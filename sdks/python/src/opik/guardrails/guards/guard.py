@@ -3,6 +3,9 @@ from typing import List, Dict, Any
 
 
 class Guard(abc.ABC):
+    # Is this guard running locally or remotely on the Guardrail API
+    remote = False
+
     @abc.abstractmethod
     def get_validation_configs(self) -> List[Dict[str, Any]]:
         """

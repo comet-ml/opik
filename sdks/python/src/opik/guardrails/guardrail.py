@@ -1,10 +1,18 @@
-from typing import List
+from typing import (
+    List,
+)
 
 import httpx
 
 from opik import exceptions
+from opik.api_objects import opik_client
+from opik.message_processing.messages import GuardrailBatchItemMessage
+from opik.opik_context import get_current_span_data, get_current_trace_data
 
-from . import guards, rest_api_client, schemas
+from . import guards, rest_api_client, schemas, tracing
+
+
+GUARDRAIL_DECORATOR = tracing.GuardrailsTrackDecorator()
 
 
 class Guardrail:
@@ -17,14 +25,12 @@ class Guardrail:
     def __init__(
         self,
         guards: List[guards.Guard],
-        host_url: str = "http://localhost:5000",
     ) -> None:
         """
         Initialize a Guardrail client.
 
         Args:
             guards: List of Guard objects to validate text against
-            host_url: URL of the Opik Guardrails API
 
         Example:
 
@@ -54,8 +60,10 @@ class Guardrail:
 
         """
         self.guards = guards
+        self._client = opik_client.get_client_cached()
+
         self._initialize_api_client(
-            host_url=host_url,
+            host_url=self._client.config.guardrails_backend_host,
         )
 
     def _initialize_api_client(self, host_url: str) -> None:
@@ -78,12 +86,43 @@ class Guardrail:
             opik.exceptions.GuardrailValidationFailed: If validation fails
             httpx.HTTPStatusError: If the API returns an error status code
         """
+        result = self._validate(generation=text)
+
+        return self._parse_result(result)
+
+    @GUARDRAIL_DECORATOR.track
+    def _validate(self, generation: str) -> schemas.ValidationResponse:
         validations = []
+
         for guard in self.guards:
             validations.extend(guard.get_validation_configs())
 
-        result = self._api_client.validate(text, validations)
+        result = self._api_client.validate(generation, validations)
 
+        if not result.validation_passed:
+            result.guardrail_result = "failed"
+        else:
+            result.guardrail_result = "passed"
+
+        for validation in result.validations:
+            guardrail_batch_item_message = GuardrailBatchItemMessage(
+                id=None,
+                project_name=None,
+                entity_id=get_current_trace_data().id,
+                secondary_id=get_current_span_data().id,
+                name=validation.type,
+                result="passed" if validation.validation_passed else "failed",
+                config=validation.validation_config,
+                details=validation.validation_details,
+            )
+
+            self._client._streamer.put(guardrail_batch_item_message)
+
+        return result
+
+    def _parse_result(
+        self, result: schemas.ValidationResponse
+    ) -> schemas.ValidationResponse:
         if not result.validation_passed:
             failed_validations = []
             for validation in result.validations:
