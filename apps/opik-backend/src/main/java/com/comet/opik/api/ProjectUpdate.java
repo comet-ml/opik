@@ -15,5 +15,5 @@ public record ProjectUpdate(
         // Not Blank makes the field required, while this pattern allows null values and validates the string if it is not null
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String name,
         String description,
-        ProjectVisibility visibility) {
+        Visibility visibility) {
 }
