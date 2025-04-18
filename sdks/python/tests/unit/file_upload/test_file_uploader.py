@@ -92,7 +92,7 @@ def test_upload_attachment__local__no_monitor(
     assert route.call_count == 1
 
 
-class TestS3FileDataUploaderRetry:
+class TestUploadAttachmentRetry:
     # It is done as it is to patch retry decorator to minimize a retry interval
     def setup_method(self):
         opik_rest_retry = tenacity.retry(
