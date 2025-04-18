@@ -1,5 +1,5 @@
 import re
-from importlib import reload
+import importlib
 from unittest.mock import patch
 
 import httpx
@@ -99,13 +99,13 @@ class TestS3FileDataUploaderRetry:
             lambda x: s3_retry(x),
         ).start()
         # Reloads the module which applies our patched decorator
-        reload(s3_file_uploader)
+        importlib.reload(s3_file_uploader)
 
     def teardown_method(self):
         # Stops all patches started with start()
         patch.stopall()
         # Reload our module, which restores the original decorator
-        reload(s3_file_uploader)
+        importlib.reload(s3_file_uploader)
 
     def test_upload_file_parts_to_s3__retry_on_500(self, data_file, respx_mock):
         max_file_part_size = 5 * 1024 * 1024

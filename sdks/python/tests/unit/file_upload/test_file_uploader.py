@@ -1,5 +1,5 @@
 import re
-from importlib import reload
+import importlib
 from unittest.mock import patch
 
 import httpx
@@ -106,13 +106,13 @@ class TestUploadAttachmentRetry:
             lambda x: opik_rest_retry(x),
         ).start()
         # Reloads the module which applies our patched decorator
-        reload(file_uploader.upload_client)
+        importlib.reload(file_uploader.upload_client)
 
     def teardown_method(self):
         # Stops all patches started with start()
         patch.stopall()
         # Reload our module, which restores the original decorator
-        reload(file_uploader.upload_client)
+        importlib.reload(file_uploader.upload_client)
 
     def test_upload_attachment__local__retry_500(
         self, file_to_upload, rest_client_local, respx_mock
