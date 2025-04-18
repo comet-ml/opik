@@ -12,9 +12,11 @@ import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.utils.ErrorUtils;
 import com.fasterxml.uuid.Generators;
 import com.google.common.eventbus.EventBus;
 import io.r2dbc.spi.Connection;
+import jakarta.ws.rs.NotFoundException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -35,6 +37,7 @@ import java.util.UUID;
 
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
@@ -153,7 +156,7 @@ class TraceServiceImplTest {
             var traceId = UUID.randomUUID();
 
             // then
-            Assertions.assertThrows(InvalidUUIDVersionException.class, () -> traceService.create(Trace.builder()
+            assertThrows(InvalidUUIDVersionException.class, () -> traceService.create(Trace.builder()
                     .id(traceId)
                     .projectName(projectName)
                     .startTime(Instant.now())
@@ -169,7 +172,7 @@ class TraceServiceImplTest {
 
         @Test
         @DisplayName("when project name is not found, then return empty page")
-        void find__whenProjectNameIsNotFound__thenReturnEmptyPage() {
+        void find__whenProjectNameIsNotFound__thenReturnNotFoundException() {
 
             // given
             var projectName = "projectName";
@@ -177,24 +180,20 @@ class TraceServiceImplTest {
             int size = 10;
             String workspaceId = UUID.randomUUID().toString();
 
-            // when
-            when(projectService.findByNames(workspaceId, List.of(projectName)))
-                    .thenReturn(List.of());
+            when(projectService.resolveProjectIdAndVerifyVisibility(null, projectName))
+                    .thenThrow(ErrorUtils.failWithNotFoundName("Project", projectName));
 
-            var actualResult = traceService
-                    .find(page, size, TraceSearchCriteria.builder()
-                            .projectName(projectName)
-                            .build())
-                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
-                            .put(RequestContext.WORKSPACE_ID, workspaceId))
-                    .block();
+            Exception exception = assertThrows(NotFoundException.class, () -> {
+                traceService
+                        .find(page, size, TraceSearchCriteria.builder()
+                                .projectName(projectName)
+                                .build())
+                        .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .block();
+            });
 
-            // then
-            Assertions.assertNotNull(actualResult);
-            assertThat(actualResult.page()).isEqualTo(page);
-            assertThat(actualResult.size()).isZero();
-            assertThat(actualResult.total()).isZero();
-            assertThat(actualResult.content()).isEmpty();
+            assertThat(exception.getMessage()).isEqualTo("Project name: %s not found".formatted(projectName));
         }
 
         @Test
@@ -224,6 +223,9 @@ class TraceServiceImplTest {
 
                         return callback.execute(connection);
                     });
+
+            when(projectService.resolveProjectIdAndVerifyVisibility(projectId, null))
+                    .thenReturn(projectId);
 
             var actualResult = traceService
                     .find(page, size, TraceSearchCriteria.builder().projectId(projectId).build())
