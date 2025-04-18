@@ -29,9 +29,12 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
       defaultValue={["attachments", "input", "output"]}
     >
       <AttachmentsList data={data} images={images} enabled={false} />
-      <AccordionItem value="input">
+      <AccordionItem className="group" value="input">
         <AccordionTrigger>Input</AccordionTrigger>
-        <AccordionContent>
+        <AccordionContent
+          forceMount
+          className="group-data-[state=closed]:hidden"
+        >
           <SyntaxHighlighter
             data={formattedData as object}
             prettifyConfig={{ fieldType: "input" }}
@@ -39,9 +42,12 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
           />
         </AccordionContent>
       </AccordionItem>
-      <AccordionItem value="output">
+      <AccordionItem className="group" value="output">
         <AccordionTrigger>Output</AccordionTrigger>
-        <AccordionContent>
+        <AccordionContent
+          forceMount
+          className="group-data-[state=closed]:hidden"
+        >
           <SyntaxHighlighter
             data={data.output}
             prettifyConfig={{ fieldType: "output" }}
