@@ -25,7 +25,7 @@ public record Project(
         @JsonView( {
                 Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({Project.View.Public.class, View.Write.class}) @NotBlank String name,
-        @JsonView({Project.View.Public.class, View.Write.class}) ProjectVisibility visibility,
+        @JsonView({Project.View.Public.class, View.Write.class}) Visibility visibility,
         @JsonView({Project.View.Public.class,
                 View.Write.class}) String description,
         @JsonView({Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
