@@ -133,11 +133,19 @@ class Factuality(base_metric.BaseMetric):
             score = 0.0
 
             for claim in list_content:
-                score += claim["score"]
+                claim_score = float(claim["score"])
+
+                if not (0.0 <= claim_score <= 1.0):
+                    raise MetricComputationError(
+                        f"Factuality score must be between 0.0 and 1.0, got {claim_score}"
+                    )
+
+                score += claim_score
                 reason += claim["reason"] + "\n"
 
             score /= len(list_content)
 
             return score_result.ScoreResult(name=self.name, value=score, reason=reason)
-        except Exception:
+        except Exception as e:
+            LOGGER.error(f"Failed to parse model output: {e}", exc_info=True)
             raise MetricComputationError(logging_messages.FACTUALITY_SCORE_CALC_FAILED)

@@ -1,3 +1,4 @@
+import logging
 import math
 from functools import cached_property
 from typing import Any, Optional, TYPE_CHECKING, Union
@@ -13,6 +14,8 @@ from opik.logging_messages import GEVAL_SCORE_CALC_FAILED
 from .template import G_EVAL_COT_TEMPLATE, G_EVAL_QUERY_TEMPLATE
 from opik import exceptions
 from .. import parsing_helpers
+
+LOGGER = logging.getLogger(__name__)
 
 
 class GEvalScoreFormat(pydantic.BaseModel):
@@ -235,5 +238,6 @@ class GEval(base_metric.BaseMetric):
                 return score_result.ScoreResult(
                     name=self.name, value=final_score, reason=reason
                 )
-        except Exception:
+        except Exception as e:
+            LOGGER.error(f"Failed to parse model output: {e}", exc_info=True)
             raise exceptions.MetricComputationError(GEVAL_SCORE_CALC_FAILED)

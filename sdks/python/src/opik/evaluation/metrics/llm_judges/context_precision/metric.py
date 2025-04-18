@@ -145,12 +145,15 @@ class ContextPrecision(base_metric.BaseMetric):
             score: float = float(dict_content["context_precision_score"])
 
             if not (0.0 <= score <= 1.0):
-                score = 0.5
+                raise exceptions.MetricComputationError(
+                    f"Context precision score must be between 0.0 and 1.0, got {score}"
+                )
 
             return score_result.ScoreResult(
                 name=self.name, value=score, reason=dict_content["reason"]
             )
-        except Exception:
+        except Exception as e:
+            LOGGER.error(f"Failed to parse model output: {e}", exc_info=True)
             raise exceptions.MetricComputationError(
                 logging_messages.CONTEXT_PRECISION_SCORE_CALC_FAILED
             )

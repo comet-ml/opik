@@ -1,5 +1,6 @@
 import logging
 from typing import Union, Optional, Any
+from opik import logging_messages
 import pydantic
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
@@ -125,6 +126,4 @@ class Usefulness(base_metric.BaseMetric):
             )
         except Exception as e:
             LOGGER.error(f"Failed to parse model output: {e}", exc_info=True)
-            raise MetricComputationError(
-                f"Failed to parse usefulness score from model output: {repr(e)}"
-            )
+            raise MetricComputationError(logging_messages.USEFULNESS_SCORE_CALC_FAILED)
