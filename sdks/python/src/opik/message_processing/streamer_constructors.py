@@ -1,5 +1,5 @@
 import queue
-from typing import Any, List, Optional
+from typing import Any, List
 
 import httpx
 
@@ -13,7 +13,7 @@ def construct_online_streamer(
     rest_client: rest_api_client.OpikApi,
     httpx_client: httpx.Client,
     use_batching: bool,
-    file_upload_worker_count: Optional[int],
+    file_upload_worker_count: int,
     n_consumers: int = 1,
 ) -> streamer.Streamer:
     message_processor = message_processors.MessageSender(rest_client=rest_client)

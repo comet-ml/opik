@@ -1,8 +1,11 @@
 import re
+from importlib import reload
+from unittest.mock import patch
 
 import httpx
 import pytest
 import respx
+import tenacity
 
 from opik import httpx_client
 from opik.file_upload import (
@@ -10,6 +13,7 @@ from opik.file_upload import (
     file_upload_monitor,
     upload_options,
 )
+from opik.rest_client_configurator import retry_decorator
 from . import conftest
 
 
@@ -88,28 +92,52 @@ def test_upload_attachment__local__no_monitor(
     assert route.call_count == 1
 
 
-def test_upload_attachment__local__retry_500(
-    file_to_upload, rest_client_local, respx_mock
-):
-    rx_url = re.compile("https://localhost:8080/bucket/*")
+class TestS3FileDataUploaderRetry:
+    # It is done as it is to patch retry decorator to minimize a retry interval
+    def setup_method(self):
+        opik_rest_retry = tenacity.retry(
+            stop=tenacity.stop_after_attempt(3),
+            wait=tenacity.wait_exponential(multiplier=1, min=1, max=2),
+            retry=tenacity.retry_if_exception(retry_decorator._allowed_to_retry),
+        )
+        # Now patch the decorator where the decorator is being imported from
+        patch(
+            "opik.rest_client_configurator.retry_decorator.opik_rest_retry",
+            lambda x: opik_rest_retry(x),
+        ).start()
+        # Reloads the module which applies our patched decorator
+        reload(file_uploader.upload_client)
 
-    def retry_side_effect(request, route):
-        if route.call_count < 1:
-            return httpx.Response(500)
-        else:
-            return httpx.Response(200)
+    def teardown_method(self):
+        # Stops all patches started with start()
+        patch.stopall()
+        # Reload our module, which restores the original decorator
+        reload(file_uploader.upload_client)
 
-    respx_mock.put(rx_url).mock(side_effect=retry_side_effect)
+    def test_upload_attachment__local__retry_500(
+        self, file_to_upload, rest_client_local, respx_mock
+    ):
+        rx_url = re.compile("https://localhost:8080/bucket/*")
 
-    monitor = file_upload_monitor.FileUploadMonitor()
-    file_uploader.upload_attachment(
-        upload_options=file_to_upload,
-        rest_client=rest_client_local,
-        upload_httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
-        monitor=monitor,
-    )
+        def retry_side_effect(request, route):
+            if route.call_count < 1:
+                return httpx.Response(500)
+            else:
+                return httpx.Response(200)
 
-    assert monitor.bytes_sent == conftest.FILE_SIZE
+        respx_mock.put(rx_url).mock(side_effect=retry_side_effect)
 
-    route = respx.put(rx_url)
-    assert route.call_count == 2  # one retry + upload call
+        monitor = file_upload_monitor.FileUploadMonitor()
+        file_uploader.upload_attachment(
+            upload_options=file_to_upload,
+            rest_client=rest_client_local,
+            upload_httpx_client=httpx_client.get(
+                None, None, check_tls_certificate=False
+            ),
+            monitor=monitor,
+        )
+
+        assert monitor.bytes_sent == conftest.FILE_SIZE
+
+        route = respx.put(rx_url)
+        assert route.call_count == 2  # one retry + upload call

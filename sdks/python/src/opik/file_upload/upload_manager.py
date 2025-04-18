@@ -107,7 +107,7 @@ class FileUploadManager(base_upload_manager.BaseFileUploadManager):
         self,
         rest_client: rest_api_client.OpikApi,
         httpx_client: httpx.Client,
-        worker_count: Optional[int],
+        worker_count: int,
     ) -> None:
         self._httpx_client = httpx_client
         self._rest_client = rest_client

@@ -111,7 +111,7 @@ class Opik:
         self,
         base_url: str,
         workers: int,
-        file_upload_worker_count: Optional[int],
+        file_upload_worker_count: int,
         api_key: Optional[str],
         check_tls_certificate: bool,
         use_batching: bool,

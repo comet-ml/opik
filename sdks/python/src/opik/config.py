@@ -129,11 +129,9 @@ class OpikConfig(pydantic_settings.BaseSettings):
     The amount of background threads that submit data to the backend.
     """
 
-    file_upload_background_workers: Optional[int] = 16
+    file_upload_background_workers: int = 16
     """
     The amount of background threads that upload files to the backend.
-
-    If not specified, it will default to the number of CPU cores, but no more than 32 workers.
     """
 
     console_logging_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = (
