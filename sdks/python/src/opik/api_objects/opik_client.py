@@ -32,6 +32,8 @@ from . import (
     trace,
     validation_helpers,
 )
+from .attachment import converters as attachment_converters
+from .attachment import Attachment
 from . import rest_stream_parser
 from .dataset import rest_operations as dataset_rest_operations
 from .experiment import helpers as experiment_helpers
@@ -180,13 +182,14 @@ class Opik:
         project_name: Optional[str] = None,
         error_info: Optional[ErrorInfoDict] = None,
         thread_id: Optional[str] = None,
+        attachments: Optional[List[Attachment]] = None,
         **ignored_kwargs: Any,
     ) -> trace.Trace:
         """
         Create and log a new trace.
 
         Args:
-            id: The unique identifier for the trace, if not provided a new ID will be generated. Must be a valid [UUIDv7](https://uuid7.com/) ID.
+            id: The unique identifier for the trace, if not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid7.com/) ID.
             name: The name of the trace.
             start_time: The start time of the trace. If not provided, the current local time will be used.
             end_time: The end time of the trace.
@@ -200,6 +203,7 @@ class Opik:
             error_info: The dictionary with error information (typically used when the trace function has failed).
             thread_id: Used to group multiple traces into a thread.
                 The identifier is user-defined and has to be unique per project.
+            attachments: The list of attachments to be uploaded to the trace.
 
         Returns:
             trace.Trace: The created trace object.
@@ -233,6 +237,18 @@ class Opik:
                 feedback_score["id"] = id
 
             self.log_traces_feedback_scores(feedback_scores, project_name)
+
+        if attachments is not None:
+            for attachment_data in attachments:
+                self._streamer.put(
+                    attachment_converters.attachment_to_message(
+                        attachment_data=attachment_data,
+                        entity_type="trace",
+                        entity_id=id,
+                        project_name=project_name,
+                        base_url=url_helpers.get_base_url(self._config.url_override),
+                    )
+                )
 
         return trace.Trace(
             id=id,
@@ -327,6 +343,7 @@ class Opik:
         provider: Optional[Union[str, LLMProvider]] = None,
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
+        attachments: Optional[List[Attachment]] = None,
     ) -> span.Span:
         """
         Create and log a new span.
@@ -353,9 +370,10 @@ class Opik:
             model: The name of LLM (in this case `type` parameter should be == `llm`)
             provider: The provider of LLM. You can find providers officially supported by Opik for cost tracking
                 in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
-                If your provider not in the list, you can still specify it but the cost tracking will not be available
+                If your provider is not in the list, you can still specify it, but the cost tracking will not be available
             error_info: The dictionary with error information (typically used when the span function has failed).
             total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
+            attachments: The list of attachments to be uploaded to the span.
 
         Returns:
             span.Span: The created span object.
@@ -422,6 +440,18 @@ class Opik:
                 feedback_score["id"] = id
 
             self.log_spans_feedback_scores(feedback_scores, project_name)
+
+        if attachments is not None:
+            for attachment_data in attachments:
+                self._streamer.put(
+                    attachment_converters.attachment_to_message(
+                        attachment_data=attachment_data,
+                        entity_type="span",
+                        entity_id=id,
+                        project_name=project_name,
+                        base_url=url_helpers.get_base_url(self._config.url_override),
+                    )
+                )
 
         return span.Span(
             id=id,
