@@ -4477,6 +4477,15 @@ class SpansResourceTest {
                             "claude-3-5-sonnet-v2@20241022", "anthropic_vertexai",
                             null, null),
                     Arguments.of(
+                            Map.of("original_usage.prompt_tokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.prompt_tokens_details.cached_tokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.completion_tokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "claude-3-5-sonnet-latest", "anthropic",
+                            null, null),
+                    Arguments.of(
                             Map.of("original_usage.input_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                                     "original_usage.output_tokens",
                                     Math.abs(podamFactory.manufacturePojo(Integer.class)),
@@ -4484,7 +4493,7 @@ class SpansResourceTest {
                                     Math.abs(podamFactory.manufacturePojo(Integer.class)),
                                     "original_usage.cache_creation_input_tokens",
                                     Math.abs(podamFactory.manufacturePojo(Integer.class))),
-                            "claude-3-5-sonnet-latest", "anthropic",
+                            "ft:gpt-4o-2024-11-20", "openai",
                             null, null),
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
@@ -5052,7 +5061,7 @@ class SpansResourceTest {
             var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .projectName(null)
                     .parentSpanId(null)
-                    .model("gpt-4o-2024-08-06")
+                    .model("gpt-4")
                     .provider("openai")
                     .usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))))

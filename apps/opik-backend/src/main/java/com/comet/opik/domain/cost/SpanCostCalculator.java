@@ -26,7 +26,7 @@ class SpanCostCalculator {
 
         // If we got cached tokens, substract them from the input tokens count
         if (cachedReadInputTokens > 0) {
-            inputTokens -= cachedReadInputTokens;
+            inputTokens = Math.max(0, inputTokens - cachedReadInputTokens);
         }
 
         // Get the output tokens
