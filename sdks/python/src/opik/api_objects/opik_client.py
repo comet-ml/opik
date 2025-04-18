@@ -92,6 +92,7 @@ class Opik:
         self._initialize_streamer(
             base_url=config_.url_override,
             workers=config_.background_workers,
+            file_upload_worker_count=config_.file_upload_background_workers,
             api_key=config_.api_key,
             check_tls_certificate=config_.check_tls_certificate,
             use_batching=_use_batching,
@@ -110,6 +111,7 @@ class Opik:
         self,
         base_url: str,
         workers: int,
+        file_upload_worker_count: int,
         api_key: Optional[str],
         check_tls_certificate: bool,
         use_batching: bool,
@@ -130,7 +132,9 @@ class Opik:
         self._streamer = streamer_constructors.construct_online_streamer(
             n_consumers=workers,
             rest_client=self._rest_client,
+            httpx_client=httpx_client_,
             use_batching=use_batching,
+            file_upload_worker_count=file_upload_worker_count,
         )
 
     def _display_trace_url(self, trace_id: str, project_name: str) -> None:
@@ -818,7 +822,7 @@ class Opik:
         timeout = timeout if timeout is not None else self._flush_timeout
         self._streamer.close(timeout)
 
-    def flush(self, timeout: Optional[int] = None) -> None:
+    def flush(self, timeout: Optional[int] = None) -> bool:
         """
         Flush the streamer to ensure all messages are sent.
 
@@ -826,10 +830,10 @@ class Opik:
             timeout (Optional[int]): The timeout for flushing the streamer. Once the timeout is reached, the flush method will return regardless of whether all messages have been sent.
 
         Returns:
-            None
+            True if all messages have been sent within specified timeout, False otherwise.
         """
         timeout = timeout if timeout is not None else self._flush_timeout
-        self._streamer.flush(timeout)
+        return self._streamer.flush(timeout)
 
     def search_traces(
         self,

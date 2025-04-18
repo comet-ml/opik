@@ -3,7 +3,7 @@ from typing import Optional
 
 import httpx
 
-from . import upload_client, upload_monitor
+from . import upload_client, file_upload_monitor
 from . import upload_options as file_upload_options
 from .s3_multipart_upload import file_parts_strategy, s3_file_uploader, s3_httpx_client
 from ..rest_api import client as rest_api_client
@@ -18,7 +18,7 @@ def upload_attachment(
     upload_options: file_upload_options.FileUploadOptions,
     rest_client: rest_api_client.OpikApi,
     upload_httpx_client: httpx.Client,
-    monitor: Optional[upload_monitor.FileUploadMonitor] = None,
+    monitor: Optional[file_upload_monitor.FileUploadMonitor] = None,
 ) -> None:
     try:
         _do_upload_attachment(
@@ -42,7 +42,7 @@ def _do_upload_attachment(
     upload_options: file_upload_options.FileUploadOptions,
     rest_client: rest_api_client.OpikApi,
     httpx_client: httpx.Client,
-    monitor: Optional[upload_monitor.FileUploadMonitor],
+    monitor: Optional[file_upload_monitor.FileUploadMonitor],
 ) -> None:
     file_parts = file_parts_strategy.FilePartsStrategy(
         file_path=upload_options.file_path,
@@ -99,7 +99,7 @@ def upload_to_s3_directly(
     file_parts: file_parts_strategy.FilePartsStrategy,
     upload_metadata: upload_client.MultipartUploadMetadata,
     upload_options: file_upload_options.FileUploadOptions,
-    monitor: Optional[upload_monitor.FileUploadMonitor],
+    monitor: Optional[file_upload_monitor.FileUploadMonitor],
 ) -> None:
     s3_uploader = s3_file_uploader.S3FileDataUploader(
         file_parts=file_parts,
