@@ -879,7 +879,8 @@ class ProjectMetricsResourceTest {
                     createTracesWithGuardrails(projectName, subtract(marker, TIME_BUCKET_3, interval)));
             var guardrailsMinus1 = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
                     createTracesWithGuardrails(projectName, subtract(marker, TIME_BUCKET_1, interval)));
-            var guardrails = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT, createTracesWithGuardrails(projectName, marker));
+            var guardrails = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
+                    createTracesWithGuardrails(projectName, marker));
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.GUARDRAILS_FAILED_COUNT)
