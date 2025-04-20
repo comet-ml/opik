@@ -1,6 +1,6 @@
 import { loadConfig, OpikConfig } from "@/config/Config";
-import { OpikApiClient } from "@/rest_api";
-import type { Trace as ITrace } from "@/rest_api/api";
+import { OpikApiClient, OpikApiError } from "@/rest_api";
+import type { DatasetPublic, Trace as ITrace } from "@/rest_api/api";
 import { Trace } from "@/tracer/Trace";
 import { generateId } from "@/utils/generateId";
 import { createLink, logger } from "@/utils/logger";
@@ -88,10 +88,9 @@ export class OpikClient {
   public getOrCreateDataset = async (name: string, description?: string) => {
     try {
       const dataset = await this.createDataset(name, description);
-      await dataset.__internal_api__sync_hashes__();
       return dataset;
     } catch (error) {
-      if ((error as any)?.response?.status !== 409) {
+      if ((error as Error)?.message === "A dataset already exists with the same name.") {
         const dataset = await this.getDataset(name);
         await dataset.__internal_api__sync_hashes__();
         return dataset;
@@ -105,32 +104,46 @@ export class OpikClient {
     logger.debug(`Creating dataset named '${name}'`);
     const datasetId = generateId();
 
-    await this.api.datasets.createDataset({
-      id: datasetId,
-      name: name,
-      description: description,
-    });
-
-    return new Dataset(datasetId, name, description);
+    try {
+      await this.api.datasets.createDataset({
+        id: datasetId,
+        name: name,
+        description: description,
+      });
+    } catch (error) {
+      if ((error as OpikApiError)?.statusCode === 409) {
+        throw new Error(`A dataset already exists with the same name.`);
+      } else {
+        throw error;
+      }
+    }
+    
+    return new Dataset(datasetId, name, description, this.api);
   };
 
   public getDataset = async (name: string) => {
     logger.debug(`Getting dataset named '${name}'`);
+    let APIDataset: DatasetPublic;
 
-    const APIDataset = await this.api.datasets.getDatasetByIdentifier({
-      datasetName: name,
-    });
-
-    if (!APIDataset) throw new Error(`Could not find dataset named '${name}'`);
-    if (!APIDataset.id)
-      throw new Error(
-        `Internal error: Could not retrieve dataset ID for dataset name: '${name}'`,
-      );
+    try {
+      APIDataset = await this.api.datasets.getDatasetByIdentifier({
+        datasetName: name,
+      });
+    } catch (error) {
+      if ((error as OpikApiError)?.statusCode === 404) {
+        throw new Error(`Could not find dataset named '${name}'.`);
+      } else {
+        throw error;
+      }
+    }
+    
     const dataset = new Dataset(
-      APIDataset.id,
+      APIDataset.id!,
       APIDataset.name,
       APIDataset.description,
+      this.api,
     );
+    
     await dataset.__internal_api__sync_hashes__();
     return dataset;
   };

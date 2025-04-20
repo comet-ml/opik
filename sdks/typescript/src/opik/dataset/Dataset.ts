@@ -3,7 +3,7 @@ import { OpikApiClient } from "@/rest_api";
 import { stringifyWithSortedKeys } from "@/dataset/utils";
 import { createHash } from "crypto";
 import { generateId } from "@/utils/generateId";
-import { DatasetItemWriteSource } from "@/rest_api/api";
+import { DatasetItemPublic, DatasetItemWriteSource } from "@/rest_api/api";
 
 const DATASET_ITEMS_MAX_BATCH_SIZE = 1000;
 const MAX_CONCURRENT_REQUESTS = 5;
@@ -54,6 +54,7 @@ export class Dataset {
     });
 
     const promises: Promise<void>[] = [];
+    console.log(`Inserting ${items.length} items into dataset "${this.name}"`);
     for (let i = 0; i < items.length; i += DATASET_ITEMS_MAX_BATCH_SIZE) {
       const batch = items.slice(i, i + DATASET_ITEMS_MAX_BATCH_SIZE);
       const datasetItemsBatch = batch.map((item) => {
@@ -73,9 +74,10 @@ export class Dataset {
         const itemContentString = stringifyWithSortedKeys(item);
         const hash = createHash("sha256");
         hash.update(itemContentString);
-
-        this.idToHash[item.id] = hash.digest("hex");
-        this.hashes.push(hash.digest("hex"));
+        const hashDigest = hash.digest("hex");
+        
+        this.idToHash[item.id] = hashDigest;
+        this.hashes.push(hashDigest);
       });
 
       promises.push(promise);
@@ -89,7 +91,7 @@ export class Dataset {
   }
 
   public async __internal_api__sync_hashes__() {
-    const items = await this.getItems();
+    const items = await this.getFullItems();
 
     this.hashes = [];
     this.idToHash = {};
@@ -98,8 +100,10 @@ export class Dataset {
       const itemContentString = stringifyWithSortedKeys(item.data);
       const hash = createHash("sha256");
       hash.update(itemContentString);
-      this.hashes.push(hash.digest("hex"));
-      this.idToHash[item.id] = hash.digest("hex");
+      const hashDigest = hash.digest("hex");
+
+      this.hashes.push(hashDigest);
+      this.idToHash[item.id || ""] = hashDigest;
     });
   }
 
@@ -134,24 +138,21 @@ export class Dataset {
   }
 
   public async clear() {
-    const items = await this.getItems();
-    await this.delete(items.map((item) => item.id));
+    const items = await this.getFullItems();
+    await this.delete(items.map((item) => item.id || ""));
   }
 
-  public async getItems(nbSamples?: number) {
+  private async getFullItems(nbSamples?: number) {
     let page = 1;
-    let allItems: any[] = [];
+    let allItems: DatasetItemPublic[] = [];
 
     while (true) {
       const response = await this.api.datasets.getDatasetItems(this.id, {
         size: DATASET_ITEMS_MAX_BATCH_SIZE,
         page: page,
       });
-      const items = response.content;
-      if (!items) {
-        throw new Error("No items found");
-      }
-      allItems.concat(items);
+      const items = response?.content || [];
+      allItems = allItems.concat(items);
 
       if (
         items.length < DATASET_ITEMS_MAX_BATCH_SIZE ||
@@ -162,7 +163,16 @@ export class Dataset {
 
       page++;
     }
+    if (nbSamples) {
+      return allItems.slice(0, nbSamples);  
+    } else {
+      return allItems;
+    }
+  }
 
-    return allItems.slice(0, nbSamples);
+  public async getItems(nbSamples?: number) {
+    const items = await this.getFullItems(nbSamples);
+
+    return items.map((item) => item.data);
   }
 }
