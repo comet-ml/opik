@@ -932,7 +932,7 @@ class ProjectMetricsResourceTest {
             };
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
-                    .metricType(MetricType.TOKEN_USAGE)
+                    .metricType(MetricType.GUARDRAILS_FAILED_COUNT)
                     .interval(interval)
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
