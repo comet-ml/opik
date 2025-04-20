@@ -1,15 +1,10 @@
-import logging
 from typing import Union, Optional, Any
-from opik import logging_messages
+from opik.evaluation.metrics.llm_judges.usefulness.parser import parse_model_output
 import pydantic
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
 
 from . import template
-from opik.exceptions import MetricComputationError
-from .. import parsing_helpers
-
-LOGGER = logging.getLogger(__name__)
 
 
 class UsefulnessResponseFormat(pydantic.BaseModel):
@@ -83,7 +78,7 @@ class Usefulness(base_metric.BaseMetric):
             input=llm_query, response_format=UsefulnessResponseFormat
         )
 
-        return self._parse_model_output(model_output)
+        return parse_model_output(content=model_output, name=self.name)
 
     async def ascore(
         self, input: str, output: str, **ignored_kwargs: Any
@@ -108,22 +103,4 @@ class Usefulness(base_metric.BaseMetric):
             input=llm_query, response_format=UsefulnessResponseFormat
         )
 
-        return self._parse_model_output(model_output)
-
-    def _parse_model_output(self, content: str) -> score_result.ScoreResult:
-        """Parse the model output string into a ScoreResult."""
-        try:
-            dict_content = parsing_helpers.extract_json_content_or_raise(content)
-            score: float = float(dict_content["score"])
-
-            if not (0.0 <= score <= 1.0):
-                raise MetricComputationError(
-                    f"Usefulness score must be between 0.0 and 1.0, got {score}"
-                )
-
-            return score_result.ScoreResult(
-                name=self.name, value=score, reason=dict_content["reason"]
-            )
-        except Exception as e:
-            LOGGER.error(f"Failed to parse model output: {e}", exc_info=True)
-            raise MetricComputationError(logging_messages.USEFULNESS_SCORE_CALC_FAILED)
+        return parse_model_output(content=model_output, name=self.name)

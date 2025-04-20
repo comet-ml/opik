@@ -1,4 +1,5 @@
 from opik import logging_messages
+from opik.evaluation.metrics.llm_judges.context_recall.parser import parse_model_output
 import pytest
 from opik.evaluation.metrics.llm_judges.context_recall.metric import ContextRecall
 from opik.exceptions import MetricComputationError
@@ -11,4 +12,4 @@ def test_context_recall_score_out_of_range():
     with pytest.raises(
         MetricComputationError, match=logging_messages.CONTEXT_RECALL_SCORE_CALC_FAILED
     ):
-        metric._parse_model_output(invalid_model_output)
+        parse_model_output(content=invalid_model_output, name=metric.name)

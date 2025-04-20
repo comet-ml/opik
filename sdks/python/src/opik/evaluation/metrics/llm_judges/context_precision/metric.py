@@ -1,15 +1,12 @@
-import logging
 from typing import Any, List, Optional, Union
+from opik.evaluation.metrics.llm_judges.context_precision.parser import (
+    parse_model_output,
+)
 import pydantic
-from opik import logging_messages
 from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.models import base_model, models_factory
 
 from . import template
-from opik import exceptions
-from .. import parsing_helpers
-
-LOGGER = logging.getLogger(__name__)
 
 
 class ContextPrecisionResponseFormat(pydantic.BaseModel):
@@ -100,7 +97,7 @@ class ContextPrecision(base_metric.BaseMetric):
             input=llm_query, response_format=ContextPrecisionResponseFormat
         )
 
-        return self._parse_model_output(model_output)
+        return parse_model_output(content=model_output, name=self.name)
 
     async def ascore(
         self,
@@ -137,23 +134,4 @@ class ContextPrecision(base_metric.BaseMetric):
             input=llm_query, response_format=ContextPrecisionResponseFormat
         )
 
-        return self._parse_model_output(model_output)
-
-    def _parse_model_output(self, content: str) -> score_result.ScoreResult:
-        try:
-            dict_content = parsing_helpers.extract_json_content_or_raise(content)
-            score: float = float(dict_content["context_precision_score"])
-
-            if not (0.0 <= score <= 1.0):
-                raise exceptions.MetricComputationError(
-                    f"Context precision score must be between 0.0 and 1.0, got {score}"
-                )
-
-            return score_result.ScoreResult(
-                name=self.name, value=score, reason=dict_content["reason"]
-            )
-        except Exception as e:
-            LOGGER.error(f"Failed to parse model output: {e}", exc_info=True)
-            raise exceptions.MetricComputationError(
-                logging_messages.CONTEXT_PRECISION_SCORE_CALC_FAILED
-            )
+        return parse_model_output(content=model_output, name=self.name)

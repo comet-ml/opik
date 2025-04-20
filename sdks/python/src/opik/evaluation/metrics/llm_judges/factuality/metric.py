@@ -1,15 +1,10 @@
-import logging
 from typing import Union, Optional, List, Any
+from opik.evaluation.metrics.llm_judges.factuality.parser import parse_model_output
 import pydantic
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
-from opik import logging_messages
 
 from . import template
-from opik.exceptions import MetricComputationError
-from .. import parsing_helpers
-
-LOGGER = logging.getLogger(__name__)
 
 
 class FactualityResponseFormatClaim(pydantic.BaseModel):
@@ -93,7 +88,7 @@ class Factuality(base_metric.BaseMetric):
             input=llm_query, response_format=FactualityResponseFormat
         )
 
-        return self._parse_model_output(model_output)
+        return parse_model_output(content=model_output, name=self.name)
 
     async def ascore(
         self, input: str, output: str, context: List[str], **ignored_kwargs: Any
@@ -123,29 +118,4 @@ class Factuality(base_metric.BaseMetric):
             input=llm_query, response_format=FactualityResponseFormat
         )
 
-        return self._parse_model_output(model_output)
-
-    def _parse_model_output(self, content: str) -> score_result.ScoreResult:
-        try:
-            list_content = parsing_helpers.extract_json_content_or_raise(content)
-
-            reason = ""
-            score = 0.0
-
-            for claim in list_content:
-                claim_score = float(claim["score"])
-
-                if not (0.0 <= claim_score <= 1.0):
-                    raise MetricComputationError(
-                        f"Factuality score must be between 0.0 and 1.0, got {claim_score}"
-                    )
-
-                score += claim_score
-                reason += claim["reason"] + "\n"
-
-            score /= len(list_content)
-
-            return score_result.ScoreResult(name=self.name, value=score, reason=reason)
-        except Exception as e:
-            LOGGER.error(f"Failed to parse model output: {e}", exc_info=True)
-            raise MetricComputationError(logging_messages.FACTUALITY_SCORE_CALC_FAILED)
+        return parse_model_output(content=model_output, name=self.name)
