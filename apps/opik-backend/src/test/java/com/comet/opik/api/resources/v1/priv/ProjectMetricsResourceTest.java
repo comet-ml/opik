@@ -876,10 +876,10 @@ class ProjectMetricsResourceTest {
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             var guardrailsMinus3 = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
-                    createSpans(projectName, subtract(marker, TIME_BUCKET_3, interval)));
+                    createTracesWithGuardrails(projectName, subtract(marker, TIME_BUCKET_3, interval)));
             var guardrailsMinus1 = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
-                    createSpans(projectName, subtract(marker, TIME_BUCKET_1, interval)));
-            var guardrails = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT, createSpans(projectName, marker));
+                    createTracesWithGuardrails(projectName, subtract(marker, TIME_BUCKET_1, interval)));
+            var guardrails = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT, createTracesWithGuardrails(projectName, marker));
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.GUARDRAILS_FAILED_COUNT)
@@ -903,7 +903,7 @@ class ProjectMetricsResourceTest {
             getAndAssertEmpty(projectId, interval, marker);
         }
 
-        private Long createSpans(String projectName, Instant marker) {
+        private Long createTracesWithGuardrails(String projectName, Instant marker) {
             List<Trace> traces = IntStream.range(0, 5)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(projectName)
