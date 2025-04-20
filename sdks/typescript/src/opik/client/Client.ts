@@ -9,6 +9,7 @@ import { SpanBatchQueue } from "./SpanBatchQueue";
 import { SpanFeedbackScoresBatchQueue } from "./SpanFeedbackScoresBatchQueue";
 import { TraceBatchQueue } from "./TraceBatchQueue";
 import { TraceFeedbackScoresBatchQueue } from "./TraceFeedbackScoresBatchQueue";
+import { Dataset } from "@/dataset/Dataset";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
@@ -37,10 +38,10 @@ export class OpikClient {
     this.spanBatchQueue = new SpanBatchQueue(this.api);
     this.traceBatchQueue = new TraceBatchQueue(this.api);
     this.spanFeedbackScoresBatchQueue = new SpanFeedbackScoresBatchQueue(
-      this.api
+      this.api,
     );
     this.traceFeedbackScoresBatchQueue = new TraceFeedbackScoresBatchQueue(
-      this.api
+      this.api,
     );
 
     clients.push(this);
@@ -58,7 +59,7 @@ export class OpikClient {
     });
 
     logger.info(
-      `Started logging traces to the "${projectName}" project at ${createLink(projectUrl)}`
+      `Started logging traces to the "${projectName}" project at ${createLink(projectUrl)}`,
     );
 
     this.lastProjectNameLogged = projectName;
@@ -74,7 +75,7 @@ export class OpikClient {
         ...traceData,
         projectName,
       },
-      this
+      this,
     );
 
     this.traceBatchQueue.create(trace.data);
@@ -82,6 +83,62 @@ export class OpikClient {
     this.displayTraceLog(projectName);
 
     return trace;
+  };
+
+  public getOrCreateDataset = async (name: string, description?: string) => {
+    try {
+      const dataset = await this.createDataset(name, description);
+      await dataset.__internal_api__sync_hashes__();
+      return dataset;
+    } catch (error) {
+      if ((error as any)?.response?.status !== 409) {
+        const dataset = await this.getDataset(name);
+        await dataset.__internal_api__sync_hashes__();
+        return dataset;
+      } else {
+        throw error;
+      }
+    }
+  };
+
+  public createDataset = async (name: string, description?: string) => {
+    logger.debug(`Creating dataset named '${name}'`);
+    const datasetId = generateId();
+
+    await this.api.datasets.createDataset({
+      id: datasetId,
+      name: name,
+      description: description,
+    });
+
+    return new Dataset(datasetId, name, description);
+  };
+
+  public getDataset = async (name: string) => {
+    logger.debug(`Getting dataset named '${name}'`);
+
+    const APIDataset = await this.api.datasets.getDatasetByIdentifier({
+      datasetName: name,
+    });
+
+    if (!APIDataset) throw new Error(`Could not find dataset named '${name}'`);
+    if (!APIDataset.id)
+      throw new Error(
+        `Internal error: Could not retrieve dataset ID for dataset name: '${name}'`,
+      );
+    const dataset = new Dataset(
+      APIDataset.id,
+      APIDataset.name,
+      APIDataset.description,
+    );
+    await dataset.__internal_api__sync_hashes__();
+    return dataset;
+  };
+
+  public deleteDataset = async (name: string) => {
+    logger.debug(`Deleting dataset named '${name}'`);
+    await this.api.datasets.deleteDatasetByName({ datasetName: name });
+    logger.debug(`Deleted dataset named '${name}'`);
   };
 
   public flush = async () => {
