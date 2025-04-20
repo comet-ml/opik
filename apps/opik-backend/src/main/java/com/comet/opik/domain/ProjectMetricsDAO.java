@@ -37,6 +37,7 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 public interface ProjectMetricsDAO {
     String NAME_TRACES = "traces";
     String NAME_COST = "cost";
+    String NAME_GUARDRAILS_FAILED_COUNT = "failed";
     String NAME_DURATION_P50 = "duration.p50";
     String NAME_DURATION_P90 = "duration.p90";
     String NAME_DURATION_P99 = "duration.p99";

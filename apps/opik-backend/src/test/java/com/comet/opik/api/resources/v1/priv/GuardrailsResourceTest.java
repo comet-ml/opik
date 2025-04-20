@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.GuardrailBatchItem;
 import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -34,27 +33,26 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient.generateGuardrailsForTrace;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
+import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
 @DisplayName("Guardrails Resource Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
 public class GuardrailsResourceTest {
-    private static final String API_KEY = UUID.randomUUID().toString();
-    private static final String USER = UUID.randomUUID().toString();
-    private static final String WORKSPACE_ID = UUID.randomUUID().toString();
-    private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
+    private static final String API_KEY = randomUUID().toString();
+    private static final String USER = randomUUID().toString();
+    private static final String WORKSPACE_ID = randomUUID().toString();
+    private static final String TEST_WORKSPACE = randomUUID().toString();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
@@ -116,7 +114,7 @@ public class GuardrailsResourceTest {
     @Test
     @DisplayName("test create guardrails, get trace by id")
     void testCreateGuardrails_getTraceById() {
-        String workspaceId = UUID.randomUUID().toString();
+        String workspaceId = randomUUID().toString();
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, workspaceId);
         var trace = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(null)
@@ -126,7 +124,7 @@ public class GuardrailsResourceTest {
                 .build();
         var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
-        var guardrails = createGuardrails(traceId, trace.projectName());
+        var guardrails = generateGuardrailsForTrace(factory, traceId, randomUUID(), trace.projectName());
 
         guardrailsResourceClient.addBatch(guardrails, API_KEY, TEST_WORKSPACE);
         Trace actual = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
@@ -143,7 +141,7 @@ public class GuardrailsResourceTest {
     @Test
     @DisplayName("test create guardrails, find traces")
     void testCreateGuardrails_findTraces() {
-        String workspaceId = UUID.randomUUID().toString();
+        String workspaceId = randomUUID().toString();
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, workspaceId);
         var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                 .map(trace -> trace.toBuilder()
@@ -158,8 +156,9 @@ public class GuardrailsResourceTest {
         var guardrailsByTraceId = traces.stream()
                 .collect(Collectors.toMap(Trace::id, trace -> Stream.concat(
                         // mimic two separate guardrails validation groups
-                        createGuardrails(trace.id(), trace.projectName()).stream(),
-                        createGuardrails(trace.id(), trace.projectName()).stream()).toList()));
+                        generateGuardrailsForTrace(factory, trace.id(), randomUUID(), trace.projectName()).stream(),
+                        generateGuardrailsForTrace(factory, trace.id(), randomUUID(), trace.projectName()).stream())
+                        .toList()));
 
         guardrailsByTraceId.values()
                 .forEach(guardrail -> guardrailsResourceClient.addBatch(guardrail, API_KEY, TEST_WORKSPACE));
@@ -171,23 +170,6 @@ public class GuardrailsResourceTest {
         actual.content().forEach(actualTrace -> assertGuardrailValidations(
                 GuardrailsMapper.INSTANCE.mapToValidations(guardrailsByTraceId.get(actualTrace.id())),
                 actualTrace.guardrailsValidations()));
-    }
-
-    private List<GuardrailBatchItem> createGuardrails(UUID traceId, String projectName) {
-        var spanId = UUID.randomUUID();
-        return PodamFactoryUtils.manufacturePojoList(factory, GuardrailBatchItem.class).stream()
-                .map(guardrail -> guardrail.toBuilder()
-                        .entityId(traceId)
-                        .secondaryId(spanId)
-                        .projectName(projectName)
-                        .build())
-                // deduplicate by guardrail name
-                .collect(Collectors.collectingAndThen(
-                        Collectors.toMap(
-                                GuardrailBatchItem::name,
-                                Function.identity(),
-                                (existing, replacement) -> existing),
-                        map -> new ArrayList<>(map.values())));
     }
 
     private void assertGuardrailValidations(List<GuardrailsValidation> expected, List<GuardrailsValidation> actual) {
