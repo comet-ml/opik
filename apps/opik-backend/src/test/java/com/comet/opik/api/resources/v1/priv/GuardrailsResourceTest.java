@@ -168,7 +168,8 @@ public class GuardrailsResourceTest {
                         .toList()));
 
         guardrailsByTraceId.values()
-                .forEach(guardrail -> guardrailsResourceClient.addBatch(guardrail, API_KEY, TEST_WORKSPACE));
+                .forEach(guardrail -> guardrailsResourceClient.addBatch(guardrail, API_KEY,
+                        TEST_WORKSPACE));
         Trace.TracePage actual = traceResourceClient.getTraces(DEFAULT_PROJECT, null, API_KEY, TEST_WORKSPACE,
                 null, null, traces.size(), Map.of());
 
@@ -199,14 +200,13 @@ public class GuardrailsResourceTest {
                         trace.id(), randomUUID(), trace.projectName())));
 
         guardrailsByTraceId.values()
-                .forEach(guardrail -> guardrailsResourceClient.addBatch(guardrail, API_KEY, TEST_WORKSPACE));
-        var expected = ProjectStats.CountValueStat.builder()
-                .name(StatsMapper.GUARDRAILS_FAILED_COUNT)
-                .value(guardrailsByTraceId.values().stream()
-                        .flatMap(List::stream)
-                        .filter(guardrail -> guardrail.result() == GuardrailResult.FAILED)
-                        .count())
-                .build();
+                .forEach(guardrail -> guardrailsResourceClient.addBatch(guardrail, API_KEY,
+                        TEST_WORKSPACE));
+        var expectedFailedCount = guardrailsByTraceId.values().stream()
+                .flatMap(List::stream)
+                .filter(guardrail -> guardrail.result() == GuardrailResult.FAILED)
+                .count();
+        var expected = new ProjectStats.CountValueStat(StatsMapper.GUARDRAILS_FAILED_COUNT, expectedFailedCount);
 
         ProjectStats actualStats = traceResourceClient.getTraceStats(DEFAULT_PROJECT, null, API_KEY,
                 TEST_WORKSPACE, null, Map.of());
