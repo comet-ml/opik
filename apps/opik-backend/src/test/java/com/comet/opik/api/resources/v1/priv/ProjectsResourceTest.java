@@ -132,7 +132,8 @@ class ProjectsResourceTest {
     public static final String URL_TEMPLATE = "%s/v1/private/projects";
     public static final String URL_TEMPLATE_TRACE = "%s/v1/private/traces";
     public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
-            "lastUpdatedTraceAt", "feedbackScores", "duration", "totalEstimatedCost", "usage", "traceCount"};
+            "lastUpdatedTraceAt", "feedbackScores", "duration", "totalEstimatedCost", "usage", "traceCount",
+            "guardrailsFailedCount"};
     public static final String[] IGNORED_FIELD_MIN = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
             "lastUpdatedTraceAt"};
 
