@@ -1,15 +1,24 @@
 import json
 import logging
-from typing import Iterable, Type, List, Optional, TypeVar
+from typing import Iterable, Set, Type, List, Optional, TypeVar, Protocol
 
 
 LOGGER = logging.getLogger(__name__)
 
 
-T = TypeVar("T")
+class _HasID(Protocol):
+    id: str
 
 
-def read_and_parse_stream(stream: Iterable[bytes], item_class: Type[T]) -> List[T]:
+T = TypeVar("T", bound=_HasID)
+
+
+def read_and_parse_stream(
+    stream: Iterable[bytes],
+    item_class: Type[T],
+    nb_samples: Optional[int] = None,
+    item_ids: Optional[Set[str]] = None,
+) -> List[T]:
     result: List[T] = []
 
     # last record in chunk may be incomplete, we will use this buffer to concatenate strings
@@ -23,7 +32,19 @@ def read_and_parse_stream(stream: Iterable[bytes], item_class: Type[T]) -> List[
         for line in lines[:-1]:
             item = _parse_stream_line(line=line, item_class=item_class)
             if item is not None:
+                # Apply filtering by IDs
+                if item_ids is not None and item.id not in item_ids:
+                    continue
+
                 result.append(item)
+
+                # Remove the ID from the set if filtering by IDs
+                if item_ids is not None:
+                    item_ids.remove(item.id)
+
+                # Stop if we have enough samples
+                if nb_samples is not None and len(result) == nb_samples:
+                    return result
 
         # Keep the last potentially incomplete line in buffer
         buffer = lines[-1]
@@ -32,6 +53,10 @@ def read_and_parse_stream(stream: Iterable[bytes], item_class: Type[T]) -> List[
     if buffer:
         item = _parse_stream_line(line=buffer, item_class=item_class)
         if item is not None:
+            # Apply filtering by IDs
+            if item_ids is not None and item.id not in item_ids:
+                return result
+
             result.append(item)
 
     return result

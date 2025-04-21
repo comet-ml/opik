@@ -1,8 +1,8 @@
 import logging
-import json
 import functools
 from typing import Optional, Any, List, Dict, Sequence, Set, TYPE_CHECKING
 
+from opik.api_objects import rest_stream_parser
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import dataset_item_write as rest_dataset_item
 from opik.message_processing.batching import sequence_splitter
@@ -222,58 +222,37 @@ class Dataset:
     ) -> List[dataset_item.DatasetItem]:
         results: List[dataset_item.DatasetItem] = []
 
-        if dataset_item_ids is not None:
-            dataset_item_ids = set(dataset_item_ids)  # type: ignore
+        dataset_item_ids_set: Optional[Set[str]] = (
+            set(dataset_item_ids) if dataset_item_ids is not None else None
+        )
 
-        while True:
-            stream = self._rest_client.datasets.stream_dataset_items(
-                dataset_name=self._name,
-                last_retrieved_id=results[-1].id if len(results) > 0 else None,
+        dataset_items = rest_stream_parser.read_and_parse_stream(
+            stream=self._rest_client.datasets.stream_dataset_items(
+                dataset_name=self._name
+            ),
+            item_class=dataset_item.DatasetItem,
+            nb_samples=nb_samples,
+            item_ids=dataset_item_ids_set,
+        )
+
+        for item in dataset_items:
+            data_item_content = item.get_content().get("data", {})
+
+            reconstructed_item = dataset_item.DatasetItem(
+                id=item.id,
+                trace_id=item.trace_id,
+                span_id=item.span_id,
+                source=item.source,
+                **data_item_content,
             )
 
-            previous_results_size = len(results)
-            if nb_samples is not None and len(results) == nb_samples:
-                break
+            results.append(reconstructed_item)
 
-            item_bytes = b"".join(stream)
-            for line in item_bytes.split(b"\n"):
-                if len(line) == 0:
-                    continue
-
-                full_item_content: Dict[str, Any] = json.loads(
-                    line.decode("utf-8").strip()
-                )
-                data_item_content = (
-                    full_item_content["data"] if "data" in full_item_content else {}
-                )
-
-                dataset_item_id = full_item_content.get("id")
-
-                if dataset_item_ids is not None:
-                    if dataset_item_id not in dataset_item_ids:
-                        continue
-                    else:
-                        dataset_item_ids.remove(dataset_item_id)
-
-                item = dataset_item.DatasetItem(
-                    id=full_item_content.get("id"),  # type: ignore
-                    trace_id=full_item_content.get("trace_id"),  # type: ignore
-                    span_id=full_item_content.get("span_id"),  # type: ignore
-                    source=full_item_content.get("source"),  # type: ignore
-                    **data_item_content,
-                )
-
-                results.append(item)
-
-                # Break the loop if we have enough samples
-                if nb_samples is not None and len(results) == nb_samples:
-                    break
-
-            # Break the loop if we have not received any new samples
-            if len(results) == previous_results_size:
-                break
-
-        if dataset_item_ids and len(dataset_item_ids) > 0:
+        if (
+            (nb_samples is None or nb_samples < len(results))
+            and dataset_item_ids
+            and len(dataset_item_ids) > 0
+        ):
             LOGGER.warning(
                 "The following dataset items were not found in the dataset: %s",
                 dataset_item_ids,

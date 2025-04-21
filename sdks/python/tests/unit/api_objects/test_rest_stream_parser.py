@@ -62,3 +62,35 @@ def test_read_and_parse_stream__span(spans_stream_source):
     for i, span in enumerate(spans):
         expected = rest_api_types.SpanPublic.model_validate(SPANS_STREAM_JSON[i])
         assert span == expected
+
+
+def test_read_and_parse_stream__limit_samples(spans_stream_source):
+    spans = rest_stream_parser.read_and_parse_stream(
+        spans_stream_source, item_class=rest_api_types.SpanPublic, nb_samples=1
+    )
+    assert len(spans) == 1
+    expected = rest_api_types.SpanPublic.model_validate(SPANS_STREAM_JSON[0])
+    assert spans[0] == expected
+
+
+def test_read_and_parse_stream__filter_by_ids(spans_stream_source):
+    item_ids = {SPANS_STREAM_JSON[1]["id"]}
+    spans = rest_stream_parser.read_and_parse_stream(
+        spans_stream_source, item_class=rest_api_types.SpanPublic, item_ids=item_ids
+    )
+    assert len(spans) == 1
+    expected = rest_api_types.SpanPublic.model_validate(SPANS_STREAM_JSON[1])
+    assert spans[0] == expected
+
+
+def test_read_and_parse_stream__limit_and_filter(spans_stream_source):
+    item_ids = {SPANS_STREAM_JSON[0]["id"], SPANS_STREAM_JSON[1]["id"]}
+    spans = rest_stream_parser.read_and_parse_stream(
+        spans_stream_source,
+        item_class=rest_api_types.SpanPublic,
+        nb_samples=1,
+        item_ids=item_ids,
+    )
+    assert len(spans) == 1
+    expected = rest_api_types.SpanPublic.model_validate(SPANS_STREAM_JSON[0])
+    assert spans[0] == expected
