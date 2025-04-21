@@ -222,7 +222,7 @@ class Dataset:
     ) -> List[dataset_item.DatasetItem]:
         results: List[dataset_item.DatasetItem] = []
 
-        dataset_item_ids_set: Optional[Set[str]] = (
+        dataset_item_ids_set = (
             set(dataset_item_ids) if dataset_item_ids is not None else None
         )
 
