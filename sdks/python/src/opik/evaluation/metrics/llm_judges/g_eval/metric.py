@@ -1,11 +1,10 @@
 from functools import cached_property
 from typing import Any, Optional, Union
-from . import parser
 import pydantic
 
 from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.models import base_model, models_factory
-from .template import G_EVAL_COT_TEMPLATE, G_EVAL_QUERY_TEMPLATE
+from . import template, parser
 
 
 class GEvalScoreFormat(pydantic.BaseModel):
@@ -48,7 +47,7 @@ class GEval(base_metric.BaseMetric):
 
     @cached_property
     def llm_chain_of_thought(self) -> str:
-        prompt = G_EVAL_COT_TEMPLATE.format(
+        prompt = template.G_EVAL_COT_TEMPLATE.format(
             task_introduction=self.task_introduction,
             evaluation_criteria=self.evaluation_criteria,
         )
@@ -85,7 +84,7 @@ class GEval(base_metric.BaseMetric):
             score_result.ScoreResult: A ScoreResult object containing the G-Eval score
             (between 0.0 and 1.0) and a reason for the score.
         """
-        llm_query = G_EVAL_QUERY_TEMPLATE.format(
+        llm_query = template.G_EVAL_QUERY_TEMPLATE.format(
             task_introduction=self.task_introduction,
             evaluation_criteria=self.evaluation_criteria,
             chain_of_thought=self.llm_chain_of_thought,
@@ -126,7 +125,7 @@ class GEval(base_metric.BaseMetric):
             score_result.ScoreResult: A ScoreResult object containing the G-Eval score
             (between 0.0 and 1.0) and a reason for the score.
         """
-        llm_query = G_EVAL_QUERY_TEMPLATE.format(
+        llm_query = template.G_EVAL_QUERY_TEMPLATE.format(
             task_introduction=self.task_introduction,
             evaluation_criteria=self.evaluation_criteria,
             chain_of_thought=self.llm_chain_of_thought,

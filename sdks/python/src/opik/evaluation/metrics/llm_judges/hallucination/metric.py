@@ -1,11 +1,10 @@
 from typing import Union, Optional, List, Any
-from . import parser
 import pydantic
 
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
 
-from . import template
+from . import template, parser
 
 
 class HallucinationResponseFormat(pydantic.BaseModel):

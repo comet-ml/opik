@@ -1,11 +1,10 @@
 from typing import Any, List, Optional, Union
-from . import parser
 
 import pydantic
 from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.models import base_model, models_factory
 
-from . import template
+from . import template, parser
 
 
 class ContextPrecisionResponseFormat(pydantic.BaseModel):
