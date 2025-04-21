@@ -1075,6 +1075,18 @@ class TraceDAOImpl implements TraceDAO {
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 <endif>
+            ), guardrails_agg AS (
+                SELECT entity_id, COUNT(id) AS failed_count
+                FROM guardrails
+                WHERE entity_type = 'trace'
+                AND workspace_id = :workspace_id
+                AND project_id IN :project_ids
+                AND entity_id IN (
+                    SELECT id
+                    FROM trace_final
+                )
+                AND result = 'failed'
+                GROUP BY entity_id
             )
             SELECT
                 t.workspace_id as workspace_id,
@@ -1088,10 +1100,12 @@ class TraceDAOImpl implements TraceDAO {
                 avgMap(s.usage) as usage,
                 avgMap(f.feedback_scores) AS feedback_scores,
                 avgIf(s.total_estimated_cost, s.total_estimated_cost > 0) AS total_estimated_cost_,
-                toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg
+                toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
+                sum(g.failed_count) AS guardrails_failed_count
             FROM trace_final t
             LEFT JOIN spans_agg AS s ON t.id = s.trace_id
             LEFT JOIN feedback_scores_agg as f ON t.id = f.entity_id
+            LEFT JOIN guardrails_agg as g ON t.id = g.entity_id
             GROUP BY t.workspace_id, t.project_id
             ;
             """;

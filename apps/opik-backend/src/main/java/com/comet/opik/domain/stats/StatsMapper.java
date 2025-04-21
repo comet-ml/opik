@@ -44,7 +44,8 @@ public class StatsMapper {
                 .add(new CountValueStat(INPUT, row.get("input", Long.class)))
                 .add(new CountValueStat(OUTPUT, row.get("output", Long.class)))
                 .add(new CountValueStat(METADATA, row.get("metadata", Long.class)))
-                .add(new AvgValueStat(TAGS, row.get("tags", Double.class)));
+                .add(new AvgValueStat(TAGS, row.get("tags", Double.class)))
+                .add(new CountValueStat(GUARDRAILS_FAILED_COUNT, row.get("guardrails_failed_count", Long.class)));
 
         BigDecimal totalEstimatedCost = row.get("total_estimated_cost_avg", BigDecimal.class);
         if (totalEstimatedCost == null) {
@@ -117,6 +118,12 @@ public class StatsMapper {
     public static Long getStatsTraceCount(Map<String, Object> projectStats) {
         return Optional.ofNullable(projectStats)
                 .map(map -> (Long) map.get(TRACE_COUNT))
+                .orElse(null);
+    }
+
+    public static Long getStatsGuardrailsFailedCount(Map<String, Object> projectStats) {
+        return Optional.ofNullable(projectStats)
+                .map(map -> (Long) map.get(GUARDRAILS_FAILED_COUNT))
                 .orElse(null);
     }
 }

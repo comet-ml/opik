@@ -1494,7 +1494,7 @@ class ProjectsResourceTest {
                 .collect(Collectors.toMap(Trace::id, trace -> guardrailsResourceClient.generateGuardrailsForTrace(
                         trace.id(), randomUUID(), trace.projectName())));
         guardrailsByTraceId.values().forEach(guardrail -> guardrailsResourceClient.addBatch(
-                guardrail, API_KEY, TEST_WORKSPACE));
+                guardrail, apiKey, workspaceName));
 
         traces = traces.stream().map(trace -> {
             List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
