@@ -59,6 +59,10 @@ def read_and_parse_stream(
 
             result.append(item)
 
+            # Remove the ID from the set if filtering by IDs
+            if item_ids is not None:
+                item_ids.remove(item.id)
+
     return result
 
 
