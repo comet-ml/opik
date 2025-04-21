@@ -517,6 +517,8 @@ class ProjectServiceImpl implements ProjectService {
                                 .totalEstimatedCost(
                                         StatsMapper.getStatsTotalEstimatedCost(projectStats.get(project.id())))
                                 .traceCount(StatsMapper.getStatsTraceCount(projectStats.get(project.id())))
+                                .guardrailsFailedCount(
+                                        StatsMapper.getStatsGuardrailsFailedCount(projectStats.get(project.id())))
                                 .build();
                     })
                     .orElseThrow(this::createNotFoundError);
