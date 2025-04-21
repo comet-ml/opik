@@ -40,7 +40,6 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
-import static com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient.generateGuardrailsForTrace;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
@@ -99,7 +98,7 @@ public class GuardrailsResourceTest {
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
 
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
-        this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
+        this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI, factory);
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -124,7 +123,8 @@ public class GuardrailsResourceTest {
                 .build();
         var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
-        var guardrails = generateGuardrailsForTrace(factory, traceId, randomUUID(), trace.projectName());
+        var guardrails = guardrailsResourceClient.generateGuardrailsForTrace(traceId, randomUUID(),
+                trace.projectName());
 
         guardrailsResourceClient.addBatch(guardrails, API_KEY, TEST_WORKSPACE);
         Trace actual = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
@@ -156,8 +156,10 @@ public class GuardrailsResourceTest {
         var guardrailsByTraceId = traces.stream()
                 .collect(Collectors.toMap(Trace::id, trace -> Stream.concat(
                         // mimic two separate guardrails validation groups
-                        generateGuardrailsForTrace(factory, trace.id(), randomUUID(), trace.projectName()).stream(),
-                        generateGuardrailsForTrace(factory, trace.id(), randomUUID(), trace.projectName()).stream())
+                        guardrailsResourceClient.generateGuardrailsForTrace(trace.id(), randomUUID(),
+                                trace.projectName()).stream(),
+                        guardrailsResourceClient.generateGuardrailsForTrace(trace.id(), randomUUID(),
+                                trace.projectName()).stream())
                         .toList()));
 
         guardrailsByTraceId.values()

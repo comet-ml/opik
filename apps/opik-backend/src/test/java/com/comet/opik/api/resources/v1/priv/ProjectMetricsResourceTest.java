@@ -92,7 +92,6 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_RESPONSE;
-import static com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient.generateGuardrailsForTrace;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -167,7 +166,7 @@ class ProjectMetricsResourceTest {
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
-        this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
+        this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI, factory);
 
         ClientSupportUtils.config(client);
 
@@ -915,7 +914,7 @@ class ProjectMetricsResourceTest {
 
             return traces.stream()
                     .map(trace -> {
-                        var guardrails = generateGuardrailsForTrace(factory, trace.id(), randomUUID(),
+                        var guardrails = guardrailsResourceClient.generateGuardrailsForTrace(trace.id(), randomUUID(),
                                 trace.projectName());
                         guardrailsResourceClient.addBatch(guardrails, API_KEY, WORKSPACE_NAME);
                         return guardrails;

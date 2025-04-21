@@ -5,6 +5,7 @@ import com.comet.opik.api.GuardrailBatchItem;
 import com.comet.opik.podam.PodamFactoryUtils;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
+import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -18,10 +19,13 @@ import java.util.stream.Collectors;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class GuardrailsResourceClient extends BaseCommentResourceClient {
-    public GuardrailsResourceClient(ClientSupport client, String baseURI) {
-        super("%s/v1/private/guardrails", client, baseURI);
-    }
+@RequiredArgsConstructor
+public class GuardrailsResourceClient {
+    private static final String RESOURCE_PATH = "%s/v1/private/guardrails";
+
+    private final ClientSupport client;
+    private final String baseURI;
+    private final PodamFactory podamFactory;
 
     public void addBatch(List<GuardrailBatchItem> guardrails, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
@@ -34,9 +38,8 @@ public class GuardrailsResourceClient extends BaseCommentResourceClient {
         }
     }
 
-    public static List<GuardrailBatchItem> generateGuardrailsForTrace(
-            PodamFactory factory, UUID traceId, UUID spanId, String projectName) {
-        return PodamFactoryUtils.manufacturePojoList(factory, GuardrailBatchItem.class).stream()
+    public List<GuardrailBatchItem> generateGuardrailsForTrace(UUID traceId, UUID spanId, String projectName) {
+        return PodamFactoryUtils.manufacturePojoList(podamFactory, GuardrailBatchItem.class).stream()
                 .map(guardrail -> guardrail.toBuilder()
                         .entityId(traceId)
                         .secondaryId(spanId)
