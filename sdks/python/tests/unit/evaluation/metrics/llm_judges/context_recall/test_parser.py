@@ -1,5 +1,5 @@
 from opik import logging_messages, exceptions
-from opik.evaluation.metrics.llm_judges.answer_relevance import parser
+from opik.evaluation.metrics.llm_judges.context_recall import parser
 import pytest
 from opik.evaluation.metrics.llm_judges.context_recall.metric import ContextRecall
 
