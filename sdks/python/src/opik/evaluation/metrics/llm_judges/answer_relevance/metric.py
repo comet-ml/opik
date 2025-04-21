@@ -1,7 +1,5 @@
 from typing import Any, List, Optional, Union
-from opik.evaluation.metrics.llm_judges.answer_relevance.parser import (
-    parse_model_output,
-)
+from . import parser
 import pydantic
 
 from opik.evaluation.metrics import base_metric, score_result
@@ -126,7 +124,7 @@ class AnswerRelevance(base_metric.BaseMetric):
         model_output = self._model.generate_string(
             input=llm_query, response_format=AnswerRelevanceResponseFormat
         )
-        return parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=model_output, name=self.name)
 
     async def ascore(
         self,
@@ -157,7 +155,7 @@ class AnswerRelevance(base_metric.BaseMetric):
             input=llm_query, response_format=AnswerRelevanceResponseFormat
         )
 
-        return parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=model_output, name=self.name)
 
     def _generate_llm_query(
         self, input: str, output: str, context: Optional[List[str]]

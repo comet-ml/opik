@@ -1,6 +1,6 @@
 from functools import cached_property
 from typing import Any, Optional, Union
-from opik.evaluation.metrics.llm_judges.g_eval.parser import parse_model_output
+from . import parser
 import pydantic
 
 from opik.evaluation.metrics import base_metric, score_result
@@ -106,7 +106,7 @@ class GEval(base_metric.BaseMetric):
             response_format=GEvalScoreFormat,
         )
 
-        return parse_model_output(
+        return parser.parse_model_output(
             content=model_output,
             name=self.name,
             log_probs_supported=self._log_probs_supported,
@@ -147,7 +147,7 @@ class GEval(base_metric.BaseMetric):
             response_format=GEvalScoreFormat,
         )
 
-        return parse_model_output(
+        return parser.parse_model_output(
             content=model_output,
             name=self.name,
             log_probs_supported=self._log_probs_supported,

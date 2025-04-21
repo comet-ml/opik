@@ -1,8 +1,7 @@
-from opik import logging_messages
-from opik.evaluation.metrics.llm_judges.g_eval.parser import parse_model_output
+from opik import logging_messages, exceptions
+from opik.evaluation.metrics.llm_judges.g_eval import parser
 import pytest
 from opik.evaluation.metrics.llm_judges.g_eval.metric import GEval
-from opik.exceptions import MetricComputationError
 
 
 @pytest.mark.parametrize("log_probs_supported", [False, True])
@@ -16,9 +15,10 @@ def test_g_eval_score_out_of_range(log_probs_supported: bool):
     )
 
     with pytest.raises(
-        MetricComputationError, match=logging_messages.GEVAL_SCORE_CALC_FAILED
+        exceptions.MetricComputationError,
+        match=logging_messages.GEVAL_SCORE_CALC_FAILED,
     ):
-        parse_model_output(
+        parser.parse_model_output(
             content=invalid_model_output,
             name=metric.name,
             log_probs_supported=log_probs_supported,

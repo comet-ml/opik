@@ -1,5 +1,5 @@
 from typing import Union, Optional, List, Any
-from opik.evaluation.metrics.llm_judges.factuality.parser import parse_model_output
+from . import parser
 import pydantic
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
@@ -88,7 +88,7 @@ class Factuality(base_metric.BaseMetric):
             input=llm_query, response_format=FactualityResponseFormat
         )
 
-        return parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=model_output, name=self.name)
 
     async def ascore(
         self, input: str, output: str, context: List[str], **ignored_kwargs: Any
@@ -118,4 +118,4 @@ class Factuality(base_metric.BaseMetric):
             input=llm_query, response_format=FactualityResponseFormat
         )
 
-        return parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=model_output, name=self.name)

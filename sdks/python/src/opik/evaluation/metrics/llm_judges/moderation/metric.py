@@ -1,5 +1,5 @@
 from typing import Any, List, Optional, Union
-from opik.evaluation.metrics.llm_judges.moderation.parser import parse_model_output
+from opik.evaluation.metrics.llm_judges.moderation import parser
 import pydantic
 from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.models import base_model, models_factory
@@ -75,7 +75,7 @@ class Moderation(base_metric.BaseMetric):
             input=llm_query, response_format=ModerationResponseFormat
         )
 
-        return parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=model_output, name=self.name)
 
     async def ascore(
         self, output: str, **ignored_kwargs: Any
@@ -101,4 +101,4 @@ class Moderation(base_metric.BaseMetric):
             input=llm_query, response_format=ModerationResponseFormat
         )
 
-        return parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=model_output, name=self.name)

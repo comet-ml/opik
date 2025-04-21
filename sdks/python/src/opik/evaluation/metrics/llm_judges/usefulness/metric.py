@@ -1,5 +1,5 @@
 from typing import Union, Optional, Any
-from opik.evaluation.metrics.llm_judges.usefulness.parser import parse_model_output
+from . import parser
 import pydantic
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
@@ -78,7 +78,7 @@ class Usefulness(base_metric.BaseMetric):
             input=llm_query, response_format=UsefulnessResponseFormat
         )
 
-        return parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=model_output, name=self.name)
 
     async def ascore(
         self, input: str, output: str, **ignored_kwargs: Any
@@ -103,4 +103,4 @@ class Usefulness(base_metric.BaseMetric):
             input=llm_query, response_format=UsefulnessResponseFormat
         )
 
-        return parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=model_output, name=self.name)

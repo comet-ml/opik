@@ -1,7 +1,6 @@
 from typing import Any, List, Optional, Union
-from opik.evaluation.metrics.llm_judges.context_precision.parser import (
-    parse_model_output,
-)
+from . import parser
+
 import pydantic
 from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.models import base_model, models_factory
@@ -97,7 +96,7 @@ class ContextPrecision(base_metric.BaseMetric):
             input=llm_query, response_format=ContextPrecisionResponseFormat
         )
 
-        return parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=model_output, name=self.name)
 
     async def ascore(
         self,
@@ -134,4 +133,4 @@ class ContextPrecision(base_metric.BaseMetric):
             input=llm_query, response_format=ContextPrecisionResponseFormat
         )
 
-        return parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=model_output, name=self.name)

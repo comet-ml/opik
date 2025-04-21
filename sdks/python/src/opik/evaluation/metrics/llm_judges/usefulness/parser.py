@@ -1,8 +1,7 @@
 import logging
-from opik import logging_messages
+from opik import logging_messages, exceptions
 from opik.evaluation.metrics import score_result
 from opik.evaluation.metrics.llm_judges import parsing_helpers
-from opik.exceptions import MetricComputationError
 
 LOGGER = logging.getLogger(__name__)
 
@@ -14,7 +13,7 @@ def parse_model_output(content: str, name: str) -> score_result.ScoreResult:
         score: float = float(dict_content["score"])
 
         if not (0.0 <= score <= 1.0):
-            raise MetricComputationError(
+            raise exceptions.MetricComputationError(
                 f"Usefulness score must be between 0.0 and 1.0, got {score}"
             )
 
@@ -23,4 +22,6 @@ def parse_model_output(content: str, name: str) -> score_result.ScoreResult:
         )
     except Exception as e:
         LOGGER.error(f"Failed to parse model output: {e}", exc_info=True)
-        raise MetricComputationError(logging_messages.USEFULNESS_SCORE_CALC_FAILED)
+        raise exceptions.MetricComputationError(
+            logging_messages.USEFULNESS_SCORE_CALC_FAILED
+        )

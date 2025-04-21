@@ -1,8 +1,7 @@
-from opik import logging_messages
-from opik.evaluation.metrics.llm_judges.hallucination.parser import parse_model_output
+from opik import logging_messages, exceptions
+from opik.evaluation.metrics.llm_judges.hallucination import parser
 import pytest
 from opik.evaluation.metrics.llm_judges.hallucination.metric import Hallucination
-from opik.exceptions import MetricComputationError
 
 
 def test_hallucination_score_out_of_range():
@@ -12,6 +11,7 @@ def test_hallucination_score_out_of_range():
     )
 
     with pytest.raises(
-        MetricComputationError, match=logging_messages.HALLUCINATION_DETECTION_FAILED
+        exceptions.MetricComputationError,
+        match=logging_messages.HALLUCINATION_DETECTION_FAILED,
     ):
-        parse_model_output(content=invalid_model_output, name=metric.name)
+        parser.parse_model_output(content=invalid_model_output, name=metric.name)
