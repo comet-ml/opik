@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.GuardrailsValidation;
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -13,7 +14,9 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.TestGenerators;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
+import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -174,6 +177,42 @@ public class GuardrailsResourceTest {
         actual.content().forEach(actualTrace -> assertGuardrailValidations(
                 GuardrailsMapper.INSTANCE.mapToValidations(guardrailsByTraceId.get(actualTrace.id())),
                 actualTrace.guardrailsValidations()));
+    }
+
+    @Test
+    @DisplayName("test create guardrails, failed count appears in trace stats")
+    void getTraceStats_containsGuardrails() {
+        String workspaceId = randomUUID().toString();
+        mockTargetWorkspace(API_KEY, TEST_WORKSPACE, workspaceId);
+        var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                .map(trace -> trace.toBuilder()
+                        .projectName(DEFAULT_PROJECT)
+                        .usage(null)
+                        .feedbackScores(null)
+                        .build())
+                .toList();
+
+        traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+
+        var guardrailsByTraceId = traces.stream()
+                .collect(Collectors.toMap(Trace::id, trace -> guardrailsResourceClient.generateGuardrailsForTrace(
+                        trace.id(), randomUUID(), trace.projectName())));
+
+        guardrailsByTraceId.values()
+                .forEach(guardrail -> guardrailsResourceClient.addBatch(guardrail, API_KEY, TEST_WORKSPACE));
+        var expected = ProjectStats.CountValueStat.builder()
+                .name(StatsMapper.GUARDRAILS_FAILED_COUNT)
+                .value(guardrailsByTraceId.values().stream()
+                        .flatMap(List::stream)
+                        .filter(guardrail -> guardrail.result() == GuardrailResult.FAILED)
+                        .count())
+                .build();
+
+        ProjectStats actualStats = traceResourceClient.getTraceStats(DEFAULT_PROJECT, null, API_KEY,
+                TEST_WORKSPACE, null, Map.of());
+
+        assertThat(actualStats).isNotNull();
+        assertThat(actualStats.stats()).contains(expected);
     }
 
     private void assertGuardrailValidations(List<GuardrailsValidation> expected, List<GuardrailsValidation> actual) {

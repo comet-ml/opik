@@ -27,6 +27,7 @@ public class StatsMapper {
     public static final String METADATA = "metadata";
     public static final String TAGS = "tags";
     public static final String TRACE_COUNT = "trace_count";
+    public static final String GUARDRAILS_FAILED_COUNT = "guardrails_failed_count";
 
     public static ProjectStats mapProjectStats(Row row, String entityCountLabel) {
 

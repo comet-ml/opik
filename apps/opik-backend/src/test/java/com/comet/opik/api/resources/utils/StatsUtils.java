@@ -1,11 +1,13 @@
 package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ProjectStats.ProjectStatItem;
 import com.comet.opik.api.ProjectStats.SingleValueStat;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.utils.ValidationUtils;
@@ -72,6 +74,7 @@ public class StatsUtils {
                 Trace::startTime,
                 Trace::endTime,
                 Trace::totalEstimatedCost,
+                Trace::guardrailsValidations,
                 "trace_count");
     }
 
@@ -112,6 +115,7 @@ public class StatsUtils {
 
                     return BigDecimal.ZERO;
                 },
+                span -> null,
                 "span_count");
     }
 
@@ -126,6 +130,7 @@ public class StatsUtils {
             Function<T, Instant> startProvider,
             Function<T, Instant> endProvider,
             Function<T, BigDecimal> totalEstimatedCostProvider,
+            Function<T, List<GuardrailsValidation>> guardrailsProvider,
             String countLabel) {
 
         if (expectedEntities.isEmpty()) {
@@ -183,11 +188,21 @@ public class StatsUtils {
                 : totalEstimatedCost.divide(BigDecimal.valueOf(countEstimatedCost), ValidationUtils.SCALE,
                         RoundingMode.HALF_UP);
 
+        var failedGuardrails = expectedEntities.stream()
+                .map(guardrailsProvider)
+                .filter(Objects::nonNull)
+                .flatMap(List::stream)
+                .map(GuardrailsValidation::checks)
+                .flatMap(List::stream)
+                .filter(guardrail -> guardrail.result() == GuardrailResult.FAILED)
+                .count();
+
         stats.add(new CountValueStat(StatsMapper.INPUT, input));
         stats.add(new CountValueStat(StatsMapper.OUTPUT, output));
         stats.add(new CountValueStat(StatsMapper.METADATA, metadata));
         stats.add(new AvgValueStat(StatsMapper.TAGS, (tags / expectedEntities.size())));
         stats.add(new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, totalEstimatedCostValue.doubleValue()));
+        stats.add(new CountValueStat(StatsMapper.GUARDRAILS_FAILED_COUNT, failedGuardrails));
 
         usage.keySet()
                 .stream()
