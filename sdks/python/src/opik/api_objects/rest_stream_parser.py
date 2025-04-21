@@ -24,44 +24,41 @@ def read_and_parse_stream(
     # last record in chunk may be incomplete, we will use this buffer to concatenate strings
     buffer = b""
 
-    for chunk in stream:
-        buffer += chunk
-        lines = buffer.split(b"\n")
-
-        # last record in chunk may be incomplete
-        for line in lines[:-1]:
-            item = _parse_stream_line(line=line, item_class=item_class)
-            if item is not None:
-                # Apply filtering by IDs
-                if item_ids is not None and item.id not in item_ids:
-                    continue
-
-                result.append(item)
-
-                # Remove the ID from the set if filtering by IDs
-                if item_ids is not None:
-                    item_ids.remove(item.id)
-
-                # Stop if we have enough samples
-                if nb_samples is not None and len(result) == nb_samples:
-                    return result
-
-        # Keep the last potentially incomplete line in buffer
-        buffer = lines[-1]
-
-    # Process any remaining data in the buffer after the stream ends
-    if buffer:
-        item = _parse_stream_line(line=buffer, item_class=item_class)
+    def process_line(line: bytes) -> bool:
+        """Process a single line and apply filtering logic."""
+        nonlocal result, item_ids
+        item = _parse_stream_line(line=line, item_class=item_class)
         if item is not None:
             # Apply filtering by IDs
             if item_ids is not None and item.id not in item_ids:
-                return result
+                return False
 
             result.append(item)
 
             # Remove the ID from the set if filtering by IDs
             if item_ids is not None:
                 item_ids.remove(item.id)
+
+            # Stop if we have enough samples
+            if nb_samples is not None and len(result) == nb_samples:
+                return True
+        return False
+
+    for chunk in stream:
+        buffer += chunk
+        lines = buffer.split(b"\n")
+
+        # last record in chunk may be incomplete
+        for line in lines[:-1]:
+            if process_line(line):
+                return result
+
+        # Keep the last potentially incomplete line in buffer
+        buffer = lines[-1]
+
+    # Process any remaining data in the buffer after the stream ends
+    if buffer:
+        process_line(buffer)
 
     return result
 
