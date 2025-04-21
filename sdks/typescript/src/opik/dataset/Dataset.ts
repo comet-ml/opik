@@ -91,7 +91,7 @@ export class Dataset {
   }
 
   public async __internal_api__sync_hashes__() {
-    const items = await this.getFullItems();
+    const items = await this.__getFullItems();
 
     this.hashes = [];
     this.idToHash = {};
@@ -138,11 +138,11 @@ export class Dataset {
   }
 
   public async clear() {
-    const items = await this.getFullItems();
+    const items = await this.__getFullItems();
     await this.delete(items.map((item) => item.id || ""));
   }
 
-  private async getFullItems(nbSamples?: number) {
+  async __getFullItems(nbSamples?: number) {
     let page = 1;
     let allItems: DatasetItemPublic[] = [];
 
@@ -171,7 +171,7 @@ export class Dataset {
   }
 
   public async getItems(nbSamples?: number) {
-    const items = await this.getFullItems(nbSamples);
+    const items = await this.__getFullItems(nbSamples);
 
     return items.map((item) => item.data);
   }
