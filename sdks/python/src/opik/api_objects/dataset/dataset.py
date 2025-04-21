@@ -250,12 +250,12 @@ class Dataset:
 
         if (
             (nb_samples is None or nb_samples < len(results))
-            and dataset_item_ids
-            and len(dataset_item_ids) > 0
+            and dataset_item_ids_set
+            and len(dataset_item_ids_set) > 0
         ):
             LOGGER.warning(
                 "The following dataset items were not found in the dataset: %s",
-                dataset_item_ids,
+                dataset_item_ids_set,
             )
 
         return results
