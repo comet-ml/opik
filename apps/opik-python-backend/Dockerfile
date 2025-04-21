@@ -32,8 +32,4 @@ ENV PYTHON_CODE_EXECUTOR_STRATEGY="docker"
 
 ENTRYPOINT ["tini", "--"]
 
-RUN chown -R 1001:1001 /opt/opik-python-backend
-
-USER 1001:1001
-
 CMD ./entrypoint.sh

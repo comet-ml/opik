@@ -14,10 +14,12 @@ RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
 ###############################
 FROM amazoncorretto:21.0.6-al2023
 
-
 RUN yum update -y && yum install -y shadow ca-certificates openssl perl \
     && yum clean all
 VOLUME /tmp
+
+# Ensure /tmp is writable by any user
+RUN chmod 777 /tmp
 # Add bundle URL from https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html
 ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /tmp/certs/global-bundle.pem
 ADD install_rds_cert.sh .
@@ -37,13 +39,6 @@ COPY redoc/ redoc/
 RUN chmod +x ./*.sh
 COPY --from=build /opt/opik-backend/target/openapi.yaml redoc/
 COPY --from=build /opt/opik-backend/target/*.jar ./
-
-# Remove previous permission changes
-# RUN chown -R appuser:appgroup /opt/opik && chmod -R 775 /opt/opik && \
-#     chown appuser:appgroup /tmp && chmod 775 /tmp
-
-# Ensure /tmp is writable by any user
-RUN chmod 777 /tmp
 
 EXPOSE 8080
 EXPOSE 3003
