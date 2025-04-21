@@ -188,17 +188,16 @@ public class StatsUtils {
                 : totalEstimatedCost.divide(BigDecimal.valueOf(countEstimatedCost), ValidationUtils.SCALE,
                         RoundingMode.HALF_UP);
 
-        Long failedGuardrails = null;
-        if (guardrailsProvider != null) {
-            failedGuardrails = expectedEntities.stream()
-                    .map(guardrailsProvider)
-                    .filter(Objects::nonNull)
-                    .flatMap(List::stream)
-                    .map(GuardrailsValidation::checks)
-                    .flatMap(List::stream)
-                    .filter(guardrail -> guardrail.result() == GuardrailResult.FAILED)
-                    .count();
-        }
+        Long failedGuardrails = guardrailsProvider == null
+                ? null
+                : expectedEntities.stream()
+                        .map(guardrailsProvider)
+                        .filter(Objects::nonNull)
+                        .flatMap(List::stream)
+                        .map(GuardrailsValidation::checks)
+                        .flatMap(List::stream)
+                        .filter(guardrail -> guardrail.result() == GuardrailResult.FAILED)
+                        .count();
 
         stats.add(new CountValueStat(StatsMapper.INPUT, input));
         stats.add(new CountValueStat(StatsMapper.OUTPUT, output));
