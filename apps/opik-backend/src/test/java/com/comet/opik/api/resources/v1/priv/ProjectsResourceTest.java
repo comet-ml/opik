@@ -5,6 +5,7 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectStats;
@@ -28,6 +29,7 @@ import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
@@ -35,6 +37,8 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingFactory;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.GuardrailResult;
+import com.comet.opik.domain.GuardrailsMapper;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -112,6 +116,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static java.util.UUID.randomUUID;
 import static java.util.stream.Collectors.averagingDouble;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toMap;
@@ -166,6 +171,7 @@ class ProjectsResourceTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private ProjectResourceClient projectResourceClient;
+    private GuardrailsResourceClient guardrailsResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi, ProjectService projectService) throws SQLException {
@@ -188,6 +194,7 @@ class ProjectsResourceTest {
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
+        this.guardrailsResourceClient = new GuardrailsResourceClient(this.client, baseURI, factory);
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -1292,6 +1299,7 @@ class ProjectsResourceTest {
                             .feedbackScores(project.feedbackScores())
                             .projectId(project.id())
                             .traceCount(project.traceCount())
+                            .guardrailsFailedCount(project.guardrailsFailedCount())
                             .build())
                     .toList();
         }
@@ -1482,6 +1490,12 @@ class ProjectsResourceTest {
         List<FeedbackScoreBatchItem> scores = PodamFactoryUtils.manufacturePojoList(factory,
                 FeedbackScoreBatchItem.class);
 
+        var guardrailsByTraceId = traces.stream()
+                .collect(Collectors.toMap(Trace::id, trace -> guardrailsResourceClient.generateGuardrailsForTrace(
+                        trace.id(), randomUUID(), trace.projectName())));
+        guardrailsByTraceId.values().forEach(guardrail -> guardrailsResourceClient.addBatch(
+                guardrail, API_KEY, TEST_WORKSPACE));
+
         traces = traces.stream().map(trace -> {
             List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
                     .map(span -> span.toBuilder()
@@ -1516,6 +1530,8 @@ class ProjectsResourceTest {
                                     .toList())
                     .usage(StatsUtils.aggregateSpansUsage(spans))
                     .totalEstimatedCost(StatsUtils.aggregateSpansCost(spans))
+                    .guardrailsValidations(GuardrailsMapper.INSTANCE.mapToValidations(
+                            guardrailsByTraceId.get(trace.id())))
                     .build();
         }).toList();
 
@@ -1535,6 +1551,13 @@ class ProjectsResourceTest {
                 .feedbackScores(getScoreAverages(traces))
                 .lastUpdatedTraceAt(traces.stream().map(Trace::lastUpdatedAt).max(Instant::compareTo).orElse(null))
                 .traceCount((long) traces.size())
+                .guardrailsFailedCount(traces.stream()
+                        .map(Trace::guardrailsValidations)
+                        .flatMap(List::stream)
+                        .map(GuardrailsValidation::checks)
+                        .flatMap(List::stream)
+                        .filter(guardrail -> guardrail.result() == GuardrailResult.FAILED)
+                        .count())
                 .build();
     }
 
