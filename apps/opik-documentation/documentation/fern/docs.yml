@@ -1,6 +1,6 @@
 instances:
   - url: https://opik.docs.buildwithfern.com/docs/opik
-    custom-domain: https://www.comet.com/docs/opik/
+    custom-domain: www.comet.com/docs/opik/
 metadata:
   # Core platform identity
   og:site_name: "Opik Documentation"

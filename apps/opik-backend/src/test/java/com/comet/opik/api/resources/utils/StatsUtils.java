@@ -107,7 +107,7 @@ public class StatsUtils {
                                 .stream()
                                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().intValue()));
 
-                        return CostService.calculateCost(span.model(), span.provider(), usage);
+                        return CostService.calculateCost(span.model(), span.provider(), usage, null);
                     }
 
                     return BigDecimal.ZERO;
@@ -372,7 +372,7 @@ public class StatsUtils {
 
     public static BigDecimal aggregateSpansCost(List<Span> spans) {
         return spans.stream()
-                .map(span -> CostService.calculateCost(span.model(), span.provider(), span.usage()))
+                .map(span -> CostService.calculateCost(span.model(), span.provider(), span.usage(), null))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

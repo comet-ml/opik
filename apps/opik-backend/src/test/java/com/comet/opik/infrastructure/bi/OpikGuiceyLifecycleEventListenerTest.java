@@ -23,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
@@ -56,9 +57,11 @@ class OpikGuiceyLifecycleEventListenerTest {
 
     private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer(false);
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final Network network = Network.newNetwork();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer(false,
+            network);
     private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
-            .newClickHouseContainer(ZOOKEEPER_CONTAINER);
+            .newClickHouseContainer(false, network, ZOOKEEPER_CONTAINER);
 
     private static final Random RANDOM = new Random();
     private static final String VERSION = "%s.%s.%s".formatted(RANDOM.nextInt(10), RANDOM.nextInt(),
@@ -190,5 +193,8 @@ class OpikGuiceyLifecycleEventListenerTest {
     @AfterAll
     void tearDown() {
         MYSQL_CONTAINER.stop();
+        CLICK_HOUSE_CONTAINER.stop();
+        ZOOKEEPER_CONTAINER.stop();
+        network.close();
     }
 }
