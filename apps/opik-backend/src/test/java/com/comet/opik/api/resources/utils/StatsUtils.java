@@ -115,7 +115,7 @@ public class StatsUtils {
 
                     return BigDecimal.ZERO;
                 },
-                span -> null,
+                null,
                 "span_count");
     }
 
@@ -188,21 +188,23 @@ public class StatsUtils {
                 : totalEstimatedCost.divide(BigDecimal.valueOf(countEstimatedCost), ValidationUtils.SCALE,
                         RoundingMode.HALF_UP);
 
-        var failedGuardrails = expectedEntities.stream()
-                .map(guardrailsProvider)
-                .filter(Objects::nonNull)
-                .flatMap(List::stream)
-                .map(GuardrailsValidation::checks)
-                .flatMap(List::stream)
-                .filter(guardrail -> guardrail.result() == GuardrailResult.FAILED)
-                .count();
+        Long failedGuardrails = null;
+        if (guardrailsProvider != null) {
+            failedGuardrails = expectedEntities.stream()
+                    .map(guardrailsProvider)
+                    .filter(Objects::nonNull)
+                    .flatMap(List::stream)
+                    .map(GuardrailsValidation::checks)
+                    .flatMap(List::stream)
+                    .filter(guardrail -> guardrail.result() == GuardrailResult.FAILED)
+                    .count();
+        }
 
         stats.add(new CountValueStat(StatsMapper.INPUT, input));
         stats.add(new CountValueStat(StatsMapper.OUTPUT, output));
         stats.add(new CountValueStat(StatsMapper.METADATA, metadata));
         stats.add(new AvgValueStat(StatsMapper.TAGS, (tags / expectedEntities.size())));
         stats.add(new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, totalEstimatedCostValue.doubleValue()));
-        stats.add(new CountValueStat(StatsMapper.GUARDRAILS_FAILED_COUNT, failedGuardrails));
 
         usage.keySet()
                 .stream()
@@ -216,6 +218,9 @@ public class StatsUtils {
                 .forEach(key -> stats
                         .add(new AvgValueStat("%s.%s".formatted(StatsMapper.FEEDBACK_SCORE, key),
                                 feedback.get(key))));
+
+        Optional.ofNullable(failedGuardrails).ifPresent(failedGuardrailCount -> stats
+                .add(new CountValueStat(StatsMapper.GUARDRAILS_FAILED_COUNT, failedGuardrailCount)));
 
         return stats;
     }

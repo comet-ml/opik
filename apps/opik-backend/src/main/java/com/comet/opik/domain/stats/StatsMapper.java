@@ -44,8 +44,7 @@ public class StatsMapper {
                 .add(new CountValueStat(INPUT, row.get("input", Long.class)))
                 .add(new CountValueStat(OUTPUT, row.get("output", Long.class)))
                 .add(new CountValueStat(METADATA, row.get("metadata", Long.class)))
-                .add(new AvgValueStat(TAGS, row.get("tags", Double.class)))
-                .add(new CountValueStat(GUARDRAILS_FAILED_COUNT, row.get("guardrails_failed_count", Long.class)));
+                .add(new AvgValueStat(TAGS, row.get("tags", Double.class)));
 
         BigDecimal totalEstimatedCost = row.get("total_estimated_cost_avg", BigDecimal.class);
         if (totalEstimatedCost == null) {
@@ -71,6 +70,13 @@ public class StatsMapper {
                     .sorted()
                     .forEach(key -> stats.add(new AvgValueStat("%s.%s".formatted(FEEDBACK_SCORE, key),
                             feedbackScores.get(key))));
+        }
+
+        // spans cannot accept guardrails and therefore will not have guardrails_failed_count in the result set
+        if (row.getMetadata().contains("guardrails_failed_count")) {
+            Optional.ofNullable(row.get("guardrails_failed_count", Long.class)).ifPresent(
+                    guardrailsFailedCount -> stats
+                            .add(new CountValueStat(GUARDRAILS_FAILED_COUNT, guardrailsFailedCount)));
         }
 
         return new ProjectStats(stats.build().toList());
