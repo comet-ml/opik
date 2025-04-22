@@ -32,6 +32,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
+import com.comet.opik.api.resources.utils.resources.TestGenerators;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
@@ -173,6 +174,7 @@ class ProjectsResourceTest {
     private SpanResourceClient spanResourceClient;
     private ProjectResourceClient projectResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
+    private TestGenerators testGenerators;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi, ProjectService projectService) throws SQLException {
@@ -195,7 +197,8 @@ class ProjectsResourceTest {
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
-        this.guardrailsResourceClient = new GuardrailsResourceClient(this.client, baseURI, factory);
+        this.guardrailsResourceClient = new GuardrailsResourceClient(this.client, baseURI);
+        this.testGenerators = new TestGenerators();
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -1492,7 +1495,7 @@ class ProjectsResourceTest {
                 FeedbackScoreBatchItem.class);
 
         var guardrailsByTraceId = traces.stream()
-                .collect(Collectors.toMap(Trace::id, trace -> guardrailsResourceClient.generateGuardrailsForTrace(
+                .collect(Collectors.toMap(Trace::id, trace -> testGenerators.generateGuardrailsForTrace(
                         trace.id(), randomUUID(), trace.projectName())));
         guardrailsByTraceId.values().forEach(guardrail -> guardrailsResourceClient.addBatch(
                 guardrail, apiKey, workspaceName));

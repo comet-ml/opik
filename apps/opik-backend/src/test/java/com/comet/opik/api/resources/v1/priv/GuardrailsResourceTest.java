@@ -196,7 +196,7 @@ public class GuardrailsResourceTest {
         traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
         var guardrailsByTraceId = traces.stream()
-                .collect(Collectors.toMap(Trace::id, trace -> guardrailsResourceClient.generateGuardrailsForTrace(
+                .collect(Collectors.toMap(Trace::id, trace -> testGenerators.generateGuardrailsForTrace(
                         trace.id(), randomUUID(), trace.projectName())));
 
         guardrailsByTraceId.values()
