@@ -5,11 +5,13 @@
 import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
+import { DatasetWriteVisibility } from "../../types/DatasetWriteVisibility";
 
 export const DatasetWrite: core.serialization.Schema<serializers.DatasetWrite.Raw, OpikApi.DatasetWrite> =
     core.serialization.object({
         id: core.serialization.string().optional(),
         name: core.serialization.string(),
+        visibility: DatasetWriteVisibility.optional(),
         description: core.serialization.string().optional(),
     });
 
@@ -17,6 +19,7 @@ export declare namespace DatasetWrite {
     export interface Raw {
         id?: string | null;
         name: string;
+        visibility?: DatasetWriteVisibility.Raw | null;
         description?: string | null;
     }
 }

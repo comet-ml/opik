@@ -19,4 +19,5 @@ export interface ProjectDetailed {
     totalEstimatedCost?: number;
     usage?: Record<string, number>;
     traceCount?: number;
+    guardrailsFailedCount?: number;
 }
