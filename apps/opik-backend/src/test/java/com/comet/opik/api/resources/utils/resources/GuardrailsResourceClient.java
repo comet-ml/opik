@@ -25,7 +25,6 @@ public class GuardrailsResourceClient {
 
     private final ClientSupport client;
     private final String baseURI;
-    private final PodamFactory podamFactory;
 
     public void addBatch(List<GuardrailBatchItem> guardrails, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
@@ -36,21 +35,5 @@ public class GuardrailsResourceClient {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
-    }
-
-    public List<GuardrailBatchItem> generateGuardrailsForTrace(UUID traceId, UUID spanId, String projectName) {
-        return PodamFactoryUtils.manufacturePojoList(podamFactory, GuardrailBatchItem.class).stream()
-                .map(guardrail -> guardrail.toBuilder()
-                        .entityId(traceId)
-                        .secondaryId(spanId)
-                        .projectName(projectName)
-                        .build())
-                // deduplicate by guardrail name
-                .collect(Collectors.collectingAndThen(
-                        Collectors.toMap(
-                                GuardrailBatchItem::name,
-                                Function.identity(),
-                                (existing, replacement) -> existing),
-                        map -> new ArrayList<>(map.values())));
     }
 }

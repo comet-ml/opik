@@ -254,13 +254,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 AND workspace_id = :workspace_id
                 AND start_time >= parseDateTime64BestEffort(:start_time, 9)
                 AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
-                <if(!final)>
-                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
-                <endif>
             )
             SELECT <bucket> AS bucket,
-                   nullIf(count(g.id), 0) AS failed_cnt
+                   nullIf(count(DISTINCT g.id), 0) AS failed_cnt
             FROM traces_dedup AS t
                 JOIN guardrails AS g ON g.entity_id = t.id
             WHERE g.result = 'failed'

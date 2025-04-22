@@ -23,6 +23,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
+import com.comet.opik.api.resources.utils.resources.TestGenerators;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.ProjectMetricsDAO;
@@ -151,6 +152,7 @@ class ProjectMetricsResourceTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
+    private TestGenerators testGenerators;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -166,7 +168,8 @@ class ProjectMetricsResourceTest {
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
-        this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI, factory);
+        this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
+        this.testGenerators = new TestGenerators();
 
         ClientSupportUtils.config(client);
 
@@ -914,7 +917,7 @@ class ProjectMetricsResourceTest {
 
             return traces.stream()
                     .map(trace -> {
-                        var guardrails = guardrailsResourceClient.generateGuardrailsForTrace(trace.id(), randomUUID(),
+                        var guardrails = testGenerators.generateGuardrailsForTrace(trace.id(), randomUUID(),
                                 trace.projectName());
                         guardrailsResourceClient.addBatch(guardrails, API_KEY, WORKSPACE_NAME);
                         return guardrails;

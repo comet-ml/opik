@@ -11,6 +11,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
+import com.comet.opik.api.resources.utils.resources.TestGenerators;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.GuardrailsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -80,6 +81,7 @@ public class GuardrailsResourceTest {
 
     private TraceResourceClient traceResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
+    private TestGenerators testGenerators;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -98,7 +100,8 @@ public class GuardrailsResourceTest {
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
 
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
-        this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI, factory);
+        this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
+        this.testGenerators = new TestGenerators();
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -123,8 +126,7 @@ public class GuardrailsResourceTest {
                 .build();
         var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
-        var guardrails = guardrailsResourceClient.generateGuardrailsForTrace(traceId, randomUUID(),
-                trace.projectName());
+        var guardrails = testGenerators.generateGuardrailsForTrace(traceId, randomUUID(), trace.projectName());
 
         guardrailsResourceClient.addBatch(guardrails, API_KEY, TEST_WORKSPACE);
         Trace actual = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
@@ -156,10 +158,10 @@ public class GuardrailsResourceTest {
         var guardrailsByTraceId = traces.stream()
                 .collect(Collectors.toMap(Trace::id, trace -> Stream.concat(
                         // mimic two separate guardrails validation groups
-                        guardrailsResourceClient.generateGuardrailsForTrace(trace.id(), randomUUID(),
-                                trace.projectName()).stream(),
-                        guardrailsResourceClient.generateGuardrailsForTrace(trace.id(), randomUUID(),
-                                trace.projectName()).stream())
+                        testGenerators.generateGuardrailsForTrace(trace.id(), randomUUID(), trace.projectName())
+                                .stream(),
+                        testGenerators.generateGuardrailsForTrace(trace.id(), randomUUID(), trace.projectName())
+                                .stream())
                         .toList()));
 
         guardrailsByTraceId.values()
