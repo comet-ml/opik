@@ -130,33 +130,33 @@ from opik.evaluation.metrics import Hallucination
 
 metric = Hallucination()
 score = metric.score(
-    input="프랑스의 수도는 무엇입니까?",
-    output="파리",
-    context=["프랑스는 유럽에 있는 국가입니다."]
+    input="法国的首都是哪里?",
+    output="巴黎",
+    context=["法国是位于欧洲的国家."]
 )
 print(score)
 ```
+Opik 还包括许多预构建的启发式指标，并且支持创建自定义指标。更多信息请参阅[评价指标文档](https://www.comet.com/docs/opik/evaluation/metrics/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_3_link&utm_campaign=opik)。
 
-Opik은 사전 구성된 다양한 평가 지표를 제공하며, 사용자 정의 지표도 생성할 수 있습니다. 자세한 내용은 [评价指标文档](https://www.comet.com/docs/opik/evaluation/metrics/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_3_link&utm_campaign=opik) 를 확인하세요.
+### 🔍 LLM 应用评估
 
-### 🔍 LLM 애플리케이션 평가
+Opik 允许您在开发过程中通过[数据集](https://www.comet.com/docs/opik/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_2_link&utm_campaign=opik)和[实验](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=experiments_link&utm_campaign=opik)评估您的 LLM 应用程序。
 
-Opik을 사용하면 [데이터셋](https://www.comet.com/docs/opik/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_2_link&utm_campaign=opik) 및 [실험](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=experiments_link&utm_campaign=opik)을 통해 개발 중에 LLM 애플리케이션을 평가할 수 있습니다.
+您还可以通过我们的 [PyTest 集成](https://www.comet.com/docs/opik/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_2_link&utm_campaign=opik)在 CI/CD 流水线中运行评估。
 
-또한, [PyTest 통합](https://www.comet.com/docs/opik/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_2_link&utm_campaign=opik)을 사용하여 CI/CD 파이프라인의 일부로 평가를 실행할 수 있습니다.
+## ⭐ 在GitHub上关注我们
 
-## ⭐ GitHub에서 별을 눌러주세요
-
-Opik이 유용하다고 느끼신다면, 별을 눌러 주세요! 여러분의 지원은 커뮤니티 성장과 제품 개선에 큰 도움이 됩니다.
+如果你觉得 Opik 有用，请考虑给我们一个 Star (点赞/加星标)！你的支持有助于我们壮大社区并持续改进产品。
 
 <img src="https://github.com/user-attachments/assets/ffc208bb-3dc0-40d8-9a20-8513b5e4a59d" alt="Opik GitHub Star History" width="600"/>
 
-## 🤝 기여
+## 🤝 贡献
 
-Opik에 기여하는 방법은 다음과 같습니다:
-* [버그 보고](https://github.com/comet-ml/opik/issues) 및 [기능 요청](https://github.com/comet-ml/opik/issues) 제출
-* 문서 검토 및 [Pull Request](https://github.com/comet-ml/opik/pulls)를 통한 개선
-* Opik 관련 글 작성 및 발표 ([문의하기](https://chat.comet.com))
-* 인기 기능 요청에 대한 지지를 통해 지원 표시
+以下是为 Opik 贡献的方法：
 
-자세한 기여 방법은 [Contributing 가이드라인](CONTRIBUTING.md)을 참고하세요.
+  * 提交 [Bug 报告](https://github.com/comet-ml/opik/issues) 和 [功能请求](https://github.com/comet-ml/opik/issues)
+  * 通过审查文档和提交 [Pull Request](https://github.com/comet-ml/opik/pulls) 来改进文档
+  * 撰写和发布与 Opik 相关的文章 ([联系我们](https://chat.comet.com))
+  * 通过支持[受欢迎的功能请求](https://github.com/comet-ml/opik/issues?q=is%3Aissue+is%3Aopen+label%3A%22enhancement%22)来表达支持
+
+有关详细的贡献方法，请参阅 [贡献指南](CONTRIBUTING.md)。
