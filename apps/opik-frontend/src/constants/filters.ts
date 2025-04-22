@@ -14,6 +14,7 @@ export const DEFAULT_OPERATOR_MAP: Record<COLUMN_TYPE, FilterOperator> = {
   [COLUMN_TYPE.numberDictionary]: "=",
   [COLUMN_TYPE.cost]: "<=",
   [COLUMN_TYPE.duration]: "<=",
+  [COLUMN_TYPE.guardrails]: "=",
 };
 
 export const OPERATORS_MAP: Record<
@@ -182,6 +183,12 @@ export const OPERATORS_MAP: Record<
     {
       label: "is not empty",
       value: "is_not_empty",
+    },
+  ],
+  [COLUMN_TYPE.guardrails]: [
+    {
+      label: "=",
+      value: "=",
     },
   ],
 };

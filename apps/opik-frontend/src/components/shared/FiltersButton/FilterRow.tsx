@@ -15,6 +15,7 @@ import DictionaryRow, {
 } from "@/components/shared/FiltersButton/rows/DictionaryRow";
 import DefaultRow from "@/components/shared/FiltersButton/rows/DefaultRow";
 import { createEmptyFilter } from "@/lib/filters";
+import GuardrailsRow from "./rows/GuardrailsRow";
 
 export type FilterRowConfig = DictionaryRowConfig;
 
@@ -52,6 +53,8 @@ export const FilterRow = <TColumnData,>({
         return (
           <DictionaryRow filter={filter} onChange={onChange} config={config} />
         );
+      case COLUMN_TYPE.guardrails:
+        return <GuardrailsRow filter={filter} onChange={onChange} />;
       case "":
       default:
         return <DefaultRow filter={filter} />;

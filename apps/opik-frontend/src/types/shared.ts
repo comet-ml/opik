@@ -18,6 +18,7 @@ export const COLUMN_ACTIONS_ID = "actions";
 export const COLUMN_METADATA_ID = "metadata";
 export const COLUMN_FEEDBACK_SCORES_ID = "feedback_scores";
 export const COLUMN_COMMENTS_ID = "comments";
+export const COLUMN_GUARDRAILS_ID = "guardrails";
 export const COLUMN_CREATED_AT_ID = "created_at";
 
 export enum COLUMN_TYPE {
@@ -29,6 +30,7 @@ export enum COLUMN_TYPE {
   dictionary = "dictionary",
   numberDictionary = "feedback_scores_number",
   cost = "cost",
+  guardrails = "guardrails",
 }
 
 export enum DYNAMIC_COLUMN_TYPE {
@@ -40,11 +42,7 @@ export enum DYNAMIC_COLUMN_TYPE {
   null = "null",
 }
 
-export enum CUSTOM_HEADER_ICON {
-  GUARDRAILS = "guardrails",
-}
-
-export type HeaderIconType = COLUMN_TYPE | CUSTOM_HEADER_ICON;
+export type HeaderIconType = COLUMN_TYPE;
 
 export type ColumnData<T> = {
   id: string;
