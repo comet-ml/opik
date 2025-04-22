@@ -16,6 +16,11 @@ public class ErrorUtils {
         return failWithNotFound(message);
     }
 
+    public static NotFoundException failWithNotFoundName(@NonNull String entity, @NonNull String name) {
+        String message = "%s name: %s not found".formatted(entity, name);
+        return failWithNotFound(message);
+    }
+
     public static NotFoundException failWithNotFound(@NonNull String entity, @NonNull UUID id) {
         return failWithNotFound(entity, id.toString());
     }

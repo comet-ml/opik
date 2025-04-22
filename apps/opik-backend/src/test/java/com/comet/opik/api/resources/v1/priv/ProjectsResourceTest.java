@@ -45,6 +45,7 @@ import com.comet.opik.utils.ValidationUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -100,7 +101,7 @@ import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.ass
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
-import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_RESPONSE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
@@ -324,8 +325,8 @@ class ProjectsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
                 if (expectedCode == 404) {
                     assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class))
-                            .isEqualTo(PROJECT_NOT_FOUND_RESPONSE);
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(id));
                 }
             }
         }
@@ -515,8 +516,8 @@ class ProjectsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
                 if (expectedCode == 404) {
                     assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class))
-                            .isEqualTo(PROJECT_NOT_FOUND_RESPONSE);
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(id));
                 }
             }
         }
