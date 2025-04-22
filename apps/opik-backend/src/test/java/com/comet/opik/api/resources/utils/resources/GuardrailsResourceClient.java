@@ -2,19 +2,13 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.GuardrailBatch;
 import com.comet.opik.api.GuardrailBatchItem;
-import com.comet.opik.podam.PodamFactoryUtils;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
-import uk.co.jemos.podam.api.PodamFactory;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
