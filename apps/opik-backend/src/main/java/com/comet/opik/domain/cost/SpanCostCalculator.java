@@ -33,11 +33,9 @@ class SpanCostCalculator {
         int outputTokens = usage.getOrDefault("original_usage.completion_tokens",
                 usage.getOrDefault("completion_tokens", 0));
 
-        BigDecimal final_price = modelPrice.inputPrice().multiply(BigDecimal.valueOf(inputTokens))
+        return modelPrice.inputPrice().multiply(BigDecimal.valueOf(inputTokens))
                 .add(modelPrice.outputPrice().multiply(BigDecimal.valueOf(outputTokens)))
                 .add(modelPrice.cacheReadInputTokenPrice().multiply(BigDecimal.valueOf(cachedReadInputTokens)));
-
-        return final_price;
     }
 
     public static BigDecimal textGenerationWithCacheCostAnthropic(ModelPrice modelPrice, Map<String, Integer> usage) {
