@@ -4457,6 +4457,74 @@ class TracesResourceTest {
                     sortingFields);
         }
 
+        @Test
+        void createAndRetrieveTraces__spanCountReflectsActualSpans_andTotalCountMatches() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            // Create traces with varying spanCount values
+            List<Trace> traces = IntStream.range(0, 5)
+                    .mapToObj(i -> createTrace().toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .spanCount(i * 3) // e.g., 0, 3, 6, 9, 12
+                            .usage(null)
+                            .feedbackScores(null)
+                            .endTime(Instant.now())
+                            .comments(null)
+                            .build())
+                    .collect(Collectors.toList());
+
+            int expectedTotalSpanCount = traces.stream().mapToInt(Trace::spanCount).sum();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // For each trace, create the actual number of spans matching the spanCount
+            List<Span> allSpans = new ArrayList<>();
+            for (Trace trace : traces) {
+                List<Span> spansForTrace = IntStream.range(0, trace.spanCount())
+                        .mapToObj(j -> factory.manufacturePojo(Span.class).toBuilder()
+                                .projectName(projectName)
+                                .traceId(trace.id())
+                                .build())
+                        .collect(Collectors.toList());
+                allSpans.addAll(spansForTrace);
+            }
+            spanResourceClient.batchCreateSpans(allSpans, apiKey, workspaceName);
+
+            // Retrieve traces from the API
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+            Trace.TracePage resultPage = traceResourceClient.getTraces(projectName, projectId, apiKey, workspaceName,
+                    List.of(), List.of(), 100, Map.of());
+            List<Trace> returnedTraces = resultPage.content();
+
+            // Check that all created traces are present and have the correct spanCount
+            for (Trace created : traces) {
+                returnedTraces.stream()
+                        .filter(returned -> returned.id().equals(created.id()))
+                        .findFirst()
+                        .ifPresentOrElse(returned -> assertThat(returned.spanCount())
+                                .as("Trace with id %s should have spanCount %d", created.id(), created.spanCount())
+                                .isEqualTo(created.spanCount()),
+                                () -> assertThat(false)
+                                        .as("Trace with id %s should be present", created.id())
+                                        .isTrue());
+            }
+
+            int actualTotalSpanCount = returnedTraces.stream()
+                    .filter(rt -> traces.stream().anyMatch(t -> t.id().equals(rt.id())))
+                    .mapToInt(Trace::spanCount)
+                    .sum();
+
+            assertThat(actualTotalSpanCount)
+                    .as("Total spanCount across all traces should match the expected total")
+                    .isEqualTo(expectedTotalSpanCount);
+        }
         private Stream<Arguments> getTracesByProject__whenSortingByValidFields__thenReturnTracesSorted() {
 
             Comparator<Trace> inputComparator = Comparator.comparing(trace -> trace.input().toString());
