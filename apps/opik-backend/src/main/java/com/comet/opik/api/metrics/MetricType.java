@@ -6,4 +6,5 @@ public enum MetricType {
     TOKEN_USAGE,
     DURATION,
     COST,
+    GUARDRAILS_FAILED_COUNT,
 }

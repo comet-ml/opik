@@ -37,6 +37,7 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 public interface ProjectMetricsDAO {
     String NAME_TRACES = "traces";
     String NAME_COST = "cost";
+    String NAME_GUARDRAILS_FAILED_COUNT = "failed";
     String NAME_DURATION_P50 = "duration.p50";
     String NAME_DURATION_P90 = "duration.p90";
     String NAME_DURATION_P99 = "duration.p99";
@@ -50,6 +51,7 @@ public interface ProjectMetricsDAO {
     Mono<List<Entry>> getFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getGuardrailsFailedCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
 }
 
 @Slf4j
@@ -238,6 +240,34 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 STEP <step>;
             """;
 
+    private static final String GET_GUARDRAILS_FAILED_COUNT = """
+            WITH traces_dedup AS (
+                SELECT
+                       id,
+                       start_time,
+                       if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                            NULL) AS duration
+                FROM traces <final>
+                WHERE project_id = :project_id
+                AND workspace_id = :workspace_id
+                AND start_time >= parseDateTime64BestEffort(:start_time, 9)
+                AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
+            )
+            SELECT <bucket> AS bucket,
+                   nullIf(count(DISTINCT g.id), 0) AS failed_cnt
+            FROM traces_dedup AS t
+                JOIN guardrails AS g ON g.entity_id = t.id
+            WHERE g.result = 'failed'
+            GROUP BY bucket
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """;
+
     @Override
     public Mono<List<Entry>> getDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
@@ -312,6 +342,16 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         result,
                         row -> NAME_COST,
                         row -> row.get("value", BigDecimal.class)))
+                .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getGuardrailsFailedCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_GUARDRAILS_FAILED_COUNT, "guardrailsFailedCount")
+                .flatMapMany(result -> rowToDataPoint(result,
+                        row -> NAME_GUARDRAILS_FAILED_COUNT,
+                        row -> row.get("failed_cnt", Integer.class)))
                 .collectList());
     }
 
