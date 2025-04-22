@@ -3,6 +3,7 @@ package com.comet.opik.domain.cost;
 import com.comet.opik.api.ModelCostData;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.Nullable;
 
@@ -23,10 +24,12 @@ public class CostService {
             "openai", "openai",
             "vertex_ai-language-models", "google_vertexai",
             "gemini", "google_ai",
-            "anthropic", "anthropic");
+            "anthropic", "anthropic",
+            "vertex_ai-anthropic_models", "anthropic_vertexai");
     private static final String PRICES_FILE = "model_prices_and_context_window.json";
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
-            .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic);
+            .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
+                    "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI);
 
     static {
         try {
@@ -41,13 +44,28 @@ public class CostService {
             new BigDecimal("0"), new BigDecimal("0"), new BigDecimal("0"), SpanCostCalculator::defaultCost);
 
     public static BigDecimal calculateCost(@Nullable String modelName, @Nullable String provider,
-            @Nullable Map<String, Integer> usage) {
+            @Nullable Map<String, Integer> usage, @Nullable JsonNode metadata) {
         ModelPrice modelPrice = Optional.ofNullable(modelName)
                 .flatMap(mn -> Optional.ofNullable(provider).map(p -> createModelProviderKey(mn, p)))
                 .map(modelProviderPrices::get)
                 .orElse(DEFAULT_COST);
 
-        return modelPrice.calculator().apply(modelPrice, Optional.ofNullable(usage).orElse(Map.of()));
+        BigDecimal estimatedCost = modelPrice.calculator().apply(modelPrice,
+                Optional.ofNullable(usage).orElse(Map.of()));
+
+        return estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? estimatedCost : getCostFromMetadata(metadata);
+    }
+
+    public static BigDecimal getCostFromMetadata(JsonNode metadata) {
+        return Optional.ofNullable(metadata)
+                .map(md -> md.get("cost"))
+                .map(cost -> Optional.ofNullable(cost.get("currency"))
+                        .map(JsonNode::asText)
+                        .filter("USD"::equals)
+                        .map(currency -> cost.get("total_tokens"))
+                        .map(JsonNode::decimalValue)
+                        .orElse(BigDecimal.ZERO))
+                .orElse(BigDecimal.ZERO);
     }
 
     private static Map<String, ModelPrice> parseModelPrices() throws IOException {

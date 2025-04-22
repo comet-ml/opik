@@ -13,6 +13,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -800,28 +801,42 @@ class SpanDAO {
 
     private static final String SELECT_SPANS_STATS = """
             WITH feedback_scores_agg AS (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    mapFromArrays(
-                        groupArray(name),
-                        groupArray(value)
-                    ) as feedback_scores
-                FROM (
+                <if(final)>
                     SELECT
-                        workspace_id,
                         project_id,
                         entity_id,
-                        name,
-                        value
-                    FROM feedback_scores
+                        mapFromArrays(
+                            groupArray(name),
+                            groupArray(value)
+                        ) as feedback_scores
+                    FROM feedback_scores final
                     WHERE entity_type = 'span'
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                ) GROUP BY workspace_id, project_id, entity_id
+                    GROUP BY workspace_id, project_id, entity_id
+                <else>
+                    SELECT
+                        project_id,
+                        entity_id,
+                        mapFromArrays(
+                            groupArray(name),
+                            groupArray(value)
+                        ) as feedback_scores
+                    FROM (
+                        SELECT
+                            workspace_id,
+                            project_id,
+                            entity_id,
+                            name,
+                            value
+                        FROM feedback_scores
+                        WHERE entity_type = 'span'
+                        AND workspace_id = :workspace_id
+                        AND project_id = :project_id
+                        ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                        LIMIT 1 BY entity_id, name
+                    ) GROUP BY workspace_id, project_id, entity_id
+                <endif>
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -838,32 +853,8 @@ class SpanDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>
-            SELECT
-                project_id as project_id,
-                count(DISTINCT span_id) as span_count,
-                arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration,
-                sum(input_count) as input,
-                sum(output_count) as output,
-                sum(metadata_count) as metadata,
-                avg(tags_count) as tags,
-                avgMap(usage) as usage,
-                avgMap(feedback_scores) AS feedback_scores,
-                avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
-                toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg
-            FROM (
-                SELECT
-                    s.workspace_id as workspace_id,
-                    s.project_id as project_id,
-                    s.id as span_id,
-                    s.duration as duration,
-                    s.input_count as input_count,
-                    s.output_count as output_count,
-                    s.metadata_count as metadata_count,
-                    s.tags_count as tags_count,
-                    s.usage as usage,
-                    f.feedback_scores as feedback_scores,
-                    s.total_estimated_cost as total_estimated_cost
-                FROM (
+            , spans_final AS (
+                <if(final)>
                     SELECT
                          workspace_id,
                          project_id,
@@ -872,9 +863,53 @@ class SpanDAO {
                                      AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                                  (dateDiff('microsecond', start_time, end_time) / 1000.0),
                                  NULL) AS duration,
-                         if(length(input) > 0, 1, 0) as input_count,
-                         if(length(output) > 0, 1, 0) as output_count,
-                         if(length(metadata) > 0, 1, 0) as metadata_count,
+                         notEmpty(input) as input_count,
+                         notEmpty(output) as output_count,
+                         notEmpty(metadata) as metadata_count,
+                         length(tags) as tags_count,
+                         usage,
+                         total_estimated_cost
+                    FROM spans final
+                    <if(feedback_scores_empty_filters)>
+                        LEFT JOIN fsc ON fsc.entity_id = spans.id
+                    <endif>
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                    <if(trace_id)> AND trace_id = :trace_id <endif>
+                    <if(type)> AND type = :type <endif>
+                    <if(filters)> AND <filters> <endif>
+                    <if(feedback_scores_filters)>
+                    AND id in (
+                        SELECT
+                            entity_id
+                        FROM (
+                            SELECT *
+                            FROM feedback_scores
+                            WHERE entity_type = 'span'
+                            AND project_id = :project_id
+                            AND workspace_id = :workspace_id
+                            ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                            LIMIT 1 BY entity_id, name
+                        )
+                        GROUP BY entity_id
+                        HAVING <feedback_scores_filters>
+                    )
+                    <endif>
+                    <if(feedback_scores_empty_filters)>
+                    AND fsc.feedback_scores_count = 0
+                    <endif>
+                <else>
+                    SELECT
+                         workspace_id,
+                         project_id,
+                         id,
+                         if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                     AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                                 (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                                 NULL) AS duration,
+                         notEmpty(input) as input_count,
+                         notEmpty(output) as output_count,
+                         notEmpty(metadata) as metadata_count,
                          length(tags) as tags_count,
                          usage,
                          total_estimated_cost
@@ -909,11 +944,23 @@ class SpanDAO {
                     <endif>
                     ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
-                ) AS s
-                LEFT JOIN feedback_scores_agg AS f ON s.id = f.entity_id
+                <endif>
             )
+            SELECT
+                project_id as project_id,
+                count(DISTINCT id) as span_count,
+                arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration,
+                sum(input_count) as input,
+                sum(output_count) as output,
+                sum(metadata_count) as metadata,
+                avg(tags_count) as tags,
+                avgMap(usage) as usage,
+                avgMap(feedback_scores) AS feedback_scores,
+                avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
+                toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg
+            FROM spans_final s
+            LEFT JOIN feedback_scores_agg AS f ON s.id = f.entity_id
             GROUP BY project_id
-            SETTINGS join_algorithm='auto'
             ;
             """;
 
@@ -935,12 +982,15 @@ class SpanDAO {
             ;
             """;
 
-    private static final String ESTIMATED_COST_VERSION = "1.0";
+    // ESTIMATED COST CHANGE
+    // 1.1 - Added cached tokens for OpenAI
+    private static final String ESTIMATED_COST_VERSION = "1.1";
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SpanSortingFactory sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull OpikConfiguration opikConfiguration;
 
     @WithSpan
     public Mono<Void> insert(@NonNull Span span) {
@@ -1213,7 +1263,7 @@ class SpanDAO {
         } else if (!isManualCostExist && isUpdateCostRecalculationAvailable(spanUpdate)) {
             // Calculate estimated cost only in case Span doesn't have manually set cost
             BigDecimal estimatedCost = CostService.calculateCost(spanUpdate.model(), spanUpdate.provider(),
-                    spanUpdate.usage());
+                    spanUpdate.usage(), spanUpdate.metadata());
             statement.bind("total_estimated_cost", estimatedCost.toString());
             statement.bind("total_estimated_cost_version",
                     estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
@@ -1431,7 +1481,7 @@ class SpanDAO {
                         .map(metadata -> metadata.get("model"))
                         .map(JsonNode::asText).orElse("");
 
-        return CostService.calculateCost(model, span.provider(), span.usage());
+        return CostService.calculateCost(model, span.provider(), span.usage(), span.metadata());
     }
 
     private Flux<? extends Result> findSpanStream(int limit, SpanSearchCriteria criteria, Connection connection) {
@@ -1592,6 +1642,10 @@ class SpanDAO {
                 .flatMapMany(connection -> {
                     var template = newFindTemplate(SELECT_SPANS_STATS, searchCriteria);
 
+                    if (opikConfiguration.isEnableFinal()) {
+                        template.add("final", true);
+                    }
+
                     var statement = connection.createStatement(template.render())
                             .bind("project_id", searchCriteria.projectId());
 
@@ -1641,8 +1695,8 @@ class SpanDAO {
     }
 
     private boolean isUpdateCostRecalculationAvailable(SpanUpdate spanUpdate) {
-        return StringUtils.isNotBlank(spanUpdate.model()) && StringUtils.isNotBlank(spanUpdate.provider())
-                && spanUpdate.usage() != null;
+        return CostService.calculateCost(spanUpdate.model(), spanUpdate.provider(), spanUpdate.usage(),
+                spanUpdate.metadata()).compareTo(BigDecimal.ZERO) > 0;
     }
 
     private void bindCost(Span span, Statement statement, String index) {

@@ -145,6 +145,7 @@ import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.SpanService.PARENT_SPAN_IS_MISMATCH;
 import static com.comet.opik.domain.SpanService.PROJECT_AND_WORKSPACE_NAME_MISMATCH;
 import static com.comet.opik.domain.SpanService.TRACE_ID_MISMATCH;
+import static com.comet.opik.domain.cost.CostService.getCostFromMetadata;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.utils.ValidationUtils.MAX_FEEDBACK_SCORE_VALUE;
@@ -4432,8 +4433,9 @@ class SpansResourceTest {
                                             .map(md -> md.get("model"))
                                             .map(JsonNode::asText).orElse(""),
                             provider,
-                            usage);
-            if (MapUtils.isNotEmpty(usage)) {
+                            usage,
+                            metadata);
+            if (MapUtils.isNotEmpty(usage) || isMetadataCost(metadata)) {
                 assertThat(expectedCost.compareTo(BigDecimal.ZERO) > 0).isTrue();
             }
             var span = getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
@@ -4444,15 +4446,24 @@ class SpansResourceTest {
                     .isEqualTo(expectedCost.compareTo(BigDecimal.ZERO) == 0 ? null : expectedCost);
         }
 
+        boolean isMetadataCost(JsonNode metadata) {
+            return getCostFromMetadata(metadata).compareTo(BigDecimal.ZERO) > 0;
+        }
+
         Stream<Arguments> createAndGetCost() {
             var metadata = JsonUtils
                     .getJsonNodeFromString(
                             "{\"created_from\":\"openai\",\"type\":\"openai_chat\",\"model\":\"gpt-3.5-turbo\"}");
+            String metadataWithCost = "{\"cost\": {\n" +
+                    "    \"total_tokens\": %s,\n" +
+                    "    \"currency\": \"%s\"\n" +
+                    "  }}";
+
             return Stream.of(
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
                             "gpt-3.5-turbo-1106", "openai",
-                            null, null),
+                            JsonUtils.getJsonNodeFromString(metadataWithCost.formatted("0.000339", "USD")), null),
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
                             "gemini-1.5-pro-preview-0514", "google_vertexai",
@@ -4460,6 +4471,23 @@ class SpansResourceTest {
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
                             "claude-3-sonnet-20240229", "anthropic",
+                            null, null),
+                    Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "claude-3-5-sonnet-v2@20241022", "anthropic_vertexai",
+                            null, null),
+                    Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "gpt-4o-mini-2024-07-18", "openai",
+                            null, null),
+                    Arguments.of(
+                            Map.of("original_usage.prompt_tokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.prompt_tokens_details.cached_tokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "original_usage.completion_tokens",
+                                    Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "gpt-4o-mini-2024-07-18", "openai",
                             null, null),
                     Arguments.of(
                             Map.of("original_usage.input_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
@@ -4483,6 +4511,14 @@ class SpansResourceTest {
                             null),
                     Arguments.of(null, "gpt-3.5-turbo-1106", "openai", null, null),
                     Arguments.of(null, "unknown-model", "openai", null, null),
+                    Arguments.of(null, null, null,
+                            JsonUtils.getJsonNodeFromString(metadataWithCost.formatted("0.000339", "USD")), null),
+                    Arguments.of(null, null, null,
+                            JsonUtils.getJsonNodeFromString(metadataWithCost.formatted("0.000339", "Wrong currency")),
+                            null),
+                    Arguments.of(null, null, null,
+                            JsonUtils.getJsonNodeFromString(metadataWithCost.formatted("\"Invalid cost\"", "USD")),
+                            null),
                     Arguments.of(null, null, null, null, null),
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
@@ -5029,7 +5065,7 @@ class SpansResourceTest {
             var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .projectName(null)
                     .parentSpanId(null)
-                    .model("gpt-4o-2024-08-06")
+                    .model("gpt-4")
                     .provider("openai")
                     .usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))))
@@ -5057,10 +5093,20 @@ class SpansResourceTest {
             } else if (initialManualCost != null) {
                 expectedCost = initialManualCost;
             } else {
-                expectedCost = CostService.calculateCost(
-                        expectedSpanUpdate.model() != null ? expectedSpanUpdate.model() : expectedSpan.model(),
-                        expectedSpanUpdate.provider() != null ? expectedSpanUpdate.provider() : expectedSpan.provider(),
-                        expectedSpanUpdate.usage() != null ? expectedSpanUpdate.usage() : expectedSpan.usage());
+                if (expectedSpanUpdate.model() != null || expectedSpanUpdate.provider() != null
+                        || expectedSpanUpdate.usage() != null) {
+                    expectedCost = CostService.calculateCost(
+                            expectedSpanUpdate.model() != null ? expectedSpanUpdate.model() : expectedSpan.model(),
+                            expectedSpanUpdate.provider() != null
+                                    ? expectedSpanUpdate.provider()
+                                    : expectedSpan.provider(),
+                            expectedSpanUpdate.usage() != null ? expectedSpanUpdate.usage() : expectedSpan.usage(),
+                            expectedSpanUpdate.metadata());
+                } else {
+                    expectedCost = CostService.calculateCost(
+                            null, null, null,
+                            expectedSpanUpdate.metadata());
+                }
             }
 
             assertThat(actualSpan.totalEstimatedCost())
@@ -5071,6 +5117,11 @@ class SpansResourceTest {
         }
 
         Stream<Arguments> update__whenCostIsChanged__thenAcceptUpdate() {
+            String metadataWithCost = "{\"cost\": {\n" +
+                    "    \"total_tokens\": %s,\n" +
+                    "    \"currency\": \"%s\"\n" +
+                    "  }}";
+
             return Stream.of(
                     arguments(SpanUpdate.builder().model("gpt-4o-2024-05-13").totalEstimatedCost(null).build(), null),
                     arguments(SpanUpdate.builder().model("gemini-1.5-pro-002").provider("google_ai")
@@ -5084,6 +5135,7 @@ class SpansResourceTest {
                     arguments(SpanUpdate.builder().model("gpt-4o-2024-05-13")
                             .usage(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                                     "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))))
+                            .metadata(JsonUtils.getJsonNodeFromString(metadataWithCost.formatted("0.000339", "USD")))
                             .totalEstimatedCost(null)
                             .build(),
                             null),
@@ -5104,6 +5156,16 @@ class SpansResourceTest {
                                     .totalEstimatedCost(podamFactory.manufacturePojo(BigDecimal.class).abs().setScale(8,
                                             RoundingMode.DOWN))
                                     .build(),
+                            podamFactory.manufacturePojo(BigDecimal.class).abs().setScale(8, RoundingMode.DOWN)),
+                    arguments(SpanUpdate.builder()
+                            .totalEstimatedCost(null)
+                            .metadata(JsonUtils.getJsonNodeFromString(metadataWithCost.formatted("0.000339", "USD")))
+                            .build(),
+                            null),
+                    arguments(SpanUpdate.builder()
+                            .totalEstimatedCost(null)
+                            .metadata(JsonUtils.getJsonNodeFromString(metadataWithCost.formatted("0.000339", "USD")))
+                            .build(),
                             podamFactory.manufacturePojo(BigDecimal.class).abs().setScale(8, RoundingMode.DOWN)));
         }
 
