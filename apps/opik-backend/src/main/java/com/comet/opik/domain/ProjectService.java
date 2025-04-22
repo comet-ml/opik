@@ -19,6 +19,7 @@ import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.BinaryOperatorUtils;
+import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.PaginationUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -213,7 +214,7 @@ class ProjectServiceImpl implements ProjectService {
 
         return Optional.of(get(id, workspaceId))
                 .filter(project -> !publicOnly || project.visibility() == ProjectVisibility.PUBLIC)
-                .orElseThrow(this::createNotFoundError);
+                .orElseThrow(() -> ErrorUtils.failWithNotFound("Project", id));
     }
 
     @Override
