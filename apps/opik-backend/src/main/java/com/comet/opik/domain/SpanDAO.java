@@ -982,7 +982,9 @@ class SpanDAO {
             ;
             """;
 
-    private static final String ESTIMATED_COST_VERSION = "1.0";
+    // ESTIMATED COST CHANGE
+    // 1.1 - Added cached tokens for OpenAI
+    private static final String ESTIMATED_COST_VERSION = "1.1";
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
