@@ -57,7 +57,7 @@ def update_current_span(
     model: Optional[str] = None,
     provider: Optional[Union[str, LLMProvider]] = None,
     total_cost: Optional[float] = None,
-    attachments: Optional[Attachment] = None,
+    attachments: Optional[List[Attachment]] = None,
 ) -> None:
     """
     Update the current span with the provided parameters. This method is usually called within a tracked function.
@@ -75,7 +75,7 @@ def update_current_span(
         feedback_scores: The feedback scores of the span.
         model: The name of LLM (in this case type parameter should be == llm)
         provider: The provider of LLM. You can find providers officially supported by Opik for cost tracking
-            in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
+            in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our GitHub - https://github.com/comet-ml/opik.
             If your provider is not in the list, you can still specify it, but the cost tracking will not be available
         total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
         attachments: The list of attachments to be uploaded to the span.
@@ -108,7 +108,7 @@ def update_current_trace(
     tags: Optional[List[str]] = None,
     feedback_scores: Optional[List[FeedbackScoreDict]] = None,
     thread_id: Optional[str] = None,
-    attachments: Optional[Attachment] = None,
+    attachments: Optional[List[Attachment]] = None,
 ) -> None:
     """
     Update the current trace with the provided parameters. This method is usually called within a tracked function.

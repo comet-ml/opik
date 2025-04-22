@@ -282,6 +282,7 @@ class BaseTrackDecorator(abc.ABC):
 
             result = None
             error_info: Optional[ErrorInfoDict] = None
+            func_exception = None
             try:
                 result = func(*args, **kwargs)
             except Exception as exception:
@@ -293,7 +294,7 @@ class BaseTrackDecorator(abc.ABC):
                     exc_info=True,
                 )
                 error_info = error_info_collector.collect(exception)
-                raise exception
+                func_exception = exception
             finally:
                 stream_or_stream_manager = self._streams_handler(
                     result,
@@ -309,7 +310,10 @@ class BaseTrackDecorator(abc.ABC):
                     capture_output=track_options.capture_output,
                     flush=track_options.flush,
                 )
-                return result
+                if func_exception is not None:
+                    raise func_exception
+                else:
+                    return result
 
         wrapper.opik_tracked = True  # type: ignore
 
@@ -330,6 +334,7 @@ class BaseTrackDecorator(abc.ABC):
             )
             result = None
             error_info: Optional[ErrorInfoDict] = None
+            func_exception = None
             try:
                 result = await func(*args, **kwargs)
             except Exception as exception:
@@ -341,7 +346,7 @@ class BaseTrackDecorator(abc.ABC):
                     exc_info=True,
                 )
                 error_info = error_info_collector.collect(exception)
-                raise exception
+                func_exception = exception
             finally:
                 stream_or_stream_manager = self._streams_handler(
                     result,
@@ -357,7 +362,10 @@ class BaseTrackDecorator(abc.ABC):
                     capture_output=track_options.capture_output,
                     flush=track_options.flush,
                 )
-                return result
+                if func_exception is not None:
+                    raise func_exception
+                else:
+                    return result
 
         wrapper.opik_tracked = True  # type: ignore
         return wrapper

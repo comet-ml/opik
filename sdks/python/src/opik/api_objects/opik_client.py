@@ -254,6 +254,7 @@ class Opik:
             id=id,
             message_streamer=self._streamer,
             project_name=project_name,
+            url_override=self._config.url_override,
         )
 
     def copy_traces(
@@ -361,15 +362,15 @@ class Opik:
             output: The output data for the span. This can be any valid JSON serializable object.
             tags: Tags associated with the span.
             feedback_scores: The list of feedback score dicts associated with the span. Dicts don't require to have an `id` value.
-            project_name: The name of the project. If not set, the project name which was configured when Opik instance
+            project_name: The name of the project. If not set, the project name which was configured when the Opik instance
                 was created will be used.
             usage: Usage data for the span. In order for input, output and total tokens to be visible in the UI,
-                the usage must contain OpenAI-formatted keys (they can be passed additionaly to original usage on the top level of the dict):  prompt_tokens, completion_tokens and total_tokens.
+                the usage must contain OpenAI-formatted keys (they can be passed additionally to the original usage on the top level of the dict): prompt_tokens, completion_tokens and total_tokens.
                 If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
                 format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
             model: The name of LLM (in this case `type` parameter should be == `llm`)
             provider: The provider of LLM. You can find providers officially supported by Opik for cost tracking
-                in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
+                in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our GitHub - https://github.com/comet-ml/opik.
                 If your provider is not in the list, you can still specify it, but the cost tracking will not be available
             error_info: The dictionary with error information (typically used when the span function has failed).
             total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
