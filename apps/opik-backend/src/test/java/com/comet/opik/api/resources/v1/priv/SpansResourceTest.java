@@ -8,7 +8,6 @@ import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
-import com.comet.opik.api.ProjectVisibility;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
@@ -16,6 +15,7 @@ import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.Operator;
@@ -128,9 +128,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.ProjectVisibility.PRIVATE;
-import static com.comet.opik.api.ProjectVisibility.PUBLIC;
-import static com.comet.opik.api.resources.utils.AuthTestUtils.mockGetWorkspaceIdByName;
+import static com.comet.opik.api.Visibility.PRIVATE;
+import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertTraceComment;
@@ -419,7 +418,7 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("publicCredentials")
         void get__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                ProjectVisibility visibility, int expectedCode) {
+                Visibility visibility, int expectedCode) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
 
@@ -454,7 +453,7 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("publicCredentials")
         void get__whenApiKeyIsPresent__thenReturnSpanStats(String apiKey,
-                ProjectVisibility visibility, int expectedCode) {
+                Visibility visibility, int expectedCode) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
 
@@ -474,7 +473,7 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("publicCredentials")
         void get__whenApiKeyIsPresent__thenReturnSpanFeedbackScoresNames(String apiKey,
-                ProjectVisibility visibility, int expectedCode) {
+                Visibility visibility, int expectedCode) {
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
 
@@ -782,7 +781,7 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("publicCredentials")
         void get__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                ProjectVisibility visibility,
+                Visibility visibility,
                 String workspaceName, int expectedCode) {
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -818,7 +817,7 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("publicCredentials")
         void get__whenSessionTokenIsPresent__thenReturnSpanStats(String sessionToken,
-                ProjectVisibility visibility,
+                Visibility visibility,
                 String workspaceName, int expectedCode) {
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -851,7 +850,7 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("publicCredentials")
         void get__whenSessionTokenIsPresent__thenReturnFeedbackScoresNames(String sessionToken,
-                ProjectVisibility visibility,
+                Visibility visibility,
                 String workspaceName, int expectedCode) {
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
