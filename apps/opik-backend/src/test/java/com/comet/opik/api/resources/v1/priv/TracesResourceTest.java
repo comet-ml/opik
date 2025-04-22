@@ -52,6 +52,7 @@ import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.GuardrailResult;
+import com.comet.opik.domain.GuardrailsMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -4147,6 +4148,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .feedbackScores(null)
                             .guardrailsValidations(null)
+                            .comments(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -4161,13 +4163,22 @@ class TracesResourceTest {
                     .toList());
 
             // set the rest of traces with passed guardrails
-            traces.subList(1, traces.size()).forEach(trace -> guardrailsByTraceId.put(trace.id(), guardrailsByTraceId.get(trace.id()).stream()
-                    .map(guardrail -> guardrail.toBuilder().result(GuardrailResult.PASSED).build())
-                    .toList()));
+            traces.subList(1, traces.size()).forEach(trace -> guardrailsByTraceId.put(trace.id(),
+                    guardrailsByTraceId.get(trace.id()).stream()
+                            .map(guardrail -> guardrail.toBuilder()
+                                    .result(GuardrailResult.PASSED)
+                                    .build())
+                            .toList()));
 
             guardrailsByTraceId.values()
-                    .forEach(guardrail -> guardrailsResourceClient.addBatch(guardrail, API_KEY,
-                            TEST_WORKSPACE));
+                    .forEach(guardrail -> guardrailsResourceClient.addBatch(guardrail, apiKey,
+                            workspaceName));
+
+            traces = traces.stream().map(trace -> trace.toBuilder()
+                    .guardrailsValidations(GuardrailsMapper.INSTANCE.mapToValidations(
+                            guardrailsByTraceId.get(trace.id())))
+                    .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
 
             // assert failed guardrails
             var filtersFailed = List.of(
@@ -4190,7 +4201,7 @@ class TracesResourceTest {
                             .value(GuardrailResult.PASSED.getResult())
                             .build());
 
-            var valuesPassed = testAssertion.transformTestParams(traces, traces.subList(1, traces.size()),
+            var valuesPassed = testAssertion.transformTestParams(traces, traces.subList(1, traces.size()).reversed(),
                     List.of(traces.getFirst()));
             testAssertion.assertTest(projectName, null, apiKey, workspaceName, valuesPassed.expected(),
                     valuesPassed.unexpected(), valuesPassed.all(), filtersPassed, Map.of());
