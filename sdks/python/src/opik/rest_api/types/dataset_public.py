@@ -2,6 +2,7 @@
 
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
+from .dataset_public_visibility import DatasetPublicVisibility
 import datetime as dt
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 import pydantic
@@ -10,6 +11,7 @@ import pydantic
 class DatasetPublic(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: str
+    visibility: typing.Optional[DatasetPublicVisibility] = None
     description: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None

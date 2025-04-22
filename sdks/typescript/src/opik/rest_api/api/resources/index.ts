@@ -1,5 +1,7 @@
 export * as attachments from "./attachments";
 export * from "./attachments/types";
+export * as datasets from "./datasets";
+export * from "./datasets/types";
 export * as feedbackDefinitions from "./feedbackDefinitions";
 export * from "./feedbackDefinitions/types";
 export * as llmProviderKey from "./llmProviderKey";
@@ -14,7 +16,6 @@ export * as systemUsage from "./systemUsage";
 export * as check from "./check";
 export * as automationRuleEvaluators from "./automationRuleEvaluators";
 export * as chatCompletions from "./chatCompletions";
-export * as datasets from "./datasets";
 export * as experiments from "./experiments";
 export * as guardrails from "./guardrails";
 export * as openTelemetryIngestion from "./openTelemetryIngestion";

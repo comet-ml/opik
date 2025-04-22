@@ -7,10 +7,12 @@ from ..types.dataset_page_public import DatasetPagePublic
 from ..core.pydantic_utilities import parse_obj_as
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
+from .types.dataset_write_visibility import DatasetWriteVisibility
 from ..types.dataset_item_write import DatasetItemWrite
 from ..core.serialization import convert_and_respect_annotation_metadata
 from ..types.dataset_public import DatasetPublic
 from ..core.jsonable_encoder import jsonable_encoder
+from .types.dataset_update_visibility import DatasetUpdateVisibility
 from ..types.dataset_item_page_compare import DatasetItemPageCompare
 from ..types.dataset_item_public import DatasetItemPublic
 from ..types.dataset_item_page_public import DatasetItemPagePublic
@@ -103,6 +105,7 @@ class DatasetsClient:
         *,
         name: str,
         id: typing.Optional[str] = OMIT,
+        visibility: typing.Optional[DatasetWriteVisibility] = OMIT,
         description: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -114,6 +117,8 @@ class DatasetsClient:
         name : str
 
         id : typing.Optional[str]
+
+        visibility : typing.Optional[DatasetWriteVisibility]
 
         description : typing.Optional[str]
 
@@ -142,6 +147,7 @@ class DatasetsClient:
             json={
                 "id": id,
                 "name": name,
+                "visibility": visibility,
                 "description": description,
             },
             headers={
@@ -284,6 +290,7 @@ class DatasetsClient:
         *,
         name: str,
         description: typing.Optional[str] = OMIT,
+        visibility: typing.Optional[DatasetUpdateVisibility] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -296,6 +303,8 @@ class DatasetsClient:
         name : str
 
         description : typing.Optional[str]
+
+        visibility : typing.Optional[DatasetUpdateVisibility]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -323,6 +332,7 @@ class DatasetsClient:
             json={
                 "name": name,
                 "description": description,
+                "visibility": visibility,
             },
             headers={
                 "content-type": "application/json",
@@ -988,6 +998,7 @@ class AsyncDatasetsClient:
         *,
         name: str,
         id: typing.Optional[str] = OMIT,
+        visibility: typing.Optional[DatasetWriteVisibility] = OMIT,
         description: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -999,6 +1010,8 @@ class AsyncDatasetsClient:
         name : str
 
         id : typing.Optional[str]
+
+        visibility : typing.Optional[DatasetWriteVisibility]
 
         description : typing.Optional[str]
 
@@ -1035,6 +1048,7 @@ class AsyncDatasetsClient:
             json={
                 "id": id,
                 "name": name,
+                "visibility": visibility,
                 "description": description,
             },
             headers={
@@ -1193,6 +1207,7 @@ class AsyncDatasetsClient:
         *,
         name: str,
         description: typing.Optional[str] = OMIT,
+        visibility: typing.Optional[DatasetUpdateVisibility] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1205,6 +1220,8 @@ class AsyncDatasetsClient:
         name : str
 
         description : typing.Optional[str]
+
+        visibility : typing.Optional[DatasetUpdateVisibility]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1240,6 +1257,7 @@ class AsyncDatasetsClient:
             json={
                 "name": name,
                 "description": description,
+                "visibility": visibility,
             },
             headers={
                 "content-type": "application/json",
