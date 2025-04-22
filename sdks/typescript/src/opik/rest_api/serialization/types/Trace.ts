@@ -9,6 +9,7 @@ import { JsonNode } from "./JsonNode";
 import { ErrorInfo } from "./ErrorInfo";
 import { FeedbackScore } from "./FeedbackScore";
 import { Comment } from "./Comment";
+import { GuardrailsValidation } from "./GuardrailsValidation";
 
 export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikApi.Trace> = core.serialization.object({
     id: core.serialization.string().optional(),
@@ -29,6 +30,10 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
     feedbackScores: core.serialization.property("feedback_scores", core.serialization.list(FeedbackScore).optional()),
     comments: core.serialization.list(Comment).optional(),
+    guardrailsValidations: core.serialization.property(
+        "guardrails_validations",
+        core.serialization.list(GuardrailsValidation).optional(),
+    ),
     totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
     spanCount: core.serialization.property("span_count", core.serialization.number().optional()),
     duration: core.serialization.number().optional(),
@@ -55,6 +60,7 @@ export declare namespace Trace {
         last_updated_by?: string | null;
         feedback_scores?: FeedbackScore.Raw[] | null;
         comments?: Comment.Raw[] | null;
+        guardrails_validations?: GuardrailsValidation.Raw[] | null;
         total_estimated_cost?: number | null;
         span_count?: number | null;
         duration?: number | null;

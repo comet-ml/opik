@@ -18,6 +18,8 @@ export * from "./chatCompletions/client/requests";
 export * as datasets from "./datasets";
 export * from "./datasets/client/requests";
 export * from "./experiments/client/requests";
+export * as guardrails from "./guardrails";
+export * from "./guardrails/client/requests";
 export * from "./llmProviderKey/client/requests";
 export * from "./projects/client/requests";
 export * from "./prompts/client/requests";

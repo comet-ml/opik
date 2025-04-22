@@ -32,7 +32,12 @@ def get(
         pool=POOL_TIMEOUT_SECONDS,
     )
 
-    client = httpx.Client(limits=limits, verify=verify, timeout=timeout)
+    client = httpx.Client(
+        limits=limits,
+        verify=verify,
+        timeout=timeout,
+        follow_redirects=True,
+    )
 
     headers = _prepare_headers(workspace=workspace, api_key=api_key)
     client.headers.update(headers)
