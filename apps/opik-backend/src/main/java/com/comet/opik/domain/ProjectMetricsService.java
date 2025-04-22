@@ -38,13 +38,14 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores,
                 MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage,
                 MetricType.COST, projectMetricsDAO::getCost,
-                MetricType.DURATION, projectMetricsDAO::getDuration);
+                MetricType.DURATION, projectMetricsDAO::getDuration,
+                MetricType.GUARDRAILS_FAILED_COUNT, projectMetricsDAO::getGuardrailsFailedCount);
         this.projectService = projectService;
     }
 
     @Override
     public Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
-        // Will throw an error in case we try to get private project with public visibility
+        // Will throw an error in case we try to get a private project with public visibility
         projectService.get(projectId);
         return getMetricHandler(request.metricType())
                 .apply(projectId, request)

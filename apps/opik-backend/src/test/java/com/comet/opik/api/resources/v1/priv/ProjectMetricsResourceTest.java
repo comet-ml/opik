@@ -3,11 +3,11 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Project;
-import com.comet.opik.api.ProjectVisibility;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
@@ -20,9 +20,12 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
+import com.comet.opik.api.resources.utils.resources.TestGenerators;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.domain.cost.CostService;
@@ -33,6 +36,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -84,13 +88,12 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.ProjectVisibility.PRIVATE;
-import static com.comet.opik.api.ProjectVisibility.PUBLIC;
-import static com.comet.opik.api.resources.utils.AuthTestUtils.mockGetWorkspaceIdByName;
+import static com.comet.opik.api.Visibility.PRIVATE;
+import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
-import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_RESPONSE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -99,6 +102,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -148,6 +152,8 @@ class ProjectMetricsResourceTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
+    private GuardrailsResourceClient guardrailsResourceClient;
+    private TestGenerators testGenerators;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -163,6 +169,8 @@ class ProjectMetricsResourceTest {
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
+        this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
+        this.testGenerators = new TestGenerators();
 
         ClientSupportUtils.config(client);
 
@@ -216,7 +224,7 @@ class ProjectMetricsResourceTest {
         @MethodSource("publicCredentials")
         @DisplayName("get project metrics: when api key is present, then return proper response")
         void getProjectMetrics__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                ProjectVisibility visibility, int expectedCode) {
+                Visibility visibility, int expectedCode) {
             mockTargetWorkspace();
 
             var projectId = projectResourceClient.createProject(
@@ -241,8 +249,8 @@ class ProjectMetricsResourceTest {
                     var actualEntity = actualResponse.readEntity(ProjectMetricResponse.class);
                     assertThat(actualEntity.projectId()).isEqualTo(projectId);
                 } else {
-                    assertThat(actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class))
-                            .isEqualTo(PROJECT_NOT_FOUND_RESPONSE);
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(projectId));
                 }
             }
         }
@@ -255,12 +263,6 @@ class ProjectMetricsResourceTest {
 
         private final String sessionToken = UUID.randomUUID().toString();
         private final String fakeSessionToken = UUID.randomUUID().toString();
-
-        Stream<Arguments> credentials() {
-            return Stream.of(
-                    arguments(sessionToken, true, "OK_" + UUID.randomUUID()),
-                    arguments(fakeSessionToken, false, UUID.randomUUID().toString()));
-        }
 
         Stream<Arguments> publicCredentials() {
             return Stream.of(
@@ -292,7 +294,7 @@ class ProjectMetricsResourceTest {
         @MethodSource("publicCredentials")
         @DisplayName("get project metrics: when session token is present, then return proper response")
         void getProjectMetrics__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                ProjectVisibility visibility,
+                Visibility visibility,
                 String workspaceName, int expectedCode) {
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
@@ -318,8 +320,8 @@ class ProjectMetricsResourceTest {
                     var actualEntity = actualResponse.readEntity(ProjectMetricResponse.class);
                     assertThat(actualEntity.projectId()).isEqualTo(projectId);
                 } else {
-                    assertThat(actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class))
-                            .isEqualTo(PROJECT_NOT_FOUND_RESPONSE);
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(projectId));
                 }
             }
         }
@@ -853,6 +855,87 @@ class ProjectMetricsResourceTest {
                             .map(duration -> duration / 1_000.0)
                             .toList(),
                     List.of(0.50, 0.90, 0.99));
+        }
+    }
+
+    @Nested
+    @DisplayName("Guardrails failed count")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GuardrailsFailedCountTest {
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void happyPath(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var guardrailsMinus3 = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
+                    createTracesWithGuardrails(projectName, subtract(marker, TIME_BUCKET_3, interval)));
+            var guardrailsMinus1 = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
+                    createTracesWithGuardrails(projectName, subtract(marker, TIME_BUCKET_1, interval)));
+            var guardrails = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
+                    createTracesWithGuardrails(projectName, marker));
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.GUARDRAILS_FAILED_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT), Long.class,
+                    guardrailsMinus3, guardrailsMinus1, guardrails);
+        }
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void emptyData(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            getAndAssertEmpty(projectId, interval, marker);
+        }
+
+        private Long createTracesWithGuardrails(String projectName, Instant marker) {
+            List<Trace> traces = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .startTime(marker.plusSeconds(i))
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+            return traces.stream()
+                    .map(trace -> {
+                        var guardrails = testGenerators.generateGuardrailsForTrace(trace.id(), randomUUID(),
+                                trace.projectName());
+                        guardrailsResourceClient.addBatch(guardrails, API_KEY, WORKSPACE_NAME);
+                        return guardrails;
+                    })
+                    .flatMap(List::stream)
+                    .filter(guardrail -> guardrail.result() == GuardrailResult.FAILED)
+                    .count();
+        }
+
+        private void getAndAssertEmpty(UUID projectId, TimeInterval interval, Instant marker) {
+            Map<String, Long> empty = new HashMap<>() {
+                {
+                    put(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT, null);
+                }
+            };
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.GUARDRAILS_FAILED_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT), Long.class, empty, empty,
+                    empty);
         }
     }
 
