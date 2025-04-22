@@ -19,15 +19,22 @@ const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
   const { type, name, url } = previewData;
   const Icon = ATTACHMENT_ICON_MAP[type];
 
-  const sameDomain = useMemo(() => isSameDomainUrl(url), [url]);
-  const showDownload = url.startsWith("data:") || sameDomain;
+  const allowedDomain = useMemo(() => {
+    return (
+      isSameDomainUrl(url) ||
+      /^https:\/\/s3\.amazonaws\.com\/([^\s/]+)\/opik\/attachment\/(\S+)$/.test(
+        url,
+      )
+    );
+  }, [url]);
+  const showDownload = url.startsWith("data:") || allowedDomain;
 
   const isExpandable =
     type === ATTACHMENT_TYPE.IMAGE ||
     type === ATTACHMENT_TYPE.VIDEO ||
     type === ATTACHMENT_TYPE.AUDIO ||
-    (type === ATTACHMENT_TYPE.TEXT && sameDomain) ||
-    (type === ATTACHMENT_TYPE.PDF && sameDomain);
+    (type === ATTACHMENT_TYPE.TEXT && allowedDomain) ||
+    (type === ATTACHMENT_TYPE.PDF && allowedDomain);
 
   const expandClickHandler = useCallback(() => {
     isExpandable && onExpand(previewData);
