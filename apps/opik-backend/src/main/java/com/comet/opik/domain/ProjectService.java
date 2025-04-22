@@ -19,6 +19,7 @@ import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.BinaryOperatorUtils;
+import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.PaginationUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -91,6 +92,8 @@ public interface ProjectService {
     Mono<List<Project>> retrieveByNamesOrCreate(Set<String> projectNames);
 
     void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces);
+
+    UUID resolveProjectIdAndVerifyVisibility(UUID projectId, String projectName);
 
     ProjectStatsSummary getStats(int page, int size, @NonNull ProjectCriteria criteria,
             @NonNull List<SortingField> sortingFields);
@@ -207,13 +210,10 @@ class ProjectServiceImpl implements ProjectService {
     @Override
     public Project get(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        boolean publicOnly = Optional.ofNullable(requestContext.get().getVisibility())
-                .map(v -> v == ProjectVisibility.PUBLIC)
-                .orElse(false);
 
         return Optional.of(get(id, workspaceId))
-                .filter(project -> !publicOnly || project.visibility() == ProjectVisibility.PUBLIC)
-                .orElseThrow(this::createNotFoundError);
+                .flatMap(this::verifyVisibility)
+                .orElseThrow(() -> ErrorUtils.failWithNotFound("Project", id));
     }
 
     @Override
@@ -538,6 +538,28 @@ class ProjectServiceImpl implements ProjectService {
     public void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces) {
         template.inTransaction(WRITE,
                 handle -> handle.attach(ProjectDAO.class).recordLastUpdatedTrace(workspaceId, lastUpdatedTraces));
+    }
+
+    @Override
+    public UUID resolveProjectIdAndVerifyVisibility(UUID projectId, String projectName) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        Project project = verifyVisibility(projectId != null
+                ? get(projectId)
+                : findByNames(workspaceId, List.of(projectName)).stream().findFirst()
+                        .orElseThrow(() -> ErrorUtils.failWithNotFoundName("Project", projectName)))
+                .orElseThrow(() -> ErrorUtils.failWithNotFoundName("Project", projectName));
+
+        return project.id();
+    }
+
+    private Optional<Project> verifyVisibility(@NonNull Project project) {
+        boolean publicOnly = Optional.ofNullable(requestContext.get().getVisibility())
+                .map(v -> v == ProjectVisibility.PUBLIC)
+                .orElse(false);
+
+        return Optional.of(project)
+                .filter(p -> !publicOnly || p.visibility() == ProjectVisibility.PUBLIC);
     }
 
     private Mono<Void> checkIfNeededToCreateProjectsWithContext(String workspaceId,
