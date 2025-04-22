@@ -1076,7 +1076,7 @@ class TraceDAOImpl implements TraceDAO {
                     LIMIT 1 BY id
                 <endif>
             ), guardrails_agg AS (
-                SELECT entity_id, COUNT(id) AS failed_count
+                SELECT entity_id, COUNT(DISTINCT id) AS failed_count
                 FROM guardrails
                 WHERE entity_type = 'trace'
                 AND workspace_id = :workspace_id
