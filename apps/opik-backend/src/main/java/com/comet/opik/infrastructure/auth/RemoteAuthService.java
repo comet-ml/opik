@@ -1,7 +1,7 @@
 package com.comet.opik.infrastructure.auth;
 
-import com.comet.opik.api.ProjectVisibility;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.usagelimit.Quota;
@@ -103,7 +103,7 @@ class RemoteAuthService implements AuthService {
                 String workspaceId = getWorkspaceId(currentWorkspaceName);
                 requestContext.get().setWorkspaceId(workspaceId);
                 requestContext.get().setWorkspaceName(currentWorkspaceName);
-                requestContext.get().setVisibility(ProjectVisibility.PUBLIC);
+                requestContext.get().setVisibility(Visibility.PUBLIC);
                 requestContext.get().setUserName("Public");
                 return;
             }

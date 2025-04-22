@@ -13,5 +13,6 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record DatasetUpdate(@NotBlank String name,
-        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String description) {
+        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String description,
+        Visibility visibility) {
 }

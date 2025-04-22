@@ -10,11 +10,11 @@ import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
-import com.comet.opik.api.ProjectVisibility;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.BigDecimalCollectors;
@@ -94,8 +94,8 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.ProjectStatsSummary.ProjectStatsSummaryItem;
-import static com.comet.opik.api.ProjectVisibility.PRIVATE;
-import static com.comet.opik.api.ProjectVisibility.PUBLIC;
+import static com.comet.opik.api.Visibility.PRIVATE;
+import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
@@ -305,7 +305,7 @@ class ProjectsResourceTest {
         @ParameterizedTest
         @MethodSource("getProjectPublicCredentials")
         @DisplayName("get project by id: when api key is present, then return proper response")
-        void getProjectById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, ProjectVisibility visibility,
+        void getProjectById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, Visibility visibility,
                 int expectedCode) {
 
             String workspaceName = UUID.randomUUID().toString();
@@ -396,7 +396,7 @@ class ProjectsResourceTest {
         @ParameterizedTest
         @MethodSource("publicCredentials")
         @DisplayName("get projects: when api key is present, then return proper response")
-        void getProjects__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, ProjectVisibility visibility) {
+        void getProjects__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, Visibility visibility) {
 
             var workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -501,7 +501,7 @@ class ProjectsResourceTest {
         @MethodSource("getProjectPublicCredentials")
         @DisplayName("get project by id: when session token is present, then return proper response")
         void getProjectById__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                ProjectVisibility visibility,
+                Visibility visibility,
                 String workspaceName, int expectedCode) {
             var id = createProject(factory.manufacturePojo(Project.class).toBuilder().visibility(visibility).build());
             mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
@@ -578,7 +578,7 @@ class ProjectsResourceTest {
         @MethodSource("publicCredentials")
         @DisplayName("get projects: when session token is present, then return proper response")
         void getProjects__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                ProjectVisibility visibility,
+                Visibility visibility,
                 String workspaceName) {
 
             String workspaceId = UUID.randomUUID().toString();
@@ -1933,7 +1933,7 @@ class ProjectsResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .method(HttpMethod.PATCH,
                             Entity.json(ProjectUpdate.builder().name(name).description(descriptionUpdate)
-                                    .visibility(ProjectVisibility.PUBLIC)
+                                    .visibility(Visibility.PUBLIC)
                                     .build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
@@ -1951,7 +1951,7 @@ class ProjectsResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
                 assertThat(actualEntity.description()).isEqualTo(descriptionUpdate);
-                assertThat(actualEntity.visibility()).isEqualTo(ProjectVisibility.PUBLIC);
+                assertThat(actualEntity.visibility()).isEqualTo(Visibility.PUBLIC);
                 assertThat(actualEntity.name()).isEqualTo(name);
             }
         }

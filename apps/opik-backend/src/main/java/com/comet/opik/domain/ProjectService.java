@@ -7,7 +7,7 @@ import com.comet.opik.api.ProjectCriteria;
 import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
-import com.comet.opik.api.ProjectVisibility;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.sorting.Direction;
@@ -308,7 +308,7 @@ class ProjectServiceImpl implements ProjectService {
             @NonNull List<SortingField> sortingFields) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        ProjectVisibility visibility = requestContext.get().getVisibility();
+        Visibility visibility = requestContext.get().getVisibility();
 
         if (!sortingFields.isEmpty() && sortingFields.getFirst().field().equals(SortableFields.LAST_UPDATED_TRACE_AT)) {
             return findWithLastTraceSorting(page, size, criteria, sortingFields.getFirst());
@@ -376,7 +376,7 @@ class ProjectServiceImpl implements ProjectService {
     private Page<Project> findWithLastTraceSorting(int page, int size, @NonNull ProjectCriteria criteria,
             @NonNull SortingField sortingField) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        ProjectVisibility visibility = requestContext.get().getVisibility();
+        Visibility visibility = requestContext.get().getVisibility();
 
         // get all project ids and last updated
         List<ProjectIdLastUpdated> allProjectIdsLastUpdated = template.inTransaction(READ_ONLY, handle -> {
@@ -473,7 +473,7 @@ class ProjectServiceImpl implements ProjectService {
                     log.info("Creating project with name '{}' on workspaceId '{}'", projectName, workspaceId);
                     var project = Project.builder()
                             .name(projectName)
-                            .visibility(ProjectVisibility.PRIVATE)
+                            .visibility(Visibility.PRIVATE)
                             .build();
 
                     UUID projectId = idGenerator.generateId();
@@ -555,11 +555,11 @@ class ProjectServiceImpl implements ProjectService {
 
     private Optional<Project> verifyVisibility(@NonNull Project project) {
         boolean publicOnly = Optional.ofNullable(requestContext.get().getVisibility())
-                .map(v -> v == ProjectVisibility.PUBLIC)
+                .map(v -> v == Visibility.PUBLIC)
                 .orElse(false);
 
         return Optional.of(project)
-                .filter(p -> !publicOnly || p.visibility() == ProjectVisibility.PUBLIC);
+                .filter(p -> !publicOnly || p.visibility() == Visibility.PUBLIC);
     }
 
     private Mono<Void> checkIfNeededToCreateProjectsWithContext(String workspaceId,
@@ -597,7 +597,7 @@ class ProjectServiceImpl implements ProjectService {
                         UUID projectId = idGenerator.generateId();
                         var newProject = Project.builder()
                                 .name(projectName)
-                                .visibility(ProjectVisibility.PRIVATE)
+                                .visibility(Visibility.PRIVATE)
                                 .id(projectId)
                                 .createdBy(userName)
                                 .lastUpdatedBy(userName)

@@ -6,6 +6,7 @@ import com.comet.opik.api.DatasetCriteria;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetUpdate;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.sorting.SortingField;
@@ -151,6 +152,7 @@ class DatasetServiceImpl implements DatasetService {
                                 Dataset.builder()
                                         .id(id)
                                         .name(name)
+                                        .visibility(Visibility.PRIVATE)
                                         .createdBy(userName)
                                         .lastUpdatedBy(userName)
                                         .build(),

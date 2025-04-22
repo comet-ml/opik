@@ -1,6 +1,6 @@
 package com.comet.opik.infrastructure.auth;
 
-import com.comet.opik.api.ProjectVisibility;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.google.inject.servlet.RequestScoped;
 import jakarta.ws.rs.core.MultivaluedMap;
@@ -31,5 +31,5 @@ public class RequestContext {
     private String apiKey;
     private MultivaluedMap<String, String> headers;
     private List<Quota> quotas;
-    private ProjectVisibility visibility;
+    private Visibility visibility;
 }

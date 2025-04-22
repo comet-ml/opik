@@ -28,14 +28,15 @@ import java.util.UUID;
 @RegisterConstructorMapper(BiInformationResponse.BiInformation.class)
 public interface DatasetDAO {
 
-    @SqlUpdate("INSERT INTO datasets(id, name, description, workspace_id, created_by, last_updated_by) " +
-            "VALUES (:dataset.id, :dataset.name, :dataset.description, :workspace_id, :dataset.createdBy, :dataset.lastUpdatedBy)")
+    @SqlUpdate("INSERT INTO datasets(id, name, description, visibility, workspace_id, created_by, last_updated_by) " +
+            "VALUES (:dataset.id, :dataset.name, :dataset.description, COALESCE(:dataset.visibility, 'private'), :workspace_id, :dataset.createdBy, :dataset.lastUpdatedBy)")
     void save(@BindMethods("dataset") Dataset dataset, @Bind("workspace_id") String workspaceId);
 
     @SqlUpdate("""
             UPDATE datasets SET
                 name = :dataset.name,
                 description = :dataset.description,
+                visibility = COALESCE(:dataset.visibility, visibility),
                 last_updated_by = :lastUpdatedBy
             WHERE id = :id AND workspace_id = :workspace_id
             """)

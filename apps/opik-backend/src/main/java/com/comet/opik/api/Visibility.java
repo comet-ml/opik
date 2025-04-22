@@ -7,7 +7,7 @@ import lombok.RequiredArgsConstructor;
 import java.util.Arrays;
 
 @RequiredArgsConstructor
-public enum ProjectVisibility {
+public enum Visibility {
     PRIVATE("private"),
     PUBLIC("public");
 
@@ -15,11 +15,11 @@ public enum ProjectVisibility {
     private final String value;
 
     @JsonCreator
-    public static ProjectVisibility fromString(String value) {
+    public static Visibility fromString(String value) {
         return Arrays.stream(values())
                 .filter(llmProvider -> llmProvider.value.equals(value))
                 .findFirst()
                 .orElseThrow(
-                        () -> new IllegalArgumentException("Unknown project visibility '%s'".formatted(value)));
+                        () -> new IllegalArgumentException("Unknown visibility '%s'".formatted(value)));
     }
 }
