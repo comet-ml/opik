@@ -6,7 +6,10 @@ import httpx
 
 from opik import exceptions
 from opik.api_objects import opik_client
-from opik.message_processing.messages import GuardrailBatchItemMessage
+from opik.message_processing.messages import (
+    GuardrailBatchItemMessage,
+    GuardrailBatchMessage,
+)
 from opik.opik_context import get_current_span_data, get_current_trace_data
 
 from . import guards, rest_api_client, schemas, tracing
@@ -63,7 +66,8 @@ class Guardrail:
         self._client = opik_client.get_client_cached()
 
         self._initialize_api_client(
-            host_url=self._client.config.guardrails_backend_host,
+            # host_url=self._client.config.guardrails_backend_host,
+            host_url="http://localhost:5000",
         )
 
     def _initialize_api_client(self, host_url: str) -> None:
@@ -104,6 +108,8 @@ class Guardrail:
         else:
             result.guardrail_result = "passed"
 
+        batch = []
+
         for validation in result.validations:
             guardrail_batch_item_message = GuardrailBatchItemMessage(
                 id=None,
@@ -115,8 +121,10 @@ class Guardrail:
                 config=validation.validation_config,
                 details=validation.validation_details,
             )
+            batch.append(guardrail_batch_item_message)
 
-            self._client._streamer.put(guardrail_batch_item_message)
+        message = GuardrailBatchMessage(batch=batch)
+        self._client._streamer.put(message)
 
         return result
 

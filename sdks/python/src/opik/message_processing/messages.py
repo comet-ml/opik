@@ -175,7 +175,7 @@ class GuardrailBatchItemMessage(BaseMessage):
 @dataclasses.dataclass
 class GuardrailBatchMessage(BaseMessage):
     batch: List[GuardrailBatchItemMessage]
-    supports_batching: bool = False
+    supports_batching: bool = True
 
     def as_payload_dict(self) -> Dict[str, Any]:
         data = super().as_payload_dict()

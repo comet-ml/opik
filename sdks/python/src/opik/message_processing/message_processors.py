@@ -40,7 +40,7 @@ class MessageSender(BaseMessageProcessor):
             messages.AddSpanFeedbackScoresBatchMessage: self._process_add_span_feedback_scores_batch_message,  # type: ignore
             messages.CreateSpansBatchMessage: self._process_create_span_batch_message,  # type: ignore
             messages.CreateTraceBatchMessage: self._process_create_trace_batch_message,  # type: ignore
-            messages.GuardrailBatchItemMessage: self._process_guardrail_batch_item_message,  # type: ignore
+            messages.GuardrailBatchMessage: self._process_guardrail_batch_message,  # type: ignore
         }
 
     def process(self, message: messages.BaseMessage) -> None:
@@ -194,11 +194,17 @@ class MessageSender(BaseMessageProcessor):
             self._rest_client.traces.create_traces(traces=batch)
             LOGGER.debug("Sent trace batch of size %d", len(batch))
 
-    def _process_guardrail_batch_item_message(
-        self, message: messages.GuardrailBatchItemMessage
+    def _process_guardrail_batch_message(
+        self, message: messages.GuardrailBatchMessage
     ) -> None:
-        batch = [guardrail_batch_item.GuardrailBatchItem(**message.__dict__)]
-        print("BATCH", batch)
+        batch = []
+
+        for message_item in message.batch:
+            guardrail_batch_item_message = guardrail_batch_item.GuardrailBatchItem(
+                **message_item.__dict__
+            )
+            batch.append(guardrail_batch_item_message)
+
         self._rest_client.guardrails.add_guardrails_batch(guardrails=batch)
 
 

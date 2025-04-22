@@ -84,3 +84,18 @@ class AddTraceFeedbackScoresBatchMessageBatcher(
             batch=self._accumulated_messages,  # type: ignore
             supports_batching=False,
         )
+
+
+class GuardrailBatchMessageBatcher(base_batcher.BaseBatcher):
+    def _create_batch_from_accumulated_messages(
+        self,
+    ) -> messages.GuardrailBatchMessage:  # type: ignore
+        batch = []
+
+        for batch_message in self._accumulated_messages:
+            batch.extend(batch_message.batch)
+
+        return messages.GuardrailBatchMessage(batch=batch)  # type: ignore
+
+    def add(self, message: messages.GuardrailBatchMessage) -> None:  # type: ignore
+        return super().add(message)
