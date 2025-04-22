@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
-import com.comet.opik.api.ProjectVisibility;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchCriteria;
@@ -12,17 +11,14 @@ import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
-import com.comet.opik.api.sorting.SpanSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.BinaryOperatorUtils;
-import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
-import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -36,7 +32,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -63,8 +58,6 @@ public class SpanService {
     private final @NonNull LockService lockService;
     private final @NonNull CommentService commentService;
     private final @NonNull AttachmentService attachmentService;
-    private final @NonNull SpanSortingFactory sortingFactory;
-    private final @NonNull Provider<RequestContext> requestContext;
 
     @WithSpan
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
@@ -85,24 +78,10 @@ public class SpanService {
     }
 
     private SpanSearchCriteria findProjectAndVerifyVisibility(SpanSearchCriteria searchCriteria) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        Project project = verifyVisibility(searchCriteria.projectId() != null
-                ? projectService.get(searchCriteria.projectId())
-                : projectService.findByNames(workspaceId, List.of(searchCriteria.projectName())).stream().findFirst()
-                        .orElseThrow(() -> ErrorUtils.failWithNotFoundName("Project", searchCriteria.projectName())));
-
-        return searchCriteria.toBuilder().projectId(project.id()).build();
-    }
-
-    private Project verifyVisibility(Project project) {
-        boolean publicOnly = Optional.ofNullable(requestContext.get().getVisibility())
-                .map(v -> v == ProjectVisibility.PUBLIC)
-                .orElse(false);
-
-        return Optional.of(project)
-                .filter(p -> !publicOnly || p.visibility() == ProjectVisibility.PUBLIC)
-                .orElseThrow(() -> ErrorUtils.failWithNotFoundName("Project", project.name()));
+        return searchCriteria.toBuilder()
+                .projectId(projectService.resolveProjectIdAndVerifyVisibility(searchCriteria.projectId(),
+                        searchCriteria.projectName()))
+                .build();
     }
 
     @WithSpan
