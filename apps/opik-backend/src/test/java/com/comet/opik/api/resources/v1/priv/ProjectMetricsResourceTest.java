@@ -20,9 +20,12 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
+import com.comet.opik.api.resources.utils.resources.TestGenerators;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.domain.cost.CostService;
@@ -99,6 +102,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -148,6 +152,8 @@ class ProjectMetricsResourceTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
+    private GuardrailsResourceClient guardrailsResourceClient;
+    private TestGenerators testGenerators;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -163,6 +169,8 @@ class ProjectMetricsResourceTest {
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
+        this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
+        this.testGenerators = new TestGenerators();
 
         ClientSupportUtils.config(client);
 
@@ -847,6 +855,87 @@ class ProjectMetricsResourceTest {
                             .map(duration -> duration / 1_000.0)
                             .toList(),
                     List.of(0.50, 0.90, 0.99));
+        }
+    }
+
+    @Nested
+    @DisplayName("Guardrails failed count")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GuardrailsFailedCountTest {
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void happyPath(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var guardrailsMinus3 = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
+                    createTracesWithGuardrails(projectName, subtract(marker, TIME_BUCKET_3, interval)));
+            var guardrailsMinus1 = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
+                    createTracesWithGuardrails(projectName, subtract(marker, TIME_BUCKET_1, interval)));
+            var guardrails = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
+                    createTracesWithGuardrails(projectName, marker));
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.GUARDRAILS_FAILED_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT), Long.class,
+                    guardrailsMinus3, guardrailsMinus1, guardrails);
+        }
+
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void emptyData(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            getAndAssertEmpty(projectId, interval, marker);
+        }
+
+        private Long createTracesWithGuardrails(String projectName, Instant marker) {
+            List<Trace> traces = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .startTime(marker.plusSeconds(i))
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+            return traces.stream()
+                    .map(trace -> {
+                        var guardrails = testGenerators.generateGuardrailsForTrace(trace.id(), randomUUID(),
+                                trace.projectName());
+                        guardrailsResourceClient.addBatch(guardrails, API_KEY, WORKSPACE_NAME);
+                        return guardrails;
+                    })
+                    .flatMap(List::stream)
+                    .filter(guardrail -> guardrail.result() == GuardrailResult.FAILED)
+                    .count();
+        }
+
+        private void getAndAssertEmpty(UUID projectId, TimeInterval interval, Instant marker) {
+            Map<String, Long> empty = new HashMap<>() {
+                {
+                    put(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT, null);
+                }
+            };
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.GUARDRAILS_FAILED_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT), Long.class, empty, empty,
+                    empty);
         }
     }
 
