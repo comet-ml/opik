@@ -77,9 +77,6 @@ component:
       AWS_ACCESS_KEY_ID: THAAIOSFODNN7EXAMPLE # rootUser for minio
       AWS_SECRET_ACCESS_KEY: LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY # rootPassword for minio
       S3_URL: "http://opik-minio:9000"
-      TOGGLE_PYTHON_EVALUATOR_ENABLED: true
-      REDIS_SCORING_CONSUMER_POOL_INTERVAL: 500ms
-      REDIS_SCORING_CONSUMER_BATCH_SIZE: 5
     envFrom:
       - configMapRef:
           name: opik-backend
