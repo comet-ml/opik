@@ -1,16 +1,10 @@
-import logging
 from typing import Union, Optional, List, Any
 import pydantic
 
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
-from opik import logging_messages
 
-from . import template
-from opik import exceptions
-from .. import parsing_helpers
-
-LOGGER = logging.getLogger(__name__)
+from . import template, parser
 
 
 class HallucinationResponseFormat(pydantic.BaseModel):
@@ -95,7 +89,7 @@ class Hallucination(base_metric.BaseMetric):
             input=llm_query, response_format=HallucinationResponseFormat
         )
 
-        return self._parse_model_output(model_output)
+        return parser.parse_model_output(content=model_output, name=self.name)
 
     async def ascore(
         self,
@@ -127,19 +121,4 @@ class Hallucination(base_metric.BaseMetric):
             input=llm_query, response_format=HallucinationResponseFormat
         )
 
-        return self._parse_model_output(model_output)
-
-    def _parse_model_output(self, content: str) -> score_result.ScoreResult:
-        try:
-            dict_content = parsing_helpers.extract_json_content_or_raise(content)
-
-            score = float(dict_content["score"])
-            return score_result.ScoreResult(
-                name=self.name,
-                value=score,
-                reason=str(dict_content["reason"]),
-            )
-        except Exception:
-            raise exceptions.MetricComputationError(
-                logging_messages.HALLUCINATION_DETECTION_FAILED
-            )
+        return parser.parse_model_output(content=model_output, name=self.name)
