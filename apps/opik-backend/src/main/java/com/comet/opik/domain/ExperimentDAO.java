@@ -7,6 +7,7 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.FeedbackScoreAverage;
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.utils.JsonUtils;
@@ -115,6 +116,169 @@ class ExperimentDAO {
             """;
 
     private static final String FIND = """
+            WITH trace_final AS (
+                SELECT
+                    id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+            ), experiment_durations AS (
+                SELECT
+                    experiment_id,
+                    arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration_values,
+                    count(DISTINCT trace_id) as trace_count,
+                    avgMap(usage) as usage,
+                    avg(total_estimated_cost) as total_estimated_cost
+                FROM (
+                    SELECT DISTINCT
+                        ei.experiment_id,
+                        ei.trace_id as trace_id,
+                        if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                            NULL) as duration,
+                        usage,
+                        total_estimated_cost
+                    FROM experiment_items ei
+                    LEFT JOIN (
+                        SELECT
+                            id,
+                            end_time,
+                            start_time
+                        FROM traces
+                        WHERE workspace_id = :workspace_id
+                        ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    ) AS t ON ei.trace_id = t.id
+                    LEFT JOIN (
+                        SELECT
+                            trace_id,
+                            sumMap(usage) as usage,
+                            sum(total_estimated_cost) as total_estimated_cost
+                        FROM (
+                            SELECT
+                                workspace_id,
+                                project_id,
+                                trace_id,
+                                usage,
+                                total_estimated_cost
+                            FROM spans
+                            WHERE workspace_id = :workspace_id
+                            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                            LIMIT 1 BY id
+                        ) GROUP BY workspace_id, project_id, trace_id
+                    ) AS s ON ei.trace_id = s.trace_id
+                    WHERE ei.workspace_id = :workspace_id
+                )
+                GROUP BY experiment_id
+            ),
+            feedback_scores_agg AS (
+                SELECT
+                    experiment_id,
+                    if(
+                        notEmpty(arrayFilter(x -> length(x) > 0, groupArray(name))),
+                        mapFromArrays(
+                            arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(name))),
+                            arrayMap(
+                                vName -> if(
+                                    arrayReduce(
+                                        'SUM',
+                                        arrayMap(
+                                            vNameAndValue -> vNameAndValue.2,
+                                            arrayFilter(
+                                                pair -> pair.1 = vName,
+                                                groupArray(DISTINCT tuple(name, count_value, trace_id))
+                                            )
+                                        )
+                                    ) = 0,
+                                    0,
+                                    arrayReduce(
+                                        'SUM',
+                                        arrayMap(
+                                            vNameAndValue -> vNameAndValue.2,
+                                            arrayFilter(
+                                                pair -> pair.1 = vName,
+                                                groupArray(DISTINCT tuple(name, total_value, trace_id))
+                                            )
+                                        )
+                                    ) / arrayReduce(
+                                        'SUM',
+                                        arrayMap(
+                                            vNameAndValue -> vNameAndValue.2,
+                                            arrayFilter(
+                                                pair -> pair.1 = vName,
+                                                groupArray(DISTINCT tuple(name, count_value, trace_id))
+                                            )
+                                        )
+                                    )
+                                ),
+                                arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(name)))
+                            )
+                        ),
+                        map()
+                    ) as feedback_scores
+                FROM (
+                    SELECT
+                        ei.experiment_id,
+                        tfs.name,
+                        tfs.total_value,
+                        tfs.count_value,
+                        tfs.trace_id as trace_id
+                    FROM experiment_items ei
+                    JOIN (
+                        SELECT
+                            entity_id as trace_id,
+                            name,
+                            SUM(value) as total_value,
+                            COUNT(value) as count_value
+                        FROM (
+                            SELECT
+                                entity_id,
+                                name,
+                                value
+                            FROM feedback_scores
+                            WHERE entity_type = :entity_type
+                            AND workspace_id = :workspace_id
+                            AND entity_id IN (SELECT id FROM trace_final)
+                            ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                            LIMIT 1 BY entity_id, name
+                        )
+                        GROUP BY
+                            entity_id,
+                            name
+                    ) AS tfs ON ei.trace_id = tfs.trace_id
+                    WHERE ei.trace_id IN (SELECT id FROM trace_final)
+                )
+                GROUP BY experiment_id
+            ),
+            comments_agg AS (
+                SELECT
+                    ei.experiment_id,
+                    groupUniqArrayArray(tc.comments_array) as comments_array_agg
+                FROM experiment_items ei
+                LEFT JOIN (
+                    SELECT
+                        entity_id,
+                        groupArray(tuple(*)) AS comments_array
+                    FROM (
+                        SELECT
+                            id,
+                            text,
+                            created_at,
+                            last_updated_at,
+                            created_by,
+                            last_updated_by,
+                            entity_id
+                        FROM comments
+                        WHERE workspace_id = :workspace_id
+                        AND entity_type = :entity_type
+                        ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    )
+                    GROUP BY entity_id
+                ) AS tc ON ei.trace_id = tc.entity_id
+                WHERE ei.trace_id IN (SELECT id FROM trace_final)
+                GROUP BY ei.experiment_id
+            )
             SELECT
                 e.workspace_id as workspace_id,
                 e.dataset_id as dataset_id,
@@ -128,50 +292,12 @@ class ExperimentDAO {
                 e.prompt_version_id as prompt_version_id,
                 e.prompt_id as prompt_id,
                 e.prompt_versions as prompt_versions,
-                if(
-                    notEmpty(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
-                    mapFromArrays(
-                        arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(tfs.name))),
-                        arrayMap(
-                            vName -> if(
-                                arrayReduce(
-                                    'SUM',
-                                    arrayMap(
-                                        vNameAndValue -> vNameAndValue.2,
-                                        arrayFilter(
-                                            pair -> pair.1 = vName,
-                                            groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
-                                        )
-                                    )
-                                ) = 0,
-                                0,
-                                arrayReduce(
-                                    'SUM',
-                                    arrayMap(
-                                        vNameAndValue -> vNameAndValue.2,
-                                        arrayFilter(
-                                            pair -> pair.1 = vName,
-                                            groupArray(DISTINCT tuple(tfs.name, tfs.total_value, tfs.id))
-                                        )
-                                    )
-                                ) / arrayReduce(
-                                    'SUM',
-                                    arrayMap(
-                                        vNameAndValue -> vNameAndValue.2,
-                                        arrayFilter(
-                                            pair -> pair.1 = vName,
-                                            groupArray(DISTINCT tuple(tfs.name, tfs.count_value, tfs.id))
-                                        )
-                                    )
-                                )
-                            ),
-                            arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(tfs.name)))
-                        )
-                    ),
-                    map()
-                ) as feedback_scores,
-                count (DISTINCT ei.trace_id) as trace_count,
-                groupUniqArrayArray(tc.comments_array) as comments_array_agg
+                fs.feedback_scores as feedback_scores,
+                ed.trace_count as trace_count,
+                ed.duration_values AS duration,
+                ed.usage as usage,
+                ed.total_estimated_cost as total_estimated_cost,
+                ca.comments_array_agg as comments_array_agg
             FROM (
                 SELECT
                     *
@@ -186,73 +312,9 @@ class ExperimentDAO {
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS e
-            LEFT JOIN (
-                SELECT DISTINCT
-                    experiment_id,
-                    trace_id
-                FROM experiment_items
-                WHERE workspace_id = :workspace_id
-            ) AS ei ON e.id = ei.experiment_id
-            LEFT JOIN (
-                SELECT
-                    entity_id as id,
-                    name,
-                    SUM(value) as total_value,
-                    COUNT(value) as count_value
-                FROM (
-                    SELECT
-                        entity_id,
-                        name,
-                        value
-                    FROM feedback_scores
-                    WHERE entity_type = :entity_type
-                    AND workspace_id = :workspace_id
-                    AND entity_id IN (
-                        SELECT
-                            id
-                        FROM traces
-                        WHERE workspace_id = :workspace_id
-                    )
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                )
-                GROUP BY
-                    entity_id,
-                    name
-            ) AS tfs ON ei.trace_id = tfs.id
-            LEFT JOIN (
-                SELECT
-                    entity_id,
-                    groupArray(tuple(*)) AS comments_array
-                FROM (
-                    SELECT
-                        id,
-                        text,
-                        created_at,
-                        last_updated_at,
-                        created_by,
-                        last_updated_by,
-                        entity_id
-                    FROM comments
-                    WHERE workspace_id = :workspace_id
-                    ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                )
-                GROUP BY entity_id
-            ) AS tc ON ei.trace_id = tc.entity_id
-            GROUP BY
-                e.workspace_id,
-                e.dataset_id,
-                e.id,
-                e.name,
-                e.metadata as metadata,
-                e.created_at,
-                e.last_updated_at,
-                e.created_by,
-                e.last_updated_by,
-                e.prompt_version_id,
-                e.prompt_id,
-                e.prompt_versions
+            LEFT JOIN experiment_durations AS ed ON e.id = ed.experiment_id
+            LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
+            LEFT JOIN comments_agg AS ca ON e.id = ca.experiment_id
             ORDER BY <if(sort_fields)><sort_fields>,<endif> e.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             ;
@@ -280,6 +342,9 @@ class ExperimentDAO {
                 *,
                 null AS feedback_scores,
                 null AS trace_count,
+                null AS duration,
+                null AS total_estimated_cost,
+                null AS usage,
                 null AS comments_array_agg
             FROM experiments
             WHERE workspace_id = :workspace_id
@@ -466,10 +531,26 @@ class ExperimentDAO {
                     .feedbackScores(getFeedbackScores(row))
                     .comments(getComments(row.get("comments_array_agg", List[].class)))
                     .traceCount(row.get("trace_count", Long.class))
+                    .duration(Optional.ofNullable(row.get("duration", List.class))
+                            .filter(value -> !value.isEmpty()
+                                    && value.stream().anyMatch(it -> BigDecimal.ZERO.compareTo((BigDecimal) it) < 0))
+                            .map(durations -> new ProjectStats.PercentageValues(
+                                    getP(durations, 0),
+                                    getP(durations, 1),
+                                    getP(durations, 2)))
+                            .orElse(null))
+                    .totalEstimatedCost(Optional.ofNullable(row.get("total_estimated_cost", BigDecimal.class))
+                            .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
+                            .orElse(null))
+                    .usage(row.get("usage", Map.class))
                     .promptVersion(promptVersions.stream().findFirst().orElse(null))
                     .promptVersions(promptVersions.isEmpty() ? null : promptVersions)
                     .build();
         });
+    }
+
+    private static BigDecimal getP(List<BigDecimal> durations, int index) {
+        return durations.get(index);
     }
 
     private List<PromptVersionLink> getPromptVersions(Row row) {

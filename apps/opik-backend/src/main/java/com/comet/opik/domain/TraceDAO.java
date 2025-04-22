@@ -981,7 +981,7 @@ class TraceDAOImpl implements TraceDAO {
                         workspace_id,
                         project_id,
                         id,
-                        notEmpty(input) as input_count,\s
+                        notEmpty(input) as input_count,
                         notEmpty(output) as output_count,
                         notEmpty(metadata) as metadata_count,
                         length(tags) as tags_length,

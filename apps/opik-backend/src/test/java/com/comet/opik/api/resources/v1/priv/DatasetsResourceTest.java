@@ -34,6 +34,7 @@ import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
+import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
@@ -3749,6 +3750,10 @@ class DatasetsResourceTest {
                                     .traceId(traces.get(i / 5).id())
                                     .input(traces.get(i / 5).input())
                                     .output(traces.get(i / 5).output())
+                                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                            traces.get(i / 5).startTime(), traces.get(i / 5).endTime()))
+                                    .totalEstimatedCost(BigDecimal.ZERO)
+                                    .usage(null)
                                     .feedbackScores(traceIdToScoresMap.get(traces.get(i / 5).id()).stream()
                                             .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
                                             .toList())

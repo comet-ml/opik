@@ -27,9 +27,11 @@ import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.CommentAssertionUtils;
+import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
@@ -111,6 +113,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
+import static com.comet.opik.api.ProjectStats.PercentageValues;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoresIgnoredFieldsAndSetThemToNull;
@@ -404,7 +407,7 @@ class ExperimentsResourceTest {
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             var workspaceName = UUID.randomUUID().toString();
 
-            var createRequest = podamFactory.manufacturePojo(ExperimentItemsBatch.class);
+            var createRequest = getExperimentItemsBatch();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
@@ -651,7 +654,7 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
-            var createRequest = podamFactory.manufacturePojo(ExperimentItemsBatch.class);
+            var createRequest = getExperimentItemsBatch();
             createAndAssert(createRequest, API_KEY, workspaceName);
             createRequest.experimentItems().forEach(item -> getAndAssert(item, workspaceName, API_KEY));
 
@@ -730,6 +733,20 @@ class ExperimentsResourceTest {
                 }
             }
         }
+    }
+
+    private ExperimentItemsBatch getExperimentItemsBatch() {
+        ExperimentItemsBatch itemsBatch = podamFactory.manufacturePojo(ExperimentItemsBatch.class);
+
+        return itemsBatch.toBuilder()
+                .experimentItems(itemsBatch.experimentItems().stream()
+                        .map(item -> item.toBuilder()
+                                .usage(null)
+                                .duration(null)
+                                .totalEstimatedCost(null)
+                                .build())
+                        .collect(toSet()))
+                .build();
     }
 
     private Experiment generateExperiment() {
@@ -1036,7 +1053,7 @@ class ExperimentsResourceTest {
 
                     assertThat(actualScores)
                             .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
-                                    .withComparatorForType(ExperimentsResourceTest.this::customComparator,
+                                    .withComparatorForType(StatsUtils::bigDecimalComparator,
                                             BigDecimal.class)
                                     .build())
                             .isEqualTo(expectedScores);
@@ -1164,8 +1181,7 @@ class ExperimentsResourceTest {
 
                     assertThat(actualScores)
                             .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
-                                    .withComparatorForType(ExperimentsResourceTest.this::customComparator,
-                                            BigDecimal.class)
+                                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                                     .build())
                             .isEqualTo(expectedScores);
                 }
@@ -1239,10 +1255,13 @@ class ExperimentsResourceTest {
             var workspaceName = "workspace-" + UUID.randomUUID();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = "apiKey-" + UUID.randomUUID();
+
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
             var experimentCount = 11;
             var expectedMatchCount = 5;
             var unexpectedDatasetCount = experimentCount - expectedMatchCount;
+
             IntStream.range(0, unexpectedDatasetCount)
                     .parallel()
                     .forEach(i -> {
@@ -1369,7 +1388,10 @@ class ExperimentsResourceTest {
             Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment = getExpectedScoresPerExperiment(
                     List.of(expectedExperiment), experimentItems);
 
+            List<BigDecimal> quantiles = getQuantities(traces.stream());
+
             return expectedExperiment.toBuilder()
+                    .duration(new PercentageValues(quantiles.get(0), quantiles.get(1), quantiles.get(2)))
                     .feedbackScores(expectedScoresPerExperiment.get(expectedExperiment.id()).entrySet().stream()
                             .map(e -> FeedbackScoreAverage.builder()
                                     .name(e.getKey())
@@ -1646,7 +1668,6 @@ class ExperimentsResourceTest {
         int tracesNumber = PodamUtils.getIntegerInRange(1, 10);
 
         List<Trace> traces = IntStream.range(0, tracesNumber)
-                .parallel()
                 .mapToObj(i -> podamFactory.manufacturePojo(Trace.class))
                 .toList();
 
@@ -1695,8 +1716,13 @@ class ExperimentsResourceTest {
         Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment = getExpectedScoresPerExperiment(
                 List.of(expectedExperiment), experimentItems);
 
+        List<BigDecimal> quantities = getQuantities(traces.stream());
+
         return expectedExperiment.toBuilder()
                 .traceCount((long) traces.size())
+                .duration(new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2)))
+                .totalEstimatedCost(null)
+                .usage(null)
                 .feedbackScores(
                         expectedScoresPerExperiment.get(expectedExperiment.id())
                                 .entrySet()
@@ -1862,8 +1888,12 @@ class ExperimentsResourceTest {
         assertThat(actualExperiments).hasSize(expectedExperiments.size());
 
         assertThat(actualExperiments)
-                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(EXPERIMENT_IGNORED_FIELDS)
-                .containsExactlyElementsOf(expectedExperiments);
+                .usingRecursiveComparison(
+                        RecursiveComparisonConfiguration.builder()
+                                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                                .build())
+                .ignoringFields(EXPERIMENT_IGNORED_FIELDS)
+                .isEqualTo(expectedExperiments);
 
         assertIgnoredFields(actualExperiments, expectedExperiments, datasetId);
 
@@ -1880,7 +1910,7 @@ class ExperimentsResourceTest {
 
                 assertThat(actualScores)
                         .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
-                                .withComparatorForType(ExperimentsResourceTest.this::customComparator,
+                                .withComparatorForType(StatsUtils::bigDecimalComparator,
                                         BigDecimal.class)
                                 .build())
                         .isEqualTo(expectedScores);
@@ -1894,40 +1924,6 @@ class ExperimentsResourceTest {
 
     private void createScoreAndAssert(FeedbackScoreBatch batch, String apiKey, String workspaceName) {
         traceResourceClient.feedbackScores(batch.scores(), apiKey, workspaceName);
-    }
-
-    private int customComparator(BigDecimal v1, BigDecimal v2) {
-        //TODO This is a workaround to compare BigDecimals and clickhouse floats seems to have some precision issues
-        // Compare the integer parts directly
-
-        if (v1.compareTo(v2) == 0) {
-            return 0;
-        }
-
-        int intComparison = v1.toBigInteger().compareTo(v2.toBigInteger());
-        if (intComparison != 0) {
-            return intComparison;
-        }
-
-        // Extract and compare the decimal parts
-        BigDecimal v1Decimal = v1.remainder(BigDecimal.ONE).abs(); // Get the decimal part
-        BigDecimal v2Decimal = v2.remainder(BigDecimal.ONE).abs(); // Get the decimal part
-
-        // Convert decimal parts to integers by scaling them to eliminate the decimal point
-        var scale = Math.min(v1Decimal.scale(), v2Decimal.scale());
-        BigDecimal v1DecimalInt = v1Decimal.movePointRight(scale);
-        BigDecimal v2DecimalInt = v2Decimal.movePointRight(scale);
-
-        // Calculate the difference between the integer representations of the decimal parts
-        BigDecimal decimalDifference = v1DecimalInt.subtract(v2DecimalInt).abs();
-
-        // If the difference is 1 or less, consider the numbers equal
-        if (decimalDifference.compareTo(BigDecimal.ONE) <= 0) {
-            return 0;
-        }
-
-        // Otherwise, compare the decimal parts as integers
-        return v1DecimalInt.compareTo(v2DecimalInt);
     }
 
     @Nested
@@ -2019,6 +2015,9 @@ class ExperimentsResourceTest {
                                 .name(name)
                                 .promptVersion(promptVersions.getFirst())
                                 .promptVersions(promptVersions)
+                                .usage(null)
+                                .duration(null)
+                                .totalEstimatedCost(null)
                                 .build();
                         // Only 2 scores per experiment is enough for this test
                         var scores = IntStream.range(0, 2)
@@ -2058,7 +2057,25 @@ class ExperimentsResourceTest {
             // Determining the expected datasetId
             var expectedDatasetId = getExperiment(experiments.getFirst().id(), TEST_WORKSPACE, API_KEY).datasetId();
 
-            var expectedExperiments = experiments.reversed();
+            var expectedExperiments = experiments.reversed().stream()
+                    .map(experiment -> {
+                        List<UUID> traceIds = experimentResourceClient
+                                .getExperimentItems(experiment.name(), API_KEY, TEST_WORKSPACE)
+                                .stream()
+                                .map(ExperimentItem::traceId)
+                                .distinct()
+                                .toList();
+
+                        List<BigDecimal> quantities = getQuantities(traceIds
+                                .parallelStream()
+                                .map(traceId -> traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY))
+                                .sequential());
+
+                        return experiment.toBuilder()
+                                .duration(new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2)))
+                                .build();
+                    })
+                    .toList();
 
             // An unrelated experiment is created to ensure that the stream only returns the expected ones
             var unexpectedExperiments = List.of(generateExperiment());
@@ -2179,6 +2196,12 @@ class ExperimentsResourceTest {
 
             createAndAssert(experimentItemsBatch, API_KEY, TEST_WORKSPACE);
 
+            List<BigDecimal> quantities = getQuantities(Stream.of(trace1, trace2, trace3));
+
+            expectedExperiment = expectedExperiment.toBuilder()
+                    .duration(new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2)))
+                    .build();
+
             Experiment experiment = getAndAssert(expectedExperiment.id(), expectedExperiment, TEST_WORKSPACE, API_KEY);
 
             assertThat(experiment.traceCount()).isEqualTo(expectedExperiment.traceCount());
@@ -2245,6 +2268,12 @@ class ExperimentsResourceTest {
             int totalNumberOfScores = 15;
             int totalNumberOfScoresPerTrace = 5;
 
+            List<BigDecimal> quantities = getQuantities(Stream.of(trace1, trace2, trace3));
+
+            expectedExperiment = expectedExperiment.toBuilder()
+                    .duration(new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2)))
+                    .build();
+
             var experimentItems = assignScoresAndTracesToExperimentItems(totalNumberOfScores,
                     totalNumberOfScoresPerTrace, expectedExperiment, traces, traceIdToScoresMap);
 
@@ -2264,7 +2293,7 @@ class ExperimentsResourceTest {
 
             assertThat(actual)
                     .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
-                            .withComparatorForType(ExperimentsResourceTest.this::customComparator, BigDecimal.class)
+                            .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                             .build())
                     .isEqualTo(expectedScores);
 
@@ -2287,6 +2316,9 @@ class ExperimentsResourceTest {
             var expectedExperiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
                     .promptVersion(versionLink)
                     .promptVersions(List.of(versionLink))
+                    .duration(null)
+                    .usage(null)
+                    .totalEstimatedCost(null)
                     .build();
 
             var expectedId = createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
@@ -2399,11 +2431,11 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var expectedExperiment = experimentResourceClient.createPartialExperiment()
+            var experiment = experimentResourceClient.createPartialExperiment()
                     .feedbackScores(null)
                     .build();
 
-            createAndAssert(expectedExperiment, apiKey, workspaceName);
+            createAndAssert(experiment, apiKey, workspaceName);
 
             // Creating three traces with input, output and scores
             var trace1 = podamFactory.manufacturePojo(Trace.class);
@@ -2456,7 +2488,7 @@ class ExperimentsResourceTest {
 
             var experimentItems = IntStream.range(0, totalNumberOfScores)
                     .mapToObj(i -> podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
-                            .experimentId(expectedExperiment.id())
+                            .experimentId(experiment.id())
                             .traceId(traces.get(i % traces.size()).id())
                             .feedbackScores(
                                     traceIdToScoresMap.get(traces.get(i % traces.size()).id()).stream()
@@ -2471,21 +2503,27 @@ class ExperimentsResourceTest {
 
             deleteTrace(trace6.id(), apiKey, workspaceName);
 
+            List<BigDecimal> quantities = getQuantities(Stream.of(trace1, trace2, trace3, trace4, trace5));
+
+            var expectedExperiment = experiment.toBuilder()
+                    .duration(new PercentageValues(quantities.get(0), quantities.get(1), quantities.get(2)))
+                    .build();
+
             Map<String, BigDecimal> expectedScores = getExpectedScores(
                     traceIdToScoresMap.entrySet()
                             .stream()
                             .filter(e -> !e.getKey().equals(trace6.id()))
                             .collect(toMap(Map.Entry::getKey, Map.Entry::getValue)));
 
-            Experiment experiment = getAndAssert(expectedExperiment.id(), expectedExperiment, workspaceName, apiKey);
+            Experiment actualExperiment = getAndAssert(experiment.id(), expectedExperiment, workspaceName, apiKey);
 
-            assertThat(experiment.traceCount()).isEqualTo(traces.size()); // decide if we should count deleted traces
+            assertThat(actualExperiment.traceCount()).isEqualTo(traces.size()); // decide if we should count deleted traces
 
-            Map<String, BigDecimal> actual = getScoresMap(experiment);
+            Map<String, BigDecimal> actual = getScoresMap(actualExperiment);
 
             assertThat(actual)
                     .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
-                            .withComparatorForType(ExperimentsResourceTest.this::customComparator, BigDecimal.class)
+                            .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                             .build())
                     .isEqualTo(expectedScores);
         }
@@ -2512,6 +2550,15 @@ class ExperimentsResourceTest {
 
             getAndAssert(expectedExperimentId, expectedExperiment, workspaceName, apiKey);
         }
+    }
+
+    private static List<BigDecimal> getQuantities(Stream<Trace> traces) {
+        return StatsUtils.calculateQuantiles(
+                traces.filter(entity -> entity.endTime() != null)
+                        .map(entity -> entity.startTime().until(entity.endTime(), ChronoUnit.MICROS))
+                        .map(duration -> duration / 1_000.0)
+                        .toList(),
+                List.of(0.50, 0.90, 0.99));
     }
 
     private ExperimentItemsBatch addRandomExperiments(List<ExperimentItem> experimentItems) {
@@ -2655,6 +2702,7 @@ class ExperimentsResourceTest {
             assertThat(actualExperiment)
                     .usingRecursiveComparison()
                     .ignoringFields(EXPERIMENT_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .isEqualTo(expectedExperiment);
 
             if (expectedExperiment.promptVersion() != null) {
@@ -2723,8 +2771,7 @@ class ExperimentsResourceTest {
         @Test
         @DisplayName("Success")
         void delete() {
-            var createRequest = podamFactory.manufacturePojo(ExperimentItemsBatch.class).toBuilder()
-                    .build();
+            var createRequest = getExperimentItemsBatch();
             createAndAssert(createRequest, API_KEY, TEST_WORKSPACE);
             createRequest.experimentItems().forEach(item -> getAndAssert(item, TEST_WORKSPACE, API_KEY));
 
@@ -2888,21 +2935,36 @@ class ExperimentsResourceTest {
             createAndAssert(experiment3, apiKey, workspaceName);
 
             var experimentItems1 = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
-                    .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment1.id())
-                            .traceId(traceWithScores1.getLeft().id()).build())
+                    .map(experimentItem -> experimentItem.toBuilder()
+                            .experimentId(experiment1.id())
+                            .traceId(traceWithScores1.getLeft().id())
+                            .totalEstimatedCost(null)
+                            .usage(null)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                    traceWithScores1.getLeft().startTime(), traceWithScores1.getLeft().endTime()))
+                            .build())
                     .collect(toUnmodifiableSet());
             var createRequest1 = ExperimentItemsBatch.builder().experimentItems(experimentItems1).build();
             createAndAssert(createRequest1, apiKey, workspaceName);
 
             var experimentItems2 = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
                     .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment2.id())
-                            .traceId(traceWithScores2.getLeft().id()).build())
+                            .traceId(traceWithScores2.getLeft().id())
+                            .totalEstimatedCost(null)
+                            .usage(null)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                    traceWithScores1.getLeft().startTime(), traceWithScores1.getLeft().endTime()))
+                            .build())
                     .collect(toUnmodifiableSet());
             var createRequest2 = ExperimentItemsBatch.builder().experimentItems(experimentItems2).build();
             createAndAssert(createRequest2, apiKey, workspaceName);
 
             var experimentItems3 = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
-                    .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment3.id()).build())
+                    .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment3.id())
+                            .totalEstimatedCost(null)
+                            .usage(null)
+                            .duration(null)
+                            .build())
                     .collect(toUnmodifiableSet());
             var createRequest3 = ExperimentItemsBatch.builder().experimentItems(experimentItems3).build();
             createAndAssert(createRequest3, apiKey, workspaceName);
@@ -2922,6 +2984,10 @@ class ExperimentsResourceTest {
                             .feedbackScores(traceWithScores2.getRight().stream()
                                     .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
                             .comments(expectedComments)
+                            .totalEstimatedCost(null)
+                            .usage(null)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                    traceWithScores2.getLeft().startTime(), traceWithScores2.getLeft().endTime()))
                             .build())
                     .toList();
             var expectedExperimentItems2 = expectedExperimentItems.subList(limit, size).stream()
@@ -2931,6 +2997,10 @@ class ExperimentsResourceTest {
                             .feedbackScores(traceWithScores1.getRight().stream()
                                     .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
                             .comments(null)
+                            .totalEstimatedCost(null)
+                            .usage(null)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                    traceWithScores1.getLeft().startTime(), traceWithScores1.getLeft().endTime()))
                             .build())
                     .toList();
 
@@ -3007,7 +3077,16 @@ class ExperimentsResourceTest {
 
         @Test
         void createAndGet() {
-            var request = podamFactory.manufacturePojo(ExperimentItemsBatch.class);
+            ExperimentItemsBatch itemsBatch = podamFactory.manufacturePojo(ExperimentItemsBatch.class);
+            var request = itemsBatch.toBuilder()
+                    .experimentItems(itemsBatch.experimentItems().stream()
+                            .map(item -> item.toBuilder()
+                                    .totalEstimatedCost(null)
+                                    .usage(null)
+                                    .duration(null)
+                                    .build())
+                            .collect(toSet()))
+                    .build();
 
             createAndAssert(request, API_KEY, TEST_WORKSPACE);
 
