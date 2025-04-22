@@ -31,7 +31,6 @@ import {
   COLUMN_TYPE,
   ColumnData,
   ColumnsStatistic,
-  CUSTOM_COLUMN_TYPE,
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
@@ -510,7 +509,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             {
               id: COLUMN_GUARDRAILS_ID,
               label: "Guardrails",
-              type: COLUMN_TYPE.string,
+              type: COLUMN_TYPE.guardrails,
               accessorFn: (row: BaseTraceData) =>
                 row.guardrail_validations || [],
               cell: GuardrailsCell as never,
@@ -547,7 +546,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             {
               id: COLUMN_GUARDRAILS_ID,
               label: "Guardrails",
-              type: CUSTOM_COLUMN_TYPE.GUARDRAILS,
+              type: COLUMN_TYPE.guardrails,
             },
           ]
         : []),

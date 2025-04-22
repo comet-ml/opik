@@ -2,7 +2,7 @@ import React from "react";
 
 import { X } from "lucide-react";
 import { Filter } from "@/types/filters";
-import { COLUMN_TYPE, ColumnData, CUSTOM_COLUMN_TYPE } from "@/types/shared";
+import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import ColumnSelector from "@/components/shared/FiltersButton/ColumnSelector";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_OPERATOR_MAP, OPERATORS_MAP } from "@/constants/filters";
@@ -53,7 +53,7 @@ export const FilterRow = <TColumnData,>({
         return (
           <DictionaryRow filter={filter} onChange={onChange} config={config} />
         );
-      case CUSTOM_COLUMN_TYPE.GUARDRAILS:
+      case COLUMN_TYPE.guardrails:
         return <GuardrailsRow filter={filter} onChange={onChange} />;
       case "":
       default:

@@ -36,7 +36,6 @@ import {
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
   ColumnData,
-  CUSTOM_COLUMN_TYPE,
 } from "@/types/shared";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import useLocalStorageState from "use-local-storage-state";
@@ -172,8 +171,7 @@ const ProjectsPage: React.FunctionComponent = () => {
             {
               id: COLUMN_GUARDRAILS_ID,
               label: "Guardrails",
-              type: COLUMN_TYPE.string,
-              iconType: CUSTOM_COLUMN_TYPE.GUARDRAILS,
+              type: COLUMN_TYPE.guardrails,
               /// TODO should be redefined once BE done
               accessorFn: (row: ProjectWithStatistic) =>
                 row.failed_guardrails && isNumber(row.failed_guardrails)

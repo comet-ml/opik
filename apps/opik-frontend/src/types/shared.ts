@@ -30,6 +30,7 @@ export enum COLUMN_TYPE {
   dictionary = "dictionary",
   numberDictionary = "feedback_scores_number",
   cost = "cost",
+  guardrails = "guardrails",
 }
 
 export enum DYNAMIC_COLUMN_TYPE {
@@ -41,11 +42,7 @@ export enum DYNAMIC_COLUMN_TYPE {
   null = "null",
 }
 
-export enum CUSTOM_COLUMN_TYPE {
-  GUARDRAILS = "guardrails",
-}
-
-export type HeaderIconType = COLUMN_TYPE | CUSTOM_COLUMN_TYPE;
+export type HeaderIconType = COLUMN_TYPE;
 
 export type ColumnData<T> = {
   id: string;
@@ -53,7 +50,7 @@ export type ColumnData<T> = {
   disabled?: boolean;
   accessorFn?: (row: T) => string | number | object | undefined;
   size?: number;
-  type?: COLUMN_TYPE | CUSTOM_COLUMN_TYPE;
+  type?: COLUMN_TYPE;
   customMeta?: object;
   iconType?: HeaderIconType;
   header?: Header<T, unknown>;

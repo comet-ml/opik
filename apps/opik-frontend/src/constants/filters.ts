@@ -1,18 +1,11 @@
 import { FilterOperator } from "@/types/filters";
-import {
-  COLUMN_TYPE,
-  CUSTOM_COLUMN_TYPE,
-  DropdownOption,
-} from "@/types/shared";
+import { COLUMN_TYPE, DropdownOption } from "@/types/shared";
 
 export const DEFAULT_OPERATORS: DropdownOption<FilterOperator>[] = [
   { label: "contains", value: "contains" },
 ];
 
-export const DEFAULT_OPERATOR_MAP: Record<
-  COLUMN_TYPE | CUSTOM_COLUMN_TYPE,
-  FilterOperator
-> = {
+export const DEFAULT_OPERATOR_MAP: Record<COLUMN_TYPE, FilterOperator> = {
   [COLUMN_TYPE.string]: "contains",
   [COLUMN_TYPE.number]: ">=",
   [COLUMN_TYPE.list]: "contains",
@@ -21,7 +14,7 @@ export const DEFAULT_OPERATOR_MAP: Record<
   [COLUMN_TYPE.numberDictionary]: "=",
   [COLUMN_TYPE.cost]: "<=",
   [COLUMN_TYPE.duration]: "<=",
-  [CUSTOM_COLUMN_TYPE.GUARDRAILS]: "=",
+  [COLUMN_TYPE.guardrails]: "=",
 };
 
 export const OPERATORS_MAP: Record<
@@ -190,6 +183,12 @@ export const OPERATORS_MAP: Record<
     {
       label: "is not empty",
       value: "is_not_empty",
+    },
+  ],
+  [COLUMN_TYPE.guardrails]: [
+    {
+      label: "=",
+      value: "=",
     },
   ],
 };
