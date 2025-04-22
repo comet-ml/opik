@@ -461,7 +461,8 @@ class TraceDAOImpl implements TraceDAO {
                          project_id,
                          name,
                          result
-                    )) as guardrails_list
+                    )) as guardrails_list,
+                    if(has(groupArray(result), 'failed'), 'failed', 'passed') as guardrails_result
                 FROM (
                     SELECT
                         *
@@ -555,6 +556,7 @@ class TraceDAOImpl implements TraceDAO {
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration
                 FROM traces t
+                    LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
                 <if(sort_has_feedback_scores)>
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
                 <endif>
@@ -655,8 +657,24 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String COUNT_BY_PROJECT_ID = """
+            WITH guardrails_agg AS (
+                SELECT
+                    entity_id,
+                    if(has(groupArray(result), 'failed'), 'failed', 'passed') as guardrails_result
+                FROM (
+                    SELECT
+                        *
+                    FROM guardrails
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, secondary_entity_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, secondary_entity_id, name
+                )
+                GROUP BY workspace_id, project_id, entity_id
+            )
             <if(feedback_scores_empty_filters)>
-             WITH fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
                     SELECT *
                     FROM feedback_scores
@@ -687,6 +705,7 @@ class TraceDAOImpl implements TraceDAO {
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration
                     FROM traces
+                        LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
                     <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = traces.id
                     <endif>
