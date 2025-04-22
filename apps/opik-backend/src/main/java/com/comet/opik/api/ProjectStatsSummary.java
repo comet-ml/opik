@@ -23,7 +23,8 @@ public record ProjectStatsSummary(List<ProjectStatsSummaryItem> content) {
             ProjectStats.PercentageValues duration,
             Double totalEstimatedCost,
             Map<String, Double> usage,
-            Long traceCount) {
+            Long traceCount,
+            Long guardrailsFailedCount) {
     }
 
 }
