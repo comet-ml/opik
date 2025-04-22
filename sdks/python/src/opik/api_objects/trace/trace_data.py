@@ -3,7 +3,7 @@ import datetime
 import logging
 from typing import Any, Dict, List, Optional
 
-from opik import dict_utils
+from opik import dict_utils, Attachment
 
 from ... import datetime_helpers, id_helpers
 from ...types import (
@@ -43,6 +43,7 @@ class TraceData:
     created_by: Optional[CreatedByType] = None
     error_info: Optional[ErrorInfoDict] = None
     thread_id: Optional[str] = None
+    attachments: Optional[List[Attachment]] = None
 
     def update(self, **new_data: Any) -> "TraceData":
         for key, value in new_data.items():
@@ -64,6 +65,9 @@ class TraceData:
                 continue
             elif key == "input":
                 self._update_input(value)
+                continue
+            elif key == "attachments":
+                self._update_attachments(value)
                 continue
 
             self.__dict__[key] = value
@@ -91,3 +95,9 @@ class TraceData:
     def init_end_time(self) -> "TraceData":
         self.end_time = datetime_helpers.local_timestamp()
         return self
+
+    def _update_attachments(self, attachments: List[Attachment]) -> None:
+        if self.attachments is None:
+            self.attachments = attachments
+        else:
+            self.attachments.extend(attachments)

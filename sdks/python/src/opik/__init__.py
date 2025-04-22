@@ -16,6 +16,7 @@ from .evaluation import evaluate, evaluate_experiment, evaluate_prompt
 from .integrations.sagemaker import auth as sagemaker_auth
 from .plugins.pytest.decorator import llm_unit
 from .types import LLMProvider
+from . import opik_context
 
 _logging.setup()
 
@@ -31,6 +32,7 @@ __all__ = [
     "track",
     "flush_tracker",
     "Opik",
+    "opik_context",
     "Trace",
     "Span",
     "Dataset",

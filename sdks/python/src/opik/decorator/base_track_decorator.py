@@ -137,11 +137,11 @@ class BaseTrackDecorator(abc.ABC):
 
             * Regular sync and async functions/methods: start the span when the
         function is called, end the span when the function is finished. While the
-        function is working, span is kept in opik context, so it can be a parent for the
+        function is working, the span is kept in opik context, so it can be a parent for the
         spans created by nested tracked functions.
 
-            * Generators and async generators: start the span when generator started
-        yielding values, end the trace when generator finished yielding values.
+            * Generators and async generators: start the span when the generator started
+        yielding values, end the trace when the generator finished yielding values.
         Span is kept in the opik context only while __next__ or __anext__ method is working.
         It means that the span can be a parent only for spans created by tracked functions
         called inside __next__ or __anext__.
@@ -197,7 +197,6 @@ class BaseTrackDecorator(abc.ABC):
                     exc_info=True,
                 )
 
-            result = None
             try:
                 result = generator_wrappers.SyncTrackedGenerator(
                     func(*args, **kwargs),
@@ -246,7 +245,6 @@ class BaseTrackDecorator(abc.ABC):
                     exc_info=True,
                 )
 
-            result = None
             try:
                 result = generator_wrappers.AsyncTrackedGenerator(
                     func(*args, **kwargs),
@@ -311,8 +309,7 @@ class BaseTrackDecorator(abc.ABC):
                     capture_output=track_options.capture_output,
                     flush=track_options.flush,
                 )
-                if result is not None:
-                    return result
+                return result
 
         wrapper.opik_tracked = True  # type: ignore
 
@@ -360,8 +357,7 @@ class BaseTrackDecorator(abc.ABC):
                     capture_output=track_options.capture_output,
                     flush=track_options.flush,
                 )
-                if result is not None:
-                    return result
+                return result
 
         wrapper.opik_tracked = True  # type: ignore
         return wrapper
