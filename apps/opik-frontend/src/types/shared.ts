@@ -18,6 +18,7 @@ export const COLUMN_ACTIONS_ID = "actions";
 export const COLUMN_METADATA_ID = "metadata";
 export const COLUMN_FEEDBACK_SCORES_ID = "feedback_scores";
 export const COLUMN_COMMENTS_ID = "comments";
+export const COLUMN_GUARDRAILS_ID = "guardrails";
 export const COLUMN_CREATED_AT_ID = "created_at";
 
 export enum COLUMN_TYPE {
@@ -40,11 +41,11 @@ export enum DYNAMIC_COLUMN_TYPE {
   null = "null",
 }
 
-export enum CUSTOM_HEADER_ICON {
+export enum CUSTOM_COLUMN_TYPE {
   GUARDRAILS = "guardrails",
 }
 
-export type HeaderIconType = COLUMN_TYPE | CUSTOM_HEADER_ICON;
+export type HeaderIconType = COLUMN_TYPE | CUSTOM_COLUMN_TYPE;
 
 export type ColumnData<T> = {
   id: string;
@@ -52,7 +53,7 @@ export type ColumnData<T> = {
   disabled?: boolean;
   accessorFn?: (row: T) => string | number | object | undefined;
   size?: number;
-  type?: COLUMN_TYPE;
+  type?: COLUMN_TYPE | CUSTOM_COLUMN_TYPE;
   customMeta?: object;
   iconType?: HeaderIconType;
   header?: Header<T, unknown>;

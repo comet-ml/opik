@@ -2,7 +2,7 @@ import React, { ForwardRefExoticComponent, RefAttributes } from "react";
 import { HeaderContext } from "@tanstack/react-table";
 import {
   COLUMN_TYPE,
-  CUSTOM_HEADER_ICON,
+  CUSTOM_COLUMN_TYPE,
   HeaderIconType,
 } from "@/types/shared";
 import {
@@ -34,7 +34,7 @@ const COLUMN_TYPE_MAP: Record<
   [COLUMN_TYPE.dictionary]: Braces,
   [COLUMN_TYPE.numberDictionary]: PenLine,
   [COLUMN_TYPE.cost]: Coins,
-  [CUSTOM_HEADER_ICON.GUARDRAILS]: Construction,
+  [CUSTOM_COLUMN_TYPE.GUARDRAILS]: Construction,
 };
 
 const TypeHeader = <TData,>(context: HeaderContext<TData, unknown>) => {

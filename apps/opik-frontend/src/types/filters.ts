@@ -1,4 +1,4 @@
-import { COLUMN_TYPE } from "@/types/shared";
+import { COLUMN_TYPE, CUSTOM_COLUMN_TYPE } from "@/types/shared";
 
 export type FilterOperator =
   | "contains"
@@ -16,7 +16,7 @@ export type FilterOperator =
 export interface Filter {
   id: string;
   field: string;
-  type: COLUMN_TYPE | "";
+  type: COLUMN_TYPE | CUSTOM_COLUMN_TYPE | "";
   operator: FilterOperator | "";
   key?: string;
   value: string | number;

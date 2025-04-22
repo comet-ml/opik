@@ -24,12 +24,14 @@ import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns
 import {
   COLUMN_COMMENTS_ID,
   COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_GUARDRAILS_ID,
   COLUMN_ID_ID,
   COLUMN_METADATA_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
   ColumnData,
   ColumnsStatistic,
+  CUSTOM_COLUMN_TYPE,
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
@@ -506,7 +508,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       ...(isGuardrailsEnabled
         ? [
             {
-              id: "guardrails",
+              id: COLUMN_GUARDRAILS_ID,
               label: "Guardrails",
               type: COLUMN_TYPE.string,
               accessorFn: (row: BaseTraceData) =>
@@ -540,8 +542,17 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         label: "Feedback scores",
         type: COLUMN_TYPE.numberDictionary,
       },
+      ...(isGuardrailsEnabled
+        ? [
+            {
+              id: COLUMN_GUARDRAILS_ID,
+              label: "Guardrails",
+              type: CUSTOM_COLUMN_TYPE.GUARDRAILS,
+            },
+          ]
+        : []),
     ];
-  }, [type]);
+  }, [type, isGuardrailsEnabled]);
 
   const columns = useMemo(() => {
     return [

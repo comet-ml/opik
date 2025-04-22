@@ -31,11 +31,12 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { formatDate } from "@/lib/date";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import {
+  COLUMN_GUARDRAILS_ID,
   COLUMN_NAME_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
   ColumnData,
-  CUSTOM_HEADER_ICON,
+  CUSTOM_COLUMN_TYPE,
 } from "@/types/shared";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import useLocalStorageState from "use-local-storage-state";
@@ -169,10 +170,10 @@ const ProjectsPage: React.FunctionComponent = () => {
       ...(isGuardrailsEnabled
         ? [
             {
-              id: "guardrails",
+              id: COLUMN_GUARDRAILS_ID,
               label: "Guardrails",
               type: COLUMN_TYPE.string,
-              iconType: CUSTOM_HEADER_ICON.GUARDRAILS,
+              iconType: CUSTOM_COLUMN_TYPE.GUARDRAILS,
               /// TODO should be redefined once BE done
               accessorFn: (row: ProjectWithStatistic) =>
                 row.failed_guardrails && isNumber(row.failed_guardrails)
