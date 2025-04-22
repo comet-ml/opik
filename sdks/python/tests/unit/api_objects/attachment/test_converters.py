@@ -24,7 +24,7 @@ def test_guess_attachment_type(attachment_data: attachment.Attachment, expected:
 
 
 def test_attachment_to_message():
-    base_url = "https://example.com"
+    url_override = "https://example.com"
     entity_id = "123"
     project_name = "test-project"
     attachment_data = attachment.Attachment(data="test.png")
@@ -34,7 +34,7 @@ def test_attachment_to_message():
         entity_type="trace",
         entity_id=entity_id,
         project_name=project_name,
-        base_url=base_url,
+        url_override=url_override,
     )
 
     assert message == messages.CreateAttachmentMessage(
@@ -44,12 +44,12 @@ def test_attachment_to_message():
         entity_type="trace",
         entity_id=entity_id,
         project_name=project_name,
-        base_url_path="aHR0cHM6Ly9leGFtcGxlLmNvbQ==",
+        url_override_path="aHR0cHM6Ly9leGFtcGxlLmNvbQ==",
     )
 
 
 def test_attachment_to_message__file_name():
-    base_url = "https://example.com"
+    url_override = "https://example.com"
     entity_id = "123"
     project_name = "test-project"
     attachment_data = attachment.Attachment(data="test.pdf", file_name="test.jpg")
@@ -59,7 +59,7 @@ def test_attachment_to_message__file_name():
         entity_type="trace",
         entity_id=entity_id,
         project_name=project_name,
-        base_url=base_url,
+        url_override=url_override,
     )
 
     assert message == messages.CreateAttachmentMessage(
@@ -69,12 +69,12 @@ def test_attachment_to_message__file_name():
         entity_type="trace",
         entity_id=entity_id,
         project_name=project_name,
-        base_url_path="aHR0cHM6Ly9leGFtcGxlLmNvbQ==",
+        url_override_path="aHR0cHM6Ly9leGFtcGxlLmNvbQ==",
     )
 
 
 def test_attachment_to_message__content_type():
-    base_url = "https://example.com"
+    url_override = "https://example.com"
     entity_id = "123"
     project_name = "test-project"
     attachment_data = attachment.Attachment(data="test.pdf", content_type="image/jpeg")
@@ -84,7 +84,7 @@ def test_attachment_to_message__content_type():
         entity_type="trace",
         entity_id=entity_id,
         project_name=project_name,
-        base_url=base_url,
+        url_override=url_override,
     )
 
     assert message == messages.CreateAttachmentMessage(
@@ -94,5 +94,5 @@ def test_attachment_to_message__content_type():
         entity_type="trace",
         entity_id=entity_id,
         project_name=project_name,
-        base_url_path="aHR0cHM6Ly9leGFtcGxlLmNvbQ==",
+        url_override_path="aHR0cHM6Ly9leGFtcGxlLmNvbQ==",
     )

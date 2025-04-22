@@ -12,13 +12,13 @@ def attachment_to_message(
     entity_type: Literal["trace", "span"],
     entity_id: str,
     project_name: str,
-    base_url: str,
+    url_override: str,
 ) -> messages.CreateAttachmentMessage:
     if attachment_data.data is None:
         raise ValueError("Attachment data cannot be None")
 
     mimetype = guess_attachment_type(attachment_data)
-    base_url_path = base64.b64encode(base_url.encode("utf-8")).decode("utf-8")
+    base_url_path = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
     file_path = attachment_data.data
     file_name = attachment_data.file_name
     if file_name is None:
@@ -31,7 +31,7 @@ def attachment_to_message(
         entity_type=entity_type,
         entity_id=entity_id,
         project_name=project_name,
-        base_url_path=base_url_path,
+        url_override_path=base_url_path,
     )
 
 

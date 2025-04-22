@@ -86,7 +86,7 @@ class RestFileUploadClient:
         monitor: Optional[file_upload_monitor.FileUploadMonitor],
         chunk_size: int = -1,
     ) -> None:
-        """Invoked to upload file to the local backend using httpx client configured with necessary authorization
+        """Invoked to upload a file to the local backend using httpx client configured with necessary authorization
         headers. Raises the `HTTPStatusError` if one occurred."""
         response = self.httpx_client.put(
             url=upload_url,

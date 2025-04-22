@@ -32,7 +32,7 @@ def attachment(data_file):
         entity_type="span",
         entity_id="entity_id",
         project_name="project_name",
-        base_url_path="base_url_path",
+        url_override_path="base_url_path",
     )
     yield attachment
 

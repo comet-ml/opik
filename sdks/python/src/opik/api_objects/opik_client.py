@@ -246,7 +246,7 @@ class Opik:
                         entity_type="trace",
                         entity_id=id,
                         project_name=project_name,
-                        base_url=url_helpers.get_base_url(self._config.url_override),
+                        url_override=self._config.url_override,
                     )
                 )
 
@@ -449,7 +449,7 @@ class Opik:
                         entity_type="span",
                         entity_id=id,
                         project_name=project_name,
-                        base_url=url_helpers.get_base_url(self._config.url_override),
+                        url_override=self._config.url_override,
                     )
                 )
 
@@ -982,7 +982,7 @@ class Opik:
         Fetches a project by its unique identifier.
 
         Parameters:
-            id (str): project if (uuid).
+            id (str): project id (uuid).
 
         Returns:
             project_public.ProjectPublic: pydantic model object with all the data associated with the project found.
