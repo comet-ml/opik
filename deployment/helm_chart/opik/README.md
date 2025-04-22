@@ -130,8 +130,6 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.OTEL_PROPAGATORS | string | `"tracecontext,baggage,b3"` |  |
 | component.backend.env.OTEL_VERSION | string | `"2.12.0"` |  |
 | component.backend.env.PYTHON_EVALUATOR_URL | string | `"http://opik-python-backend:8000"` |  |
-| component.backend.env.REDIS_SCORING_CONSUMER_BATCH_SIZE | int | `5` |  |
-| component.backend.env.REDIS_SCORING_CONSUMER_POOL_INTERVAL | string | `"500ms"` |  |
 | component.backend.env.REDIS_URL | string | `"redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/"` |  |
 | component.backend.env.S3_URL | string | `"http://opik-minio:9000"` |  |
 | component.backend.env.STATE_DB_DATABASE_NAME | string | `"opik"` |  |
@@ -139,7 +137,6 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.STATE_DB_PROTOCOL | string | `"jdbc:mysql://"` |  |
 | component.backend.env.STATE_DB_URL | string | `"opik-mysql:3306/opik?rewriteBatchedStatements=true"` |  |
 | component.backend.env.STATE_DB_USER | string | `"opik"` |  |
-| component.backend.env.TOGGLE_PYTHON_EVALUATOR_ENABLED | bool | `true` |  |
 | component.backend.envFrom[0].configMapRef.name | string | `"opik-backend"` |  |
 | component.backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.backend.image.repository | string | `"opik-backend"` |  |
