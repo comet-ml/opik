@@ -45,6 +45,8 @@ GEVAL_SCORE_CALC_FAILED = "Failed to calculate g-eval score"
 
 CONTEXT_PRECISION_SCORE_CALC_FAILED = "Failed to calculate context precision score"
 
+USEFULNESS_SCORE_CALC_FAILED = "Failed to calculate usefulness score"
+
 NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE = (
     'You are attempting to log data into a nested span under the project name "{}". '
     'However, the project name "{}" from parent span will be used instead.'

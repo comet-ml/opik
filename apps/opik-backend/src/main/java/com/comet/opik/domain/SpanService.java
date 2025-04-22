@@ -11,7 +11,6 @@ import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
-import com.comet.opik.api.sorting.SpanSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -21,7 +20,6 @@ import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,7 +31,6 @@ import reactor.core.scheduler.Schedulers;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
@@ -61,21 +58,13 @@ public class SpanService {
     private final @NonNull LockService lockService;
     private final @NonNull CommentService commentService;
     private final @NonNull AttachmentService attachmentService;
-    private final @NonNull SpanSortingFactory sortingFactory;
 
     @WithSpan
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
         log.info("Finding span by '{}'", searchCriteria);
+        searchCriteria = findProjectAndVerifyVisibility(searchCriteria);
 
-        if (searchCriteria.projectId() != null) {
-            return spanDAO.find(page, size, searchCriteria);
-        }
-
-        return findProject(searchCriteria)
-                .flatMap(project -> project.stream().findFirst().map(Mono::just).orElseGet(Mono::empty))
-                .flatMap(project -> spanDAO.find(
-                        page, size, searchCriteria.toBuilder().projectId(project.id()).build()))
-                .switchIfEmpty(Mono.just(Span.SpanPage.empty(page, sortingFactory.getSortableFields())));
+        return spanDAO.find(page, size, searchCriteria);
     }
 
     private Mono<List<Project>> findProject(SpanSearchCriteria searchCriteria) {
@@ -86,6 +75,13 @@ public class SpanService {
                     .fromCallable(() -> projectService.findByNames(workspaceId, List.of(searchCriteria.projectName())))
                     .subscribeOn(Schedulers.boundedElastic());
         });
+    }
+
+    private SpanSearchCriteria findProjectAndVerifyVisibility(SpanSearchCriteria searchCriteria) {
+        return searchCriteria.toBuilder()
+                .projectId(projectService.resolveProjectIdAndVerifyVisibility(searchCriteria.projectId(),
+                        searchCriteria.projectName()))
+                .build();
     }
 
     @WithSpan
@@ -298,18 +294,8 @@ public class SpanService {
     }
 
     public Mono<ProjectStats> getStats(@NonNull SpanSearchCriteria criteria) {
-        if (criteria.projectId() != null) {
-            return spanDAO.getStats(criteria)
-                    .switchIfEmpty(Mono.just(ProjectStats.empty()));
-        }
-
-        return makeMonoContextAware(
-                (userName, workspaceId) -> findProjectByName(criteria.projectName(), workspaceId).onErrorResume(
-                        e -> switch (e) {
-                            case NoSuchElementException __ -> Mono.error(new NotFoundException("Project not found"));
-                            default -> Mono.error(e);
-                        }))
-                .flatMap(project -> spanDAO.getStats(criteria.toBuilder().projectId(project.id()).build()))
+        criteria = findProjectAndVerifyVisibility(criteria);
+        return spanDAO.getStats(criteria)
                 .switchIfEmpty(Mono.just(ProjectStats.empty()));
     }
 

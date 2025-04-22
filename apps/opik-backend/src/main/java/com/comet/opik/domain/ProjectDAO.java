@@ -2,7 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectIdLastUpdated;
-import com.comet.opik.api.ProjectVisibility;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
@@ -40,7 +40,7 @@ interface ProjectDAO {
             @Bind("workspaceId") String workspaceId,
             @Bind("name") String name,
             @Bind("description") String description,
-            @Bind("visibility") ProjectVisibility visibility,
+            @Bind("visibility") Visibility visibility,
             @Bind("lastUpdatedBy") String lastUpdatedBy);
 
     @SqlUpdate("DELETE FROM projects WHERE id = :id AND workspace_id = :workspaceId")
@@ -63,7 +63,7 @@ interface ProjectDAO {
     @AllowUnusedBindings
     long findCount(@Bind("workspaceId") String workspaceId,
             @Define("name") @Bind("name") String name,
-            @Define("visibility") @Bind("visibility") ProjectVisibility visibility);
+            @Define("visibility") @Bind("visibility") Visibility visibility);
 
     @SqlQuery("SELECT * FROM projects " +
             " WHERE workspace_id = :workspaceId " +
@@ -77,7 +77,7 @@ interface ProjectDAO {
             @Bind("offset") int offset,
             @Bind("workspaceId") String workspaceId,
             @Define("name") @Bind("name") String name,
-            @Define("visibility") @Bind("visibility") ProjectVisibility visibility,
+            @Define("visibility") @Bind("visibility") Visibility visibility,
             @Define("sort_fields") @Bind("sort_fields") String sortingFields);
 
     @SqlQuery("SELECT id, last_updated_at FROM projects" +
@@ -88,7 +88,7 @@ interface ProjectDAO {
     @AllowUnusedBindings
     List<ProjectIdLastUpdated> getAllProjectIdsLastUpdated(@Bind("workspaceId") String workspaceId,
             @Define("name") @Bind("name") String name,
-            @Define("visibility") @Bind("visibility") ProjectVisibility visibility);
+            @Define("visibility") @Bind("visibility") Visibility visibility);
 
     default Optional<Project> fetch(UUID id, String workspaceId) {
         return Optional.ofNullable(findById(id, workspaceId));
