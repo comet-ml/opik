@@ -23,14 +23,9 @@ import AttachmentPreviewDialog from "@/components/pages-shared/attachments/Attac
 type AttachmentsListProps = {
   data: Trace | Span;
   images: ParsedImageData[];
-  enabled: boolean; // TODO temporary flag to disable this functionality until it will be implemented on SDK
 };
 
-const AttachmentsList: React.FC<AttachmentsListProps> = ({
-  data,
-  images,
-  enabled,
-}) => {
+const AttachmentsList: React.FC<AttachmentsListProps> = ({ data, images }) => {
   const isSpan = isObjectSpan(data);
   const [previewData, setPreviewData] = useState<AttachmentPreviewData | null>(
     null,
@@ -44,9 +39,7 @@ const AttachmentsList: React.FC<AttachmentsListProps> = ({
       page: 1,
       size: 1000,
     },
-    {
-      enabled,
-    },
+    {},
   );
 
   const attachments: AttachmentWithType[] = useMemo(
