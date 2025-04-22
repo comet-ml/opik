@@ -1,15 +1,13 @@
 import React, { useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
+import PDFWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import Loader from "@/components/shared/Loader/Loader";
 import { Button } from "@/components/ui/button";
 
 // Set the worker source for react-pdf
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url,
-).toString();
+pdfjs.GlobalWorkerOptions.workerPort = new PDFWorker();
 
 interface PDFPreviewProps {
   url: string;
