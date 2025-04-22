@@ -121,7 +121,7 @@ component:
       OPIK_REVERSE_PROXY_URL: "http://opik-frontend:5173/api"
       OTEL_SERVICE_NAME: "opik-python-backend"
       OTEL_METRIC_EXPORT_INTERVAL: "60000"
-      OTEL_TRACES_EXPORTER: none
+      OTEL_PROPAGATORS: "tracecontext,baggage"
       OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED: true
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: cumulative
     envFrom:
