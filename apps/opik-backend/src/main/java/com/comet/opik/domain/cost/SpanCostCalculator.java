@@ -13,13 +13,13 @@ class SpanCostCalculator {
                         .multiply(BigDecimal.valueOf(usage.getOrDefault("completion_tokens", 0))));
     }
 
-    public static BigDecimal textGenerationWithCacheCostAnthropic(ModelPrice modelPrice, Map<String, Integer> usage) {
+    public static BigDecimal textGenerationWithCacheCostOpenAI(ModelPrice modelPrice, Map<String, Integer> usage) {
 
         // In OpenAI usage format, input tokens includes the cached input tokens, so we need to substract them to compute the correct input token count
         // Don't generalize yet as other providers seems to separate the cached tokens from non-cached tokens
 
-        // Get the input tokens
-        int inputTokens = usage.getOrDefault("original_usage.prompt_tokens", 0);
+        // Get the input tokens (SDK version below 1.6.0 logged prompt_tokens, while 1.6.0+ logged original_usage.prompt_tokens)
+        int inputTokens = usage.getOrDefault("original_usage.prompt_tokens", usage.getOrDefault("prompt_tokens", 0));
 
         // Get the cached read input tokens
         int cachedReadInputTokens = usage.getOrDefault("original_usage.prompt_tokens_details.cached_tokens", 0);
@@ -29,15 +29,18 @@ class SpanCostCalculator {
             inputTokens = Math.max(0, inputTokens - cachedReadInputTokens);
         }
 
-        // Get the output tokens
-        int outputTokens = usage.getOrDefault("original_usage.completion_tokens", 0);
+        // Get the output tokens (SDK version below 1.6.0 logged completion_tokens, while 1.6.0+ logged original_usage.completion_tokens)
+        int outputTokens = usage.getOrDefault("original_usage.completion_tokens",
+                usage.getOrDefault("completion_tokens", 0));
 
-        return modelPrice.inputPrice().multiply(BigDecimal.valueOf(inputTokens))
+        BigDecimal final_price = modelPrice.inputPrice().multiply(BigDecimal.valueOf(inputTokens))
                 .add(modelPrice.outputPrice().multiply(BigDecimal.valueOf(outputTokens)))
                 .add(modelPrice.cacheReadInputTokenPrice().multiply(BigDecimal.valueOf(cachedReadInputTokens)));
+
+        return final_price;
     }
 
-    public static BigDecimal textGenerationWithCacheCostOpenAI(ModelPrice modelPrice, Map<String, Integer> usage) {
+    public static BigDecimal textGenerationWithCacheCostAnthropic(ModelPrice modelPrice, Map<String, Integer> usage) {
         return textGenerationWithCachedTokensNotIncludedInCost(modelPrice, usage, "original_usage.input_tokens",
                 "original_usage.output_tokens", "original_usage.cache_read_input_tokens",
                 "original_usage.cache_creation_input_tokens");
