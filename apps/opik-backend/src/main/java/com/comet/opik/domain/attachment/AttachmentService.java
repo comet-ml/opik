@@ -252,8 +252,8 @@ class AttachmentServiceImpl implements AttachmentService {
 
         UriBuilder uriBuilder = UriBuilder.fromUri(baseUrl)
                 .path("v1/private/attachment/upload")
-                .queryParam("file_name", uploadRequest.fileName())
-                .queryParam("mime_type", getMimeType(uploadRequest))
+                .queryParam("file_name", URLEncoder.encode(uploadRequest.fileName(), StandardCharsets.UTF_8))
+                .queryParam("mime_type", URLEncoder.encode(getMimeType(uploadRequest), StandardCharsets.UTF_8))
                 .queryParam("entity_type", uploadRequest.entityType().getValue())
                 .queryParam("entity_id", uploadRequest.entityId());
 
