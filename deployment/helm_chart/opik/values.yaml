@@ -77,7 +77,6 @@ component:
       AWS_ACCESS_KEY_ID: THAAIOSFODNN7EXAMPLE # rootUser for minio
       AWS_SECRET_ACCESS_KEY: LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY # rootPassword for minio
       S3_URL: "http://opik-minio:9000"
-      TOGGLE_PYTHON_EVALUATOR_ENABLED: true
     envFrom:
       - configMapRef:
           name: opik-backend
@@ -121,10 +120,9 @@ component:
       PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: "3"
       OPIK_REVERSE_PROXY_URL: "http://opik-frontend:5173/api"
       OTEL_SERVICE_NAME: "opik-python-backend"
-      OTEL_METRIC_EXPORT_INTERVAL: "60000"      
+      OTEL_METRIC_EXPORT_INTERVAL: "60000"
       OTEL_PROPAGATORS: "tracecontext,baggage"
       OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED: true
-      OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: BASE2_EXPONENTIAL_BUCKET_HISTOGRAM
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: cumulative
     envFrom:
       - configMapRef:
