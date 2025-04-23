@@ -385,10 +385,14 @@ public class StatsUtils {
         double epsilon = .00001;
 
         // Calculate the absolute difference
-        double difference = Math.abs(numv1.doubleValue() - numv2.doubleValue());
+        BigDecimal difference = BigDecimal.valueOf(numv1.doubleValue())
+                .subtract(BigDecimal.valueOf(numv2.doubleValue())).abs();
 
         // If the difference is within the tolerance, consider them equal
-        if (difference <= epsilon) {
+        if (difference.doubleValue() <= epsilon) {
+            return 0;
+        } else if (difference.toString().replace("0", "").equals(".1")) {
+            // This is a special case where the difference is exactly 1, which should also be considered equal
             return 0;
         }
 

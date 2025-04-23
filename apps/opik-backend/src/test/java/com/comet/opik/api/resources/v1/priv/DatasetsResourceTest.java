@@ -169,7 +169,6 @@ class DatasetsResourceTest {
     private static final String EXPERIMENT_RESOURCE_URI = "%s/v1/private/experiments";
     private static final String DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH = "/items/experiments/items";
 
-    private static final String URL_TEMPLATE_EXPERIMENT_ITEMS = "%s/v1/private/experiments/items";
     private static final String URL_TEMPLATE_TRACES = "%s/v1/private/traces";
 
     public static final String[] IGNORED_FIELDS_LIST = {"feedbackScores", "createdAt", "lastUpdatedAt", "createdBy",
@@ -3837,8 +3836,11 @@ class DatasetsResourceTest {
                             experimentItems.get(7)).reversed();
 
                     assertThat(actualDatasetItem.experimentItems())
-                            .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_LIST)
-                            .containsExactlyElementsOf(expectedExperimentItems);
+                            .usingRecursiveComparison()
+                            .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                            .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                            .ignoringFields(IGNORED_FIELDS_LIST)
+                            .isEqualTo(expectedExperimentItems);
 
                     for (var j = 0; j < actualDatasetItem.experimentItems().size(); j++) {
                         var actualExperimentItem = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(
@@ -4011,7 +4013,8 @@ class DatasetsResourceTest {
                     assertThat(actualDatasetItem.experimentItems())
                             .usingRecursiveComparison()
                             .ignoringFields(IGNORED_FIELDS_LIST)
-                            .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                            .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                            .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
                             .isEqualTo(List.of(expectedExperimentItem));
 
                     for (var j = 0; j < actualDatasetItem.experimentItems().size(); j++) {
@@ -4175,8 +4178,11 @@ class DatasetsResourceTest {
                 assertThat(actualPage.content()).hasSize(expectedDatasetItems.size());
                 for (int i = 0; i < expectedExperimentItems.size(); i++) {
                     assertThat(actualPage.content().get(i).experimentItems())
-                            .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_LIST)
-                            .containsExactlyElementsOf(expectedExperimentItems.reversed().get(i));
+                            .usingRecursiveComparison()
+                            .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                            .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                            .ignoringFields(IGNORED_FIELDS_LIST)
+                            .isEqualTo(expectedExperimentItems.reversed().get(i));
                 }
             }
         }

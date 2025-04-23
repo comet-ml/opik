@@ -3648,8 +3648,11 @@ class ExperimentsResourceTest {
                     actualResponse, EXPERIMENT_ITEM_TYPE_REFERENCE);
 
             assertThat(actualExperimentItems)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(ITEM_IGNORED_FIELDS)
-                    .containsExactlyElementsOf(expectedExperimentItems);
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                    .ignoringFields(ITEM_IGNORED_FIELDS)
+                    .isEqualTo(expectedExperimentItems);
 
             assertIgnoredFields(actualExperimentItems, expectedExperimentItems);
 
