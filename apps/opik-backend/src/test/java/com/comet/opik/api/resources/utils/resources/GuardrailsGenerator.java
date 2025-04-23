@@ -10,7 +10,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-public class TestGenerators {
+public class GuardrailsGenerator {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     public List<GuardrailBatchItem> generateGuardrailsForTrace(UUID traceId, UUID spanId, String projectName) {

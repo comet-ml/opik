@@ -57,6 +57,7 @@ public class FilterQueryBuilder {
     private static final String LAST_UPDATED_AT_ANALYTICS_DB = "last_updated_at";
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
     private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
+    private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -137,6 +138,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceField.DURATION, DURATION_ANALYTICS_DB)
                     .put(TraceField.THREAD_ID, THREAD_ID_ANALYTICS_DB)
+                    .put(TraceField.GUARDRAILS, GUARDRAILS_RESULT_DB)
                     .build());
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
@@ -188,6 +190,7 @@ public class FilterQueryBuilder {
                     .add(TraceField.TAGS)
                     .add(TraceField.DURATION)
                     .add(TraceField.THREAD_ID)
+                    .add(TraceField.GUARDRAILS)
                     .build()),
             FilterStrategy.TRACE_AGGREGATION, EnumSet.copyOf(ImmutableSet.<TraceField>builder()
                     .add(TraceField.USAGE_COMPLETION_TOKENS)

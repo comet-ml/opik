@@ -21,6 +21,7 @@ public enum TraceField implements Field {
     FEEDBACK_SCORES(FEEDBACK_SCORES_QUERY_PARAM, FieldType.FEEDBACK_SCORES_NUMBER),
     DURATION(DURATION_QUERY_PARAM, FieldType.NUMBER),
     THREAD_ID(THREAD_ID_QUERY_PARAM, FieldType.STRING),
+    GUARDRAILS(GUARDRAILS_QUERY_PARAM, FieldType.STRING),
     ;
 
     private final String queryParamField;

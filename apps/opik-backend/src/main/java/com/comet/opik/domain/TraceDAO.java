@@ -404,9 +404,9 @@ class TraceDAOImpl implements TraceDAO {
                     AND workspace_id = :workspace_id
                     AND entity_id = :id
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, secondary_entity_id, name
+                    LIMIT 1 BY entity_id, id
                 )
-                GROUP BY workspace_id, project_id, entity_id
+                GROUP BY workspace_id, project_id, entity_type, entity_id
             ) AS gr ON t.id = gr.entity_id
             GROUP BY
                 t.*
@@ -461,7 +461,8 @@ class TraceDAOImpl implements TraceDAO {
                          project_id,
                          name,
                          result
-                    )) as guardrails_list
+                    )) as guardrails_list,
+                    if(has(groupArray(result), 'failed'), 'failed', 'passed') as guardrails_result
                 FROM (
                     SELECT
                         *
@@ -469,10 +470,10 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, secondary_entity_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, secondary_entity_id, name
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, id
                 )
-                GROUP BY workspace_id, project_id, entity_id
+                GROUP BY workspace_id, project_id, entity_type, entity_id
             ), spans_agg AS (
                 <if(final)>
                     SELECT
@@ -555,6 +556,7 @@ class TraceDAOImpl implements TraceDAO {
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration
                 FROM traces t
+                    LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
                 <if(sort_has_feedback_scores)>
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
                 <endif>
@@ -655,8 +657,24 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String COUNT_BY_PROJECT_ID = """
+            WITH guardrails_agg AS (
+                SELECT
+                    entity_id,
+                    if(has(groupArray(result), 'failed'), 'failed', 'passed') as guardrails_result
+                FROM (
+                    SELECT
+                        *
+                    FROM guardrails
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, id
+                )
+                GROUP BY workspace_id, project_id, entity_type, entity_id
+            )
             <if(feedback_scores_empty_filters)>
-             WITH fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
                     SELECT *
                     FROM feedback_scores
@@ -687,6 +705,7 @@ class TraceDAOImpl implements TraceDAO {
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration
                     FROM traces
+                        LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
                     <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = traces.id
                     <endif>
@@ -959,6 +978,23 @@ class TraceDAOImpl implements TraceDAO {
                     )
                     GROUP BY workspace_id, project_id, entity_id
                 <endif>
+            ),
+            guardrails_agg AS (
+                SELECT
+                    entity_id,
+                    countIf(DISTINCT id, result = 'failed') AS failed_count,
+                    if(has(groupArray(result), 'failed'), 'failed', 'passed') as guardrails_result
+                FROM (
+                    SELECT
+                        *
+                    FROM guardrails
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND project_id IN :project_ids
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, id
+                )
+                GROUP BY workspace_id, project_id, entity_type, entity_id
             )
             <if(feedback_scores_empty_filters)>
             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -1038,6 +1074,7 @@ class TraceDAOImpl implements TraceDAO {
                              (dateDiff('microsecond', start_time, end_time) / 1000.0),
                              NULL) as duration
                     FROM traces
+                        LEFT JOIN guardrails_agg gagg ON guardrails_agg.entity_id = traces.id
                     <if(feedback_scores_empty_filters)>
                         LEFT JOIN fsc ON fsc.entity_id = traces.id
                     <endif>
@@ -1075,18 +1112,6 @@ class TraceDAOImpl implements TraceDAO {
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 <endif>
-            ), guardrails_agg AS (
-                SELECT entity_id, COUNT(DISTINCT id) AS failed_count
-                FROM guardrails
-                WHERE entity_type = 'trace'
-                AND workspace_id = :workspace_id
-                AND project_id IN :project_ids
-                AND entity_id IN (
-                    SELECT id
-                    FROM trace_final
-                )
-                AND result = 'failed'
-                GROUP BY entity_id
             )
             SELECT
                 t.workspace_id as workspace_id,
