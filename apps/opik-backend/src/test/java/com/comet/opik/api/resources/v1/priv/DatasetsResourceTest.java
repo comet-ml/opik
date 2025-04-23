@@ -2407,6 +2407,7 @@ class DatasetsResourceTest {
             var expectedDataset = dataset.toBuilder()
                     .name(datasetUpdate.name())
                     .description(datasetUpdate.description())
+                    .visibility(datasetUpdate.visibility())
                     .build();
 
             getAndAssertEquals(id, expectedDataset, TEST_WORKSPACE, API_KEY);
@@ -2466,6 +2467,7 @@ class DatasetsResourceTest {
             var datasetUpdate = factory.manufacturePojo(DatasetUpdate.class)
                     .toBuilder()
                     .description(null)
+                    .visibility(null)
                     .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
