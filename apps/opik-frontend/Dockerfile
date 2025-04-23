@@ -31,13 +31,22 @@ RUN yum update -y && yum install -y nginx \
 # Add label for later inspection
 ARG BUILD_MODE=production
 LABEL build.mode="${BUILD_MODE}"
+
+# implement changes required to run NGINX as an unprivileged user
+RUN sed -i '/access_log.*main/d' /etc/nginx/nginx.conf
+RUN sed -i 's,listen       80;,listen       8080;,' /etc/nginx/conf.d/default.conf \
+    && sed -i '/user  nginx;/d' /etc/nginx/nginx.conf \
+    && sed -i 's,/var/run/nginx.pid,/tmp/nginx.pid,' /etc/nginx/nginx.conf \
+    && sed -i "/^http {/a \    proxy_temp_path /tmp/proxy_temp;\n    client_body_temp_path /tmp/client_temp;\n    fastcgi_temp_path /tmp/fastcgi_temp;\n    uwsgi_temp_path /tmp/uwsgi_temp;\n    scgi_temp_path /tmp/scgi_temp;\n" /etc/nginx/nginx.conf \
+# nginx user must own the cache and etc directory to write cache and tweak the nginx config
+    && chown -R $UID:0 /var/cache/nginx \
+    && chmod -R g+w /var/cache/nginx \
+    && chown -R $UID:0 /etc/nginx \
+    && chmod -R g+w /etc/nginx
+
 # Copy the built files from the builder stage
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
-# RUN sed -i '/access_log.*main/d' /etc/nginx/nginx.conf
-# Ensure nginx user owns necessary directories
-RUN rm /etc/nginx/nginx.conf && \
-    mkdir -p /var/cache/nginx /var/log/nginx /var/run && \
-    chown -R nginx:nginx /var/cache/nginx /var/log/nginx /usr/share/nginx/html /var/run /run /etc/nginx
+
 EXPOSE 5173
 # Switch to the non-root user
 USER nginx:nginx
