@@ -82,8 +82,6 @@ class GuardrailsServiceImpl implements GuardrailsService {
             EntityType entityType, List<Pair<Project, List<Guardrail>>> projects, int actualBatchSize) {
         return Flux.fromIterable(projects)
                 .flatMap(projectDto -> guardrailsDAO.addGuardrails(entityType, projectDto.getValue()))
-                .reduce(0L, Long::sum)
-                .flatMap(rowsUpdated -> rowsUpdated == actualBatchSize ? Mono.just(rowsUpdated) : Mono.empty())
-                .switchIfEmpty(Mono.error(failWithNotFound("Error while processing guardrails batch")));
+                .reduce(0L, Long::sum);
     }
 }
