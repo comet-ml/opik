@@ -33,13 +33,13 @@ ARG BUILD_MODE=production
 LABEL build.mode="${BUILD_MODE}"
 
 # implement changes required to run NGINX as an unprivileged user
-RUN rm /etc/nginx/nginx.conf.default && \
+RUN mkdir -p /tmp && chmod 777 /tmp && \
+    rm /etc/nginx/nginx.conf.default && \
     sed -i '/access_log.*main/d' /etc/nginx/nginx.conf && \
     sed -i 's,listen       80;,listen       8080;,' /etc/nginx/nginx.conf && \
     sed -i 's,listen       \[::\]:80;,listen       \[::\]:8080;,' /etc/nginx/nginx.conf && \
     sed -i '/user  nginx;/d' /etc/nginx/nginx.conf && \
-    sed -i 's,/var/run/nginx.pid,/tmp/nginx.pid,' /etc/nginx/nginx.conf && \
-    sed -i "/^http {/a \    proxy_temp_path /tmp/proxy_temp;\n    client_body_temp_path /tmp/client_temp;\n    fastcgi_temp_path /tmp/fastcgi_temp;\n    uwsgi_temp_path /tmp/uwsgi_temp;\n    scgi_temp_path /tmp/scgi_temp;\n" /etc/nginx/nginx.conf 
+    sed -i 's,/var/run/nginx.pid,/tmp/nginx.pid,g' /etc/nginx/nginx.conf
 # nginx user must own the cache and etc directory to write cache and tweak the nginx config
 RUN mkdir -p /var/cache/nginx /var/log/nginx && chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx && \
     chmod -R g+w /var/cache/nginx /var/log/nginx /etc/nginx 
