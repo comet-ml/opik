@@ -406,7 +406,7 @@ class TraceDAOImpl implements TraceDAO {
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, id
                 )
-                GROUP BY workspace_id, project_id, entity_id
+                GROUP BY workspace_id, project_id, entity_type, entity_id
             ) AS gr ON t.id = gr.entity_id
             GROUP BY
                 t.*
