@@ -44,8 +44,6 @@ ARG OPIK_VERSION
 ENV OPIK_VERSION=${OPIK_VERSION}
 
 RUN chmod -R 777 /tmp && chown -R 1001:1001 /opt/opik
-
-# Switch to the non-root user
 USER 1001:1001
 
 CMD ["./entrypoint.sh"]

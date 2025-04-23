@@ -38,7 +38,6 @@ RUN rm -f /etc/nginx/nginx.conf.default && \
     sed -i 's,listen       80;,listen       8080;,' /etc/nginx/nginx.conf && \
     sed -i 's,listen       \[::\]:80;,listen       \[::\]:8080;,' /etc/nginx/nginx.conf && \
     sed -i '/user  nginx;/d' /etc/nginx/nginx.conf
-# nginx user must own the cache and etc directory to write cache and tweak the nginx config
 RUN mkdir -p /var/cache/nginx /var/log/nginx /run && \
     chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx /run && \
     chmod -R g+w /var/cache/nginx /var/log/nginx /etc/nginx /run
@@ -47,7 +46,7 @@ RUN mkdir -p /var/cache/nginx /var/log/nginx /run && \
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
 
 EXPOSE 5173
-# Switch to the non-root user
+
 USER nginx:nginx
 # Start Nginx
 CMD ["nginx", "-g", "daemon off;"]
