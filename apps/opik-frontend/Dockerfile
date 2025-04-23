@@ -33,9 +33,10 @@ ARG BUILD_MODE=production
 LABEL build.mode="${BUILD_MODE}"
 # Copy the built files from the builder stage
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
-RUN sed -i '/access_log.*main/d' /etc/nginx/nginx.conf
+# RUN sed -i '/access_log.*main/d' /etc/nginx/nginx.conf
 # Ensure nginx user owns necessary directories
-RUN mkdir -p /var/cache/nginx /var/log/nginx /var/run && \
+RUN rm /etc/nginx/nginx.conf && \
+    mkdir -p /var/cache/nginx /var/log/nginx /var/run && \
     chown -R nginx:nginx /var/cache/nginx /var/log/nginx /usr/share/nginx/html /var/run /run /etc/nginx
 EXPOSE 5173
 # Switch to the non-root user
