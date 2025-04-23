@@ -6,7 +6,6 @@ WORKDIR /opt/frontend
 COPY package*.json ./
 COPY patches ./patches
 RUN npm install
-
 # Copy and build the application
 COPY . .
 
@@ -17,7 +16,6 @@ ARG SENTRY_DSN
 ENV VITE_APP_VERSION=${OPIK_VERSION}
 ENV VITE_SENTRY_ENABLED=${SENTRY_ENABLED}
 ENV VITE_SENTRY_DSN=${SENTRY_DSN}
-
 ENV NODE_OPTIONS="--max-old-space-size=8192"
 
 ARG BUILD_MODE=production
@@ -34,12 +32,22 @@ RUN yum update -y && yum install -y nginx \
 ARG BUILD_MODE=production
 LABEL build.mode="${BUILD_MODE}"
 
+# implement changes required to run NGINX as an unprivileged user
+RUN rm -f /etc/nginx/nginx.conf.default && \
+    sed -i '/access_log.*main/d' /etc/nginx/nginx.conf && \
+    sed -i 's,listen       80;,listen       8080;,' /etc/nginx/nginx.conf && \
+    sed -i 's,listen       \[::\]:80;,listen       \[::\]:8080;,' /etc/nginx/nginx.conf && \
+    sed -i '/user  nginx;/d' /etc/nginx/nginx.conf
+# nginx user must own the cache and etc directory to write cache and tweak the nginx config
+RUN mkdir -p /var/cache/nginx /var/log/nginx /run && \
+    chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx /run && \
+    chmod -R g+w /var/cache/nginx /var/log/nginx /etc/nginx /run
+
 # Copy the built files from the builder stage
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
 
-RUN sed -i '/access_log.*main/d' /etc/nginx/nginx.conf
-
 EXPOSE 5173
-
+# Switch to the non-root user
+USER nginx:nginx
 # Start Nginx
 CMD ["nginx", "-g", "daemon off;"]
