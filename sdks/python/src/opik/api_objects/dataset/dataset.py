@@ -267,11 +267,7 @@ class Dataset:
                 if dataset_item_ids is not None and len(dataset_item_ids) == 0:
                     break
 
-        if (
-            (nb_samples is None or nb_samples < len(results))
-            and dataset_item_ids
-            and len(dataset_item_ids) > 0
-        ):
+        if dataset_item_ids and len(dataset_item_ids) > 0:
             LOGGER.warning(
                 "The following dataset items were not found in the dataset: %s",
                 dataset_item_ids,
