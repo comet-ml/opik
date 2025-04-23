@@ -244,8 +244,6 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-      # guardrails-backend:
-      #   condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5173"]
       interval: 1s
