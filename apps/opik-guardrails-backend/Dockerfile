@@ -43,11 +43,5 @@ ENV NVIDIA_VISIBLE_DEVICES=all \
 RUN chmod u+x entrypoint.sh
 EXPOSE 5000
 
-# Change ownership of workdir before switching user
-RUN chown -R 1001:1001 /opt/opik-guardrails-backend
-
-# Switch to the non-root user
-USER 1001:1001
-
 ENTRYPOINT ["tini", "--"]
 CMD ["./entrypoint.sh"]

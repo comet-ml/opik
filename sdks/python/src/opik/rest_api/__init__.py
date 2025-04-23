@@ -82,6 +82,8 @@ from .types import (
     DatasetItemWriteSource,
     DatasetPagePublic,
     DatasetPublic,
+    DatasetPublicVisibility,
+    DatasetVisibility,
     DeleteAttachmentsRequest,
     DeleteAttachmentsRequestEntityType,
     DeleteFeedbackScore,
@@ -291,6 +293,7 @@ from .attachments import (
     UploadAttachmentRequestEntityType,
 )
 from .client import AsyncOpikApi, OpikApi
+from .datasets import DatasetUpdateVisibility, DatasetWriteVisibility
 from .environment import OpikApiEnvironment
 from .feedback_definitions import FindFeedbackDefinitionsRequestType
 from .llm_provider_key import ProviderApiKeyWriteProvider
@@ -394,6 +397,10 @@ __all__ = [
     "DatasetItemWriteSource",
     "DatasetPagePublic",
     "DatasetPublic",
+    "DatasetPublicVisibility",
+    "DatasetUpdateVisibility",
+    "DatasetVisibility",
+    "DatasetWriteVisibility",
     "DeleteAttachmentsRequest",
     "DeleteAttachmentsRequestEntityType",
     "DeleteFeedbackScore",
