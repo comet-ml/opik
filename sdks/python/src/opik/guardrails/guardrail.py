@@ -90,7 +90,7 @@ class Guardrail:
             opik.exceptions.GuardrailValidationFailed: If validation fails
             httpx.HTTPStatusError: If the API returns an error status code
         """
-        result = self._validate(generation=text)
+        result: schemas.ValidationResponse = self._validate(generation=text)  # type: ignore
 
         return self._parse_result(result)
 
@@ -110,12 +110,18 @@ class Guardrail:
 
         batch = []
 
+        # Makes mypy happy that a current span and trace exists
+        current_span = get_current_span_data()
+        current_trace = get_current_trace_data()
+        assert current_span is not None
+        assert current_trace is not None
+
         for validation in result.validations:
             guardrail_batch_item_message = GuardrailBatchItemMessage(
                 id=None,
                 project_name=None,
-                entity_id=get_current_trace_data().id,
-                secondary_id=get_current_span_data().id,
+                entity_id=current_span.id,
+                secondary_id=current_trace.id,
                 name=validation.type,
                 result="passed" if validation.validation_passed else "failed",
                 config=validation.validation_config,

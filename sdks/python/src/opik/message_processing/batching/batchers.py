@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, cast
 
 from . import base_batcher
 from .. import messages
@@ -93,7 +93,10 @@ class GuardrailBatchMessageBatcher(base_batcher.BaseBatcher):
         batch = []
 
         for batch_message in self._accumulated_messages:
-            batch.extend(batch_message.batch)
+            batch_of_message_item = cast(
+                messages.GuardrailBatchMessage, batch_message
+            ).batch
+            batch.extend(batch_of_message_item)
 
         return messages.GuardrailBatchMessage(batch=batch)  # type: ignore
 
