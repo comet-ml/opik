@@ -39,7 +39,7 @@ public record Experiment(
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) BigDecimal totalEstimatedCost,
         @JsonView({
-                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Map<String, Integer> usage,
+                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Map<String, Double> usage,
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,

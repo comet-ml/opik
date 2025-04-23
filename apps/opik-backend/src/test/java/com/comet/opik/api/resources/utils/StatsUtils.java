@@ -205,7 +205,7 @@ public class StatsUtils {
         return stats;
     }
 
-    private static Map<String, Double> calculateUsageAverage(List<Map<String, Long>> data) {
+    public static Map<String, Double> calculateUsageAverage(List<Map<String, Long>> data) {
         return data.stream()
                 .filter(Objects::nonNull)
                 .map(Map::entrySet)
@@ -218,6 +218,20 @@ public class StatsUtils {
                 .map(e -> Map.entry(e.getKey(),
                         avgFromDoubleList(e.getValue().stream().map(Double::valueOf).toList())))
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    public static Map<String, Long> calculateUsage(List<Map<String, Long>> data) {
+        return data.stream()
+                .filter(Objects::nonNull)
+                .map(Map::entrySet)
+                .flatMap(Collection::stream)
+                .collect(groupingBy(
+                        Map.Entry::getKey,
+                        mapping(Map.Entry::getValue, toList())))
+                .entrySet()
+                .stream()
+                .map(e -> Map.entry(e.getKey(), e.getValue().stream().mapToLong(Long::longValue).average()))
+                .collect(toMap(Map.Entry::getKey, e -> (long) e.getValue().orElseThrow()));
     }
 
     private static Map<String, Double> calculateFeedbackAverage(List<List<FeedbackScore>> data) {

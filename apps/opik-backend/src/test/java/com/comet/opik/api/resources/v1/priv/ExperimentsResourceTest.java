@@ -20,6 +20,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
@@ -37,16 +38,19 @@ import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
+import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.FeedbackScoreMapper;
+import com.comet.opik.domain.SpanType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
@@ -108,6 +112,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -148,6 +153,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class ExperimentsResourceTest {
+
     private static final String URL_TEMPLATE = "%s/v1/private/experiments";
     private static final String ITEMS_PATH = "/items";
 
@@ -169,7 +175,7 @@ class ExperimentsResourceTest {
     private static final TimeBasedEpochGenerator GENERATOR = Generators.timeBasedEpochGenerator();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final MySQLContainer<?> MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
+    private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
             .newClickHouseContainer(ZOOKEEPER_CONTAINER);
@@ -181,7 +187,7 @@ class ExperimentsResourceTest {
     private final TestDropwizardAppExtension app;
 
     {
-        Startables.deepStart(REDIS, MY_SQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
+        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 
@@ -189,7 +195,7 @@ class ExperimentsResourceTest {
                 CLICK_HOUSE_CONTAINER, DATABASE_NAME);
 
         contextConfig = AppContextConfig.builder()
-                .jdbcUrl(MY_SQL_CONTAINER.getJdbcUrl())
+                .jdbcUrl(MYSQL_CONTAINER.getJdbcUrl())
                 .databaseAnalyticsFactory(databaseAnalyticsFactory)
                 .runtimeInfo(wireMock.runtimeInfo())
                 .redisUrl(REDIS.getRedisURI())
@@ -210,6 +216,7 @@ class ExperimentsResourceTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private DatasetResourceClient datasetResourceClient;
+    private SpanResourceClient spanResourceClient;
 
     @BeforeAll
     void beforeAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -233,6 +240,7 @@ class ExperimentsResourceTest {
         this.experimentResourceClient = new ExperimentResourceClient(this.client, baseURI, podamFactory);
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
         this.datasetResourceClient = new DatasetResourceClient(this.client, baseURI);
+        this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -1304,6 +1312,83 @@ class ExperimentsResourceTest {
                     true,
                     expectedScoresPerExperiment,
                     null);
+        }
+
+        @Test
+        void find__whenExperimentsHaveSpanData__thenReturnPage() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .usage(null)
+                    .build();
+
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            List<Span> spans = new ArrayList<>();
+            List<Trace> traces = new ArrayList<>();
+
+            IntStream.range(0, 5).forEach(i -> {
+                var trace = podamFactory.manufacturePojo(Trace.class);
+                traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+                var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                        .traceId(trace.id())
+                        .projectName(trace.projectName())
+                        .type(SpanType.llm)
+                        .totalEstimatedCost(BigDecimal.valueOf(PodamUtils.getIntegerInRange(0, 10)))
+                        .build();
+
+                spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+                var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                        .experimentId(experiment.id())
+                        .usage(null)
+                        .traceId(trace.id())
+                        .feedbackScores(null)
+                        .build();
+
+                experimentResourceClient.createExperimentItem(Set.of(experimentItem), apiKey, workspaceName);
+
+                traces.add(trace);
+                spans.add(span);
+            });
+
+            List<BigDecimal> quantiles = getQuantities(traces.stream());
+
+            var expectedExperiment = experiment.toBuilder()
+                    .duration(new PercentageValues(quantiles.get(0), quantiles.get(1), quantiles.get(2)))
+                    .totalEstimatedCost(getTotalEstimatedCost(spans))
+                    .usage(getUsage(spans))
+                    .build();
+
+            findAndAssert(workspaceName, 1, 1, null, null, List.of(expectedExperiment), 1,
+                    List.of(), apiKey, false, Map.of(), null);
+        }
+
+        private Map<String, Double> getUsage(List<Span> spans) {
+            return spans.stream()
+                    .map(Span::usage)
+                    .map(Map::entrySet)
+                    .flatMap(Collection::stream)
+                    .collect(groupingBy(Map.Entry::getKey, Collectors.averagingLong(e -> e.getValue())));
+        }
+
+        private BigDecimal getTotalEstimatedCost(List<Span> spans) {
+
+            BigDecimal accumulated = spans.stream()
+                    .map(Span::totalEstimatedCost)
+                    .reduce(BigDecimal::add)
+                    .orElse(BigDecimal.ZERO);
+
+            return accumulated.divide(BigDecimal.valueOf(spans.size()), ValidationUtils.SCALE, RoundingMode.HALF_UP);
         }
 
         @ParameterizedTest
@@ -3053,6 +3138,107 @@ class ExperimentsResourceTest {
             var expectedExperimentItems = List.<ExperimentItem>of();
             var unexpectedExperimentItems1 = List.<ExperimentItem>of();
             streamAndAssert(streamRequest, expectedExperimentItems, unexpectedExperimentItems1, apiKey, workspaceName);
+        }
+
+        @Test
+        void streamByExperimentNameWithSpanData() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Creating two traces with input, output and scores
+            var traceWithScores1 = createTraceWithScores(apiKey, workspaceName);
+            var traceWithScores2 = createTraceWithScores(apiKey, workspaceName);
+
+            Trace trace1 = traceWithScores1.getLeft();
+            Trace trace2 = traceWithScores2.getLeft();
+
+            // Creating Span Data
+            var span1 = createSpan(trace1, apiKey, workspaceName);
+            var span2 = createSpan(trace2, apiKey, workspaceName);
+
+            var span3 = createSpan(trace1, apiKey, workspaceName);
+            var span4 = createSpan(trace2, apiKey, workspaceName);
+
+            // Streaming by experiment name
+
+            var experiment = experimentResourceClient.createPartialExperiment().build();
+
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace1.id())
+                    .totalEstimatedCost(getTotalEstimatedCost(List.of(span1, span3)))
+                    .usage(getUsage(List.of(span1, span3)))
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace1.startTime(),
+                            trace1.endTime()))
+                    .output(trace1.output())
+                    .input(trace1.input())
+                    .comments(null)
+                    .feedbackScores(null)
+                    .build();
+
+            var experimentItem2 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace2.id())
+                    .totalEstimatedCost(getTotalEstimatedCost(List.of(span2, span4)))
+                    .usage(getUsage(List.of(span2, span4)))
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace2.startTime(),
+                            trace2.endTime()))
+                    .output(trace2.output())
+                    .input(trace2.input())
+                    .comments(null)
+                    .feedbackScores(null)
+                    .build();
+
+            var createRequest1 = ExperimentItemsBatch.builder().experimentItems(Set.of(experimentItem, experimentItem2))
+                    .build();
+
+            createAndAssert(createRequest1, apiKey, workspaceName);
+
+            var streamRequest = ExperimentItemStreamRequest.builder()
+                    .experimentName(experiment.name())
+                    .build();
+            var expectedExperimentItems = List.of(experimentItem2, experimentItem);
+            var unexpectedExperimentItems1 = List.<ExperimentItem>of();
+            streamAndAssert(streamRequest, expectedExperimentItems, unexpectedExperimentItems1, apiKey, workspaceName);
+        }
+
+        private static Map<String, Long> getUsage(List<Span> spans) {
+            return StatsUtils.calculateUsage(
+                    spans.stream()
+                            .map(it -> it.usage().entrySet()
+                                    .stream()
+                                    .collect(Collectors.toMap(
+                                            Map.Entry::getKey,
+                                            entry -> entry.getValue().longValue())))
+                            .toList());
+        }
+
+        private BigDecimal getTotalEstimatedCost(List<Span> spans) {
+            return spans.stream()
+                    .map(Span::totalEstimatedCost)
+                    .reduce(BigDecimal::add)
+                    .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
+                    .orElse(null);
+        }
+
+        private Span createSpan(Trace trace, String apiKey, String workspaceName) {
+            Span span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(trace.projectName())
+                    .traceId(trace.id())
+                    .totalEstimatedCost(BigDecimal.valueOf(PodamUtils.getIntegerInRange(0, 10)))
+                    .feedbackScores(null)
+                    .totalEstimatedCostVersion(null)
+                    .type(SpanType.llm)
+                    .build();
+
+            spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+            return span;
         }
 
         private Pair<Trace, List<FeedbackScoreBatchItem>> createTraceWithScores(String apiKey, String workspaceName) {

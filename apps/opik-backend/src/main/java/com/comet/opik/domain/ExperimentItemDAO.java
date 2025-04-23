@@ -175,9 +175,9 @@ class ExperimentItemDAO {
                 LEFT JOIN (
                     SELECT
                         trace_id,
-                        SUM(total_estimated_cost) AS total_estimated_cost,
-                        avgMap(usage) AS usage
-                    FROM spans
+                        sum(total_estimated_cost) AS total_estimated_cost,
+                        sumMap(usage) AS usage
+                    FROM spans final
                     WHERE workspace_id = :workspace_id
                     AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
                     GROUP BY workspace_id, project_id, trace_id

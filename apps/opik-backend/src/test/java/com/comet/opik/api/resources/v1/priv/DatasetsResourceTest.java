@@ -38,17 +38,20 @@ import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
+import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DatasetDAO;
 import com.comet.opik.domain.FeedbackScoreMapper;
+import com.comet.opik.domain.SpanType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -98,6 +101,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
+import uk.co.jemos.podam.api.PodamUtils;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -148,6 +152,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.stream.Collectors.flatMapping;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
+import static java.util.stream.Collectors.toCollection;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
@@ -215,6 +220,7 @@ class DatasetsResourceTest {
     private ExperimentResourceClient experimentResourceClient;
     private DatasetResourceClient datasetResourceClient;
     private TraceResourceClient traceResourceClient;
+    private SpanResourceClient spanResourceClient;
     private TransactionTemplate mySqlTemplate;
 
     @BeforeAll
@@ -238,7 +244,8 @@ class DatasetsResourceTest {
         promptResourceClient = new PromptResourceClient(client, baseURI, factory);
         experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
         datasetResourceClient = new DatasetResourceClient(client, baseURI);
-        this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
+        traceResourceClient = new TraceResourceClient(this.client, baseURI);
+        spanResourceClient = new SpanResourceClient(this.client, baseURI);
     }
 
     @AfterAll
@@ -1592,15 +1599,7 @@ class DatasetsResourceTest {
     }
 
     private void createAndAssert(Experiment experiment, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(EXPERIMENT_RESOURCE_URI.formatted(baseURI))
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(experiment))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
+        experimentResourceClient.create(experiment, apiKey, workspaceName);
     }
 
     @Nested
@@ -3051,27 +3050,11 @@ class DatasetsResourceTest {
     }
 
     private UUID createTrace(Trace trace, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(TracesResourceTest.URL_TEMPLATE.formatted(baseURI)).request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.entity(trace, MediaType.APPLICATION_JSON_TYPE))) {
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
-
-            return getIdFromLocation(actualResponse.getLocation());
-        }
+        return traceResourceClient.createTrace(trace, apiKey, workspaceName);
     }
 
     private UUID createSpan(Span span, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(SpansResourceTest.URL_TEMPLATE.formatted(baseURI)).request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.entity(span, MediaType.APPLICATION_JSON_TYPE))) {
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
-
-            return getIdFromLocation(actualResponse.getLocation());
-        }
+        return spanResourceClient.createSpan(span, apiKey, workspaceName);
     }
 
     @Nested
@@ -3268,9 +3251,6 @@ class DatasetsResourceTest {
 
         var actualEntity = actualResponse.readEntity(DatasetItem.class);
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-
-        Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.data())
-                .orElse(Map.of());
 
         assertThat(actualEntity.id()).isEqualTo(expectedDatasetItem.id());
         assertThat(actualEntity).usingRecursiveComparison()
@@ -3653,9 +3633,6 @@ class DatasetsResourceTest {
             var actualDatasetItem = actualItems.get(i);
             var expectedDatasetItem = expectedItems.get(i);
 
-            Map<String, JsonNode> data = Optional.ofNullable(expectedDatasetItem.data())
-                    .orElse(Map.of());
-
             assertThat(actualDatasetItem.data()).isEqualTo(expectedDatasetItem.data());
         }
     }
@@ -3752,11 +3729,11 @@ class DatasetsResourceTest {
                                     .output(traces.get(i / 5).output())
                                     .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                             traces.get(i / 5).startTime(), traces.get(i / 5).endTime()))
-                                    .totalEstimatedCost(BigDecimal.ZERO)
-                                    .usage(null)
                                     .feedbackScores(traceIdToScoresMap.get(traces.get(i / 5).id()).stream()
                                             .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
                                             .toList())
+                                    .usage(null)
+                                    .totalEstimatedCost(null)
                                     .build()))
                     .collect(groupingBy(ExperimentItem::datasetItemId));
 
@@ -3770,7 +3747,11 @@ class DatasetsResourceTest {
                                     .traceId(traceMissingFields.id())
                                     .input(traceMissingFields.input())
                                     .output(traceMissingFields.output())
+                                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                            traceMissingFields.startTime(), traceMissingFields.endTime()))
                                     .feedbackScores(null)
+                                    .usage(null)
+                                    .totalEstimatedCost(null)
                                     .build()))
                     .toList());
 
@@ -3784,6 +3765,9 @@ class DatasetsResourceTest {
                                     .input(null)
                                     .output(null)
                                     .feedbackScores(null)
+                                    .usage(null)
+                                    .totalEstimatedCost(null)
+                                    .duration(null)
                                     .build()))
                     .toList());
 
@@ -3792,7 +3776,12 @@ class DatasetsResourceTest {
             // When storing the experiment items in batch, adding some more unrelated random ones
             var experimentItemsBatch = factory.manufacturePojo(ExperimentItemsBatch.class);
             experimentItemsBatch = experimentItemsBatch.toBuilder()
-                    .experimentItems(Stream.concat(experimentItemsBatch.experimentItems().stream(),
+                    .experimentItems(Stream.concat(experimentItemsBatch.experimentItems().stream()
+                            .map(item -> item.toBuilder()
+                                    .usage(null)
+                                    .totalEstimatedCost(null)
+                                    .duration(null)
+                                    .build()),
                             datasetItemIdToExperimentItemMap.values().stream().flatMap(Collection::stream))
                             .collect(toUnmodifiableSet()))
                     .build();
@@ -3885,6 +3874,211 @@ class DatasetsResourceTest {
             }
         }
 
+        @Test
+        void find__whenExperimentsHaveSpansWithLLMCalls__thenIncludeSpanData() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Creating two traces with input, output and scores
+
+            var trace1 = factory.manufacturePojo(Trace.class);
+            createAndAssert(trace1, workspaceName, apiKey);
+
+            var trace2 = factory.manufacturePojo(Trace.class);
+            createAndAssert(trace2, workspaceName, apiKey);
+
+            var traces = List.of(trace1, trace2);
+
+            Map<UUID, List<Span>> spansMap = traces.stream().map(trace -> {
+                Span span1 = createSpan(trace, apiKey, workspaceName);
+                Span span2 = createSpan(trace, apiKey, workspaceName);
+
+                return Map.entry(trace.id(), List.of(span1, span2));
+            }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            // Creating dataset and experiment items
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Creating 5 dataset items for the dataset above
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .datasetId(datasetId)
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .promptVersion(null)
+                    .promptVersions(null)
+                    .build();
+
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            // Creating 5 different experiment ids
+            var experimentItems = IntStream
+                    .range(0, 2).mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experiment.id())
+                            .traceId(traces.get(i).id())
+                            .input(traces.get(i).input())
+                            .output(traces.get(i).output())
+                            .usage(getUsage(spansMap, traces.get(i)))
+                            .totalEstimatedCost(getTotalEstimatedCost(spansMap, traces.get(i)))
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                    traces.get(i).startTime(), traces.get(i).endTime()))
+                            .datasetItemId(datasetItemBatch.items().get(i).id())
+                            .comments(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            createAndAssert(new ExperimentItemsBatch(Set.copyOf(experimentItems)), apiKey, workspaceName);
+
+            var otherExperimentItems = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experiment.id())
+                            .usage(null)
+                            .totalEstimatedCost(null)
+                            .duration(null)
+                            .datasetItemId(datasetItemBatch.items().get(i + 2).id())
+                            .comments(null)
+                            .feedbackScores(null)
+                            .output(null)
+                            .input(null)
+                            .build())
+                    .toList();
+
+            createAndAssert(new ExperimentItemsBatch(Set.copyOf(otherExperimentItems)), apiKey, workspaceName);
+
+            Set<Column> columns = datasetItemBatch.items()
+                    .stream()
+                    .flatMap(item -> item.data().entrySet().stream())
+                    .map(column -> new Column(column.getKey(), Set.of(getType(column)), "data"))
+                    .collect(toSet());
+
+            List<DatasetItem> datasetItems = datasetItemBatch.items()
+                    .stream()
+                    .sorted(Comparator.comparing(DatasetItem::id).reversed())
+                    .toList();
+
+            List<ExperimentItem> expectedExperimentItems = new ArrayList<>();
+
+            expectedExperimentItems.addAll(otherExperimentItems.reversed());
+            expectedExperimentItems.addAll(experimentItems.reversed());
+
+            assertPageAndContent(datasetId, List.of(experiment.id()), apiKey, workspaceName, expectedExperimentItems,
+                    columns, datasetItems);
+        }
+
+        private void assertPageAndContent(UUID datasetId, List<UUID> experimentIds, String apiKey, String workspaceName,
+                List<ExperimentItem> expectedExperimentItems, Set<Column> columns, List<DatasetItem> datasetItems) {
+            var experimentIdsQueryParm = JsonUtils.writeValueAsString(experimentIds);
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("experiment_ids", experimentIdsQueryParm)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+
+                assertThat(actualPage.page()).isEqualTo(1);
+                assertThat(actualPage.size()).isEqualTo(datasetItems.size());
+                assertThat(actualPage.total()).isEqualTo(datasetItems.size());
+                assertThat(actualPage.columns()).isEqualTo(columns);
+
+                var actualDatasetItems = actualPage.content();
+
+                assertPage(datasetItems, actualPage.content());
+
+                for (var i = 0; i < actualDatasetItems.size(); i++) {
+                    var actualDatasetItem = actualDatasetItems.get(i);
+                    var expectedDatasetItem = datasetItems.get(i);
+                    var expectedExperimentItem = expectedExperimentItems.get(i);
+
+                    assertThat(actualDatasetItem.experimentItems())
+                            .usingRecursiveComparison()
+                            .ignoringFields(IGNORED_FIELDS_LIST)
+                            .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                            .isEqualTo(List.of(expectedExperimentItem));
+
+                    for (var j = 0; j < actualDatasetItem.experimentItems().size(); j++) {
+                        var actualExperimentItem = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(
+                                actualDatasetItem.experimentItems().get(j), USER);
+
+                        assertThat(actualExperimentItem.feedbackScores())
+                                .usingRecursiveComparison()
+                                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                                .ignoringCollectionOrder()
+                                .isEqualTo(expectedExperimentItem.feedbackScores());
+
+                        assertThat(actualExperimentItem.createdAt())
+                                .isAfter(expectedExperimentItem.createdAt());
+                        assertThat(actualExperimentItem.lastUpdatedAt())
+                                .isAfter(expectedExperimentItem.lastUpdatedAt());
+
+                        assertThat(actualExperimentItem.createdBy())
+                                .isEqualTo(USER);
+                        assertThat(actualExperimentItem.lastUpdatedBy())
+                                .isEqualTo(USER);
+                    }
+
+                    assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
+                    assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
+                }
+            }
+        }
+
+        private Span createSpan(Trace trace, String apiKey, String workspaceName) {
+            Span span = factory.manufacturePojo(Span.class).toBuilder()
+                    .totalEstimatedCost(BigDecimal.valueOf(PodamUtils.getIntegerInRange(0, 10)))
+                    .feedbackScores(null)
+                    .totalEstimatedCostVersion(null)
+                    .type(SpanType.llm)
+                    .errorInfo(null)
+                    .comments(null)
+                    .traceId(trace.id())
+                    .projectName(trace.projectName())
+                    .build();
+
+            spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+            return span;
+        }
+
+        private BigDecimal getTotalEstimatedCost(Map<UUID, List<Span>> spansMap, Trace trace) {
+            return Optional.ofNullable(spansMap.get(trace.id()))
+                    .stream()
+                    .flatMap(List::stream)
+                    .map(Span::totalEstimatedCost)
+                    .reduce(BigDecimal::add)
+                    .filter(v -> v.compareTo(BigDecimal.ZERO) > 0)
+                    .orElse(null);
+        }
+
+        private static Map<String, Long> getUsage(Map<UUID, List<Span>> spansMap, Trace trace) {
+            return Optional.ofNullable(spansMap.get(trace.id()))
+                    .map(spans -> StatsUtils.calculateUsage(
+                            spans.stream()
+                                    .map(it -> it.usage().entrySet()
+                                            .stream()
+                                            .collect(Collectors.toMap(
+                                                    Map.Entry::getKey,
+                                                    entry -> entry.getValue().longValue())))
+                                    .toList()))
+                    .orElse(null);
+        }
+
         @ParameterizedTest
         @MethodSource("com.comet.opik.api.resources.v1.priv.ImageTruncationArgProvider#provideTestArguments")
         void findWithImageTruncation(JsonNode original, JsonNode expected, boolean truncate) {
@@ -3902,7 +4096,8 @@ class DatasetsResourceTest {
                             .metadata(original)
                             .build())
                     .toList();
-            traces.forEach(trace -> createAndAssert(trace, workspaceName, apiKey));
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             // Creating the dataset
             var dataset = factory.manufacturePojo(Dataset.class);
@@ -3927,6 +4122,10 @@ class DatasetsResourceTest {
                     .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
                             .experimentId(experimentIds.get(i))
                             .traceId(traces.get(i).id())
+                            .usage(null)
+                            .totalEstimatedCost(null)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                    traces.get(i).startTime(), traces.get(i).endTime()))
                             .datasetItemId(datasetItemBatchWithImage.items().get(i).id()).build())
                     .toList();
 
@@ -4336,7 +4535,7 @@ class DatasetsResourceTest {
 
             List<ExperimentItem> experimentItems = new ArrayList<>();
             createExperimentItems(datasetItems, traces, Stream.concat(scores.stream(),
-                    Stream.of((FeedbackScoreBatchItem) null)).collect(Collectors.toList()),
+                    Stream.of((FeedbackScoreBatchItem) null)).collect(toList()),
                     experimentId, experimentItems);
 
             createAndAssert(
@@ -4847,7 +5046,7 @@ class DatasetsResourceTest {
                         .types(Set.of(getType(entry)))
                         .filterFieldPrefix("data")
                         .build())
-                .collect(Collectors.toCollection(HashSet::new));
+                .collect(toCollection(HashSet::new));
 
         Map<String, Set<ColumnType>> results = columns.stream()
                 .collect(groupingBy(Column::name, mapping(Column::types, flatMapping(Set::stream, toSet()))));
@@ -4856,7 +5055,7 @@ class DatasetsResourceTest {
                 .stream()
                 .map(entry -> Column.builder().name(entry.getKey()).types(entry.getValue()).filterFieldPrefix("data")
                         .build())
-                .collect(Collectors.toSet());
+                .collect(toSet());
     }
 
     private ColumnType getType(Map.Entry<String, JsonNode> entry) {
@@ -4919,34 +5118,11 @@ class DatasetsResourceTest {
     }
 
     private void createAndAssert(ExperimentItemsBatch request, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(getExperimentItemsPath())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
+        experimentResourceClient.createExperimentItem(request.experimentItems(), apiKey, workspaceName);
     }
 
     private void createAndAssert(Trace trace, String workspaceName, String apiKey) {
-        try (var actualResponse = client.target(getTracesPath())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(trace))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
-            assertThat(actualResponse.hasEntity()).isFalse();
-
-            var actualHeaderString = actualResponse.getHeaderString("Location");
-            assertThat(actualHeaderString).isEqualTo(getTracesPath() + "/" + trace.id());
-        }
-    }
-
-    private String getExperimentItemsPath() {
-        return URL_TEMPLATE_EXPERIMENT_ITEMS.formatted(baseURI);
+        traceResourceClient.createTrace(trace, apiKey, workspaceName);
     }
 
     private String getTracesPath() {
