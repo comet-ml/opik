@@ -34,8 +34,6 @@ on:
     secrets:
       OPIK_FE_SENTRY_DSN:
         required: false
-        type: string
-        description: Sentry DSN for OPIK frontend
 
 env:
   DOCKER_REGISTRY: "ghcr.io/comet-ml/opik" 
