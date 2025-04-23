@@ -29,17 +29,14 @@ def read_and_parse_stream(
         nonlocal result, item_ids
         item = _parse_stream_line(line=line, item_class=item_class)
         if item is not None:
-            # Apply filtering by IDs
             if item_ids is not None and item.id not in item_ids:
                 return False
 
             result.append(item)
 
-            # Remove the ID from the set if filtering by IDs
             if item_ids is not None:
                 item_ids.remove(item.id)
 
-            # Stop if we have enough samples
             if nb_samples is not None and len(result) == nb_samples:
                 return True
         return False
