@@ -222,40 +222,59 @@ class Dataset:
     ) -> List[dataset_item.DatasetItem]:
         results: List[dataset_item.DatasetItem] = []
 
-        dataset_item_ids_set = (
-            set(dataset_item_ids) if dataset_item_ids is not None else None
-        )
+        if dataset_item_ids is not None:
+            dataset_item_ids = set(dataset_item_ids)  # type: ignore
 
-        dataset_items = rest_stream_parser.read_and_parse_stream(
-            stream=self._rest_client.datasets.stream_dataset_items(
-                dataset_name=self._name
-            ),
-            item_class=dataset_item.DatasetItem,
-            nb_samples=nb_samples,
-            item_ids=dataset_item_ids_set,
-        )
-
-        for item in dataset_items:
-            data_item_content = item.get_content().get("data", {})
-
-            reconstructed_item = dataset_item.DatasetItem(
-                id=item.id,
-                trace_id=item.trace_id,
-                span_id=item.span_id,
-                source=item.source,
-                **data_item_content,
+        while True:
+            dataset_items = rest_stream_parser.read_and_parse_stream(
+                stream=self._rest_client.datasets.stream_dataset_items(
+                    dataset_name=self._name,
+                    last_retrieved_id=results[-1].id if len(results) > 0 else None,
+                ),
+                item_class=dataset_item.DatasetItem,
+                nb_samples=nb_samples,
             )
 
-            results.append(reconstructed_item)
+            if len(dataset_items) == 0:
+                break
+
+            for item in dataset_items:
+                dataset_item_id = item.id
+
+                if dataset_item_ids is not None:
+                    if dataset_item_id not in dataset_item_ids:
+                        continue
+                    else:
+                        dataset_item_ids.remove(dataset_item_id)
+
+                data_item_content = item.get_content().get("data", {})
+
+                reconstructed_item = dataset_item.DatasetItem(
+                    id=item.id,
+                    trace_id=item.trace_id,
+                    span_id=item.span_id,
+                    source=item.source,
+                    **data_item_content,
+                )
+
+                results.append(reconstructed_item)
+
+                # Break the loop if we have enough samples
+                if nb_samples is not None and len(results) == nb_samples:
+                    break
+
+                # Break the loop if we found all filtered dataset items
+                if dataset_item_ids is not None and len(dataset_item_ids) == 0:
+                    break
 
         if (
             (nb_samples is None or nb_samples < len(results))
-            and dataset_item_ids_set
-            and len(dataset_item_ids_set) > 0
+            and dataset_item_ids
+            and len(dataset_item_ids) > 0
         ):
             LOGGER.warning(
                 "The following dataset items were not found in the dataset: %s",
-                dataset_item_ids_set,
+                dataset_item_ids,
             )
 
         return results
