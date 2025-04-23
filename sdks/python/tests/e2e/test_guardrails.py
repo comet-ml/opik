@@ -3,7 +3,7 @@ from opik import opik_context
 from . import verifiers
 from opik.guardrails import Guardrail, PII, Topic
 from opik import exceptions
-import mock
+from unittest import mock
 import pytest
 
 from .conftest import OPIK_E2E_TESTS_PROJECT_NAME
