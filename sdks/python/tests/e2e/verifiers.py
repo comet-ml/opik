@@ -30,6 +30,7 @@ def verify_trace(
     project_name: Optional[str] = mock.ANY,  # type: ignore
     error_info: Optional[ErrorInfoDict] = mock.ANY,  # type: ignore
     thread_id: Optional[str] = mock.ANY,  # type: ignore
+    guardrails_validations: Optional[List[Dict[str, Any]]] = mock.ANY,  # type: ignore
 ):
     if not synchronization.until(
         lambda: (opik_client.get_trace_content(id=trace_id) is not None),
@@ -93,6 +94,35 @@ def verify_trace(
             sorted_actual_feedback_scores, sorted_expected_feedback_scores
         ):
             testlib.assert_dicts_equal(actual_score, expected_score)
+
+    if guardrails_validations is not mock.ANY:
+        if trace.guardrails_validations is None:
+            assert (
+                guardrails_validations is None
+            ), f"Expected guardrails validation to be None, but got {guardrails_validations}"
+            return
+
+        actual_guardrails_validations = (
+            [] if trace.guardrails_validations is None else trace.guardrails_validations
+        )
+        assert (
+            len(actual_guardrails_validations) == len(guardrails_validations)
+        ), f"Expected amount of trace guardrails validation ({len(guardrails_validations)}) is not equal to actual amount ({len(actual_guardrails_validations)})"
+
+        actual_guardrails_validations = [
+            guardrail.model_dump() for guardrail in trace.guardrails_validations
+        ]
+
+        sorted_actual_guardrails_validations = sorted(
+            actual_guardrails_validations, key=lambda item: item["span_id"]
+        )
+        sorted_expected_guardrails_validations = sorted(
+            guardrails_validations, key=lambda item: item["span_id"]
+        )
+        for actual_guardrail, expected_guardrail in zip(
+            sorted_actual_guardrails_validations, sorted_expected_guardrails_validations
+        ):
+            testlib.assert_dicts_equal(actual_guardrail, expected_guardrail)
 
 
 def verify_span(

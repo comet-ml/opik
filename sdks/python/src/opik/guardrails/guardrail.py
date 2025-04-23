@@ -66,8 +66,7 @@ class Guardrail:
         self._client = opik_client.get_client_cached()
 
         self._initialize_api_client(
-            # host_url=self._client.config.guardrails_backend_host,
-            host_url="http://localhost:5000",
+            host_url=self._client.config.guardrails_backend_host,
         )
 
     def _initialize_api_client(self, host_url: str) -> None:
@@ -120,8 +119,8 @@ class Guardrail:
             guardrail_batch_item_message = GuardrailBatchItemMessage(
                 id=None,
                 project_name=None,
-                entity_id=current_span.id,
-                secondary_id=current_trace.id,
+                entity_id=current_trace.id,
+                secondary_id=current_span.id,
                 name=validation.type,
                 result="passed" if validation.validation_passed else "failed",
                 config=validation.validation_config,
