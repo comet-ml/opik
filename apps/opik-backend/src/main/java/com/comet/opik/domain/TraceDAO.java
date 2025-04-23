@@ -978,6 +978,16 @@ class TraceDAOImpl implements TraceDAO {
                     )
                     GROUP BY workspace_id, project_id, entity_id
                 <endif>
+            ),
+            guardrails_agg AS (
+                SELECT entity_id,
+                    countIf(DISTINCT id, result = 'failed') AS failed_count,
+                    if(has(groupArray(result), 'failed'), 'failed', 'passed') as guardrails_result
+                FROM guardrails
+                WHERE entity_type = 'trace'
+                AND workspace_id = :workspace_id
+                AND project_id IN :project_ids
+                GROUP BY entity_id
             )
             <if(feedback_scores_empty_filters)>
             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -1057,6 +1067,7 @@ class TraceDAOImpl implements TraceDAO {
                              (dateDiff('microsecond', start_time, end_time) / 1000.0),
                              NULL) as duration
                     FROM traces
+                        LEFT JOIN guardrails_agg gagg ON guardrails_agg.entity_id = traces.id
                     <if(feedback_scores_empty_filters)>
                         LEFT JOIN fsc ON fsc.entity_id = traces.id
                     <endif>
@@ -1094,18 +1105,6 @@ class TraceDAOImpl implements TraceDAO {
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 <endif>
-            ), guardrails_agg AS (
-                SELECT entity_id, COUNT(DISTINCT id) AS failed_count
-                FROM guardrails
-                WHERE entity_type = 'trace'
-                AND workspace_id = :workspace_id
-                AND project_id IN :project_ids
-                AND entity_id IN (
-                    SELECT id
-                    FROM trace_final
-                )
-                AND result = 'failed'
-                GROUP BY entity_id
             )
             SELECT
                 t.workspace_id as workspace_id,
