@@ -37,7 +37,7 @@ def read_and_parse_stream(
 
     # Process any remaining data in the buffer after the stream ends
     if buffer:
-        item = _parse_stream_line(line=line, item_class=item_class)
+        item = _parse_stream_line(line=buffer, item_class=item_class)
         if item is not None:
             result.append(item)
 
