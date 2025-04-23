@@ -404,7 +404,7 @@ class TraceDAOImpl implements TraceDAO {
                     AND workspace_id = :workspace_id
                     AND entity_id = :id
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, secondary_entity_id, name
+                    LIMIT 1 BY entity_id, id
                 )
                 GROUP BY workspace_id, project_id, entity_id
             ) AS gr ON t.id = gr.entity_id
@@ -470,10 +470,10 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, secondary_entity_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, secondary_entity_id, name
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, id
                 )
-                GROUP BY workspace_id, project_id, entity_id
+                GROUP BY workspace_id, project_id, entity_type, entity_id
             ), spans_agg AS (
                 <if(final)>
                     SELECT
@@ -668,10 +668,10 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, entity_type, entity_id, secondary_entity_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, secondary_entity_id, name
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, id
                 )
-                GROUP BY workspace_id, project_id, entity_id
+                GROUP BY workspace_id, project_id, entity_type, entity_id
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -980,14 +980,21 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
             ),
             guardrails_agg AS (
-                SELECT entity_id,
+                SELECT
+                    entity_id,
                     countIf(DISTINCT id, result = 'failed') AS failed_count,
                     if(has(groupArray(result), 'failed'), 'failed', 'passed') as guardrails_result
-                FROM guardrails
-                WHERE entity_type = 'trace'
-                AND workspace_id = :workspace_id
-                AND project_id IN :project_ids
-                GROUP BY entity_id
+                FROM (
+                    SELECT
+                        *
+                    FROM guardrails
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND project_id IN :project_ids
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, id
+                )
+                GROUP BY workspace_id, project_id, entity_type, entity_id
             )
             <if(feedback_scores_empty_filters)>
             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
