@@ -25,6 +25,14 @@ $GUARDRAILS_CONTAINERS = @(
     "opik-guardrails-backend-1"
 )
 
+function Get-Containers {
+    $containers = $REQUIRED_CONTAINERS
+    if ($GUARDRAILS_ENABLED) {
+        $containers += $GUARDRAILS_CONTAINERS
+    }
+    return $containers
+}
+
 function Show-Usage {
     Write-Host 'Usage: opik.ps1 [OPTION]'
     Write-Host ''
@@ -60,10 +68,7 @@ function Test-ContainersStatus {
     Test-DockerStatus
     $allOk = $true
 
-    $containers = $REQUIRED_CONTAINERS
-    if ($GUARDRAILS_ENABLED) {
-        $containers += $GUARDRAILS_CONTAINERS
-    }
+    $containers = Get-Containers
 
     foreach ($container in $containers) {
         $status = docker inspect -f '{{.State.Status}}' $container 2>$null
@@ -162,10 +167,7 @@ function Start-MissingContainers {
     if ($DEBUG_MODE) { Write-Host '[DEBUG] Checking required containers...' }
     $allRunning = $true
 
-    $containers = $REQUIRED_CONTAINERS
-    if ($GUARDRAILS_ENABLED) {
-        $containers += $GUARDRAILS_CONTAINERS
-    }
+    $containers = Get-Containers
 
     foreach ($container in $containers) {
         $status = docker inspect -f '{{.State.Status}}' $container 2>$null
@@ -181,7 +183,7 @@ function Start-MissingContainers {
 
     Write-Host '[INFO] Starting missing containers...'
     Set-Location -Path "$scriptDir\deployment\docker-compose"
-    $dockerArgs = @("compose", "-f", "$scriptDir\deployment\docker-compose\docker-compose.yaml")
+    $dockerArgs = @("compose")
     
     if ($GUARDRAILS_ENABLED) {
         $dockerArgs += "--profile", "guardrails"
@@ -248,7 +250,7 @@ function Stop-Containers {
     Test-DockerStatus
     Write-Host '[INFO] Stopping all required containers...'
     Set-Location -Path "$scriptDir\deployment\docker-compose"
-    $dockerArgs = @("compose", "-f", "$scriptDir\deployment\docker-compose\docker-compose.yaml")
+    $dockerArgs = @("compose")
     
     if ($GUARDRAILS_ENABLED) {
         $dockerArgs += "--profile", "guardrails"
