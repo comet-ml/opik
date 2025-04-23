@@ -49,7 +49,7 @@ public class GuardrailCheckTypeManufacturer extends AbstractTypeManufacturer<Gua
                     .scores(new HashMap<>() {
                         {
                             for (var i = 0; i < 5; i++) {
-                                put(RandomStringUtils.randomAlphanumeric(10), RANDOM.nextDouble());
+                                put(RandomStringUtils.randomAlphanumeric(10), RANDOM.nextFloat());
                             }
                         }
                     })
@@ -60,7 +60,7 @@ public class GuardrailCheckTypeManufacturer extends AbstractTypeManufacturer<Gua
                             for (var i = 0; i < 5; i++) {
                                 put(RandomStringUtils.randomAlphanumeric(10), List.of(
                                         GuardrailPiiDetails.Item.builder()
-                                                .score(RANDOM.nextDouble())
+                                                .score(RANDOM.nextFloat())
                                                 .build()));
                             }
                         }
