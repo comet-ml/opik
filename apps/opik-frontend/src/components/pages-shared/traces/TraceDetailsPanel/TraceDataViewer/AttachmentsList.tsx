@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import { Span, Trace } from "@/types/traces";
 import useAttachmentsList from "@/api/attachments/useAttachmentsList";
 import { isObjectSpan } from "@/lib/traces";
@@ -8,6 +9,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import AttachmentThumbnail from "@/components/pages-shared/attachments/AttachmentThumbnail/AttachmentThumbnail";
+import AttachmentPreviewDialog from "@/components/pages-shared/attachments/AttachmentPreviewDialog/AttachmentPreviewDialog";
 import {
   ATTACHMENT_TYPE,
   AttachmentPreviewData,
@@ -18,7 +20,6 @@ import {
   ATTACHMENT_ORDER_MAP,
   MINE_TYPE_TO_ATTACHMENT_TYPE_MAP,
 } from "@/constants/attachments";
-import AttachmentPreviewDialog from "@/components/pages-shared/attachments/AttachmentPreviewDialog/AttachmentPreviewDialog";
 
 type AttachmentsListProps = {
   data: Trace | Span;
@@ -39,7 +40,9 @@ const AttachmentsList: React.FC<AttachmentsListProps> = ({ data, images }) => {
       page: 1,
       size: 1000,
     },
-    {},
+    {
+      placeholderData: keepPreviousData,
+    },
   );
 
   const attachments: AttachmentWithType[] = useMemo(
