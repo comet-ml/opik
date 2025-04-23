@@ -33,7 +33,8 @@ ARG BUILD_MODE=production
 LABEL build.mode="${BUILD_MODE}"
 
 # implement changes required to run NGINX as an unprivileged user
-RUN sed -i '/access_log.*main/d' /etc/nginx/nginx.conf && \
+RUN rm nginx.conf.default && \
+    sed -i '/access_log.*main/d' /etc/nginx/nginx.conf && \
     sed -i 's,listen       80;,listen       8080;,' /etc/nginx/nginx.conf && \
     sed -i '/user  nginx;/d' /etc/nginx/nginx.conf && \
     sed -i 's,/var/run/nginx.pid,/tmp/nginx.pid,' /etc/nginx/nginx.conf && \
