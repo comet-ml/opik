@@ -37,10 +37,10 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
-import com.comet.opik.api.resources.utils.resources.TestGenerators;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
@@ -204,7 +204,7 @@ class TracesResourceTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
-    private TestGenerators testGenerators;
+    private GuardrailsGenerator guardrailsGenerator;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -227,7 +227,7 @@ class TracesResourceTest {
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
         this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
-        this.testGenerators = new TestGenerators();
+        this.guardrailsGenerator = new GuardrailsGenerator();
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -4157,7 +4157,7 @@ class TracesResourceTest {
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             var guardrailsByTraceId = traces.stream()
-                    .collect(Collectors.toMap(Trace::id, trace -> testGenerators.generateGuardrailsForTrace(
+                    .collect(Collectors.toMap(Trace::id, trace -> guardrailsGenerator.generateGuardrailsForTrace(
                             trace.id(), randomUUID(), trace.projectName())));
 
             // set the first trace with failed guardrails

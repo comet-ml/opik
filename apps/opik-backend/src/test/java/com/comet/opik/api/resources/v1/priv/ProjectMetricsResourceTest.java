@@ -20,10 +20,10 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
-import com.comet.opik.api.resources.utils.resources.TestGenerators;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.ProjectMetricsDAO;
@@ -153,7 +153,7 @@ class ProjectMetricsResourceTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
-    private TestGenerators testGenerators;
+    private GuardrailsGenerator guardrailsGenerator;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -170,7 +170,7 @@ class ProjectMetricsResourceTest {
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
-        this.testGenerators = new TestGenerators();
+        this.guardrailsGenerator = new GuardrailsGenerator();
 
         ClientSupportUtils.config(client);
 
@@ -912,7 +912,7 @@ class ProjectMetricsResourceTest {
 
             return traces.stream()
                     .map(trace -> {
-                        var guardrails = testGenerators.generateGuardrailsForTrace(trace.id(), randomUUID(),
+                        var guardrails = guardrailsGenerator.generateGuardrailsForTrace(trace.id(), randomUUID(),
                                 trace.projectName());
                         guardrailsResourceClient.addBatch(guardrails, API_KEY, WORKSPACE_NAME);
                         return guardrails;
