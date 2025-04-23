@@ -16,7 +16,9 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.Filter;
@@ -35,6 +37,8 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
+import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
@@ -48,6 +52,8 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.FeedbackScoreMapper;
+import com.comet.opik.domain.GuardrailResult;
+import com.comet.opik.domain.GuardrailsMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -63,6 +69,7 @@ import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -120,6 +127,8 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
+import static com.comet.opik.api.Visibility.PRIVATE;
+import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertTraceComment;
@@ -128,6 +137,8 @@ import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.ass
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NAME_NOT_FOUND_MESSAGE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
@@ -141,6 +152,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -191,6 +203,8 @@ class TracesResourceTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
+    private GuardrailsResourceClient guardrailsResourceClient;
+    private GuardrailsGenerator guardrailsGenerator;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -212,6 +226,8 @@ class TracesResourceTest {
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
+        this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
+        this.guardrailsGenerator = new GuardrailsGenerator();
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -244,6 +260,16 @@ class TracesResourceTest {
                     arguments(okApikey, true, null),
                     arguments(fakeApikey, false, UNAUTHORIZED_RESPONSE),
                     arguments("", false, NO_API_KEY_RESPONSE));
+        }
+
+        Stream<Arguments> publicCredentials() {
+            return Stream.of(
+                    arguments(okApikey, PRIVATE, 200),
+                    arguments(okApikey, PUBLIC, 200),
+                    arguments("", PRIVATE, 404),
+                    arguments("", PUBLIC, 200),
+                    arguments(fakeApikey, PRIVATE, 404),
+                    arguments(fakeApikey, PUBLIC, 200));
         }
 
         @BeforeEach
@@ -362,13 +388,20 @@ class TracesResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("publicCredentials")
         @DisplayName("get traces, when api key is present, then return proper response")
-        void get__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+        void get__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
+                Visibility visibility, int expectedCode) {
 
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, workspaceId);
+            mockGetWorkspaceIdByName(workspaceName, workspaceId);
+
+            Project project = factory.manufacturePojo(Project.class).toBuilder().name(DEFAULT_PROJECT)
+                    .visibility(visibility).build();
+            projectResourceClient.createProject(project, okApikey, workspaceName);
 
             int tracesCount = setupTracesForWorkspace(workspaceName, workspaceId, okApikey);
 
@@ -379,16 +412,135 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
-                if (expected) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                if (expectedCode == 200) {
                     var response = actualResponse.readEntity(Trace.TracePage.class);
                     assertThat(response.content()).hasSize(tracesCount);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(errorMessage);
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NAME_NOT_FOUND_MESSAGE.formatted(DEFAULT_PROJECT));
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void getById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
+                Visibility visibility, int expectedCode) {
+
+            publicCredentialsTest(apiKey, visibility, expectedCode,
+                    id -> "/" + id, "project_id");
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void get__whenApiKeyIsPresent__thenReturnTraceStats(String apiKey,
+                Visibility visibility, int expectedCode) {
+
+            publicCredentialsTest(apiKey, visibility, expectedCode,
+                    id -> "/stats", "project_name");
+
+            publicCredentialsTest(apiKey, visibility, expectedCode,
+                    id -> "/stats", "project_id");
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void get__whenApiKeyIsPresent__thenReturnTraceFeedbackScoresNames(String apiKey,
+                Visibility visibility, int expectedCode) {
+
+            publicCredentialsTest(apiKey, visibility, expectedCode,
+                    id -> "/feedback-scores/names", "project_id");
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void get__whenApiKeyIsPresent__thenReturnTraceThreads(String apiKey,
+                Visibility visibility, int expectedCode) {
+
+            publicCredentialsTest(apiKey, visibility, expectedCode,
+                    id -> "/threads", "project_name");
+
+            publicCredentialsTest(apiKey, visibility, expectedCode,
+                    id -> "/threads", "project_id");
+        }
+
+        private void publicCredentialsTest(String apiKey,
+                Visibility visibility, int expectedCode,
+                Function<UUID, String> urlSuffix, String queryParam) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, workspaceId);
+            mockGetWorkspaceIdByName(workspaceName, workspaceId);
+
+            Project project = factory.manufacturePojo(Project.class).toBuilder().name(DEFAULT_PROJECT)
+                    .visibility(visibility).build();
+            var projectId = projectResourceClient.createProject(project, okApikey, workspaceName);
+
+            var trace = createTrace()
+                    .toBuilder()
+                    .projectId(null)
+                    .projectName(DEFAULT_PROJECT)
+                    .build();
+            var traceId = create(trace, okApikey, workspaceName);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + urlSuffix.apply(traceId))
+                    .queryParam(queryParam, "project_id".equals(queryParam) ? projectId : DEFAULT_PROJECT)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                if (expectedCode == 404) {
+                    if ("project_id".equals(queryParam)) {
+                        assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                                .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(projectId));
+                    } else {
+                        assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                                .isEqualTo(PROJECT_NAME_NOT_FOUND_MESSAGE.formatted(DEFAULT_PROJECT));
+                    }
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void get__whenApiKeyIsPresent__thenReturnTraceThread(String apiKey,
+                Visibility visibility, int expectedCode) {
+
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, workspaceId);
+            mockGetWorkspaceIdByName(workspaceName, workspaceId);
+
+            Project project = factory.manufacturePojo(Project.class).toBuilder().name(DEFAULT_PROJECT)
+                    .visibility(visibility).build();
+            var projectId = projectResourceClient.createProject(project, okApikey, workspaceName);
+
+            var threadId = UUID.randomUUID().toString();
+            var trace = createTrace()
+                    .toBuilder()
+                    .projectId(null)
+                    .threadId(threadId)
+                    .projectName(DEFAULT_PROJECT)
+                    .build();
+            create(trace, okApikey, workspaceName);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + "/threads/retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity
+                            .json(TraceThreadIdentifier.builder().projectId(projectId).threadId(threadId).build()))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                if (expectedCode == 404) {
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(projectId));
                 }
             }
         }
@@ -506,40 +658,6 @@ class TracesResourceTest {
             }
 
         }
-
-        @ParameterizedTest
-        @MethodSource("credentials")
-        @DisplayName("get trace threads, when api key is present, then return proper response")
-        void getThreads__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
-
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(okApikey, workspaceName, workspaceId);
-
-            var trace = createTrace()
-                    .toBuilder()
-                    .projectId(null)
-                    .threadId(UUID.randomUUID().toString())
-                    .projectName(DEFAULT_PROJECT)
-                    .feedbackScores(null)
-                    .build();
-
-            create(trace, okApikey, workspaceName);
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("threads")
-                    .queryParam("project_name", DEFAULT_PROJECT)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
-
-                assertExpectedResponseWithoutABody(expected, actualResponse, errorMessage, HttpStatus.SC_OK);
-            }
-        }
-
     }
 
     @Nested
@@ -554,6 +672,14 @@ class TracesResourceTest {
             return Stream.of(
                     arguments(sessionToken, true, "OK_" + UUID.randomUUID()),
                     arguments(fakeSessionToken, false, UUID.randomUUID().toString()));
+        }
+
+        Stream<Arguments> publicCredentials() {
+            return Stream.of(
+                    arguments(sessionToken, PRIVATE, "OK_" + UUID.randomUUID(), 200),
+                    arguments(sessionToken, PUBLIC, "OK_" + UUID.randomUUID(), 200),
+                    arguments(fakeSessionToken, PRIVATE, UUID.randomUUID().toString(), 404),
+                    arguments(fakeSessionToken, PUBLIC, UUID.randomUUID().toString(), 200));
         }
 
         @BeforeEach
@@ -671,20 +797,22 @@ class TracesResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("publicCredentials")
         @DisplayName("get traces, when session token is present, then return proper response")
-        void get__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean expected,
-                String workspaceName) {
-
-            var projectName = UUID.randomUUID().toString();
-
+        void get__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
+                Visibility visibility,
+                String workspaceName, int expectedCode) {
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
+
+            Project project = factory.manufacturePojo(Project.class).toBuilder().visibility(visibility).build();
+            projectResourceClient.createProject(project, API_KEY, workspaceName);
 
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(t -> t.toBuilder()
                             .projectId(null)
-                            .projectName(projectName)
+                            .projectName(project.name())
                             .feedbackScores(null)
                             .build())
                     .toList();
@@ -692,22 +820,139 @@ class TracesResourceTest {
             traces.forEach(trace -> create(trace, API_KEY, workspaceName));
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("project_name", projectName)
+                    .queryParam("project_name", project.name())
                     .request()
                     .cookie(SESSION_COOKIE, sessionToken)
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
-                if (expected) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                if (expectedCode == 200) {
                     var response = actualResponse.readEntity(Trace.TracePage.class);
                     assertThat(response.content()).hasSize(traces.size());
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NAME_NOT_FOUND_MESSAGE.formatted(project.name()));
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void getById__whenApiKeyIsPresent__thenReturnProperResponse(String sessionToken,
+                Visibility visibility,
+                String workspaceName, int expectedCode) {
+
+            publicCredentialsTest(sessionToken, visibility, workspaceName, expectedCode,
+                    id -> "/" + id, "project_id");
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void get__whenSessionTokenIsPresent__thenReturnTraceStats(String sessionToken,
+                Visibility visibility,
+                String workspaceName, int expectedCode) {
+
+            publicCredentialsTest(sessionToken, visibility, workspaceName, expectedCode,
+                    id -> "/stats", "project_id");
+
+            publicCredentialsTest(sessionToken, visibility, workspaceName, expectedCode,
+                    id -> "/stats", "project_name");
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void get__whenSessionTokenIsPresent__thenReturnTraceFeedbackScoresNames(String sessionToken,
+                Visibility visibility,
+                String workspaceName, int expectedCode) {
+
+            publicCredentialsTest(sessionToken, visibility, workspaceName, expectedCode,
+                    id -> "/feedback-scores/names", "project_id");
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void get__whenSessionTokenIsPresent__thenReturnTraceThreads(String sessionToken,
+                Visibility visibility,
+                String workspaceName, int expectedCode) {
+
+            publicCredentialsTest(sessionToken, visibility, workspaceName, expectedCode,
+                    id -> "/threads", "project_id");
+
+            publicCredentialsTest(sessionToken, visibility, workspaceName, expectedCode,
+                    id -> "/threads", "project_name");
+        }
+
+        private void publicCredentialsTest(String sessionToken,
+                Visibility visibility,
+                String workspaceName, int expectedCode,
+                Function<UUID, String> urlSuffix, String queryParam) {
+            mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
+
+            Project project = factory.manufacturePojo(Project.class).toBuilder().visibility(visibility).build();
+            var projectId = projectResourceClient.createProject(project, API_KEY, workspaceName);
+
+            var trace = createTrace()
+                    .toBuilder()
+                    .projectId(null)
+                    .projectName(project.name())
+                    .build();
+            var traceId = create(trace, API_KEY, workspaceName);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + urlSuffix.apply(traceId))
+                    .queryParam(queryParam, "project_id".equals(queryParam) ? projectId : project.name())
+                    .request()
+                    .cookie(SESSION_COOKIE, sessionToken)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                if (expectedCode == 404) {
+                    if ("project_id".equals(queryParam)) {
+                        assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                                .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(projectId));
+                    } else {
+                        assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                                .isEqualTo(PROJECT_NAME_NOT_FOUND_MESSAGE.formatted(project.name()));
+                    }
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void get__whenApiKeyIsPresent__thenReturnTraceThread(String sessionToken,
+                Visibility visibility,
+                String workspaceName, int expectedCode) {
+
+            mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
+
+            Project project = factory.manufacturePojo(Project.class).toBuilder().visibility(visibility).build();
+            var projectId = projectResourceClient.createProject(project, API_KEY, workspaceName);
+
+            var threadId = UUID.randomUUID().toString();
+            var trace = createTrace()
+                    .toBuilder()
+                    .projectId(null)
+                    .threadId(threadId)
+                    .projectName(project.name())
+                    .build();
+            create(trace, API_KEY, workspaceName);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + "/threads/retrieve")
+                    .request()
+                    .cookie(SESSION_COOKIE, sessionToken)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity
+                            .json(TraceThreadIdentifier.builder().projectId(projectId).threadId(threadId).build()))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                if (expectedCode == 404) {
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(projectId));
                 }
             }
         }
@@ -823,36 +1068,6 @@ class TracesResourceTest {
                         HttpStatus.SC_NO_CONTENT);
             }
 
-        }
-
-        @ParameterizedTest
-        @MethodSource("credentials")
-        @DisplayName("get trace threads, when session token is present, then return proper response")
-        void getThreads__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean expected,
-                String workspaceName) {
-
-            mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
-
-            var trace = createTrace()
-                    .toBuilder()
-                    .projectId(null)
-                    .threadId(UUID.randomUUID().toString())
-                    .projectName(DEFAULT_PROJECT)
-                    .feedbackScores(null)
-                    .build();
-
-            create(trace, API_KEY, workspaceName);
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("threads")
-                    .queryParam("project_name", DEFAULT_PROJECT)
-                    .request()
-                    .cookie(SESSION_COOKIE, sessionToken)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
-
-                assertExpectedResponseWithoutABody(expected, actualResponse, UNAUTHORIZED_RESPONSE, HttpStatus.SC_OK);
-            }
         }
     }
 
@@ -1111,7 +1326,8 @@ class TracesResourceTest {
         @DisplayName("when project name and project id are null, then return bad request")
         void whenProjectNameAndIdAreNull__thenReturnBadRequest(String endpoint, TracePageTestAssertion testAssertion) {
 
-            UUID projectId = generator.generate();
+            Project project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
             testAssertion.assertTest(null, projectId, API_KEY, TEST_WORKSPACE, List.of(), List.of(), List.of(),
                     List.of(), Map.of());
@@ -1132,6 +1348,7 @@ class TracesResourceTest {
                             .usage(null)
                             .feedbackScores(null)
                             .totalEstimatedCost(BigDecimal.ZERO)
+                            .guardrailsValidations(null)
                             .build())
                     .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
@@ -1194,6 +1411,7 @@ class TracesResourceTest {
                             .usage(null)
                             .feedbackScores(null)
                             .totalEstimatedCost(BigDecimal.ZERO)
+                            .guardrailsValidations(null)
                             .build())
                     .toList();
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -1240,6 +1458,7 @@ class TracesResourceTest {
                         .output(null)
                         .tags(null)
                         .feedbackScores(null)
+                        .guardrailsValidations(null)
                         .build();
 
                 traces.add(trace);
@@ -1274,6 +1493,7 @@ class TracesResourceTest {
                     .projectId(null)
                     .tags(null)
                     .feedbackScores(null)
+                    .guardrailsValidations(null)
                     .build();
 
             create(trace, apiKey, workspaceName);
@@ -1316,6 +1536,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
                             .comments(null)
+                            .guardrailsValidations(null)
                             .build())
                     .toList();
 
@@ -1329,6 +1550,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
                             .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
                             .build())
                     .toList();
 
@@ -1370,6 +1592,7 @@ class TracesResourceTest {
                         .tags(null)
                         .feedbackScores(null)
                         .usage(null)
+                        .guardrailsValidations(null)
                         .totalEstimatedCost(BigDecimal.ZERO)
                         .build();
 
@@ -1429,6 +1652,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -1480,6 +1704,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(UUID.randomUUID().toString())
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -1525,6 +1750,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .feedbackScores(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -1568,6 +1794,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -1610,6 +1837,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .threadId(null)
                             .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -1651,6 +1879,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .threadId(null)
                             .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -1698,6 +1927,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -1749,6 +1979,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -1789,6 +2020,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1835,6 +2067,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1882,6 +2115,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1928,6 +2162,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1973,6 +2208,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -2014,6 +2250,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .feedbackScores(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -2057,6 +2294,7 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .feedbackScores(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -2100,6 +2338,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -2161,6 +2400,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .threadId(null)
                             .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -2236,6 +2476,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .threadId(null)
                             .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2281,6 +2522,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .threadId(null)
                             .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2332,6 +2574,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .threadId(null)
                             .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2381,6 +2624,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .totalEstimatedCost(null)
                             .feedbackScores(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2430,6 +2674,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .threadId(null)
                             .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2479,6 +2724,7 @@ class TracesResourceTest {
                             .usage(null)
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2529,6 +2775,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2578,6 +2825,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2628,6 +2876,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2809,6 +3058,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2986,6 +3236,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -3034,6 +3285,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toList());
 
@@ -3095,6 +3347,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .threadId(null)
                             .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -3154,6 +3407,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -3214,6 +3468,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -3274,6 +3529,7 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -3342,6 +3598,7 @@ class TracesResourceTest {
                                             .value(factory.manufacturePojo(BigDecimal.class))
                                             .build())
                                     .collect(Collectors.toList()))
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(1, traces.get(1).toBuilder()
@@ -3404,6 +3661,7 @@ class TracesResourceTest {
                                             .build())
                                     .collect(Collectors.toList()))
                             .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(traces.size() - 1, traces.getLast().toBuilder().feedbackScores(null).build());
@@ -3477,6 +3735,7 @@ class TracesResourceTest {
                                             .value(factory.manufacturePojo(BigDecimal.class))
                                             .build())
                                     .collect(Collectors.toList()), 2, 1234.5678))
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -3538,6 +3797,7 @@ class TracesResourceTest {
                             .usage(null)
                             .threadId(null)
                             .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(factory.manufacturePojo(BigDecimal.class))
@@ -3601,6 +3861,7 @@ class TracesResourceTest {
                             .threadId(null)
                             .comments(null)
                             .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(factory.manufacturePojo(BigDecimal.class))
@@ -3668,6 +3929,7 @@ class TracesResourceTest {
                                             .value(factory.manufacturePojo(BigDecimal.class))
                                             .build())
                                     .collect(Collectors.toList()), 2, 2345.6789))
+                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -3735,6 +3997,7 @@ class TracesResourceTest {
                                 .endTime(Set.of(Operator.LESS_THAN, Operator.LESS_THAN_EQUAL).contains(operator)
                                         ? Instant.now().plusSeconds(2)
                                         : now.plusNanos(1000))
+                                .guardrailsValidations(null)
                                 .build();
                     })
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -3866,6 +4129,85 @@ class TracesResourceTest {
                 var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                 assertThat(actualError).isEqualTo(expectedError);
             }
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterGuardrails__thenReturnTracesFiltered(String endpoint, TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .threadId(null)
+                            .totalEstimatedCost(null)
+                            .feedbackScores(null)
+                            .guardrailsValidations(null)
+                            .comments(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var guardrailsByTraceId = traces.stream()
+                    .collect(Collectors.toMap(Trace::id, trace -> guardrailsGenerator.generateGuardrailsForTrace(
+                            trace.id(), randomUUID(), trace.projectName())));
+
+            // set the first trace with failed guardrails
+            guardrailsByTraceId.put(traces.getFirst().id(), guardrailsByTraceId.get(traces.getFirst().id()).stream()
+                    .map(guardrail -> guardrail.toBuilder().result(GuardrailResult.FAILED).build())
+                    .toList());
+
+            // set the rest of traces with passed guardrails
+            traces.subList(1, traces.size()).forEach(trace -> guardrailsByTraceId.put(trace.id(),
+                    guardrailsByTraceId.get(trace.id()).stream()
+                            .map(guardrail -> guardrail.toBuilder()
+                                    .result(GuardrailResult.PASSED)
+                                    .build())
+                            .toList()));
+
+            guardrailsByTraceId.values()
+                    .forEach(guardrail -> guardrailsResourceClient.addBatch(guardrail, apiKey,
+                            workspaceName));
+
+            traces = traces.stream().map(trace -> trace.toBuilder()
+                    .guardrailsValidations(GuardrailsMapper.INSTANCE.mapToValidations(
+                            guardrailsByTraceId.get(trace.id())))
+                    .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            // assert failed guardrails
+            var filtersFailed = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.GUARDRAILS)
+                            .operator(Operator.EQUAL)
+                            .value(GuardrailResult.FAILED.getResult())
+                            .build());
+
+            var valuesFailed = testAssertion.transformTestParams(traces, List.of(traces.getFirst()),
+                    traces.subList(1, traces.size()));
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, valuesFailed.expected(),
+                    valuesFailed.unexpected(), valuesFailed.all(), filtersFailed, Map.of());
+
+            // assert passed guardrails
+            var filtersPassed = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.GUARDRAILS)
+                            .operator(Operator.EQUAL)
+                            .value(GuardrailResult.PASSED.getResult())
+                            .build());
+
+            var valuesPassed = testAssertion.transformTestParams(traces, traces.subList(1, traces.size()).reversed(),
+                    List.of(traces.getFirst()));
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, valuesPassed.expected(),
+                    valuesPassed.unexpected(), valuesPassed.all(), filtersPassed, Map.of());
         }
     }
 
@@ -4457,6 +4799,74 @@ class TracesResourceTest {
                     sortingFields);
         }
 
+        @Test
+        void createAndRetrieveTraces__spanCountReflectsActualSpans_andTotalCountMatches() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            // Create traces with varying spanCount values
+            List<Trace> traces = IntStream.range(0, 5)
+                    .mapToObj(i -> createTrace().toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .spanCount(i * 3) // e.g., 0, 3, 6, 9, 12
+                            .usage(null)
+                            .feedbackScores(null)
+                            .endTime(Instant.now())
+                            .comments(null)
+                            .build())
+                    .collect(Collectors.toList());
+
+            int expectedTotalSpanCount = traces.stream().mapToInt(Trace::spanCount).sum();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // For each trace, create the actual number of spans matching the spanCount
+            List<Span> allSpans = new ArrayList<>();
+            for (Trace trace : traces) {
+                List<Span> spansForTrace = IntStream.range(0, trace.spanCount())
+                        .mapToObj(j -> factory.manufacturePojo(Span.class).toBuilder()
+                                .projectName(projectName)
+                                .traceId(trace.id())
+                                .build())
+                        .collect(Collectors.toList());
+                allSpans.addAll(spansForTrace);
+            }
+            spanResourceClient.batchCreateSpans(allSpans, apiKey, workspaceName);
+
+            // Retrieve traces from the API
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+            Trace.TracePage resultPage = traceResourceClient.getTraces(projectName, projectId, apiKey, workspaceName,
+                    List.of(), List.of(), 100, Map.of());
+            List<Trace> returnedTraces = resultPage.content();
+
+            // Check that all created traces are present and have the correct spanCount
+            for (Trace created : traces) {
+                returnedTraces.stream()
+                        .filter(returned -> returned.id().equals(created.id()))
+                        .findFirst()
+                        .ifPresentOrElse(returned -> assertThat(returned.spanCount())
+                                .as("Trace with id %s should have spanCount %d", created.id(), created.spanCount())
+                                .isEqualTo(created.spanCount()),
+                                () -> assertThat(false)
+                                        .as("Trace with id %s should be present", created.id())
+                                        .isTrue());
+            }
+
+            int actualTotalSpanCount = returnedTraces.stream()
+                    .filter(rt -> traces.stream().anyMatch(t -> t.id().equals(rt.id())))
+                    .mapToInt(Trace::spanCount)
+                    .sum();
+
+            assertThat(actualTotalSpanCount)
+                    .as("Total spanCount across all traces should match the expected total")
+                    .isEqualTo(expectedTotalSpanCount);
+        }
         private Stream<Arguments> getTracesByProject__whenSortingByValidFields__thenReturnTracesSorted() {
 
             Comparator<Trace> inputComparator = Comparator.comparing(trace -> trace.input().toString());
@@ -7200,8 +7610,6 @@ class TracesResourceTest {
     }
 
     private int setupTracesForWorkspace(String workspaceName, String workspaceId, String okApikey) {
-        mockTargetWorkspace(okApikey, workspaceName, workspaceId);
-
         var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                 .stream()
                 .map(t -> t.toBuilder()
@@ -7223,4 +7631,7 @@ class TracesResourceTest {
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
     }
 
+    private void mockGetWorkspaceIdByName(String workspaceName, String workspaceId) {
+        AuthTestUtils.mockGetWorkspaceIdByName(wireMock.server(), workspaceName, workspaceId);
+    }
 }

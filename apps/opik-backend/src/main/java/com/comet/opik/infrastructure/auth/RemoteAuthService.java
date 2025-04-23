@@ -1,7 +1,7 @@
 package com.comet.opik.infrastructure.auth;
 
-import com.comet.opik.api.ProjectVisibility;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.usagelimit.Quota;
@@ -23,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import java.net.URI;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -39,12 +40,25 @@ class RemoteAuthService implements AuthService {
     private static final String USER_NOT_FOUND = "User not found";
     private static final String NOT_LOGGED_USER = "Please login first";
 
-    private static final Map<String, Set<String>> PUBLIC_ENDPOINTS = Map.of(
-            "^/v1/private/projects/?$", Set.of("GET"),
-            "^/v1/private/projects/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/?$",
-            Set.of("GET"),
-            "^/v1/private/projects/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/metrics/?$",
-            Set.of("POST"));
+    private static final Map<String, Set<String>> PUBLIC_ENDPOINTS = new HashMap<>() {
+        {
+            put("^/v1/private/projects/?$", Set.of("GET"));
+            put("^/v1/private/projects/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/?$",
+                    Set.of("GET"));
+            put("^/v1/private/projects/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/metrics/?$",
+                    Set.of("POST"));
+            put("^/v1/private/spans/?$", Set.of("GET"));
+            put("^/v1/private/spans/stats/?$", Set.of("GET"));
+            put("^/v1/private/spans/feedback-scores/names/?$", Set.of("GET"));
+            put("^/v1/private/traces/?$", Set.of("GET"));
+            put("^/v1/private/traces/stats/?$", Set.of("GET"));
+            put("^/v1/private/traces/feedback-scores/names/?$", Set.of("GET"));
+            put("^/v1/private/traces/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/?$",
+                    Set.of("GET"));
+            put("^/v1/private/traces/threads/?$", Set.of("GET"));
+            put("^/v1/private/traces/threads/retrieve/?$", Set.of("POST"));
+        }
+    };
 
     private final @NonNull Client client;
     private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;
@@ -89,7 +103,7 @@ class RemoteAuthService implements AuthService {
                 String workspaceId = getWorkspaceId(currentWorkspaceName);
                 requestContext.get().setWorkspaceId(workspaceId);
                 requestContext.get().setWorkspaceName(currentWorkspaceName);
-                requestContext.get().setVisibility(ProjectVisibility.PUBLIC);
+                requestContext.get().setVisibility(Visibility.PUBLIC);
                 requestContext.get().setUserName("Public");
                 return;
             }

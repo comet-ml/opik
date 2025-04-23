@@ -4330,6 +4330,11 @@ components:
           format: uuid
         name:
           type: string
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -4373,6 +4378,11 @@ components:
           format: uuid
         name:
           type: string
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -4844,6 +4854,11 @@ components:
           format: uuid
         name:
           type: string
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -5069,6 +5084,11 @@ components:
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
     Experiment:
       required:
       - dataset_name
@@ -6032,6 +6052,10 @@ components:
           type: integer
           format: int64
           readOnly: true
+        guardrails_failed_count:
+          type: integer
+          format: int64
+          readOnly: true
     Project_Write:
       required:
       - name
@@ -6138,6 +6162,7 @@ components:
           - TOKEN_USAGE
           - DURATION
           - COST
+          - GUARDRAILS_FAILED_COUNT
         interval:
           type: string
           enum:
@@ -6168,6 +6193,7 @@ components:
           - TOKEN_USAGE
           - DURATION
           - COST
+          - GUARDRAILS_FAILED_COUNT
         interval:
           type: string
           enum:
@@ -6208,6 +6234,9 @@ components:
             type: number
             format: double
         trace_count:
+          type: integer
+          format: int64
+        guardrails_failed_count:
           type: integer
           format: int64
     FeedbackScoreAverage_Detailed:
@@ -6286,6 +6315,10 @@ components:
             readOnly: true
           readOnly: true
         trace_count:
+          type: integer
+          format: int64
+          readOnly: true
+        guardrails_failed_count:
           type: integer
           format: int64
           readOnly: true

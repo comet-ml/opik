@@ -51,7 +51,7 @@ jobs:
           git add sdks/typescript/src/opik/rest_api/
           git add sdks/code_generation/fern/openapi/openapi.yaml
           git add apps/opik-documentation/documentation/fern/openapi/opik.yaml
-          git commit -m "Update OpenAPI spec and Fern code"
+          git commit --allow-empty -m "Update OpenAPI spec and Fern code"
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6

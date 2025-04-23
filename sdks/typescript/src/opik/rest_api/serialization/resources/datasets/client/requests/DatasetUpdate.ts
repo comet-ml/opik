@@ -5,16 +5,19 @@
 import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
+import { DatasetUpdateVisibility } from "../../types/DatasetUpdateVisibility";
 
 export const DatasetUpdate: core.serialization.Schema<serializers.DatasetUpdate.Raw, OpikApi.DatasetUpdate> =
     core.serialization.object({
         name: core.serialization.string(),
         description: core.serialization.string().optional(),
+        visibility: DatasetUpdateVisibility.optional(),
     });
 
 export declare namespace DatasetUpdate {
     export interface Raw {
         name: string;
         description?: string | null;
+        visibility?: DatasetUpdateVisibility.Raw | null;
     }
 }

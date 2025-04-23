@@ -27,6 +27,7 @@ public interface Field {
     String LAST_MESSAGE_QUERY_PARAM = "last_message";
     String CREATED_AT_QUERY_PARAM = "created_at";
     String LAST_UPDATED_AT_QUERY_PARAM = "last_updated_at";
+    String GUARDRAILS_QUERY_PARAM = "guardrails";
 
     @JsonValue
     String getQueryParamField();
