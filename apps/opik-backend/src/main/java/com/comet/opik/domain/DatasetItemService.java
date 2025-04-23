@@ -6,6 +6,7 @@ import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSearchCriteria;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.PageColumns;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -44,7 +45,7 @@ public interface DatasetItemService {
 
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
-    Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request);
+    Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request, Visibility visibility);
 
     Mono<PageColumns> getOutputColumns(UUID datasetId, Set<UUID> experimentIds);
 }
@@ -112,9 +113,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     @WithSpan
-    public Flux<DatasetItem> getItems(@NonNull String workspaceId, @NonNull DatasetItemStreamRequest request) {
+    public Flux<DatasetItem> getItems(@NonNull String workspaceId, @NonNull DatasetItemStreamRequest request,
+            Visibility visibility) {
         log.info("Getting dataset items by '{}' on workspaceId '{}'", request, workspaceId);
-        return Mono.fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName()))
+        return Mono
+                .fromCallable(() -> datasetService
+                        .verifyVisibility(datasetService.findByName(workspaceId, request.datasetName()), visibility))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMapMany(dataset -> dao.getItems(dataset.id(), request.steamLimit(), request.lastRetrievedId()));
     }
@@ -209,6 +213,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @Override
     @WithSpan
     public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size, boolean truncate) {
+        // Verify dataset visibility
+        datasetService.findByIdVerifyVisibility(datasetId);
+
         return dao.getItems(datasetId, page, size, truncate)
                 .defaultIfEmpty(DatasetItemPage.empty(page));
     }

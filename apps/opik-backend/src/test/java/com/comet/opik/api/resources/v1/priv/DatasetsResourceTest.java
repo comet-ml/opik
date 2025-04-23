@@ -28,6 +28,7 @@ import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
@@ -137,6 +138,8 @@ import java.util.stream.StreamSupport;
 
 import static com.comet.opik.api.Column.ColumnType;
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
+import static com.comet.opik.api.Visibility.PRIVATE;
+import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.IGNORED_FIELDS_COMMENTS;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoresIgnoredFieldsAndSetThemToNull;
@@ -182,7 +185,7 @@ class DatasetsResourceTest {
     public static final String[] IGNORED_FIELDS_LIST = {"feedbackScores", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "comments"};
     public static final String[] IGNORED_FIELDS_DATA_ITEM = {"createdAt", "lastUpdatedAt", "experimentItems",
-            "createdBy", "lastUpdatedBy"};
+            "createdBy", "lastUpdatedBy", "datasetId"};
     public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt", "lastCreatedExperimentAt",
             "datasetItemsCount", "lastCreatedOptimizationAt", "mostRecentOptimizationAt", "optimizationCount"};
@@ -337,6 +340,23 @@ class DatasetsResourceTest {
                     arguments("", false, NO_API_KEY_RESPONSE));
         }
 
+        Stream<Arguments> publicCredentials() {
+            return Stream.of(
+                    arguments(okApikey, PRIVATE),
+                    arguments(fakeApikey, PUBLIC),
+                    arguments("", PUBLIC));
+        }
+
+        Stream<Arguments> getDatasetPublicCredentials() {
+            return Stream.of(
+                    arguments(okApikey, PRIVATE, 200),
+                    arguments(okApikey, PUBLIC, 200),
+                    arguments("", PRIVATE, 404),
+                    arguments("", PUBLIC, 200),
+                    arguments(fakeApikey, PRIVATE, 404),
+                    arguments(fakeApikey, PUBLIC, 200));
+        }
+
         @BeforeEach
         void setUp() {
 
@@ -381,18 +401,20 @@ class DatasetsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("getDatasetPublicCredentials")
         @DisplayName("Get dataset by id: when api key is present, then return proper response")
-        void getDatasetById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+        void getDatasetById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, Visibility visibility,
+                int expectedCode) {
 
             Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
+                    .visibility(visibility)
                     .build();
 
             var id = createAndAssert(dataset);
 
             mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(TEST_WORKSPACE, WORKSPACE_ID);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path(id.toString())
@@ -402,34 +424,32 @@ class DatasetsResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .get()) {
 
-                if (shouldSucceed) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                if (expectedCode == 200) {
                     var actualEntity = actualResponse.readEntity(Dataset.class);
-
                     assertThat(actualEntity.id()).isEqualTo(id);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(errorMessage);
+                    assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset not found");
                 }
             }
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("getDatasetPublicCredentials")
         @DisplayName("Get dataset by name: when api key is present, then return proper response")
-        void getDatasetByName__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+        void getDatasetByName__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, Visibility visibility,
+                int expectedCode) {
 
             var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
+                    .visibility(visibility)
                     .build();
 
             var id = createAndAssert(dataset);
 
             mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(TEST_WORKSPACE, WORKSPACE_ID);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("retrieve")
@@ -439,35 +459,29 @@ class DatasetsResourceTest {
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .post(Entity.json(new DatasetIdentifier(dataset.name())))) {
 
-                if (shouldSucceed) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                if (expectedCode == 200) {
                     var actualEntity = actualResponse.readEntity(Dataset.class);
-
                     assertThat(actualEntity.id()).isEqualTo(id);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(errorMessage);
+                    assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset not found");
                 }
             }
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("publicCredentials")
         @DisplayName("Get datasets: when api key is present, then return proper response")
-        void getDatasets__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+        void getDatasets__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, Visibility visibility) {
 
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, workspaceId);
+            mockGetWorkspaceIdByName(workspaceName, workspaceId);
 
-            List<Dataset> expected = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class).stream()
-                    .map(dataset -> dataset.toBuilder().build())
-                    .toList();
+            List<Dataset> expected = prepareDatasetsListWithOnePublic();
 
             expected.forEach(dataset -> createAndAssert(dataset, okApikey, workspaceName));
 
@@ -477,17 +491,13 @@ class DatasetsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
-                if (shouldSucceed) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
-
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+                if (visibility == PRIVATE) {
                     assertThat(actualEntity.content()).hasSize(expected.size());
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(errorMessage);
+                    assertThat(actualEntity.content()).hasSize(1);
                 }
             }
         }
@@ -605,13 +615,15 @@ class DatasetsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("getDatasetPublicCredentials")
         @DisplayName("Get dataset items by dataset id: when api key is present, then return proper response")
         void getDatasetItemsByDatasetId__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
-                boolean shouldSucceed, io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+                Visibility visibility,
+                int expectedCode) {
 
             var datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
+                    .visibility(visibility)
                     .build());
 
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
@@ -629,6 +641,7 @@ class DatasetsResourceTest {
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
             mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(TEST_WORKSPACE, WORKSPACE_ID);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path(datasetId.toString())
@@ -639,31 +652,28 @@ class DatasetsResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .get()) {
 
-                if (shouldSucceed) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                if (expectedCode == 200) {
                     var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
-
                     assertThat(actualEntity.content().size()).isEqualTo(items.size());
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(errorMessage);
+                    assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset not found");
                 }
             }
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("getDatasetPublicCredentials")
         @DisplayName("Stream dataset items: when api key is present, then return proper response")
-        void streamDatasetItems__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+        void streamDatasetItems__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, Visibility visibility,
+                                                                               int expectedCode) {
             String name = UUID.randomUUID().toString();
 
             var datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
                     .name(name)
+                    .visibility(visibility)
                     .build());
 
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
@@ -681,6 +691,7 @@ class DatasetsResourceTest {
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
             mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(TEST_WORKSPACE, WORKSPACE_ID);
 
             var request = new DatasetItemStreamRequest(name, null, null);
 
@@ -693,18 +704,14 @@ class DatasetsResourceTest {
                     .accept(MediaType.APPLICATION_OCTET_STREAM)
                     .post(Entity.json(request))) {
 
-                if (shouldSucceed) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                if (expectedCode == 200) {
                     assertThat(actualResponse.hasEntity()).isTrue();
-
                     List<DatasetItem> actualItems = getStreamedItems(actualResponse);
                     assertThat(actualItems.size()).isEqualTo(items.size());
 
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(errorMessage);
+                    assertThat(actualResponse.hasEntity()).isFalse();
                 }
             }
         }
@@ -756,15 +763,17 @@ class DatasetsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("getDatasetPublicCredentials")
         @DisplayName("Get dataset item by id: when api key is present, then return proper response")
-        void getDatasetItemById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean shouldSucceed,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+        void getDatasetItemById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
+                Visibility visibility,
+                int expectedCode) {
             String name = UUID.randomUUID().toString();
 
             var datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
                     .name(name)
+                    .visibility(visibility)
                     .build());
 
             var item = factory.manufacturePojo(DatasetItem.class);
@@ -777,6 +786,9 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
+            mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(TEST_WORKSPACE, WORKSPACE_ID);
+
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
                     .path(item.id().toString())
@@ -786,17 +798,13 @@ class DatasetsResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .get()) {
 
-                if (shouldSucceed) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                if (expectedCode == 200) {
                     var actualEntity = actualResponse.readEntity(DatasetItem.class);
-
                     assertThat(actualEntity.id()).isEqualTo(item.id());
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(errorMessage);
+                    assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset not found");
                 }
             }
 
@@ -836,6 +844,20 @@ class DatasetsResourceTest {
                     arguments(fakeSessionToken, false, UUID.randomUUID().toString()));
         }
 
+        Stream<Arguments> publicCredentials() {
+            return Stream.of(
+                    arguments(sessionToken, PRIVATE, "OK_" + UUID.randomUUID()),
+                    arguments(fakeSessionToken, PUBLIC, UUID.randomUUID().toString()));
+        }
+
+        Stream<Arguments> getDatasetPublicCredentials() {
+            return Stream.of(
+                    arguments(sessionToken, PRIVATE, "OK_" + UUID.randomUUID(), 200),
+                    arguments(sessionToken, PUBLIC, "OK_" + UUID.randomUUID(), 200),
+                    arguments(fakeSessionToken, PRIVATE, UUID.randomUUID().toString(), 404),
+                    arguments(fakeSessionToken, PUBLIC, UUID.randomUUID().toString(), 200));
+        }
+
         @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("create dataset: when session token is present, then return proper response")
@@ -868,14 +890,18 @@ class DatasetsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("getDatasetPublicCredentials")
         @DisplayName("Get dataset by id: when session token is present, then return proper response")
         void getDatasetById__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                boolean shouldSucceed, String workspaceName) {
+                Visibility visibility,
+                String workspaceName, int expectedCode) {
 
             Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
+                    .visibility(visibility)
                     .build();
+
+            mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
 
             var id = createAndAssert(dataset);
 
@@ -887,34 +913,33 @@ class DatasetsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
-                if (shouldSucceed) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                if (expectedCode == 200) {
                     var actualEntity = actualResponse.readEntity(Dataset.class);
-
                     assertThat(actualEntity.id()).isEqualTo(id);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset not found");
                 }
             }
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("getDatasetPublicCredentials")
         @DisplayName("Get dataset by name: when session token is present, then return proper response")
         void getDatasetByName__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                boolean shouldSucceed, String workspaceName) {
+                Visibility visibility,
+                String workspaceName, int expectedCode) {
 
             var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
+                    .visibility(visibility)
                     .build();
 
             var id = createAndAssert(dataset);
 
             mockSessionCookieTargetWorkspace(this.sessionToken, workspaceName, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("retrieve")
@@ -924,35 +949,32 @@ class DatasetsResourceTest {
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .post(Entity.json(new DatasetIdentifier(dataset.name())))) {
 
-                if (shouldSucceed) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    var actualEntity = actualResponse.readEntity(Dataset.class);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                assertThat(actualResponse.hasEntity()).isTrue();
 
+                if (expectedCode == 200) {
+                    var actualEntity = actualResponse.readEntity(Dataset.class);
                     assertThat(actualEntity.id()).isEqualTo(id);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset not found");
                 }
             }
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("publicCredentials")
         @DisplayName("Get datasets: when session token is present, then return proper response")
         void getDatasets__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                boolean shouldSucceed, String workspaceName) {
+                Visibility visibility, String workspaceName) {
 
             String workspaceId = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
+            mockGetWorkspaceIdByName(workspaceName, workspaceId);
             mockSessionCookieTargetWorkspace(this.sessionToken, workspaceName, workspaceId);
 
-            List<Dataset> expected = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class);
+            List<Dataset> expected = prepareDatasetsListWithOnePublic();
 
             expected.forEach(dataset -> createAndAssert(dataset, apiKey, workspaceName));
 
@@ -962,17 +984,13 @@ class DatasetsResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get()) {
 
-                if (shouldSucceed) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
-
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+                if (visibility == PRIVATE) {
                     assertThat(actualEntity.content()).hasSize(expected.size());
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualEntity.content()).hasSize(1);
                 }
             }
         }
@@ -1085,13 +1103,16 @@ class DatasetsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("getDatasetPublicCredentials")
         @DisplayName("Get dataset items by dataset id: when session token is present, then return proper response")
         void getDatasetItemsByDatasetId__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                boolean shouldSucceed, String workspaceName) {
+                Visibility visibility,
+                String workspaceName, int expectedCode) {
+            mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
 
             var datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
+                    .visibility(visibility)
                     .build());
 
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
@@ -1117,32 +1138,30 @@ class DatasetsResourceTest {
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .get()) {
 
-                if (shouldSucceed) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                assertThat(actualResponse.hasEntity()).isTrue();
 
+                if (expectedCode == 200) {
+                    var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
                     assertThat(actualEntity.content().size()).isEqualTo(items.size());
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset not found");
                 }
             }
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("getDatasetPublicCredentials")
         @DisplayName("Stream dataset items: when session token is present, then return proper response")
         void getDatasetItemsStream__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                boolean shouldSucceed, String workspaceName) {
-
+                                                                                        Visibility visibility,
+                                                                                        String workspaceName, int expectedCode) {
             String name = UUID.randomUUID().toString();
 
             var datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
                     .name(name)
+                    .visibility(visibility)
                     .build());
 
             var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
@@ -1160,6 +1179,7 @@ class DatasetsResourceTest {
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
             mockSessionCookieTargetWorkspace(this.sessionToken, workspaceName, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
 
             var request = new DatasetItemStreamRequest(name, null, null);
 
@@ -1172,18 +1192,15 @@ class DatasetsResourceTest {
                     .accept(MediaType.APPLICATION_OCTET_STREAM)
                     .post(Entity.json(request))) {
 
-                if (shouldSucceed) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
+                if (expectedCode == 200) {
+                    assertThat(actualResponse.hasEntity()).isTrue();
                     List<DatasetItem> actualItems = getStreamedItems(actualResponse);
                     assertThat(actualItems.size()).isEqualTo(items.size());
 
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualResponse.hasEntity()).isFalse();
                 }
             }
         }
@@ -1235,16 +1252,20 @@ class DatasetsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
+        @MethodSource("getDatasetPublicCredentials")
         @DisplayName("Get dataset item by id: when session token is present, then return proper response")
         void getDatasetItemById__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                boolean shouldSucceed, String workspaceName) {
+                Visibility visibility,
+                String workspaceName, int expectedCode) {
+
+            mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
 
             String name = UUID.randomUUID().toString();
 
             var datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
                     .name(name)
+                    .visibility(visibility)
                     .build());
 
             var item = factory.manufacturePojo(DatasetItem.class);
@@ -1266,17 +1287,13 @@ class DatasetsResourceTest {
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .get()) {
 
-                if (shouldSucceed) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                    assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                if (expectedCode == 200) {
                     var actualEntity = actualResponse.readEntity(DatasetItem.class);
-
                     assertThat(actualEntity.id()).isEqualTo(item.id());
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
-                    assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset not found");
                 }
             }
 
@@ -5339,5 +5356,20 @@ class DatasetsResourceTest {
         }
 
         return items;
+    }
+
+    private void mockGetWorkspaceIdByName(String workspaceName, String workspaceId) {
+        AuthTestUtils.mockGetWorkspaceIdByName(wireMock.server(), workspaceName, workspaceId);
+    }
+
+    private List<Dataset> prepareDatasetsListWithOnePublic() {
+        var datasets = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class).stream()
+                .map(project -> project.toBuilder()
+                        .visibility(PRIVATE)
+                        .build())
+                .collect(Collectors.toCollection(ArrayList::new));
+        datasets.set(0, datasets.getFirst().toBuilder().visibility(PUBLIC).build());
+
+        return datasets;
     }
 }

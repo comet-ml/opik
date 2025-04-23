@@ -99,7 +99,7 @@ public class DatasetsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Finding dataset by id '{}' on workspaceId '{}'", id, workspaceId);
-        Dataset dataset = service.findById(id);
+        Dataset dataset = service.findByIdVerifyVisibility(id);
         log.info("Found dataset by id '{}' on workspaceId '{}'", id, workspaceId);
 
         return Response.ok().entity(dataset).build();
@@ -238,6 +238,7 @@ public class DatasetsResource {
 
         log.info("Finding dataset by name '{}' on workspace_id '{}'", name, workspaceId);
         Dataset dataset = service.findByName(workspaceId, name);
+        service.verifyVisibility(dataset);
         log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", name, dataset.id(), workspaceId);
 
         return Response.ok(dataset).build();
@@ -259,6 +260,10 @@ public class DatasetsResource {
         DatasetItem datasetItem = itemService.get(itemId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
+
+        // Verify visibility
+        service.findByIdVerifyVisibility(datasetItem.datasetId());
+
         log.info("Found dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
 
         return Response.ok(datasetItem).build();
@@ -301,8 +306,10 @@ public class DatasetsResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemStreamRequest.class))) @NotNull @Valid DatasetItemStreamRequest request) {
         var workspaceId = requestContext.get().getWorkspaceId();
         var userName = requestContext.get().getUserName();
+        var visibility = requestContext.get().getVisibility();
+
         log.info("Streaming dataset items by '{}' on workspaceId '{}'", request, workspaceId);
-        var items = itemService.getItems(workspaceId, request)
+        var items = itemService.getItems(workspaceId, request, visibility)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId));
         var outputStream = streamer.getOutputStream(items);
