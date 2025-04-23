@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -18,6 +19,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.utils.JsonUtils.ISO_INSTANT_MICROS_PATTERN;
 import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 
 @Builder(toBuilder = true)
@@ -40,7 +42,8 @@ public record Trace(
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) ErrorInfo errorInfo,
         @JsonView({Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Map<String, Long> usage,
         @JsonView({Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
-        @JsonView({Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
+        @JsonFormat(pattern = ISO_INSTANT_MICROS_PATTERN, timezone = "UTC") @JsonView({
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @JsonView({Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
         @JsonView({
