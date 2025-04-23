@@ -5,6 +5,22 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REQUIRED_CONTAINERS=("opik-clickhouse-1" "opik-mysql-1" "opik-python-backend-1" "opik-redis-1" "opik-frontend-1" "opik-backend-1" "opik-minio-1")
 GUARDRAILS_CONTAINERS=("opik-guardrails-backend-1")
 
+get_verify_cmd() {
+  local cmd="./opik.sh --verify"
+  if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
+    cmd="./opik.sh --guardrails --verify"
+  fi
+  echo "$cmd"
+}
+
+get_start_cmd() {
+  local cmd="./opik.sh"
+  if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
+    cmd="./opik.sh --guardrails"
+  fi
+  echo "$cmd"
+}
+
 generate_uuid() {
   if command -v uuidgen >/dev/null 2>&1; then
     uuidgen
@@ -176,7 +192,7 @@ print_banner() {
   echo "║  📊 Access the UI:                                              ║"
   echo "║     $ui_url                                       ║"
   echo "║                                                                 ║"
-  echo "║  🛠️ Configure the Python SDK:                                   ║"
+  echo "║  🛠️  Configure the Python SDK:                                   ║"
   echo "║     \$ python --version                                          ║"
   echo "║     \$ pip install opik                                          ║"
   echo "║     \$ opik configure                                            ║"
@@ -292,7 +308,7 @@ case "$1" in
       print_banner
       exit 0
     else
-      echo "⚠️  Some containers are not running/healthy. Please run './opik.sh' to start them."
+      echo "⚠️  Some containers are not running/healthy. Please run '$(get_start_cmd)' to start them."
       exit 1
     fi
     ;;
@@ -314,7 +330,7 @@ case "$1" in
     if check_containers_status; then
       print_banner
     else
-      echo "⚠️  Some containers are still not healthy. Please check manually using './opik.sh --verify'"
+      echo "⚠️  Some containers are still not healthy. Please check manually using '$(get_verify_cmd)'"
       exit 1
     fi
     ;;
@@ -327,7 +343,7 @@ case "$1" in
     if check_containers_status; then
       print_banner
     else
-      echo "⚠️  Some containers are still not healthy. Please check manually using './opik.sh --verify'"
+      echo "⚠️  Some containers are still not healthy. Please check manually using '$(get_verify_cmd)'"
       exit 1
     fi
     ;;
@@ -339,7 +355,7 @@ case "$1" in
     if check_containers_status "true"; then
       print_banner
     else
-      echo "⚠️  Some containers are still not healthy. Please check manually using './opik.sh --verify'"
+      echo "⚠️  Some containers are still not healthy. Please check manually using '$(get_verify_cmd)'"
       exit 1
     fi
     ;;

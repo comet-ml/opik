@@ -290,6 +290,13 @@ function Show-Banner {
     Write-Host '╚═════════════════════════════════════════════════════════════════╝'
 }
 
+function Get-VerifyCommand {
+    if ($GUARDRAILS_ENABLED) {
+        return ".\opik.ps1 --guardrails --verify"
+    }
+    return ".\opik.ps1 --verify"
+}
+
 $DEBUG_MODE = $false
 $GUARDRAILS_ENABLED = $false
 $env:OPIK_FRONTEND_FLAVOR = "default"
@@ -316,7 +323,7 @@ switch ($option) {
             Show-Banner
             exit 0
         } else {
-            Write-Host '[WARN] Some containers are not running/healthy. Please run ".\opik.ps1 --verify".'
+            Write-Host '[WARN] Some containers are not running/healthy. Please run "' + (Get-VerifyCommand) + '".'
             exit 1
         }
     }
@@ -338,7 +345,7 @@ switch ($option) {
         if (Test-ContainersStatus -ShowOutput:$true) {
             Show-Banner
         } else {
-            Write-Host '[WARN] Some containers are still not healthy. Please check manually using ".\opik.ps1 --verify".'
+            Write-Host '[WARN] Some containers are still not healthy. Please check manually using "' + (Get-VerifyCommand) + '".'
             exit 1
         }
     }
@@ -351,7 +358,7 @@ switch ($option) {
         if (Test-ContainersStatus -ShowOutput:$true) {
             Show-Banner
         } else {
-            Write-Host '[WARN] Some containers are still not healthy. Please check manually using ".\opik.ps1 --verify".'
+            Write-Host '[WARN] Some containers are still not healthy. Please check manually using "' + (Get-VerifyCommand) + '".'
             exit 1
         }
     }
@@ -363,7 +370,7 @@ switch ($option) {
         if (Test-ContainersStatus -ShowOutput:$true) {
             Show-Banner
         } else {
-            Write-Host '[WARN] Some containers are still not healthy. Please check manually using ".\opik.ps1 --verify".'
+            Write-Host '[WARN] Some containers are still not healthy. Please check manually using "' + (Get-VerifyCommand) + '".'
             exit 1
         }
     }
