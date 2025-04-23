@@ -3,6 +3,7 @@ package com.comet.opik.api;
 import com.comet.opik.domain.GuardrailResult;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -19,13 +20,44 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record GuardrailBatchItem(
-        UUID id,
-        @NotNull UUID entityId, // entity (trace or span) id
-        @NotNull UUID secondaryId, // secondary id used for grouping
-        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used") String projectName,
-        @JsonIgnore UUID projectId,
-        @NotNull GuardrailType name,
-        @NotNull GuardrailResult result,
-        @NotNull JsonNode config,
-        @NotNull JsonNode details) {
+        @JsonView( {
+                GuardrailBatchItem.View.Public.class, GuardrailBatchItem.View.Write.class}) UUID id,
+
+        // entity (trace or span) id
+        @JsonView({
+                GuardrailBatchItem.View.Public.class, GuardrailBatchItem.View.Write.class}) @NotNull UUID entityId,
+
+        // secondary id used for grouping (guardrail span id)
+        @JsonView({
+                GuardrailBatchItem.View.Public.class, GuardrailBatchItem.View.Write.class}) @NotNull UUID secondaryId,
+
+        @JsonView({
+                GuardrailBatchItem.View.Public.class,
+                GuardrailBatchItem.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used") String projectName,
+
+        @JsonView({
+                GuardrailBatchItem.View.Public.class, GuardrailBatchItem.View.Write.class}) @JsonIgnore UUID projectId,
+
+        @JsonView({
+                GuardrailBatchItem.View.Public.class, GuardrailBatchItem.View.Write.class}) @NotNull GuardrailType name,
+
+        @JsonView({
+                GuardrailBatchItem.View.Public.class,
+                GuardrailBatchItem.View.Write.class}) @NotNull GuardrailResult result,
+
+        @JsonView({
+                GuardrailBatchItem.View.Public.class,
+                GuardrailBatchItem.View.Write.class}) @Schema(implementation = JsonNode.class, ref = "JsonNode") @NotNull JsonNode config,
+
+        @JsonView({
+                GuardrailBatchItem.View.Public.class,
+                GuardrailBatchItem.View.Write.class}) @Schema(implementation = JsonNode.class, ref = "JsonNode") @NotNull JsonNode details){
+
+    public static class View {
+        public static class Write {
+        }
+
+        public static class Public {
+        }
+    }
 }
