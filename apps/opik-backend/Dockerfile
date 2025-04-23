@@ -17,9 +17,6 @@ FROM amazoncorretto:21.0.6-al2023
 RUN yum update -y && yum install -y shadow ca-certificates openssl perl \
     && yum clean all
 VOLUME /tmp
-
-# Ensure /tmp is writable by any user
-RUN chmod 777 /tmp
 # Add bundle URL from https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html
 ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /tmp/certs/global-bundle.pem
 ADD install_rds_cert.sh .
@@ -45,10 +42,5 @@ EXPOSE 3003
 
 ARG OPIK_VERSION
 ENV OPIK_VERSION=${OPIK_VERSION}
-
-RUN chown -R 1001:1001 /opt/opik
-
-# Switch to the non-root user
-USER 1001:1001
 
 CMD ["./entrypoint.sh"]
