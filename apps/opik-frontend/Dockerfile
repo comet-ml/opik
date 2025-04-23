@@ -37,7 +37,7 @@ RUN rm -f /etc/nginx/nginx.conf.default && \
     sed -i '/access_log.*main/d' /etc/nginx/nginx.conf && \
     sed -i 's,listen       80;,listen       8080;,' /etc/nginx/nginx.conf && \
     sed -i 's,listen       \[::\]:80;,listen       \[::\]:8080;,' /etc/nginx/nginx.conf && \
-    sed -i '/user  nginx;/d' /etc/nginx/nginx.conf
+    sed -i '/user nginx/d' /etc/nginx/nginx.conf
 RUN mkdir -p /var/cache/nginx /var/log/nginx /run && \
     chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx /run && \
     chmod -R g+w /var/cache/nginx /var/log/nginx /etc/nginx /run
