@@ -171,7 +171,7 @@ print_banner() {
 # Check installation
 send_install_report() {
   uuid="$1"
-  event_completed="$2"  # Pass "true" to send install_completed
+  event_completed="$2"  # Pass "true" to send opik_install_completed
   start_time="$3"  # Optional: start time in ISO 8601 format
 
   if [ "$OPIK_USAGE_REPORT_ENABLED" != "true" ] && [ "$OPIK_USAGE_REPORT_ENABLED" != "" ]; then
@@ -237,7 +237,7 @@ EOF
     rm -f "$tmpfile"
   fi
 
-  if [ $event_type = "install_completed" ]; then
+  if [ $event_type = "opik_install_completed" ]; then
     touch "$INSTALL_MARKER_FILE"
     [[ "$DEBUG_MODE" == true ]] && echo "[DEBUG] Post-install report sent successfully."
   else
