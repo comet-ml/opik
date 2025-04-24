@@ -78,8 +78,8 @@ jobs:
 
         - name: Build and Push Docker Image for Comet integration
           if: inputs.build_comet_image
-          uses: docker/build-push-action@v4
           secrets: inherit
+          uses: docker/build-push-action@v4
           with:
             context: apps/${{ inputs.image }}/
             platforms: ${{ inputs.is_release && 'linux/amd64,linux/arm64' || 'linux/amd64' }}

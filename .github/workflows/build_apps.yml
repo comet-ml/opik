@@ -119,8 +119,8 @@ jobs:
   build-frontend:
     needs:
       - set-version
-    uses: ./.github/workflows/build_and_push_docker.yaml
     secrets: inherit
+    uses: ./.github/workflows/build_and_push_docker.yaml
     with:
       image: "opik-frontend"
       version: ${{needs.set-version.outputs.version}}
