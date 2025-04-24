@@ -9,7 +9,11 @@ LOGGER = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-def read_and_parse_stream(stream: Iterable[bytes], item_class: Type[T]) -> List[T]:
+def read_and_parse_stream(
+    stream: Iterable[bytes],
+    item_class: Type[T],
+    nb_samples: Optional[int] = None,
+) -> List[T]:
     result: List[T] = []
 
     # last record in chunk may be incomplete, we will use this buffer to concatenate strings
@@ -24,6 +28,9 @@ def read_and_parse_stream(stream: Iterable[bytes], item_class: Type[T]) -> List[
             item = _parse_stream_line(line=line, item_class=item_class)
             if item is not None:
                 result.append(item)
+
+                if nb_samples is not None and len(result) == nb_samples:
+                    return result
 
         # Keep the last potentially incomplete line in buffer
         buffer = lines[-1]

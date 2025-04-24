@@ -20,7 +20,7 @@ public record ProjectStatsSummary(List<ProjectStatsSummaryItem> content) {
     public record ProjectStatsSummaryItem(
             UUID projectId,
             List<FeedbackScoreAverage> feedbackScores,
-            ProjectStats.PercentageValues duration,
+            PercentageValues duration,
             Double totalEstimatedCost,
             Map<String, Double> usage,
             Long traceCount,
