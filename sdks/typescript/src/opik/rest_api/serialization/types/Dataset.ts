@@ -5,11 +5,13 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { DatasetVisibility } from "./DatasetVisibility";
 
 export const Dataset: core.serialization.ObjectSchema<serializers.Dataset.Raw, OpikApi.Dataset> =
     core.serialization.object({
         id: core.serialization.string().optional(),
         name: core.serialization.string(),
+        visibility: DatasetVisibility.optional(),
         description: core.serialization.string().optional(),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -31,6 +33,7 @@ export declare namespace Dataset {
     export interface Raw {
         id?: string | null;
         name: string;
+        visibility?: DatasetVisibility.Raw | null;
         description?: string | null;
         created_at?: string | null;
         created_by?: string | null;

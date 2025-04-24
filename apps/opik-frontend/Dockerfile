@@ -31,14 +31,22 @@ RUN yum update -y && yum install -y nginx \
 # Add label for later inspection
 ARG BUILD_MODE=production
 LABEL build.mode="${BUILD_MODE}"
+
+# implement changes required to run NGINX as an unprivileged user
+RUN rm -f /etc/nginx/nginx.conf.default && \
+    sed -i '/access_log.*main/d' /etc/nginx/nginx.conf && \
+    sed -i 's,listen       80;,listen       8080;,' /etc/nginx/nginx.conf && \
+    sed -i 's,listen       \[::\]:80;,listen       \[::\]:8080;,' /etc/nginx/nginx.conf && \
+    sed -i '/user nginx/d' /etc/nginx/nginx.conf
+RUN mkdir -p /var/cache/nginx /var/log/nginx /run && \
+    chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx /run && \
+    chmod -R g+w /var/cache/nginx /var/log/nginx /etc/nginx /run
+
 # Copy the built files from the builder stage
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
-RUN sed -i '/access_log.*main/d' /etc/nginx/nginx.conf
-# Ensure nginx user owns necessary directories before switching user
-RUN mkdir -p /var/cache/nginx /var/log/nginx /var/run && \
-    chown -R nginx:nginx /var/cache/nginx /var/log/nginx /usr/share/nginx/html /var/run /run
+
 EXPOSE 5173
-# Switch to the non-root user
+
 USER nginx:nginx
 # Start Nginx
 CMD ["nginx", "-g", "daemon off;"]
