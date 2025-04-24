@@ -221,6 +221,7 @@ class Dataset:
         dataset_item_ids: Optional[List[str]] = None,
     ) -> List[dataset_item.DatasetItem]:
         results: List[dataset_item.DatasetItem] = []
+        last_retrieved_id: Optional[str] = None
 
         if dataset_item_ids is not None:
             dataset_item_ids = set(dataset_item_ids)  # type: ignore
@@ -229,7 +230,7 @@ class Dataset:
             dataset_items = rest_stream_parser.read_and_parse_stream(
                 stream=self._rest_client.datasets.stream_dataset_items(
                     dataset_name=self._name,
-                    last_retrieved_id=results[-1].id if len(results) > 0 else None,
+                    last_retrieved_id=last_retrieved_id,
                 ),
                 item_class=dataset_item.DatasetItem,
                 nb_samples=nb_samples,
@@ -240,6 +241,7 @@ class Dataset:
 
             for item in dataset_items:
                 dataset_item_id = item.id
+                last_retrieved_id = dataset_item_id
 
                 if dataset_item_ids is not None:
                     if dataset_item_id not in dataset_item_ids:
