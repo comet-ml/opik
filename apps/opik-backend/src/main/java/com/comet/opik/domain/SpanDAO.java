@@ -22,6 +22,7 @@ import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
+import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -46,14 +47,16 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
+import static com.comet.opik.api.Span.SpanField;
+import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
-import static com.comet.opik.domain.CommentResultMapper.getComments;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -635,7 +638,7 @@ class SpanDAO {
             <endif>
             , spans_final AS (
                 SELECT
-                      s.*,
+                      s.* <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
                       if(end_time IS NOT NULL AND start_time IS NOT NULL
                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
@@ -682,32 +685,13 @@ class SpanDAO {
                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
             )
             SELECT
-                s.id as id,
-                s.workspace_id as workspace_id,
-                s.project_id as project_id,
-                s.trace_id as trace_id,
-                s.parent_span_id as parent_span_id,
-                s.name as name,
-                s.type as type,
-                s.start_time as start_time,
-                s.end_time as end_time,
-                <if(truncate)> replaceRegexpAll(s.input, '<truncate>', '"[image]"') as input <else> s.input as input<endif>,
-                <if(truncate)> replaceRegexpAll(s.output, '<truncate>', '"[image]"') as output <else> s.output as output<endif>,
-                <if(truncate)> replaceRegexpAll(s.metadata, '<truncate>', '"[image]"') as metadata <else> s.metadata as metadata<endif>,
-                s.model as model,
-                s.provider as provider,
-                s.total_estimated_cost as total_estimated_cost,
-                s.tags as tags,
-                s.usage as usage,
-                s.error_info as error_info,
-                s.created_at as created_at,
-                s.last_updated_at as last_updated_at,
-                s.created_by as created_by,
-                s.last_updated_by as last_updated_by,
-                s.duration as duration,
-                fsa.feedback_scores_list as feedback_scores_list,
-                fsa.feedback_scores as feedback_scores,
-                c.comments AS comments
+                s.* <if(exclude_fields)>EXCEPT (<exclude_fields>) <else> EXCEPT (input, output, metadata)<endif>
+                <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(s.input, '<truncate>', '"[image]"') as input <else> s.input as input<endif> <endif>
+                <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(s.output, '<truncate>', '"[image]"') as output <else> s.output as output<endif> <endif>
+                <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(s.metadata, '<truncate>', '"[image]"') as metadata <else> s.metadata as metadata<endif> <endif>
+                <if(!exclude_feedback_scores)>, fsa.feedback_scores_list as feedback_scores_list <endif>
+                , fsa.feedback_scores as feedback_scores
+                <if(!exclude_comments)>, c.comments AS comments <endif>
             FROM spans_final s
             LEFT JOIN comments_final c ON s.id = c.entity_id
             LEFT JOIN feedback_scores_agg fsa ON fsa.entity_id = s.id
@@ -1355,63 +1339,90 @@ class SpanDAO {
     }
 
     private Publisher<Span> mapToDto(Result result) {
+        return mapToDto(result, Set.of());
+    }
+
+    private <T> T getValue(Set<SpanField> exclude, SpanField field, Row row, String fieldName, Class<T> clazz) {
+        return exclude.contains(field) ? null : row.get(fieldName, clazz);
+    }
+
+    private Publisher<Span> mapToDto(Result result, Set<SpanField> exclude) {
+
+        Set<SpanField> excludedFields = CollectionUtils.isEmpty(exclude) ? Set.of() : exclude;
+
         return result.map((row, rowMetadata) -> {
-            var parentSpanId = row.get("parent_span_id", String.class);
             return Span.builder()
                     .id(row.get("id", UUID.class))
                     .projectId(row.get("project_id", UUID.class))
                     .traceId(row.get("trace_id", UUID.class))
-                    .parentSpanId(Optional.ofNullable(parentSpanId)
+                    .parentSpanId(Optional.ofNullable(row.get("parent_span_id", String.class))
                             .filter(str -> !str.isBlank())
                             .map(UUID::fromString)
                             .orElse(null))
-                    .name(row.get("name", String.class))
-                    .type(SpanType.fromString(row.get("type", String.class)))
-                    .startTime(row.get("start_time", Instant.class))
-                    .endTime(row.get("end_time", Instant.class))
-                    .input(Optional.ofNullable(row.get("input", String.class))
+                    .name(getValue(excludedFields, SpanField.NAME, row, "name", String.class))
+                    .type(Optional.ofNullable(
+                            getValue(excludedFields, SpanField.TYPE, row, "type", String.class))
+                            .map(SpanType::fromString)
+                            .orElse(null))
+                    .startTime(getValue(excludedFields, SpanField.START_TIME, row, "start_time", Instant.class))
+                    .endTime(getValue(excludedFields, SpanField.END_TIME, row, "end_time", Instant.class))
+                    .input(Optional.ofNullable(getValue(excludedFields, SpanField.INPUT, row, "input", String.class))
                             .filter(str -> !str.isBlank())
                             .map(JsonUtils::getJsonNodeFromString)
                             .orElse(null))
-                    .output(Optional.ofNullable(row.get("output", String.class))
+                    .output(Optional.ofNullable(getValue(excludedFields, SpanField.OUTPUT, row, "output", String.class))
                             .filter(str -> !str.isBlank())
                             .map(JsonUtils::getJsonNodeFromString)
                             .orElse(null))
-                    .metadata(Optional.ofNullable(row.get("metadata", String.class))
+                    .metadata(Optional
+                            .ofNullable(getValue(excludedFields, SpanField.METADATA, row, "metadata", String.class))
                             .filter(str -> !str.isBlank())
                             .map(JsonUtils::getJsonNodeFromString)
                             .orElse(null))
-                    .model(StringUtils.isBlank(row.get("model", String.class))
-                            ? null
-                            : row.get("model", String.class))
-                    .provider(StringUtils.isBlank(row.get("provider", String.class))
-                            ? null
-                            : row.get("provider", String.class))
+                    .model(Optional.ofNullable(getValue(excludedFields, SpanField.MODEL, row, "model", String.class))
+                            .filter(str -> !str.isBlank())
+                            .orElse(null))
+                    .provider(Optional
+                            .ofNullable(getValue(excludedFields, SpanField.PROVIDER, row, "provider", String.class))
+                            .filter(str -> !str.isBlank())
+                            .orElse(null))
                     .totalEstimatedCost(
-                            BigDecimal.ZERO.compareTo(row.get("total_estimated_cost", BigDecimal.class)) == 0
-                                    ? null
-                                    : row.get("total_estimated_cost", BigDecimal.class))
-                    .totalEstimatedCostVersion(row.getMetadata().contains("total_estimated_cost_version")
-                            ? row.get("total_estimated_cost_version", String.class)
-                            : null)
-                    .feedbackScores(Optional.ofNullable(row.get("feedback_scores_list", List.class))
+                            Optional.ofNullable(getValue(excludedFields, SpanField.TOTAL_ESTIMATED_COST, row,
+                                    "total_estimated_cost", BigDecimal.class))
+                                    .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
+                                    .orElse(null))
+                    .totalEstimatedCostVersion(getValue(excludedFields, SpanField.TOTAL_ESTIMATED_COST_VERSION, row,
+                            "total_estimated_cost_version", String.class))
+                    .feedbackScores(Optional
+                            .ofNullable(getValue(excludedFields, SpanField.FEEDBACK_SCORES, row, "feedback_scores_list",
+                                    List.class))
+                            .filter(not(List::isEmpty))
                             .map(this::mapFeedbackScores)
                             .filter(not(List::isEmpty))
                             .orElse(null))
-                    .tags(Optional.of(Arrays.stream(row.get("tags", String[].class)).collect(Collectors.toSet()))
-                            .filter(set -> !set.isEmpty())
+                    .tags(Optional.ofNullable(getValue(excludedFields, SpanField.TAGS, row, "tags", String[].class))
+                            .map(Arrays::stream)
+                            .map(Stream::toList)
+                            .filter(not(List::isEmpty))
+                            .map(Set::copyOf)
                             .orElse(null))
-                    .usage(row.get("usage", Map.class))
-                    .comments(getComments(row.get("comments", List[].class)))
-                    .errorInfo(Optional.ofNullable(row.get("error_info", String.class))
+                    .usage(getValue(excludedFields, SpanField.USAGE, row, "usage", Map.class))
+                    .comments(Optional
+                            .ofNullable(getValue(excludedFields, SpanField.COMMENTS, row, "comments", List[].class))
+                            .map(CommentResultMapper::getComments)
+                            .filter(not(List::isEmpty))
+                            .orElse(null))
+                    .errorInfo(Optional
+                            .ofNullable(getValue(excludedFields, SpanField.ERROR_INFO, row, "error_info", String.class))
                             .filter(str -> !str.isBlank())
                             .map(errorInfo -> JsonUtils.readValue(errorInfo, ERROR_INFO_TYPE))
                             .orElse(null))
-                    .createdAt(row.get("created_at", Instant.class))
+                    .createdAt(getValue(excludedFields, SpanField.CREATED_AT, row, "created_at", Instant.class))
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                    .createdBy(row.get("created_by", String.class))
-                    .lastUpdatedBy(row.get("last_updated_by", String.class))
-                    .duration(row.get("duration", Double.class))
+                    .createdBy(getValue(excludedFields, SpanField.CREATED_BY, row, "created_by", String.class))
+                    .lastUpdatedBy(
+                            getValue(excludedFields, SpanField.LAST_UPDATED_BY, row, "last_updated_by", String.class))
+                    .duration(getValue(excludedFields, SpanField.DURATION, row, "duration", Double.class))
                     .build();
         });
     }
@@ -1449,17 +1460,17 @@ class SpanDAO {
     }
 
     @WithSpan
-    public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria spanSearchCriteria) {
+    public Mono<SpanPage> find(int page, int size, @NonNull SpanSearchCriteria spanSearchCriteria) {
         log.info("Finding span by '{}'", spanSearchCriteria);
         return countTotal(spanSearchCriteria).flatMap(total -> find(page, size, spanSearchCriteria, total));
     }
 
-    private Mono<Span.SpanPage> find(int page, int size, SpanSearchCriteria spanSearchCriteria, Long total) {
+    private Mono<SpanPage> find(int page, int size, SpanSearchCriteria spanSearchCriteria, Long total) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> find(page, size, spanSearchCriteria, connection))
-                .flatMap(this::mapToDto)
+                .flatMap(result -> mapToDto(result, spanSearchCriteria.exclude()))
                 .collectList()
-                .map(spans -> new Span.SpanPage(page, spans.size(), total, spans, sortingFactory.getSortableFields()));
+                .map(spans -> new SpanPage(page, spans.size(), total, spans, sortingFactory.getSortableFields()));
     }
 
     @WithSpan
@@ -1515,6 +1526,22 @@ class SpanDAO {
         template = ImageUtils.addTruncateToTemplate(template, spanSearchCriteria.truncate());
 
         var finalTemplate = template;
+        Optional.ofNullable(spanSearchCriteria.exclude())
+                .filter(Predicate.not(Set::isEmpty))
+                .ifPresent(exclude -> {
+
+                    String fields = exclude.stream()
+                            .map(SpanField::getValue)
+                            .collect(Collectors.joining(", "));
+
+                    finalTemplate.add("exclude_fields", fields);
+                    finalTemplate.add("exclude_input", exclude.contains(SpanField.INPUT));
+                    finalTemplate.add("exclude_output", exclude.contains(SpanField.OUTPUT));
+                    finalTemplate.add("exclude_metadata", exclude.contains(SpanField.METADATA));
+                    finalTemplate.add("exclude_feedback_scores", exclude.contains(SpanField.FEEDBACK_SCORES));
+                    finalTemplate.add("exclude_comments", exclude.contains(SpanField.COMMENTS));
+                });
+
         Optional.ofNullable(sortingQueryBuilder.toOrderBySql(spanSearchCriteria.sortingFields()))
                 .ifPresent(sortFields -> {
 
