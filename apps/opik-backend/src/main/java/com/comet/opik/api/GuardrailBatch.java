@@ -15,7 +15,7 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record GuardrailBatch(
-        @NotNull @Size(min = 1, max = 1000) @Valid List<GuardrailBatchItem> guardrails) implements RateEventContainer {
+        @NotNull @Size(min = 1, max = 1000) @Valid List<Guardrail> guardrails) implements RateEventContainer {
 
     @Override
     public long eventCount() {

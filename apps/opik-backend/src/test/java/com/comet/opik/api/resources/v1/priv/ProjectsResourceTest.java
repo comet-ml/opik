@@ -6,9 +6,9 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.GuardrailsValidation;
+import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectRetrieve;
-import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.ReactServiceErrorResponse;
@@ -29,10 +29,10 @@ import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
-import com.comet.opik.api.resources.utils.resources.TestGenerators;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
@@ -174,7 +174,7 @@ class ProjectsResourceTest {
     private SpanResourceClient spanResourceClient;
     private ProjectResourceClient projectResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
-    private TestGenerators testGenerators;
+    private GuardrailsGenerator guardrailsGenerator;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi, ProjectService projectService) throws SQLException {
@@ -198,7 +198,7 @@ class ProjectsResourceTest {
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
         this.guardrailsResourceClient = new GuardrailsResourceClient(this.client, baseURI);
-        this.testGenerators = new TestGenerators();
+        this.guardrailsGenerator = new GuardrailsGenerator();
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -1495,7 +1495,7 @@ class ProjectsResourceTest {
                 FeedbackScoreBatchItem.class);
 
         var guardrailsByTraceId = traces.stream()
-                .collect(Collectors.toMap(Trace::id, trace -> testGenerators.generateGuardrailsForTrace(
+                .collect(Collectors.toMap(Trace::id, trace -> guardrailsGenerator.generateGuardrailsForTrace(
                         trace.id(), randomUUID(), trace.projectName())));
         guardrailsByTraceId.values().forEach(guardrail -> guardrailsResourceClient.addBatch(
                 guardrail, apiKey, workspaceName));
@@ -1546,7 +1546,7 @@ class ProjectsResourceTest {
                 List.of(0.5, 0.90, 0.99));
 
         return project.toBuilder()
-                .duration(new ProjectStats.PercentageValues(durations.get(0), durations.get(1), durations.get(2)))
+                .duration(new PercentageValues(durations.get(0), durations.get(1), durations.get(2)))
                 .totalEstimatedCost(getTotalEstimatedCost(traces))
                 .usage(traces.stream()
                         .map(Trace::usage)
