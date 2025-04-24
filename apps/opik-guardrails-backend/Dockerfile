@@ -45,7 +45,7 @@ ENV NVIDIA_VISIBLE_DEVICES=all \
 RUN chmod u+x entrypoint.sh
 EXPOSE 5000
 
-RUN chown -R 1001:1001 /opt/opik-guardrails-backend
+RUN mkdir /.cache/ && chown -R 1001:1001 /opt/opik-guardrails-backend /.cache/
 USER 1001:1001
 
 ENTRYPOINT ["tini", "--"]
