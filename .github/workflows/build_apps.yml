@@ -33,9 +33,6 @@ on:
         required: true
         description: Is release build
         default: false
-    secrets:
-      OPIK_FE_SENTRY_DSN:
-        required: false
 
 jobs:
 
@@ -123,6 +120,7 @@ jobs:
     needs:
       - set-version
     uses: ./.github/workflows/build_and_push_docker.yaml
+    secrets: inherit
     with:
       image: "opik-frontend"
       version: ${{needs.set-version.outputs.version}}
