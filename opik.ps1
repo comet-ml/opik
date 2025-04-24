@@ -79,7 +79,7 @@ function Test-ContainersStatus {
 function Send-InstallReport {
     param (
         [string]$Uuid,
-        [string]$EventCompleted = $null,   # Pass "true" to send install_completed
+        [string]$EventCompleted = $null,   # Pass "true" to send opik_install_completed
         [string]$StartTime = $null         # Optional ISO 8601 format
     )
 
@@ -134,7 +134,7 @@ function Send-InstallReport {
         return
     }
 
-    if ($EventType -eq "install_completed") {
+    if ($EventType -eq "opik_install_completed") {
         New-Item -ItemType File -Path $InstallMarkerFile -Force | Out-Null
         if ($DebugMode) { Write-Host "[DEBUG] Post-install report sent successfully." }
     } else {
