@@ -46,6 +46,8 @@ RUN chmod u+x entrypoint.sh
 EXPOSE 5000
 
 RUN chown -R 1001:1001 /opt/opik-guardrails-backend
+RUN mkdir /.cache/
+RUN chown -R 1001:1001 /.cache/
 USER 1001:1001
 
 ENTRYPOINT ["tini", "--"]
