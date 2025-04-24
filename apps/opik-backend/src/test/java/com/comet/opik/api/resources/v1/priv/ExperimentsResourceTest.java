@@ -16,6 +16,7 @@ import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
@@ -118,7 +119,6 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
-import static com.comet.opik.api.ProjectStats.PercentageValues;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoresIgnoredFieldsAndSetThemToNull;

@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.GuardrailsValidation;
+import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ProjectStats.ProjectStatItem;
 import com.comet.opik.api.ProjectStats.SingleValueStat;
@@ -35,7 +36,6 @@ import java.util.stream.Collectors;
 import static com.comet.opik.api.ProjectStats.AvgValueStat;
 import static com.comet.opik.api.ProjectStats.CountValueStat;
 import static com.comet.opik.api.ProjectStats.PercentageValueStat;
-import static com.comet.opik.api.ProjectStats.PercentageValues;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;

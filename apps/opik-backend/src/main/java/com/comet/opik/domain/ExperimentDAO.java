@@ -7,7 +7,7 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.FeedbackScoreAverage;
-import com.comet.opik.api.ProjectStats;
+import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.utils.JsonUtils;
@@ -531,22 +531,30 @@ class ExperimentDAO {
                     .feedbackScores(getFeedbackScores(row))
                     .comments(getComments(row.get("comments_array_agg", List[].class)))
                     .traceCount(row.get("trace_count", Long.class))
-                    .duration(Optional.ofNullable(row.get("duration", List.class))
-                            .filter(value -> !value.isEmpty()
-                                    && value.stream().anyMatch(it -> BigDecimal.ZERO.compareTo((BigDecimal) it) < 0))
-                            .map(durations -> new ProjectStats.PercentageValues(
-                                    getP(durations, 0),
-                                    getP(durations, 1),
-                                    getP(durations, 2)))
-                            .orElse(null))
-                    .totalEstimatedCost(Optional.ofNullable(row.get("total_estimated_cost", BigDecimal.class))
-                            .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
-                            .orElse(null))
+                    .duration(getDuration(row))
+                    .totalEstimatedCost(getTotalEstimatedCost(row))
                     .usage(row.get("usage", Map.class))
                     .promptVersion(promptVersions.stream().findFirst().orElse(null))
                     .promptVersions(promptVersions.isEmpty() ? null : promptVersions)
                     .build();
         });
+    }
+
+    private static BigDecimal getTotalEstimatedCost(Row row) {
+        return Optional.ofNullable(row.get("total_estimated_cost", BigDecimal.class))
+                .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
+                .orElse(null);
+    }
+
+    private static PercentageValues getDuration(Row row) {
+        return Optional.ofNullable(row.get("duration", List.class))
+                .filter(value -> !value.isEmpty()
+                        && value.stream().anyMatch(it -> BigDecimal.ZERO.compareTo((BigDecimal) it) < 0))
+                .map(durations -> new PercentageValues(
+                        getP(durations, 0),
+                        getP(durations, 1),
+                        getP(durations, 2)))
+                .orElse(null);
     }
 
     private static BigDecimal getP(List<BigDecimal> durations, int index) {
