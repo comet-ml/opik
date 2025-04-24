@@ -66,4 +66,5 @@ jobs:
         if: failure()
         with:
           action_fail: true
+          check_name: SDK Unit Tests Results
           files: ${{ github.workspace }}/test_results.xml

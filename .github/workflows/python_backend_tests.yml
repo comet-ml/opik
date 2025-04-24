@@ -48,4 +48,5 @@ jobs:
         if: always()
         with:
           action_fail: true
+          check_name: Python Backend Tests Results
           files: apps/opik-python-backend/test-results.xml
