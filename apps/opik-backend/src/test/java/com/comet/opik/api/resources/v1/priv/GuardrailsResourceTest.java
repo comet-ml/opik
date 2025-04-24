@@ -11,8 +11,8 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
-import com.comet.opik.api.resources.utils.resources.TestGenerators;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
@@ -84,7 +84,7 @@ public class GuardrailsResourceTest {
 
     private TraceResourceClient traceResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
-    private TestGenerators testGenerators;
+    private GuardrailsGenerator guardrailsGenerator;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
@@ -104,7 +104,7 @@ public class GuardrailsResourceTest {
 
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
-        this.testGenerators = new TestGenerators();
+        this.guardrailsGenerator = new GuardrailsGenerator();
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -129,7 +129,7 @@ public class GuardrailsResourceTest {
                 .build();
         var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
-        var guardrails = testGenerators.generateGuardrailsForTrace(traceId, randomUUID(), trace.projectName());
+        var guardrails = guardrailsGenerator.generateGuardrailsForTrace(traceId, randomUUID(), trace.projectName());
 
         guardrailsResourceClient.addBatch(guardrails, API_KEY, TEST_WORKSPACE);
         Trace actual = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
@@ -161,9 +161,9 @@ public class GuardrailsResourceTest {
         var guardrailsByTraceId = traces.stream()
                 .collect(Collectors.toMap(Trace::id, trace -> Stream.concat(
                         // mimic two separate guardrails validation groups
-                        testGenerators.generateGuardrailsForTrace(trace.id(), randomUUID(), trace.projectName())
+                        guardrailsGenerator.generateGuardrailsForTrace(trace.id(), randomUUID(), trace.projectName())
                                 .stream(),
-                        testGenerators.generateGuardrailsForTrace(trace.id(), randomUUID(), trace.projectName())
+                        guardrailsGenerator.generateGuardrailsForTrace(trace.id(), randomUUID(), trace.projectName())
                                 .stream())
                         .toList()));
 
@@ -196,7 +196,7 @@ public class GuardrailsResourceTest {
         traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
         var guardrailsByTraceId = traces.stream()
-                .collect(Collectors.toMap(Trace::id, trace -> testGenerators.generateGuardrailsForTrace(
+                .collect(Collectors.toMap(Trace::id, trace -> guardrailsGenerator.generateGuardrailsForTrace(
                         trace.id(), randomUUID(), trace.projectName())));
 
         guardrailsByTraceId.values()
