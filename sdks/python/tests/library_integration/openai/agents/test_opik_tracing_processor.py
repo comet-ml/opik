@@ -1,5 +1,4 @@
-from agents import Agent, Runner
-from agents import set_trace_processors
+from agents import Agent, Runner, set_trace_processors
 
 import opik
 from opik.integrations.openai.agents import OpikTracingProcessor
