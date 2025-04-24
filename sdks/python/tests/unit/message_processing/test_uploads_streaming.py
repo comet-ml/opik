@@ -33,7 +33,7 @@ def test_streamer__attachment_uploads__flush__ok(temp_file_15mb):
             entity_type="span",
             entity_id=NOT_USED,
             project_name=NOT_USED,
-            url_override_path=NOT_USED,
+            encoded_url_override=NOT_USED,
         )
 
         tested.put(attachment)
@@ -72,7 +72,7 @@ def test_streamer__attachment_uploads__flush__timeout(temp_file_15mb):
             entity_type="span",
             entity_id=NOT_USED,
             project_name=NOT_USED,
-            url_override_path=NOT_USED,
+            encoded_url_override=NOT_USED,
         )
 
         tested.put(attachment)

@@ -44,7 +44,7 @@ def test_attachment_to_message():
         entity_type="trace",
         entity_id=entity_id,
         project_name=project_name,
-        url_override_path="aHR0cHM6Ly9leGFtcGxlLmNvbQ==",
+        encoded_url_override="aHR0cHM6Ly9leGFtcGxlLmNvbQ==",
     )
 
 
@@ -69,7 +69,7 @@ def test_attachment_to_message__file_name():
         entity_type="trace",
         entity_id=entity_id,
         project_name=project_name,
-        url_override_path="aHR0cHM6Ly9leGFtcGxlLmNvbQ==",
+        encoded_url_override="aHR0cHM6Ly9leGFtcGxlLmNvbQ==",
     )
 
 
@@ -94,5 +94,5 @@ def test_attachment_to_message__content_type():
         entity_type="trace",
         entity_id=entity_id,
         project_name=project_name,
-        url_override_path="aHR0cHM6Ly9leGFtcGxlLmNvbQ==",
+        encoded_url_override="aHR0cHM6Ly9leGFtcGxlLmNvbQ==",
     )
