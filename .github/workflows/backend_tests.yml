@@ -42,4 +42,5 @@ jobs:
               if: always()
               with:
                 action_fail: true
+                check_name: Backend Tests Results
                 files: '**/target/surefire-reports/TEST-*.xml'
