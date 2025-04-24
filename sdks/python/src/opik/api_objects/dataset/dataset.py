@@ -222,11 +222,12 @@ class Dataset:
     ) -> List[dataset_item.DatasetItem]:
         results: List[dataset_item.DatasetItem] = []
         last_retrieved_id: Optional[str] = None
+        should_search_for_dataset_items = True
 
         if dataset_item_ids is not None:
             dataset_item_ids = set(dataset_item_ids)  # type: ignore
 
-        while True:
+        while should_search_for_dataset_items:
             dataset_items = rest_stream_parser.read_and_parse_stream(
                 stream=self._rest_client.datasets.stream_dataset_items(
                     dataset_name=self._name,
@@ -237,7 +238,7 @@ class Dataset:
             )
 
             if len(dataset_items) == 0:
-                break
+                should_search_for_dataset_items = False
 
             for item in dataset_items:
                 dataset_item_id = item.id
@@ -261,12 +262,14 @@ class Dataset:
 
                 results.append(reconstructed_item)
 
-                # Break the loop if we have enough samples
+                # Stop the search if we have enough samples
                 if nb_samples is not None and len(results) == nb_samples:
+                    should_search_for_dataset_items = False
                     break
 
-                # Break the loop if we found all filtered dataset items
+                # Stop the search if we found all filtered dataset items
                 if dataset_item_ids is not None and len(dataset_item_ids) == 0:
+                    should_search_for_dataset_items = False
                     break
 
         if dataset_item_ids and len(dataset_item_ids) > 0:
