@@ -109,7 +109,7 @@ start_missing_containers() {
     export COMPOSE_BAKE=true
   fi
 
-  local cmd="docker compose -f $script_dir/deployment/docker-compose/docker-compose.yaml"
+  local cmd="docker compose"
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --profile guardrails"
   fi
@@ -167,7 +167,7 @@ stop_containers() {
   check_docker_status
   echo "🛑 Stopping all required containers..."
   cd "$script_dir/deployment/docker-compose" || exit
-  local cmd="docker compose -f $script_dir/deployment/docker-compose/docker-compose.yaml"
+  local cmd="docker compose"
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --profile guardrails"
   fi
