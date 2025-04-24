@@ -3,3 +3,5 @@
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces
     MODIFY COLUMN last_updated_at DateTime64(6, 'UTC') DEFAULT now64(6);
+
+--rollback empty
