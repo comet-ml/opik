@@ -66,7 +66,7 @@ public class BiEventListener {
         }
 
         if (event.traces().isEmpty()) {
-            log.debug("No trace ids found for event '{}'", event);
+            log.warn("No trace ids found for event '{}'", event);
             return;
         }
 
@@ -79,7 +79,7 @@ public class BiEventListener {
         projectIds.removeAll(demoProjectIds);
 
         if (projectIds.isEmpty()) {
-            log.debug("No project ids found for event");
+            log.info("No project ids found for event");
             return;
         }
 
@@ -89,7 +89,7 @@ public class BiEventListener {
                 .block();
 
         if (traces <= 0) {
-            log.debug("No traces found for event '{}'", event);
+            log.info("No traces found for event '{}'", event);
             return;
         }
 

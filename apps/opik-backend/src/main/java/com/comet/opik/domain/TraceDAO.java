@@ -116,7 +116,7 @@ interface TraceDAO {
 
     Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria);
 
-    Mono<Long> countTraces(@NonNull Set<UUID> projectIds);
+    Mono<Long> countTraces(Set<UUID> projectIds);
 }
 
 @Slf4j
