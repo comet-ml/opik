@@ -171,7 +171,6 @@ class GuardrailBatchItemMessage(BaseMessage):
     details: Dict[str, Any]
 
 
-# TODO!!
 @dataclasses.dataclass
 class GuardrailBatchMessage(BaseMessage):
     batch: List[GuardrailBatchItemMessage]

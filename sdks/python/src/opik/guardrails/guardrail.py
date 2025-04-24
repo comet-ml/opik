@@ -118,7 +118,7 @@ class Guardrail:
         for validation in result.validations:
             guardrail_batch_item_message = GuardrailBatchItemMessage(
                 id=None,
-                project_name=None,
+                project_name=self._client._project_name,
                 entity_id=current_trace.id,
                 secondary_id=current_span.id,
                 name=validation.type,
