@@ -6,7 +6,7 @@ import { generateSearchByIDFilters, processFilters } from "@/lib/filters";
 import { Sorting } from "@/types/sorting";
 import { processSorting } from "@/lib/sorting";
 
-type UseSpansListParams = {
+export type UseSpansListParams = {
   projectId: string;
   traceId?: string;
   type?: SPAN_TYPE;
@@ -16,6 +16,7 @@ type UseSpansListParams = {
   page: number;
   size: number;
   truncate?: boolean;
+  excludeFields?: string[];
 };
 
 export type UseSpansListResponse = {
@@ -36,6 +37,7 @@ const getSpansList = async (
     size,
     page,
     truncate,
+    excludeFields,
   }: UseSpansListParams,
 ) => {
   const { data } = await api.get(SPANS_REST_ENDPOINT, {
@@ -46,11 +48,18 @@ const getSpansList = async (
       ...(type && { type }),
       ...processFilters(filters, generateSearchByIDFilters(search)),
       ...processSorting(sorting),
+      ...(excludeFields && { excludeFields: excludeFields.join(",") }),
       size,
       page,
       truncate,
     },
   });
+
+  if (excludeFields) {
+    data.content.forEach((span: Span) => {
+      excludeFields.forEach((field) => delete span[field as keyof Span]);
+    });
+  }
 
   return data;
 };
