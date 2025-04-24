@@ -162,4 +162,4 @@ class CreateAttachmentMessage(BaseMessage):
     entity_type: AttachmentEntityType
     entity_id: str
     project_name: str
-    base_url_path: str  # the encoded base URL
+    encoded_url_override: str

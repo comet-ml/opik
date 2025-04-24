@@ -15,7 +15,7 @@ class FileUploadOptions:
     entity_type: AttachmentEntityType
     entity_id: str
     project_name: str
-    base_url_path: str  # the encoded base URL
+    encoded_url_override: str
 
 
 def file_upload_options_from_attachment(
@@ -31,5 +31,5 @@ def file_upload_options_from_attachment(
         entity_type=attachment.entity_type,
         entity_id=attachment.entity_id,
         project_name=attachment.project_name,
-        base_url_path=attachment.base_url_path,
+        encoded_url_override=attachment.encoded_url_override,
     )

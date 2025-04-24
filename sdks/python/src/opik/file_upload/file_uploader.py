@@ -61,7 +61,7 @@ def _do_upload_attachment(
     upload_metadata = upload_rest_client.start_upload(
         upload_options=upload_options,
         num_of_file_parts=parts_number,
-        base_url_path=upload_options.base_url_path,
+        base_url_path=upload_options.encoded_url_override,
     )
     assert len(upload_metadata.urls) > 0, "At least one URL must be returned by backend"
 
