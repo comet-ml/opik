@@ -14,6 +14,7 @@ type CustomMeta = {
   idKey?: string;
   resource: RESOURCE_TYPE;
   getSearch?: (cellData: unknown) => Record<string, string | number>;
+  getParams?: (cellData: unknown) => Record<string, string | number>;
 };
 
 const ResourceCell = (context: CellContext<unknown, string>) => {
@@ -24,11 +25,13 @@ const ResourceCell = (context: CellContext<unknown, string>) => {
     nameKey = "name",
     idKey = "id",
     getSearch,
+    getParams,
   } = (custom ?? {}) as CustomMeta;
 
   const name = get(cellData, nameKey, undefined);
   const id = get(cellData, idKey, undefined);
   const search = isFunction(getSearch) ? getSearch(cellData) : undefined;
+  const params = isFunction(getParams) ? getParams(cellData) : undefined;
 
   return (
     <CellWrapper
@@ -37,7 +40,13 @@ const ResourceCell = (context: CellContext<unknown, string>) => {
       className="py-1.5"
     >
       {id ? (
-        <ResourceLink id={id} name={name} resource={resource} search={search} />
+        <ResourceLink
+          id={id}
+          name={name}
+          resource={resource}
+          search={search}
+          params={params}
+        />
       ) : (
         "-"
       )}
