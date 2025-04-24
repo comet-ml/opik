@@ -224,9 +224,8 @@ class Dataset:
         last_retrieved_id: Optional[str] = None
         should_retrieve_more_items = True
 
-        if dataset_item_ids is not None:
-            dataset_item_ids = set(dataset_item_ids)  # type: ignore
-
+        dataset_items_ids_left = set(dataset_item_ids) if dataset_item_ids else None
+        
         while should_retrieve_more_items:
             dataset_items = rest_stream_parser.read_and_parse_stream(
                 stream=self._rest_client.datasets.stream_dataset_items(
@@ -244,11 +243,11 @@ class Dataset:
                 dataset_item_id = item.id
                 last_retrieved_id = dataset_item_id
 
-                if dataset_item_ids is not None:
-                    if dataset_item_id not in dataset_item_ids:
+                if dataset_items_ids_left is not None:
+                    if dataset_item_id not in dataset_items_ids_left:
                         continue
                     else:
-                        dataset_item_ids.remove(dataset_item_id)
+                        dataset_items_ids_left.remove(dataset_item_id)
 
                 data_item_content = item.get_content().get("data", {})
 
@@ -268,14 +267,14 @@ class Dataset:
                     break
 
                 # Stop retrieving if we found all filtered dataset items
-                if dataset_item_ids is not None and len(dataset_item_ids) == 0:
+                if dataset_items_ids_left is not None and len(dataset_items_ids_left) == 0:
                     should_retrieve_more_items = False
                     break
 
-        if dataset_item_ids and len(dataset_item_ids) > 0:
+        if dataset_items_ids_left and len(dataset_items_ids_left) > 0:
             LOGGER.warning(
                 "The following dataset items were not found in the dataset: %s",
-                dataset_item_ids,
+                dataset_items_ids_left,
             )
 
         return results
