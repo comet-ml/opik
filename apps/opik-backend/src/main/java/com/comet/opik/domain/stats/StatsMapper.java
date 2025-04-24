@@ -1,6 +1,7 @@
 package com.comet.opik.domain.stats;
 
 import com.comet.opik.api.FeedbackScoreAverage;
+import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.ProjectStats;
 import io.r2dbc.spi.Row;
 
@@ -13,7 +14,6 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.ProjectStats.AvgValueStat;
 import static com.comet.opik.api.ProjectStats.CountValueStat;
 import static com.comet.opik.api.ProjectStats.PercentageValueStat;
-import static com.comet.opik.api.ProjectStats.PercentageValues;
 import static java.util.stream.Collectors.toMap;
 
 public class StatsMapper {

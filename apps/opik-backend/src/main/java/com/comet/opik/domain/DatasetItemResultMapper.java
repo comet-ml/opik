@@ -15,6 +15,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
@@ -60,10 +61,28 @@ class DatasetItemResultMapper {
                         .createdBy(experimentItem.get(9).toString())
                         .lastUpdatedBy(experimentItem.get(10).toString())
                         .comments(experimentItem.size() > COMMENT_INDEX ? getComments(experimentItem.get(11)) : null)
+                        .duration((Double) experimentItem.get(12))
+                        .totalEstimatedCost(getTotalEstimatedCost(experimentItem))
+                        .usage(getUsage(experimentItem))
                         .build())
                 .toList();
 
         return experimentItems.isEmpty() ? null : experimentItems;
+    }
+
+    private static BigDecimal getTotalEstimatedCost(List experimentItem) {
+        return Optional.ofNullable(experimentItem.get(13))
+                .map(value -> (BigDecimal) value)
+                .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
+                .orElse(null);
+    }
+
+    private static Map<String, Long> getUsage(List experimentItem) {
+        return Optional.ofNullable(experimentItem.get(14))
+                .map(value -> (Map<String, Long>) value)
+                .filter(not(Map::isEmpty))
+                .orElse(null);
+
     }
 
     static JsonNode getJsonNodeOrNull(Object field) {

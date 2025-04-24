@@ -6,9 +6,9 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.GuardrailsValidation;
+import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectRetrieve;
-import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.ReactServiceErrorResponse;
@@ -1546,7 +1546,7 @@ class ProjectsResourceTest {
                 List.of(0.5, 0.90, 0.99));
 
         return project.toBuilder()
-                .duration(new ProjectStats.PercentageValues(durations.get(0), durations.get(1), durations.get(2)))
+                .duration(new PercentageValues(durations.get(0), durations.get(1), durations.get(2)))
                 .totalEstimatedCost(getTotalEstimatedCost(traces))
                 .usage(traces.stream()
                         .map(Trace::usage)

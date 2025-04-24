@@ -466,7 +466,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     ei.last_updated_at,
                     ei.created_by,
                     ei.last_updated_by,
-                    tfs.comments_array_agg
+                    tfs.comments_array_agg,
+                    tfs.duration,
+                    tfs.total_estimated_cost,
+                    tfs.usage
                 )) AS experiment_items_array
             FROM dataset_items_final AS di
             INNER JOIN experiment_items_final AS ei ON di.id = ei.dataset_item_id
@@ -475,11 +478,18 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     t.id,
                     t.input,
                     t.output,
+                    t.duration,
+                    s.total_estimated_cost,
+                    s.usage,
                     groupUniqArray(tuple(fs.*)) AS feedback_scores_array,
                     groupUniqArray(tuple(c.*)) AS comments_array_agg
                 FROM (
                     SELECT
                         id,
+                       if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                                         NULL) AS duration,
                         <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
                         <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>
                     FROM traces
@@ -490,10 +500,23 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 ) AS t
                 LEFT JOIN feedback_scores_final AS fs ON t.id = fs.entity_id
                 LEFT JOIN comments_final AS c ON t.id = c.entity_id
+                LEFT JOIN (
+                    SELECT
+                        trace_id,
+                        SUM(total_estimated_cost) AS total_estimated_cost,
+                        sumMap(usage) AS usage
+                    FROM spans final
+                    WHERE workspace_id = :workspace_id
+                    AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
+                    GROUP BY workspace_id, project_id, trace_id
+                ) s ON t.id = s.trace_id
                 GROUP BY
                     t.id,
                     t.input,
-                    t.output
+                    t.output,
+                    t.duration,
+                    s.total_estimated_cost,
+                    s.usage
             ) AS tfs ON ei.trace_id = tfs.id
             GROUP BY
                 di.id,

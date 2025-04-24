@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.resources.utils.TestUtils;
@@ -11,6 +12,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
@@ -19,6 +21,7 @@ import org.testcontainers.shaded.com.google.common.net.HttpHeaders;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -37,6 +40,15 @@ public class ExperimentResourceClient {
     private static final TypeReference<Experiment> EXPERIMENT_TYPE_REFERENCE = new TypeReference<>() {
     };
 
+    private static final TypeReference<ExperimentItem> ITEM_TYPE_REFERENCE = new TypeReference<>() {
+
+        @Override
+        public Type getType() {
+            return ExperimentItem.class;
+        }
+
+    };
+
     private final ClientSupport client;
     private final String baseURI;
     private final PodamFactory podamFactory;
@@ -44,12 +56,21 @@ public class ExperimentResourceClient {
     public Experiment.ExperimentBuilder createPartialExperiment() {
         return podamFactory.manufacturePojo(Experiment.class).toBuilder()
                 .promptVersion(null)
-                .promptVersions(null);
+                .promptVersions(null)
+                .duration(null)
+                .totalEstimatedCost(null)
+                .usage(null);
     }
 
     public List<Experiment> generateExperimentList() {
         return PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class).stream()
-                .map(experiment -> experiment.toBuilder().promptVersion(null).promptVersions(null).build())
+                .map(experiment -> experiment.toBuilder()
+                        .promptVersion(null)
+                        .promptVersions(null)
+                        .duration(null)
+                        .totalEstimatedCost(null)
+                        .usage(null)
+                        .build())
                 .toList();
     }
 
@@ -112,5 +133,19 @@ public class ExperimentResourceClient {
             }
         }
         return items;
+    }
+
+    public List<ExperimentItem> getExperimentItems(String experimentName, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("stream")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .accept(MediaType.APPLICATION_OCTET_STREAM)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(new ExperimentItemStreamRequest(experimentName, null, null, false)))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return getStreamed(response, ITEM_TYPE_REFERENCE);
+        }
     }
 }

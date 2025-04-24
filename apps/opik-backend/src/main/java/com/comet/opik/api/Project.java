@@ -14,8 +14,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import static com.comet.opik.api.ProjectStats.PercentageValues;
-
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 // This annotation is used to specify the strategy to be used for naming of properties for the annotated type. Required so that OpenAPI schema generation uses snake_case
