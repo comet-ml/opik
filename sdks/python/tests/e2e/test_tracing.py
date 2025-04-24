@@ -1,4 +1,3 @@
-import base64
 import os
 import tempfile
 import time
@@ -10,10 +9,10 @@ import pytest
 import opik
 from opik import opik_context, id_helpers, Attachment
 from opik.api_objects import helpers
+from opik.types import FeedbackScoreDict, ErrorInfoDict
 from . import verifiers
 from .conftest import OPIK_E2E_TESTS_PROJECT_NAME
 from ..testlib import ANY_STRING
-
 
 FILE_SIZE = 2 * 1024 * 1024
 
@@ -161,11 +160,11 @@ def test_tracked_function__error_inside_inner_function__caugth_in_top_level_span
         name="f_inner",
         input={"y": "inner-input"},
         output=None,
-        error_info={
-            "exception_type": "ValueError",
-            "message": "inner span error message",
-            "traceback": ANY_STRING(),
-        },
+        error_info=ErrorInfoDict(
+            exception_type="ValueError",
+            message="inner span error message",
+            traceback=ANY_STRING(),
+        ),
     )
 
 
@@ -200,11 +199,11 @@ def test_tracked_function__error_inside_inner_function__error_not_caught__trace_
         name="f_outer",
         input={"x": "outer-input"},
         output=None,
-        error_info={
-            "exception_type": "ValueError",
-            "message": "inner span error message",
-            "traceback": ANY_STRING(),
-        },
+        error_info=ErrorInfoDict(
+            exception_type="ValueError",
+            message="inner span error message",
+            traceback=ANY_STRING(),
+        ),
     )
 
     # Verify top level span
@@ -216,11 +215,11 @@ def test_tracked_function__error_inside_inner_function__error_not_caught__trace_
         name="f_outer",
         input={"x": "outer-input"},
         output=None,
-        error_info={
-            "exception_type": "ValueError",
-            "message": "inner span error message",
-            "traceback": ANY_STRING(),
-        },
+        error_info=ErrorInfoDict(
+            exception_type="ValueError",
+            message="inner span error message",
+            traceback=ANY_STRING(),
+        ),
     )
 
     # Verify nested span
@@ -232,11 +231,11 @@ def test_tracked_function__error_inside_inner_function__error_not_caught__trace_
         name="f_inner",
         input={"y": "inner-input"},
         output=None,
-        error_info={
-            "exception_type": "ValueError",
-            "message": "inner span error message",
-            "traceback": ANY_STRING(),
-        },
+        error_info=ErrorInfoDict(
+            exception_type="ValueError",
+            message="inner span error message",
+            traceback=ANY_STRING(),
+        ),
     )
 
 
@@ -590,13 +589,13 @@ def test_copy_traces__happyflow(opik_client):
             input={"input": f"test input - {i}"},
             output={"output": f"test output - {i}"},
             feedback_scores=[
-                {
-                    "id": trace.id,
-                    "name": "score_trace",
-                    "value": i,
-                    "category_name": "category_",
-                    "reason": "reason_",
-                }
+                FeedbackScoreDict(
+                    id=trace.id,
+                    name="score_trace",
+                    value=i,
+                    category_name="category_",
+                    reason="reason_",
+                )
             ],
             metadata={"value": i},
             tags=["a", "b"],
@@ -677,6 +676,22 @@ def test_opik_trace__attachments(opik_client, data_file):
     trace_id = helpers.generate_id()
     file_name = os.path.basename(data_file.name)
     names = [file_name + "_first", file_name + "_second"]
+    attachments = {
+        names[0]: Attachment(
+            data=data_file.name,
+            file_name=names[0],
+            content_type="application/octet-stream",
+        ),
+        names[1]: Attachment(
+            data=data_file.name,
+            file_name=names[1],
+            content_type="application/octet-stream",
+        ),
+    }
+    data_sizes = {
+        names[0]: FILE_SIZE,
+        names[1]: FILE_SIZE,
+    }
 
     # Send a trace that matches the input filter
     opik_client.trace(
@@ -685,48 +700,39 @@ def test_opik_trace__attachments(opik_client, data_file):
         input={"input": "Some random input"},
         output={"output": "trace-output"},
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
-        attachments=[
-            Attachment(
-                data=data_file.name,
-                file_name=names[0],
-                content_type="application/octet-stream",
-            ),
-            Attachment(
-                data=data_file.name,
-                file_name=names[1],
-                content_type="application/octet-stream",
-            ),
-        ],
+        attachments=attachments.values(),
     )
 
     opik_client.flush()
 
     # check that the attachment was uploaded
-    url_override = opik_client._config.url_override
-    url_override_path = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
-    trace = opik_client.get_trace_content(id=trace_id)
-    attachments = opik_client._rest_client.attachments.attachment_list(
-        project_id=trace.project_id,
+    verifiers.verify_attachments(
+        opik_client=opik_client,
         entity_type="trace",
         entity_id=trace_id,
-        path=url_override_path,
+        attachments=attachments,
+        data_sizes=data_sizes,
     )
-
-    assert len(attachments.content) == 2
-    for attachment in attachments.content:
-        assert attachment.file_name in names
-        assert attachment.mime_type == "application/octet-stream"
-        assert attachment.file_size == FILE_SIZE
-        assert attachment.link.startswith(url_override)
 
 
 def test_tracked_function__update_current_trace__with_attachments(
     opik_client, data_file
 ):
-    file_name = os.path.basename(data_file.name)
     # Setup
     ID_STORAGE = {}
     THREAD_ID = id_helpers.generate_id()
+
+    file_name = os.path.basename(data_file.name)
+    attachments = {
+        file_name: Attachment(
+            data=data_file.name,
+            file_name=file_name,
+            content_type="application/octet-stream",
+        )
+    }
+    data_sizes = {
+        file_name: FILE_SIZE,
+    }
 
     @opik.track
     def f():
@@ -736,13 +742,7 @@ def test_tracked_function__update_current_trace__with_attachments(
             output={"trace-output": "trace-output-value"},
             metadata={"trace-metadata-key": "trace-metadata-value"},
             thread_id=THREAD_ID,
-            attachments=[
-                Attachment(
-                    data=data_file.name,
-                    file_name=file_name,
-                    content_type="application/octet-stream",
-                ),
-            ],
+            attachments=attachments.values(),
         )
         ID_STORAGE["f_trace-id"] = opik_context.get_current_trace_data().id
 
@@ -751,30 +751,35 @@ def test_tracked_function__update_current_trace__with_attachments(
     opik.flush_tracker()
 
     # check that the attachment was uploaded
-    trace_id = ID_STORAGE["f_trace-id"]
-
-    url_override = opik_client._config.url_override
-    url_override_path = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
-    trace = opik_client.get_trace_content(id=trace_id)
-    attachments = opik_client._rest_client.attachments.attachment_list(
-        project_id=trace.project_id,
+    verifiers.verify_attachments(
+        opik_client=opik_client,
         entity_type="trace",
-        entity_id=trace_id,
-        path=url_override_path,
+        entity_id=ID_STORAGE["f_trace-id"],
+        attachments=attachments,
+        data_sizes=data_sizes,
     )
-
-    assert len(attachments.content) == 1
-    attachment = attachments.content[0]
-    assert attachment.file_name == file_name
-    assert attachment.mime_type == "application/octet-stream"
-    assert attachment.file_size == FILE_SIZE
-    assert attachment.link.startswith(url_override)
 
 
 def test_opik_span__attachments(opik_client, data_file):
     trace_id = helpers.generate_id()
     file_name = os.path.basename(data_file.name)
     names = [file_name + "_first", file_name + "_second"]
+    attachments = {
+        names[0]: Attachment(
+            data=data_file.name,
+            file_name=names[0],
+            content_type="application/octet-stream",
+        ),
+        names[1]: Attachment(
+            data=data_file.name,
+            file_name=names[1],
+            content_type="application/octet-stream",
+        ),
+    }
+    data_sizes = {
+        names[0]: FILE_SIZE,
+        names[1]: FILE_SIZE,
+    }
 
     # Send a trace that matches the input filter
     opik_client.trace(
@@ -789,45 +794,41 @@ def test_opik_span__attachments(opik_client, data_file):
         name="span-name",
         input={"input": "Some random input 2"},
         output={"output": "span-output"},
-        attachments=[
-            Attachment(
-                data=data_file.name,
-                file_name=names[0],
-                content_type="application/octet-stream",
-            ),
-            Attachment(
-                data=data_file.name,
-                file_name=names[1],
-                content_type="application/octet-stream",
-            ),
-        ],
+        attachments=attachments.values(),
     )
 
     opik_client.flush()
 
     # check that the attachment was uploaded
-    url_override = opik_client._config.url_override
-    url_override_path = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
-    trace = opik_client.get_trace_content(id=trace_id)
-    attachments = opik_client._rest_client.attachments.attachment_list(
-        project_id=trace.project_id,
+    verifiers.verify_attachments(
+        opik_client=opik_client,
         entity_type="span",
         entity_id=span.id,
-        path=url_override_path,
+        attachments=attachments,
+        data_sizes=data_sizes,
     )
-
-    assert len(attachments.content) == 2
-    for attachment in attachments.content:
-        assert attachment.file_name in names
-        assert attachment.mime_type == "application/octet-stream"
-        assert attachment.file_size == FILE_SIZE
-        assert attachment.link.startswith(url_override)
 
 
 def test_trace_span__attachments(opik_client, data_file):
     trace_id = helpers.generate_id()
     file_name = os.path.basename(data_file.name)
     names = [file_name + "_first", file_name + "_second"]
+    attachments = {
+        names[0]: Attachment(
+            data=data_file.name,
+            file_name=names[0],
+            content_type="application/octet-stream",
+        ),
+        names[1]: Attachment(
+            data=data_file.name,
+            file_name=names[1],
+            content_type="application/octet-stream",
+        ),
+    }
+    data_sizes = {
+        names[0]: FILE_SIZE,
+        names[1]: FILE_SIZE,
+    }
 
     # Send a trace that matches the input filter
     trace = opik_client.trace(
@@ -841,39 +842,19 @@ def test_trace_span__attachments(opik_client, data_file):
         name="span-name",
         input={"input": "Some random input 2"},
         output={"output": "span-output"},
-        attachments=[
-            Attachment(
-                data=data_file.name,
-                file_name=names[0],
-                content_type="application/octet-stream",
-            ),
-            Attachment(
-                data=data_file.name,
-                file_name=names[1],
-                content_type="application/octet-stream",
-            ),
-        ],
+        attachments=attachments.values(),
     )
 
     opik_client.flush()
 
     # check that the attachment was uploaded
-    url_override = opik_client._config.url_override
-    url_override_path = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
-    trace = opik_client.get_trace_content(id=trace_id)
-    attachments = opik_client._rest_client.attachments.attachment_list(
-        project_id=trace.project_id,
+    verifiers.verify_attachments(
+        opik_client=opik_client,
         entity_type="span",
         entity_id=span.id,
-        path=url_override_path,
+        attachments=attachments,
+        data_sizes=data_sizes,
     )
-
-    assert len(attachments.content) == 2
-    for attachment in attachments.content:
-        assert attachment.file_name in names
-        assert attachment.mime_type == "application/octet-stream"
-        assert attachment.file_size == FILE_SIZE
-        assert attachment.link.startswith(url_override)
 
 
 def test_tracked_function__update_current_span__with_attachments(
@@ -882,7 +863,18 @@ def test_tracked_function__update_current_span__with_attachments(
     # Setup
     ID_STORAGE = {}
     THREAD_ID = id_helpers.generate_id()
+
     file_name = os.path.basename(data_file.name)
+    attachments = {
+        file_name: Attachment(
+            data=data_file.name,
+            file_name=file_name,
+            content_type="application/octet-stream",
+        )
+    }
+    data_sizes = {
+        file_name: FILE_SIZE,
+    }
 
     @opik.track
     def f():
@@ -892,13 +884,7 @@ def test_tracked_function__update_current_span__with_attachments(
             output={"span-output": "span-output-value"},
             metadata={"span-metadata-key": "span-metadata-value"},
             total_cost=0.42,
-            attachments=[
-                Attachment(
-                    data=data_file.name,
-                    file_name=file_name,
-                    content_type="application/octet-stream",
-                ),
-            ],
+            attachments=attachments.values(),
         )
         opik_context.update_current_trace(
             name="trace-name",
@@ -908,29 +894,16 @@ def test_tracked_function__update_current_span__with_attachments(
             thread_id=THREAD_ID,
         )
         ID_STORAGE["f_span-id"] = opik_context.get_current_span_data().id
-        ID_STORAGE["f_trace-id"] = opik_context.get_current_trace_data().id
 
     # Call
     f()
     opik.flush_tracker()
 
     # check that the attachment was uploaded
-    trace_id = ID_STORAGE["f_trace-id"]
-    span_id = ID_STORAGE["f_span-id"]
-
-    url_override = opik_client._config.url_override
-    url_override_path = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
-    trace = opik_client.get_trace_content(id=trace_id)
-    attachments = opik_client._rest_client.attachments.attachment_list(
-        project_id=trace.project_id,
+    verifiers.verify_attachments(
+        opik_client=opik_client,
         entity_type="span",
-        entity_id=span_id,
-        path=url_override_path,
+        entity_id=ID_STORAGE["f_span-id"],
+        attachments=attachments,
+        data_sizes=data_sizes,
     )
-
-    assert len(attachments.content) == 1
-    attachment = attachments.content[0]
-    assert attachment.file_name == file_name
-    assert attachment.mime_type == "application/octet-stream"
-    assert attachment.file_size == FILE_SIZE
-    assert attachment.link.startswith(url_override)
