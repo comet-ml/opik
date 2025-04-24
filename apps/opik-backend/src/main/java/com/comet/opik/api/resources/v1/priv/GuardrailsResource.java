@@ -39,10 +39,10 @@ public class GuardrailsResource {
     private final @NonNull Provider<RequestContext> requestContext;
 
     @POST
-    @Operation(operationId = "addGuardrailsBatch", summary = "Batch guardrails for traces", description = "Batch guardrails for traces", responses = {
+    @Operation(operationId = "createGuardrails", summary = "Create guardrails for traces in a batch", description = "Batch guardrails for traces", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
-    public Response addGuardrailsBatch(
+    public Response createGuardrails(
             @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailBatch.class))) @NotNull @Valid GuardrailBatch batch) {
 
         String workspaceId = requestContext.get().getWorkspaceId();

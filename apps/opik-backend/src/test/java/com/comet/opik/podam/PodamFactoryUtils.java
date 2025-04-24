@@ -1,7 +1,7 @@
 package com.comet.opik.podam;
 
 import com.comet.opik.api.DatasetItem;
-import com.comet.opik.api.GuardrailBatchItem;
+import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
@@ -69,7 +69,7 @@ public class PodamFactoryUtils {
         strategy.addOrReplaceTypeManufacturer(ChatCompletionRequest.class, ChatCompletionRequestManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(StartMultipartUploadRequest.class,
                 StartMultipartUploadRequestManufacturer.INSTANCE);
-        strategy.addOrReplaceTypeManufacturer(GuardrailBatchItem.class, GuardrailCheckTypeManufacturer.INSTANCE);
+        strategy.addOrReplaceTypeManufacturer(Guardrail.class, GuardrailCheckTypeManufacturer.INSTANCE);
 
         return podamFactory;
     }

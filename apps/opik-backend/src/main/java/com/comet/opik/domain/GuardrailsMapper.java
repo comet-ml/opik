@@ -1,6 +1,6 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.GuardrailBatchItem;
+import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailsValidation;
 import lombok.NonNull;
 import org.mapstruct.Mapper;
@@ -19,28 +19,28 @@ public interface GuardrailsMapper {
 
     GuardrailsMapper INSTANCE = Mappers.getMapper(GuardrailsMapper.class);
 
-    default List<GuardrailsValidation> mapToValidations(@NonNull List<GuardrailBatchItem> guardrailBatchItems) {
-        if (guardrailBatchItems.isEmpty()) {
+    default List<GuardrailsValidation> mapToValidations(@NonNull List<Guardrail> guardrails) {
+        if (guardrails.isEmpty()) {
             return List.of();
         }
 
-        return guardrailBatchItems.stream()
+        return guardrails.stream()
                 // group by span ids
-                .collect(groupingBy(GuardrailBatchItem::secondaryId, mapping(Function.identity(), Collectors.toList())))
+                .collect(groupingBy(Guardrail::secondaryId, mapping(Function.identity(), Collectors.toList())))
                 .entrySet().stream()
                 .map(entry -> mapToValidation(entry.getKey(), entry.getValue()))
                 .toList();
     }
 
     default GuardrailsValidation mapToValidation(
-            @NonNull UUID spanId, @NonNull List<GuardrailBatchItem> guardrailBatchItems) {
+            @NonNull UUID spanId, @NonNull List<Guardrail> guardrails) {
         return GuardrailsValidation.builder()
                 .spanId(spanId)
-                .checks(guardrailBatchItems.stream().map(this::mapToGuardrailValidationCheck).toList())
+                .checks(guardrails.stream().map(this::mapToGuardrailValidationCheck).toList())
                 .build();
     }
 
-    default GuardrailsValidation.Check mapToGuardrailValidationCheck(@NonNull GuardrailBatchItem guardrailBatchItems) {
+    default GuardrailsValidation.Check mapToGuardrailValidationCheck(@NonNull Guardrail guardrailBatchItems) {
         return GuardrailsValidation.Check.builder()
                 .name(guardrailBatchItems.name())
                 .result(guardrailBatchItems.result())

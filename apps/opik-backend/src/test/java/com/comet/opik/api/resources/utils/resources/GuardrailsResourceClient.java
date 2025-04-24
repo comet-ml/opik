@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailBatch;
-import com.comet.opik.api.GuardrailBatchItem;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +20,7 @@ public class GuardrailsResourceClient {
     private final ClientSupport client;
     private final String baseURI;
 
-    public void addBatch(List<GuardrailBatchItem> guardrails, String apiKey, String workspaceName) {
+    public void addBatch(List<Guardrail> guardrails, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)

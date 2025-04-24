@@ -1,6 +1,6 @@
 package com.comet.opik.podam.manufacturer;
 
-import com.comet.opik.api.GuardrailBatchItem;
+import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailPiiDetails;
 import com.comet.opik.api.GuardrailTopicDetails;
 import com.comet.opik.api.GuardrailType;
@@ -17,19 +17,19 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
 
-public class GuardrailCheckTypeManufacturer extends AbstractTypeManufacturer<GuardrailBatchItem> {
+public class GuardrailCheckTypeManufacturer extends AbstractTypeManufacturer<Guardrail> {
     public static final Random RANDOM = new Random();
     public static final GuardrailCheckTypeManufacturer INSTANCE = new GuardrailCheckTypeManufacturer();
 
     @Override
-    public GuardrailBatchItem getType(
+    public Guardrail getType(
             DataProviderStrategy dataProviderStrategy,
             AttributeMetadata attributeMetadata,
             ManufacturingContext manufacturingContext) {
         GuardrailType name = GuardrailType.values()[RANDOM.nextInt(GuardrailType.values().length)];
         GuardrailResult result = GuardrailResult.values()[RANDOM.nextInt(GuardrailResult.values().length)];
 
-        return GuardrailBatchItem.builder()
+        return Guardrail.builder()
                 .id(UUIDTypeManufacturer.INSTANCE.getType(dataProviderStrategy, attributeMetadata,
                         manufacturingContext))
                 .secondaryId(UUIDTypeManufacturer.INSTANCE.getType(dataProviderStrategy, attributeMetadata,
@@ -49,7 +49,7 @@ public class GuardrailCheckTypeManufacturer extends AbstractTypeManufacturer<Gua
                     .scores(new HashMap<>() {
                         {
                             for (var i = 0; i < 5; i++) {
-                                put(RandomStringUtils.randomAlphanumeric(10), RANDOM.nextDouble());
+                                put(RandomStringUtils.randomAlphanumeric(10), RANDOM.nextFloat());
                             }
                         }
                     })
@@ -60,7 +60,7 @@ public class GuardrailCheckTypeManufacturer extends AbstractTypeManufacturer<Gua
                             for (var i = 0; i < 5; i++) {
                                 put(RandomStringUtils.randomAlphanumeric(10), List.of(
                                         GuardrailPiiDetails.Item.builder()
-                                                .score(RANDOM.nextDouble())
+                                                .score(RANDOM.nextFloat())
                                                 .build()));
                             }
                         }
