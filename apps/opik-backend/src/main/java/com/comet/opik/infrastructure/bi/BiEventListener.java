@@ -8,7 +8,6 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
-import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
@@ -39,7 +38,7 @@ public class BiEventListener {
     private final BiEventService biEventService;
 
     @Inject
-    public BiEventListener(EventBus eventBus, @NonNull ProjectService projectService,
+    public BiEventListener(@NonNull ProjectService projectService,
             @NonNull UsageReportService usageReportService, @NonNull TraceService traceService,
             @NonNull OpikConfiguration config, @NonNull LockService lockService,
             @NonNull BiEventService biEventService) {
@@ -49,8 +48,6 @@ public class BiEventListener {
         this.usageReportService = usageReportService;
         this.lockService = lockService;
         this.biEventService = biEventService;
-
-        eventBus.register(this);
     }
 
     @Subscribe

@@ -489,10 +489,6 @@ class TraceServiceImpl implements TraceService {
 
     @Override
     public Mono<Long> countTraces(@NonNull Set<UUID> projectIds) {
-        if (projectIds.isEmpty()) {
-            return Mono.just(0L);
-        }
-
         return dao.countTraces(projectIds);
     }
 

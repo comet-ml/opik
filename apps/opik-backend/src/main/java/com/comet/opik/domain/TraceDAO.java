@@ -2041,8 +2041,11 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    public Mono<Long> countTraces(@NonNull Set<UUID> projectIds) {
-        Preconditions.checkArgument(!projectIds.isEmpty(), "projectIds must not be empty");
+    public Mono<Long> countTraces(Set<UUID> projectIds) {
+
+        if (CollectionUtils.isEmpty(projectIds)) {
+            return Mono.just(0L);
+        }
 
         return asyncTemplate.nonTransaction(connection -> {
             var statement = connection.createStatement(SELECT_COUNT_TRACES_BY_PROJECT_IDS)
