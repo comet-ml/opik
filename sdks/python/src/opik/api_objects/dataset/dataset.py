@@ -225,7 +225,7 @@ class Dataset:
         should_retrieve_more_items = True
 
         dataset_items_ids_left = set(dataset_item_ids) if dataset_item_ids else None
-        
+
         while should_retrieve_more_items:
             dataset_items = rest_stream_parser.read_and_parse_stream(
                 stream=self._rest_client.datasets.stream_dataset_items(
@@ -267,7 +267,10 @@ class Dataset:
                     break
 
                 # Stop retrieving if we found all filtered dataset items
-                if dataset_items_ids_left is not None and len(dataset_items_ids_left) == 0:
+                if (
+                    dataset_items_ids_left is not None
+                    and len(dataset_items_ids_left) == 0
+                ):
                     should_retrieve_more_items = False
                     break
 
