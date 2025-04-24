@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -13,6 +14,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import static com.comet.opik.utils.JsonUtils.ISO_INSTANT_MICROS_PATTERN;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -30,7 +33,7 @@ public record Project(
         @JsonView({Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @JsonView({Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
-        @JsonView({
+        @JsonFormat(pattern = ISO_INSTANT_MICROS_PATTERN, timezone = "UTC") @JsonView({
                 Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Instant lastUpdatedTraceAt,
         @JsonView({
                 Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable List<FeedbackScoreAverage> feedbackScores,

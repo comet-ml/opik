@@ -26,6 +26,8 @@ import java.util.Collection;
 @Slf4j
 public class JsonUtils {
 
+    public static final String ISO_INSTANT_MICROS_PATTERN = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX";
+
     public static final ObjectMapper MAPPER = new ObjectMapper()
             .setPropertyNamingStrategy(PropertyNamingStrategies.SnakeCaseStrategy.INSTANCE)
             .setSerializationInclusion(JsonInclude.Include.NON_NULL)
