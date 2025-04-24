@@ -141,3 +141,5 @@ export interface AverageFeedbackScore {
   name: string;
   value: number;
 }
+
+export interface MaxFeedbackScore extends AverageFeedbackScore {}
