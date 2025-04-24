@@ -78,7 +78,6 @@ jobs:
 
         - name: Build and Push Docker Image for Comet integration
           if: inputs.build_comet_image
-          secrets: inherit
           uses: docker/build-push-action@v4
           with:
             context: apps/${{ inputs.image }}/
@@ -92,6 +91,9 @@ jobs:
               OPIK_VERSION=${{inputs.version}}
               SENTRY_ENABLED=true
               SENTRY_DSN=${{secrets.OPIK_FE_SENTRY_DSN}}
+            secrets: |
+              OPIK_FE_SENTRY_DSN=${{secrets.OPIK_FE_SENTRY_DSN}}
+              GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
 
         - name: Write Build Summary
           run: |
