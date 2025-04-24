@@ -1,6 +1,4 @@
 #!/bin/bash
-set -e
-
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 REQUIRED_CONTAINERS=("opik-clickhouse-1" "opik-mysql-1" "opik-python-backend-1" "opik-redis-1" "opik-frontend-1" "opik-backend-1" "opik-minio-1")
@@ -104,13 +102,12 @@ start_missing_containers() {
   done
 
   echo "🔄 Starting missing containers..."
-  cd "$script_dir/deployment/docker-compose"
 
   if [[ "${BUILD_MODE}" = "true" ]]; then
     export COMPOSE_BAKE=true
   fi
 
-  local cmd="docker compose"
+  local cmd="docker compose --project-directory $script_dir/deployment/docker-compose"
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --profile guardrails"
   fi
@@ -167,8 +164,7 @@ start_missing_containers() {
 stop_containers() {
   check_docker_status
   echo "🛑 Stopping all required containers..."
-  cd "$script_dir/deployment/docker-compose"
-  local cmd="docker compose"
+  local cmd="docker compose --project-directory $script_dir/deployment/docker-compose"
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --profile guardrails"
   fi
