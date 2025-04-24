@@ -1,4 +1,4 @@
-from testlib import ANY_BUT_NONE
+from ...testlib import ANY_BUT_NONE
 
 MODEL_FOR_TESTS = "gpt-4o-mini"
 EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
