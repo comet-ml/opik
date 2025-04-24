@@ -10,5 +10,5 @@ import java.util.Map;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record GuardrailTopicDetails(Map<String, Double> scores) {
+public record GuardrailTopicDetails(Map<String, Float> scores) {
 }
