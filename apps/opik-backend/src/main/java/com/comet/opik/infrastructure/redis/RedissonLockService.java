@@ -16,6 +16,7 @@ import reactor.util.retry.Retry;
 
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -24,6 +25,8 @@ class RedissonLockService implements LockService {
     private static final String LOCK_ACQUIRED = "Lock '{}' acquired";
     private static final String LOCK_RELEASED = "Lock '{}' released";
     private static final String TRYING_TO_LOCK_WITH = "Trying to lock with '{}'";
+    private static final Consumer<Void> NO_OP = __ -> {
+    };
 
     private final @NonNull RedissonReactiveClient redisClient;
     private final @NonNull DistributedLockConfig distributedLockConfig;
@@ -32,11 +35,9 @@ class RedissonLockService implements LockService {
 
         public void release(Lock lock) {
             semaphore.release(locked)
-                    .subscribe(
-                            __ -> {
-                            },
+                    .subscribe(NO_OP,
                             __ -> log.warn("Lock already released or doesn't exist"),
-                            () -> log.debug("Lock '{}' with id '{}' released successfully", lock, locked));
+                            () -> log.debug("Lock {} released successfully", lock));
         }
 
     }

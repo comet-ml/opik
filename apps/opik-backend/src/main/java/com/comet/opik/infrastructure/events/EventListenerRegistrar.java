@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.events;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
 import com.google.inject.Injector;
+import com.google.inject.Key;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
@@ -63,8 +64,7 @@ public class EventListenerRegistrar implements GuiceyLifecycleListener {
 
     private Set<ListenerInfo> findAllEventListeners() {
         return injector.get().getAllBindings().keySet().stream()
-                .filter(key -> key.getTypeLiteral().getRawType().isAnnotationPresent(EagerSingleton.class) &&
-                        hasSubscribeMethod(key.getTypeLiteral().getRawType()))
+                .filter(this::isAnEventListener)
                 .map(key -> {
                     try {
                         return new ListenerInfo(injector.get().getInstance(key), key.getTypeLiteral().getRawType());
@@ -74,6 +74,11 @@ public class EventListenerRegistrar implements GuiceyLifecycleListener {
                     }
                 })
                 .collect(Collectors.toSet());
+    }
+
+    private boolean isAnEventListener(Key<?> key) {
+        return key.getTypeLiteral().getRawType().isAnnotationPresent(EagerSingleton.class) &&
+                hasSubscribeMethod(key.getTypeLiteral().getRawType());
     }
 
     private boolean hasSubscribeMethod(Class<?> clazz) {
