@@ -5,7 +5,6 @@ import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TraceService;
-import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
@@ -22,10 +21,9 @@ public class ProjectEventListener {
     private final TraceService traceService;
 
     @Inject
-    public ProjectEventListener(EventBus eventBus, ProjectService projectService, TraceService traceService) {
+    public ProjectEventListener(ProjectService projectService, TraceService traceService) {
         this.projectService = projectService;
         this.traceService = traceService;
-        eventBus.register(this);
     }
 
     @Subscribe

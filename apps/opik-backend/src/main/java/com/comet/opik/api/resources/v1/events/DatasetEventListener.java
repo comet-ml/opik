@@ -7,7 +7,6 @@ import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.events.BaseEvent;
-import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
@@ -31,10 +30,9 @@ public class DatasetEventListener {
     private final ExperimentService experimentService;
 
     @Inject
-    public DatasetEventListener(EventBus eventBus, DatasetService datasetService, ExperimentService experimentService) {
+    public DatasetEventListener(DatasetService datasetService, ExperimentService experimentService) {
         this.datasetService = datasetService;
         this.experimentService = experimentService;
-        eventBus.register(this);
     }
 
     @Subscribe

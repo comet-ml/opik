@@ -115,6 +115,8 @@ interface TraceDAO {
     Mono<Trace> getPartialById(@NonNull UUID id);
 
     Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria);
+
+    Mono<Long> countTraces(Set<UUID> projectIds);
 }
 
 @Slf4j
@@ -1272,6 +1274,13 @@ class TraceDAOImpl implements TraceDAO {
                 t.workspace_id, t.project_id, t.thread_id
             ;
             """;
+    public static final String SELECT_COUNT_TRACES_BY_PROJECT_IDS = """
+            SELECT
+                count(distinct id) as count
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND project_id IN :project_ids
+            """;
 
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -2068,6 +2077,26 @@ class TraceDAOImpl implements TraceDAO {
                 .buffer(limit > 100 ? limit / 2 : limit)
                 .concatWith(Mono.just(List.of()))
                 .flatMap(Flux::fromIterable);
+    }
+
+    @Override
+    public Mono<Long> countTraces(Set<UUID> projectIds) {
+
+        if (CollectionUtils.isEmpty(projectIds)) {
+            return Mono.just(0L);
+        }
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_COUNT_TRACES_BY_PROJECT_IDS)
+                    .bind("project_ids", projectIds);
+
+            Segment segment = startSegment("traces", "Clickhouse", "countTraces");
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("count", Long.class)))
+                    .reduce(0L, Long::sum);
+        });
     }
 
     private Flux<? extends Result> findTraceStream(int limit, @NonNull TraceSearchCriteria criteria,

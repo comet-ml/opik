@@ -13,7 +13,6 @@ import com.comet.opik.domain.UserLog;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
-import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
@@ -56,7 +55,6 @@ public class OnlineScoringSampler {
     public OnlineScoringSampler(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
             @NonNull RedissonReactiveClient redisClient,
-            @NonNull EventBus eventBus,
             @NonNull AutomationRuleEvaluatorService ruleEvaluatorService) throws NoSuchAlgorithmException {
         this.ruleEvaluatorService = ruleEvaluatorService;
         this.redisClient = redisClient;
@@ -76,10 +74,6 @@ public class OnlineScoringSampler {
                 })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
-        // Register at the end, only after successful instantiation.
-        // TODO: this registration should be de-coupled from instantiation in the future.
-        //  Multiple occurrences happen in the codebase.
-        eventBus.register(this);
     }
 
     /**

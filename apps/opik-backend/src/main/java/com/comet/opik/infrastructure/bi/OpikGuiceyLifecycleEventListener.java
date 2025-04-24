@@ -1,6 +1,6 @@
 package com.comet.opik.infrastructure.bi;
 
-import com.comet.opik.infrastructure.UsageReportConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.utils.JobManagerUtils;
 import com.google.inject.Injector;
 import io.dropwizard.jobs.GuiceJobManager;
@@ -60,7 +60,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
 
     private void setupDailyJob() {
 
-        var usageReportConfig = injector.get().getInstance(UsageReportConfig.class);
+        var usageReportConfig = injector.get().getInstance(OpikConfiguration.class).getUsageReport();
 
         if (!usageReportConfig.isEnabled()) {
             disableJob();

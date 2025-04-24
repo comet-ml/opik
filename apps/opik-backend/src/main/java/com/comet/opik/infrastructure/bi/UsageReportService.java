@@ -1,6 +1,6 @@
 package com.comet.opik.infrastructure.bi;
 
-import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.cache.CacheManager;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -15,6 +15,7 @@ import reactor.util.function.Tuples;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -44,6 +45,8 @@ interface UsageReportService {
 
     Mono<UserCount> getUserCount();
 
+    boolean isFirstTraceReport();
+
 }
 
 @Slf4j
@@ -56,7 +59,7 @@ class UsageReportServiceImpl implements UsageReportService {
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull MetadataAnalyticsDAO metadataAnalyticsDAO;
-    private final @NonNull OpikConfiguration opikConfiguration;
+    private final @NonNull CacheManager cacheManager;
 
     public Optional<String> getAnonymousId() {
         return template.inTransaction(READ_ONLY,
@@ -68,6 +71,27 @@ class UsageReportServiceImpl implements UsageReportService {
             handle.attach(MetadataDAO.class).saveMetadataKey(Metadata.ANONYMOUS_ID.getValue(), id);
             return null;
         });
+    }
+
+    @Override
+    public boolean isFirstTraceReport() {
+
+        Boolean firstTraceReport = cacheManager.get(Metadata.FIRST_TRACE_CREATED.getValue(), Boolean.class).block();
+
+        if (firstTraceReport == null) {
+            firstTraceReport = template.inTransaction(READ_ONLY,
+                    handle -> handle.attach(UsageReportDAO.class)
+                            .isEventReported(Metadata.FIRST_TRACE_CREATED.getValue()));
+
+            // Only store in cache if it was reported as we don't want to report again
+            if (firstTraceReport) {
+                cacheManager.put(Metadata.FIRST_TRACE_CREATED.getValue(), true, Duration.ofDays(1)).block();
+            }
+
+            return firstTraceReport;
+        }
+
+        return firstTraceReport;
     }
 
     public boolean isEventReported(@NonNull String eventType) {

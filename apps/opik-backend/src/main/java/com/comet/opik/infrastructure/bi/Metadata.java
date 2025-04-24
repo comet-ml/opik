@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 enum Metadata {
 
     ANONYMOUS_ID("anonymous_id"),
+    FIRST_TRACE_CREATED("first_trace_created"),
     ;
 
     private final String value;
