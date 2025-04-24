@@ -43,7 +43,7 @@ public class EventListenerRegistrar implements GuiceyLifecycleListener {
     private void registerAllEventListeners() {
         if (injector.get() == null) {
             log.error("Injector not available, cannot register event listeners");
-            return;
+            throw new IllegalStateException("Injector not available");
         }
 
         log.info("Registering event listeners...");
@@ -69,7 +69,7 @@ public class EventListenerRegistrar implements GuiceyLifecycleListener {
                     try {
                         return new ListenerInfo(injector.get().getInstance(key), key.getTypeLiteral().getRawType());
                     } catch (Exception e) {
-                        log.debug("Failed to get instance for {}: {}", key, e.getMessage());
+                        log.error("Failed to get instance for {}: {}", key, e.getMessage());
                         return null;
                     }
                 })
