@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -103,7 +104,7 @@ start_missing_containers() {
   done
 
   echo "🔄 Starting missing containers..."
-  cd "$script_dir/deployment/docker-compose" || exit
+  cd "$script_dir/deployment/docker-compose"
 
   if [[ "${BUILD_MODE}" = "true" ]]; then
     export COMPOSE_BAKE=true
@@ -166,7 +167,7 @@ start_missing_containers() {
 stop_containers() {
   check_docker_status
   echo "🛑 Stopping all required containers..."
-  cd "$script_dir/deployment/docker-compose" || exit
+  cd "$script_dir/deployment/docker-compose"
   local cmd="docker compose"
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --profile guardrails"
