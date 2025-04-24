@@ -16,6 +16,6 @@ public record GuardrailPiiDetails(Map<String, List<Item>> detectedEntities) {
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record Item(double score) {
+    public record Item(float score) {
     }
 }
