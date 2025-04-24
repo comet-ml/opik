@@ -75,6 +75,7 @@ jobs:
           if: failure()
           with:
             action_fail: true
+            check_name: SDK E2E Tests Results
             files: ${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
 
         - name: Keep BE log in case of failure

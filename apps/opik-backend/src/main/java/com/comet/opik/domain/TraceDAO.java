@@ -2,7 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse.BiInformation;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.GuardrailBatchItem;
+import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.ProjectStats;
@@ -1017,7 +1017,7 @@ class TraceDAOImpl implements TraceDAO {
                         workspace_id,
                         project_id,
                         id,
-                        notEmpty(input) as input_count,\s
+                        notEmpty(input) as input_count,
                         notEmpty(output) as output_count,
                         notEmpty(metadata) as metadata_count,
                         length(tags) as tags_length,
@@ -1562,7 +1562,7 @@ class TraceDAOImpl implements TraceDAO {
                 .orElse(List.of())
                 .stream()
                 .map(guardrail -> {
-                    return GuardrailBatchItem.builder()
+                    return Guardrail.builder()
                             .entityId(UUID.fromString((String) guardrail.get(0)))
                             .secondaryId(UUID.fromString((String) guardrail.get(1)))
                             .projectId(UUID.fromString((String) guardrail.get(2)))
