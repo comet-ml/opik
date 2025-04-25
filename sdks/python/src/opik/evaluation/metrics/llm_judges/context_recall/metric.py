@@ -26,6 +26,8 @@ class ContextRecall(base_metric.BaseMetric):
         name: The name of the metric. Defaults to "ContextRecallMetric".
         few_shot_examples: A list of few-shot examples to provide to the model. If None, uses the default few-shot examples.
         track: Whether to track the metric. Defaults to True.
+        project_name: Optional project name to track the metric in for the cases when
+            there are no parent span/trace to inherit project name from.
 
     Example:
         >>> from opik.evaluation.metrics import ContextRecall
