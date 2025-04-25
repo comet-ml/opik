@@ -9,6 +9,16 @@ from ....testlib import (
     assert_equal,
 )
 
+import mock
+
+
+@pytest.fixture(autouse=True)
+def disable_misconfigurations_detection():
+    with mock.patch(
+        "opik.config.OpikConfig.check_for_known_misconfigurations", return_value=False
+    ):
+        yield
+
 
 def test_metric_equals__track_enabled__happyflow(fake_backend):
     metric = equals.Equals(name="equals_metric", track=True)
