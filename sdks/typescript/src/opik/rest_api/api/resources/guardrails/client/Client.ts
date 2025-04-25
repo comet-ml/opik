@@ -49,7 +49,7 @@ export class Guardrails {
      * @param {Guardrails.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.guardrails.addGuardrailsBatch({
+     *     await client.guardrails.createGuardrails({
      *         guardrails: [{
      *                 entityId: "entity_id",
      *                 secondaryId: "secondary_id",
@@ -64,7 +64,7 @@ export class Guardrails {
      *             }]
      *     })
      */
-    public async addGuardrailsBatch(
+    public async createGuardrails(
         request: OpikApi.GuardrailBatch,
         requestOptions?: Guardrails.RequestOptions,
     ): Promise<void> {

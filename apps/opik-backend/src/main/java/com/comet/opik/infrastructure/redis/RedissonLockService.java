@@ -16,6 +16,7 @@ import reactor.util.retry.Retry;
 
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -24,17 +25,19 @@ class RedissonLockService implements LockService {
     private static final String LOCK_ACQUIRED = "Lock '{}' acquired";
     private static final String LOCK_RELEASED = "Lock '{}' released";
     private static final String TRYING_TO_LOCK_WITH = "Trying to lock with '{}'";
+    private static final Consumer<Void> NO_OP = __ -> {
+    };
 
     private final @NonNull RedissonReactiveClient redisClient;
     private final @NonNull DistributedLockConfig distributedLockConfig;
 
     private record LockInstance(RPermitExpirableSemaphoreReactive semaphore, String locked) {
 
-        public void release() {
+        public void release(Lock lock) {
             semaphore.release(locked)
-                    .subscribe(
-                            __ -> log.debug("Lock '{}' released successfully", locked),
-                            __ -> log.warn("Lock already released or doesn't exist"));
+                    .subscribe(NO_OP,
+                            __ -> log.warn("Lock already released or doesn't exist"),
+                            () -> log.debug("Lock {} released successfully", lock));
         }
 
     }
@@ -49,10 +52,7 @@ class RedissonLockService implements LockService {
         return acquireLock(semaphore, Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
                 .flatMap(lockInstance -> runAction(lock, action, lockInstance.locked())
                         .subscribeOn(Schedulers.boundedElastic())
-                        .doFinally(signalType -> {
-                            lockInstance.release();
-                            log.debug(LOCK_RELEASED, lock);
-                        }));
+                        .doFinally(signalType -> lockInstance.release(lock)));
     }
 
     @Override
@@ -65,10 +65,7 @@ class RedissonLockService implements LockService {
         return acquireLock(semaphore, duration)
                 .flatMap(lockInstance -> runAction(lock, action, lockInstance.locked())
                         .subscribeOn(Schedulers.boundedElastic())
-                        .doFinally(signalType -> {
-                            lockInstance.release();
-                            log.debug(LOCK_RELEASED, lock);
-                        }));
+                        .doFinally(signalType -> lockInstance.release(lock)));
     }
 
     private RPermitExpirableSemaphoreReactive getSemaphore(Lock lock) {
@@ -113,10 +110,7 @@ class RedissonLockService implements LockService {
         return acquireLock(semaphore, Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
                 .flatMapMany(lockInstance -> stream(lock, stream, lockInstance.locked())
                         .subscribeOn(Schedulers.boundedElastic())
-                        .doFinally(signalType -> {
-                            lockInstance.release();
-                            log.debug(LOCK_RELEASED, lock);
-                        }));
+                        .doFinally(signalType -> lockInstance.release(lock)));
     }
 
     private <T> Flux<T> stream(Lock lock, Flux<T> action, String locked) {
