@@ -528,6 +528,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               accessorFn: (row: BaseTraceData) =>
                 row.guardrails_validations || [],
               cell: GuardrailsCell as never,
+              statisticDataFormater: (value: number) => `${value} failed`,
             },
           ]
         : []),
