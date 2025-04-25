@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Iterable, Set, Union
 import opik
 import json
 
@@ -18,6 +18,13 @@ def _try_get__dict__(instance: Any) -> Optional[Dict[str, Any]]:
     return instance.__dict__
 
 
+def _try_build_set(iterable: Optional[Iterable[Any]]) -> Optional[Set[Any]]:
+    if iterable is None:
+        return iterable
+
+    return set(iterable)
+
+
 def verify_trace(
     opik_client: opik.Opik,
     trace_id: str,
@@ -25,7 +32,7 @@ def verify_trace(
     metadata: Dict[str, Any] = mock.ANY,  # type: ignore
     input: Dict[str, Any] = mock.ANY,  # type: ignore
     output: Dict[str, Any] = mock.ANY,  # type: ignore
-    tags: List[str] = mock.ANY,  # type: ignore
+    tags: Union[List[str], Set[str]] = mock.ANY,  # type: ignore
     feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore
     project_name: Optional[str] = mock.ANY,  # type: ignore
     error_info: Optional[ErrorInfoDict] = mock.ANY,  # type: ignore
@@ -47,10 +54,16 @@ def verify_trace(
     assert trace.metadata == metadata, testlib.prepare_difference_report(
         trace.metadata, metadata
     )
-    assert trace.tags == tags, testlib.prepare_difference_report(trace.tags, tags)
-    assert (
-        _try_get__dict__(trace.error_info) == error_info
-    ), testlib.prepare_difference_report(trace.error_info, error_info)
+
+    if tags is not mock.ANY:
+        assert _try_build_set(trace.tags) == _try_build_set(
+            tags
+        ), testlib.prepare_difference_report(trace.tags, tags)
+
+    if error_info is not mock.ANY:
+        assert (
+            _try_get__dict__(trace.error_info) == error_info
+        ), testlib.prepare_difference_report(trace.error_info, error_info)
 
     assert thread_id == trace.thread_id, f"{trace.thread_id} != {thread_id}"
 
@@ -104,7 +117,7 @@ def verify_span(
     metadata: Dict[str, Any] = mock.ANY,  # type: ignore
     input: Dict[str, Any] = mock.ANY,  # type: ignore
     output: Dict[str, Any] = mock.ANY,  # type: ignore
-    tags: List[str] = mock.ANY,  # type: ignore
+    tags: Union[List[str], Set[str]] = mock.ANY,  # type: ignore
     type: str = mock.ANY,  # type: ignore
     feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore
     project_name: Optional[str] = mock.ANY,
@@ -138,10 +151,17 @@ def verify_span(
     assert span.metadata == metadata, testlib.prepare_difference_report(
         span.metadata, metadata
     )
-    assert span.tags == tags, testlib.prepare_difference_report(span.tags, tags)
-    assert (
-        _try_get__dict__(span.error_info) == error_info
-    ), testlib.prepare_difference_report(span.error_info, error_info)
+
+    if tags is not mock.ANY:
+        assert _try_build_set(span.tags) == _try_build_set(
+            tags
+        ), testlib.prepare_difference_report(span.tags, tags)
+
+    if error_info is not mock.ANY:
+        assert (
+            _try_get__dict__(span.error_info) == error_info
+        ), testlib.prepare_difference_report(span.error_info, error_info)
+
     assert span.model == model, f"{span.model} != {model}"
     assert span.provider == provider, f"{span.provider} != {provider}"
     assert (
