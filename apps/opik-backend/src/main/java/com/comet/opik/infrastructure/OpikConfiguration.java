@@ -78,6 +78,4 @@ public class OpikConfiguration extends JobConfiguration {
     @Valid @NotNull @JsonProperty
     private ServiceTogglesConfig serviceToggles = new ServiceTogglesConfig();
 
-    @Valid @NotNull @JsonProperty
-    private boolean enableFinal;
 }
