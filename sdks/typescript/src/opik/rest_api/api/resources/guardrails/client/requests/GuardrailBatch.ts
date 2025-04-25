@@ -22,5 +22,5 @@ import * as OpikApi from "../../../../index";
  *     }
  */
 export interface GuardrailBatch {
-    guardrails: OpikApi.GuardrailBatchItem[];
+    guardrails: OpikApi.Guardrail[];
 }

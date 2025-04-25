@@ -19,6 +19,9 @@ class ExperimentItem(UniversalBaseModel):
     output: typing.Optional[JsonNode] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScore]] = None
     comments: typing.Optional[typing.List[Comment]] = None
+    total_estimated_cost: typing.Optional[float] = None
+    duration: typing.Optional[float] = None
+    usage: typing.Optional[typing.Dict[str, int]] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None

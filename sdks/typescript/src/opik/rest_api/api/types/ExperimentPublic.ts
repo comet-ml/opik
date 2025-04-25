@@ -14,6 +14,9 @@ export interface ExperimentPublic {
     comments?: OpikApi.CommentPublic[];
     traceCount?: number;
     createdAt?: Date;
+    duration?: OpikApi.PercentageValuesPublic;
+    totalEstimatedCost?: number;
+    usage?: Record<string, number>;
     lastUpdatedAt?: Date;
     createdBy?: string;
     lastUpdatedBy?: string;

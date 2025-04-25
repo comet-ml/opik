@@ -24,6 +24,9 @@ export const ExperimentItemCompare: core.serialization.ObjectSchema<
         core.serialization.list(FeedbackScoreCompare).optional(),
     ),
     comments: core.serialization.list(CommentCompare).optional(),
+    totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
+    duration: core.serialization.number().optional(),
+    usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -40,6 +43,9 @@ export declare namespace ExperimentItemCompare {
         output?: JsonNodeCompare.Raw | null;
         feedback_scores?: FeedbackScoreCompare.Raw[] | null;
         comments?: CommentCompare.Raw[] | null;
+        total_estimated_cost?: number | null;
+        duration?: number | null;
+        usage?: Record<string, number> | null;
         created_at?: string | null;
         last_updated_at?: string | null;
         created_by?: string | null;

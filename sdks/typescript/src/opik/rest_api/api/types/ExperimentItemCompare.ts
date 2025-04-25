@@ -13,6 +13,9 @@ export interface ExperimentItemCompare {
     output?: OpikApi.JsonNodeCompare;
     feedbackScores?: OpikApi.FeedbackScoreCompare[];
     comments?: OpikApi.CommentCompare[];
+    totalEstimatedCost?: number;
+    duration?: number;
+    usage?: Record<string, number>;
     createdAt?: Date;
     lastUpdatedAt?: Date;
     createdBy?: string;

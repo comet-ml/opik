@@ -3,13 +3,13 @@
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
 import pydantic
-from .guardrail_batch_item_name import GuardrailBatchItemName
-from .guardrail_batch_item_result import GuardrailBatchItemResult
+from .guardrail_name import GuardrailName
+from .guardrail_result import GuardrailResult
 from .json_node import JsonNode
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 
 
-class GuardrailBatchItem(UniversalBaseModel):
+class Guardrail(UniversalBaseModel):
     id: typing.Optional[str] = None
     entity_id: str
     secondary_id: str
@@ -18,8 +18,8 @@ class GuardrailBatchItem(UniversalBaseModel):
     If null, the default project is used
     """
 
-    name: GuardrailBatchItemName
-    result: GuardrailBatchItemResult
+    name: GuardrailName
+    result: GuardrailResult
     config: JsonNode
     details: JsonNode
 

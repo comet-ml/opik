@@ -5,15 +5,15 @@
 import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
-import { GuardrailBatchItem } from "../../../../types/GuardrailBatchItem";
+import { Guardrail } from "../../../../types/Guardrail";
 
 export const GuardrailBatch: core.serialization.Schema<serializers.GuardrailBatch.Raw, OpikApi.GuardrailBatch> =
     core.serialization.object({
-        guardrails: core.serialization.list(GuardrailBatchItem),
+        guardrails: core.serialization.list(Guardrail),
     });
 
 export declare namespace GuardrailBatch {
     export interface Raw {
-        guardrails: GuardrailBatchItem.Raw[];
+        guardrails: Guardrail.Raw[];
     }
 }
