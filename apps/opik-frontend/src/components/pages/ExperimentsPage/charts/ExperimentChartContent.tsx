@@ -1,7 +1,7 @@
 import { ChartData } from "./ExperimentChartContainer";
 import { useState, useMemo, useCallback } from "react";
 import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
-import { LineChart } from "recharts";
+import { Dot, LineChart } from "recharts";
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
@@ -14,6 +14,7 @@ import { DEFAULT_CHART_TICK } from "@/constants/chart";
 import { CartesianGrid, YAxis, Line } from "recharts";
 import ExperimentChartLegendContent from "./ExperimentChartLegendContent";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
+import { LineDot } from "recharts/types/cartesian/Line";
 
 const MIN_LEGEND_WIDTH = 140;
 const MAX_LEGEND_WIDTH = 300;
@@ -77,6 +78,43 @@ const ExperimentChartContent: React.FC<ExperimentChartContentProps> = ({
 
   const isSinglePoint = chartData.data.length === 1;
 
+  const shouldShowDot = useCallback(
+    (dataIndex: number, line: string): boolean => {
+      if (isSinglePoint) return true;
+
+      const { data = [] } = chartData;
+
+      const currentValue = data[dataIndex]?.scores?.[line];
+      if (currentValue === null || currentValue === undefined) return false;
+
+      const hasValueAt = (idx: number): boolean => {
+        const value = data[idx]?.scores?.[line];
+        return value !== null && value !== undefined;
+      };
+
+      const hasPreviousValue = dataIndex > 0 && hasValueAt(dataIndex - 1);
+      const hasNextValue =
+        dataIndex < data.length - 1 && hasValueAt(dataIndex + 1);
+
+      return !hasPreviousValue && !hasNextValue;
+    },
+    [chartData, isSinglePoint],
+  );
+
+  const renderDot: LineDot = (props) => {
+    if (shouldShowDot(props.index, props.name)) {
+      return (
+        <Dot
+          {...props}
+          fill={config[props.name as string].color}
+          strokeWidth={0}
+        />
+      );
+    }
+
+    return <></>;
+  };
+
   return (
     <ChartContainer config={config} className="h-32 w-full">
       <LineChart
@@ -127,15 +165,12 @@ const ExperimentChartContent: React.FC<ExperimentChartContentProps> = ({
               dataKey={(record) => record.scores[line]}
               name={config[line].label as string}
               stroke={config[line].color as string}
-              dot={
-                isSinglePoint
-                  ? { fill: config[line].color, strokeWidth: 0 }
-                  : false
-              }
+              dot={renderDot}
               activeDot={{ strokeWidth: 1.5, r: 4, stroke: "white" }}
               strokeWidth={1.5}
               strokeOpacity={strokeOpacity}
               animationDuration={800}
+              connectNulls={false}
             />
           );
         })}
