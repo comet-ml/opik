@@ -4,14 +4,14 @@
 
 import * as OpikApi from "../index";
 
-export interface GuardrailBatchItem {
+export interface Guardrail {
     id?: string;
     entityId: string;
     secondaryId: string;
     /** If null, the default project is used */
     projectName?: string;
-    name: OpikApi.GuardrailBatchItemName;
-    result: OpikApi.GuardrailBatchItemResult;
+    name: OpikApi.GuardrailName;
+    result: OpikApi.GuardrailResult;
     config: OpikApi.JsonNode;
     details: OpikApi.JsonNode;
 }
