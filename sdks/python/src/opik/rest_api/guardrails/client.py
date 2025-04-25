@@ -2,7 +2,7 @@
 
 import typing
 from ..core.client_wrapper import SyncClientWrapper
-from ..types.guardrail_batch_item import GuardrailBatchItem
+from ..types.guardrail import Guardrail
 from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
 from json.decoder import JSONDecodeError
@@ -17,10 +17,10 @@ class GuardrailsClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
 
-    def add_guardrails_batch(
+    def create_guardrails(
         self,
         *,
-        guardrails: typing.Sequence[GuardrailBatchItem],
+        guardrails: typing.Sequence[Guardrail],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -28,7 +28,7 @@ class GuardrailsClient:
 
         Parameters
         ----------
-        guardrails : typing.Sequence[GuardrailBatchItem]
+        guardrails : typing.Sequence[Guardrail]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -39,15 +39,15 @@ class GuardrailsClient:
 
         Examples
         --------
-        from Opik import GuardrailBatchItem, OpikApi
+        from Opik import Guardrail, OpikApi
 
         client = OpikApi(
             api_key="YOUR_API_KEY",
             workspace_name="YOUR_WORKSPACE_NAME",
         )
-        client.guardrails.add_guardrails_batch(
+        client.guardrails.create_guardrails(
             guardrails=[
-                GuardrailBatchItem(
+                Guardrail(
                     entity_id="entity_id",
                     secondary_id="secondary_id",
                     name="TOPIC",
@@ -64,7 +64,7 @@ class GuardrailsClient:
             json={
                 "guardrails": convert_and_respect_annotation_metadata(
                     object_=guardrails,
-                    annotation=typing.Sequence[GuardrailBatchItem],
+                    annotation=typing.Sequence[Guardrail],
                     direction="write",
                 ),
             },
@@ -87,10 +87,10 @@ class AsyncGuardrailsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
 
-    async def add_guardrails_batch(
+    async def create_guardrails(
         self,
         *,
-        guardrails: typing.Sequence[GuardrailBatchItem],
+        guardrails: typing.Sequence[Guardrail],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -98,7 +98,7 @@ class AsyncGuardrailsClient:
 
         Parameters
         ----------
-        guardrails : typing.Sequence[GuardrailBatchItem]
+        guardrails : typing.Sequence[Guardrail]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -111,7 +111,7 @@ class AsyncGuardrailsClient:
         --------
         import asyncio
 
-        from Opik import AsyncOpikApi, GuardrailBatchItem
+        from Opik import AsyncOpikApi, Guardrail
 
         client = AsyncOpikApi(
             api_key="YOUR_API_KEY",
@@ -120,9 +120,9 @@ class AsyncGuardrailsClient:
 
 
         async def main() -> None:
-            await client.guardrails.add_guardrails_batch(
+            await client.guardrails.create_guardrails(
                 guardrails=[
-                    GuardrailBatchItem(
+                    Guardrail(
                         entity_id="entity_id",
                         secondary_id="secondary_id",
                         name="TOPIC",
@@ -142,7 +142,7 @@ class AsyncGuardrailsClient:
             json={
                 "guardrails": convert_and_respect_annotation_metadata(
                     object_=guardrails,
-                    annotation=typing.Sequence[GuardrailBatchItem],
+                    annotation=typing.Sequence[Guardrail],
                     direction="write",
                 ),
             },

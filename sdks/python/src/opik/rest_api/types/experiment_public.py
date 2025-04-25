@@ -6,6 +6,7 @@ from .json_node_public import JsonNodePublic
 from .feedback_score_average_public import FeedbackScoreAveragePublic
 from .comment_public import CommentPublic
 import datetime as dt
+from .percentage_values_public import PercentageValuesPublic
 from .prompt_version_link_public import PromptVersionLinkPublic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2
 import pydantic
@@ -21,6 +22,9 @@ class ExperimentPublic(UniversalBaseModel):
     comments: typing.Optional[typing.List[CommentPublic]] = None
     trace_count: typing.Optional[int] = None
     created_at: typing.Optional[dt.datetime] = None
+    duration: typing.Optional[PercentageValuesPublic] = None
+    total_estimated_cost: typing.Optional[float] = None
+    usage: typing.Optional[typing.Dict[str, float]] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_by: typing.Optional[str] = None
