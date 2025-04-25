@@ -30,6 +30,7 @@ import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
+import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -63,7 +64,6 @@ import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
-import static com.comet.opik.domain.CommentResultMapper.getComments;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -1477,7 +1477,7 @@ class TraceDAOImpl implements TraceDAO {
     @WithSpan
     public Mono<Trace> findById(@NonNull UUID id, @NonNull Connection connection) {
         return getById(id, connection)
-                .flatMap(this::mapToDto)
+                .flatMap(result -> mapToDto(result, Set.of()))
                 .singleOrEmpty();
     }
 
@@ -1488,53 +1488,76 @@ class TraceDAOImpl implements TraceDAO {
                 .singleOrEmpty();
     }
 
-    private Publisher<Trace> mapToDto(Result result) {
+    private <T> T getValue(Set<Trace.TraceField> exclude, Trace.TraceField field, Row row, String fieldName,
+            Class<T> clazz) {
+        return exclude.contains(field) ? null : row.get(fieldName, clazz);
+    }
+
+    private Publisher<Trace> mapToDto(Result result, Set<Trace.TraceField> exclude) {
+
         return result.map((row, rowMetadata) -> Trace.builder()
                 .id(row.get("id", UUID.class))
                 .projectId(row.get("project_id", UUID.class))
-                .name(row.get("name", String.class))
-                .startTime(row.get("start_time", Instant.class))
-                .endTime(row.get("end_time", Instant.class))
-                .input(Optional.ofNullable(row.get("input", String.class))
-                        .filter(it -> !it.isBlank())
+                .name(getValue(exclude, Trace.TraceField.NAME, row, "name", String.class))
+                .startTime(getValue(exclude, Trace.TraceField.START_TIME, row, "start_time", Instant.class))
+                .endTime(getValue(exclude, Trace.TraceField.END_TIME, row, "end_time", Instant.class))
+                .input(Optional.ofNullable(getValue(exclude, Trace.TraceField.INPUT, row, "input", String.class))
+                        .filter(str -> !str.isBlank())
                         .map(JsonUtils::getJsonNodeFromString)
                         .orElse(null))
-                .output(Optional.ofNullable(row.get("output", String.class))
-                        .filter(it -> !it.isBlank())
+                .output(Optional.ofNullable(getValue(exclude, Trace.TraceField.OUTPUT, row, "output", String.class))
+                        .filter(str -> !str.isBlank())
                         .map(JsonUtils::getJsonNodeFromString)
                         .orElse(null))
-                .metadata(Optional.ofNullable(row.get("metadata", String.class))
-                        .filter(it -> !it.isBlank())
+                .metadata(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.METADATA, row, "metadata", String.class))
+                        .filter(str -> !str.isBlank())
                         .map(JsonUtils::getJsonNodeFromString)
                         .orElse(null))
-                .tags(Optional.of(Arrays.stream(row.get("tags", String[].class))
-                        .collect(Collectors.toSet()))
-                        .filter(it -> !it.isEmpty())
+                .tags(Optional.ofNullable(getValue(exclude, Trace.TraceField.TAGS, row, "tags", String[].class))
+                        .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
+                        .filter(set -> !set.isEmpty())
                         .orElse(null))
-                .comments(getComments(row.get("comments", List[].class)))
-                .feedbackScores(Optional.ofNullable(row.get("feedback_scores_list", List.class))
+                .comments(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.COMMENTS, row, "comments", List[].class))
+                        .map(CommentResultMapper::getComments)
+                        .filter(not(List::isEmpty))
+                        .orElse(null))
+                .feedbackScores(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.FEEDBACK_SCORES, row, "feedback_scores_list",
+                                List.class))
+                        .filter(not(List::isEmpty))
                         .map(this::mapFeedbackScores)
                         .filter(not(List::isEmpty))
                         .orElse(null))
-                .guardrailsValidations(Optional.ofNullable(row.get("guardrails_validations", List.class))
+                .guardrailsValidations(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.GUARDRAILS_VALIDATIONS, row,
+                                "guardrails_validations", List.class))
                         .map(this::mapGuardrails)
                         .filter(not(List::isEmpty))
                         .orElse(null))
-                .spanCount(row.get("span_count", Integer.class))
-                .usage(row.get("usage", Map.class))
-                .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
-                        ? null
-                        : row.get("total_estimated_cost", BigDecimal.class))
-                .errorInfo(Optional.ofNullable(row.get("error_info", String.class))
+                .spanCount(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.SPAN_COUNT, row, "span_count", Integer.class))
+                        .orElse(0))
+                .usage(getValue(exclude, Trace.TraceField.USAGE, row, "usage", Map.class))
+                .totalEstimatedCost(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.TOTAL_ESTIMATED_COST, row,
+                                "total_estimated_cost", BigDecimal.class))
+                        .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
+                        .orElse(null))
+                .errorInfo(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.ERROR_INFO, row, "error_info", String.class))
                         .filter(str -> !str.isBlank())
                         .map(errorInfo -> JsonUtils.readValue(errorInfo, ERROR_INFO_TYPE))
                         .orElse(null))
-                .createdAt(row.get("created_at", Instant.class))
+                .createdAt(getValue(exclude, Trace.TraceField.CREATED_AT, row, "created_at", Instant.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                .createdBy(row.get("created_by", String.class))
-                .lastUpdatedBy(row.get("last_updated_by", String.class))
-                .duration(row.get("duration", Double.class))
-                .threadId(Optional.ofNullable(row.get("thread_id", String.class))
+                .createdBy(getValue(exclude, Trace.TraceField.CREATED_BY, row, "created_by", String.class))
+                .lastUpdatedBy(
+                        getValue(exclude, Trace.TraceField.LAST_UPDATED_BY, row, "last_updated_by", String.class))
+                .duration(getValue(exclude, Trace.TraceField.DURATION, row, "duration", Double.class))
+                .threadId(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.THREAD_ID, row, "thread_id", String.class))
                         .filter(StringUtils::isNotEmpty)
                         .orElse(null))
                 .build());
@@ -1596,7 +1619,7 @@ class TraceDAOImpl implements TraceDAO {
         return countTotal(traceSearchCriteria, connection)
                 .flatMap(result -> Mono.from(result.map((row, rowMetadata) -> row.get("count", Long.class))))
                 .flatMap(total -> getTracesByProjectId(size, page, traceSearchCriteria, connection) //Get count then pagination
-                        .flatMapMany(this::mapToDto)
+                        .flatMapMany(result1 -> mapToDto(result1, traceSearchCriteria.exclude()))
                         .collectList()
                         .map(traces -> new TracePage(page, traces.size(), total, traces,
                                 sortingFactory.getSortableFields())));
@@ -2113,7 +2136,7 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     public Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria) {
         return asyncTemplate.stream(connection -> findTraceStream(limit, criteria, connection))
-                .flatMap(this::mapToDto)
+                .flatMap(result -> mapToDto(result, Set.of()))
                 .buffer(limit > 100 ? limit / 2 : limit)
                 .concatWith(Mono.just(List.of()))
                 .flatMap(Flux::fromIterable);

@@ -80,9 +80,6 @@ public record Trace(
     @Getter
     public enum TraceField {
 
-        ID("id"),
-        PROJECT_NAME("project_name"),
-        PROJECT_ID("project_id"),
         NAME("name"),
         START_TIME("start_time"),
         END_TIME("end_time"),
@@ -93,7 +90,6 @@ public record Trace(
         ERROR_INFO("error_info"),
         USAGE("usage"),
         CREATED_AT("created_at"),
-        LAST_UPDATED_AT("last_updated_at"),
         CREATED_BY("created_by"),
         LAST_UPDATED_BY("last_updated_by"),
         FEEDBACK_SCORES("feedback_scores"),

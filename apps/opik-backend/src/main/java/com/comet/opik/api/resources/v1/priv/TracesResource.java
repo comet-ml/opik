@@ -21,6 +21,7 @@ import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
+import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.CommentDAO;
 import com.comet.opik.domain.CommentService;
@@ -110,7 +111,8 @@ public class TracesResource {
             @QueryParam("project_id") UUID projectId,
             @QueryParam("filters") String filters,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate,
-            @QueryParam("sorting") String sorting) {
+            @QueryParam("sorting") String sorting,
+            @QueryParam("exclude") String exclude) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         var traceFilters = filtersFactory.newFilters(filters, TraceFilter.LIST_TYPE_REFERENCE);
@@ -130,6 +132,7 @@ public class TracesResource {
                 .filters(traceFilters)
                 .truncate(truncate)
                 .sortingFields(sortingFields)
+                .exclude(ParamsValidator.get(exclude, Trace.TraceField.class, "exclude"))
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
