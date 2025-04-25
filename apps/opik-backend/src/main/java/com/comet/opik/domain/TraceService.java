@@ -95,6 +95,8 @@ public interface TraceService {
     Mono<TraceThread> getThreadById(UUID projectId, String threadId);
 
     Flux<Trace> search(int limit, TraceSearchCriteria searchCriteria);
+
+    Mono<Long> countTraces(Set<UUID> projectIds);
 }
 
 @Slf4j
@@ -310,6 +312,13 @@ class TraceServiceImpl implements TraceService {
         });
     }
 
+    private TraceSearchCriteria findProjectAndVerifyVisibility(TraceSearchCriteria criteria) {
+        return criteria.toBuilder()
+                .projectId(projectService.resolveProjectIdAndVerifyVisibility(criteria.projectId(),
+                        criteria.projectName()))
+                .build();
+    }
+
     private <T> Mono<T> failWithConflict(String error) {
         log.info(error);
         return Mono.error(new IdentifierMismatchException(new ErrorMessage(List.of(error))));
@@ -355,15 +364,9 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<TracePage> find(int page, int size, @NonNull TraceSearchCriteria criteria) {
+        TraceSearchCriteria resolvedCriteria = findProjectAndVerifyVisibility(criteria);
 
-        if (criteria.projectId() != null) {
-            return template.nonTransaction(connection -> dao.find(size, page, criteria, connection));
-        }
-
-        return getProjectByName(criteria.projectName())
-                .flatMap(project -> template.nonTransaction(connection -> dao.find(
-                        size, page, criteria.toBuilder().projectId(project.id()).build(), connection)))
-                .switchIfEmpty(Mono.just(TracePage.empty(page, sortingFactory.getSortableFields())));
+        return template.nonTransaction(connection -> dao.find(size, page, resolvedCriteria, connection));
     }
 
     @Override
@@ -407,14 +410,9 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
+        criteria = findProjectAndVerifyVisibility(criteria);
 
-        if (criteria.projectId() != null) {
-            return dao.getStats(criteria)
-                    .switchIfEmpty(Mono.just(ProjectStats.empty()));
-        }
-
-        return getProjectByName(criteria.projectName())
-                .flatMap(project -> dao.getStats(criteria.toBuilder().projectId(project.id()).build()))
+        return dao.getStats(criteria)
                 .switchIfEmpty(Mono.just(ProjectStats.empty()));
     }
 
@@ -439,14 +437,9 @@ class TraceServiceImpl implements TraceService {
 
     @Override
     public Mono<TraceThreadPage> getTraceThreads(int page, int size, @NonNull TraceSearchCriteria criteria) {
+        criteria = findProjectAndVerifyVisibility(criteria);
 
-        if (criteria.projectId() != null) {
-            return dao.findThreads(size, page, criteria);
-        }
-
-        return getProjectByName(criteria.projectName())
-                .flatMap(project -> dao.findThreads(size, page, criteria.toBuilder().projectId(project.id()).build()))
-                .switchIfEmpty(Mono.just(TraceThreadPage.empty(page)));
+        return dao.findThreads(size, page, criteria);
     }
 
     @Override
@@ -483,6 +476,11 @@ class TraceServiceImpl implements TraceService {
                 .map(project -> criteria.toBuilder().projectId(project.id()).build())
                 .flatMapMany(newCriteria -> dao.search(limit, newCriteria))
                 .switchIfEmpty(Flux.empty());
+    }
+
+    @Override
+    public Mono<Long> countTraces(Set<UUID> projectIds) {
+        return dao.countTraces(projectIds);
     }
 
 }

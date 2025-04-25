@@ -1,11 +1,14 @@
 package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.GuardrailsValidation;
+import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ProjectStats.ProjectStatItem;
 import com.comet.opik.api.ProjectStats.SingleValueStat;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.utils.ValidationUtils;
@@ -33,7 +36,6 @@ import java.util.stream.Collectors;
 import static com.comet.opik.api.ProjectStats.AvgValueStat;
 import static com.comet.opik.api.ProjectStats.CountValueStat;
 import static com.comet.opik.api.ProjectStats.PercentageValueStat;
-import static com.comet.opik.api.ProjectStats.PercentageValues;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;
@@ -72,6 +74,7 @@ public class StatsUtils {
                 Trace::startTime,
                 Trace::endTime,
                 Trace::totalEstimatedCost,
+                Trace::guardrailsValidations,
                 "trace_count");
     }
 
@@ -112,6 +115,7 @@ public class StatsUtils {
 
                     return BigDecimal.ZERO;
                 },
+                null,
                 "span_count");
     }
 
@@ -126,6 +130,7 @@ public class StatsUtils {
             Function<T, Instant> startProvider,
             Function<T, Instant> endProvider,
             Function<T, BigDecimal> totalEstimatedCostProvider,
+            Function<T, List<GuardrailsValidation>> guardrailsProvider,
             String countLabel) {
 
         if (expectedEntities.isEmpty()) {
@@ -183,6 +188,17 @@ public class StatsUtils {
                 : totalEstimatedCost.divide(BigDecimal.valueOf(countEstimatedCost), ValidationUtils.SCALE,
                         RoundingMode.HALF_UP);
 
+        Long failedGuardrails = guardrailsProvider == null
+                ? null
+                : expectedEntities.stream()
+                        .map(guardrailsProvider)
+                        .filter(Objects::nonNull)
+                        .flatMap(List::stream)
+                        .map(GuardrailsValidation::checks)
+                        .flatMap(List::stream)
+                        .filter(guardrail -> guardrail.result() == GuardrailResult.FAILED)
+                        .count();
+
         stats.add(new CountValueStat(StatsMapper.INPUT, input));
         stats.add(new CountValueStat(StatsMapper.OUTPUT, output));
         stats.add(new CountValueStat(StatsMapper.METADATA, metadata));
@@ -202,10 +218,13 @@ public class StatsUtils {
                         .add(new AvgValueStat("%s.%s".formatted(StatsMapper.FEEDBACK_SCORE, key),
                                 feedback.get(key))));
 
+        Optional.ofNullable(failedGuardrails).ifPresent(failedGuardrailCount -> stats
+                .add(new CountValueStat(StatsMapper.GUARDRAILS_FAILED_COUNT, failedGuardrailCount)));
+
         return stats;
     }
 
-    private static Map<String, Double> calculateUsageAverage(List<Map<String, Long>> data) {
+    public static Map<String, Double> calculateUsageAverage(List<Map<String, Long>> data) {
         return data.stream()
                 .filter(Objects::nonNull)
                 .map(Map::entrySet)
@@ -218,6 +237,20 @@ public class StatsUtils {
                 .map(e -> Map.entry(e.getKey(),
                         avgFromDoubleList(e.getValue().stream().map(Double::valueOf).toList())))
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    public static Map<String, Long> calculateUsage(List<Map<String, Long>> data) {
+        return data.stream()
+                .filter(Objects::nonNull)
+                .map(Map::entrySet)
+                .flatMap(Collection::stream)
+                .collect(groupingBy(
+                        Map.Entry::getKey,
+                        mapping(Map.Entry::getValue, toList())))
+                .entrySet()
+                .stream()
+                .map(e -> Map.entry(e.getKey(), e.getValue().stream().mapToLong(Long::longValue).average()))
+                .collect(toMap(Map.Entry::getKey, e -> (long) e.getValue().orElseThrow()));
     }
 
     private static Map<String, Double> calculateFeedbackAverage(List<List<FeedbackScore>> data) {
@@ -352,10 +385,14 @@ public class StatsUtils {
         double epsilon = .00001;
 
         // Calculate the absolute difference
-        double difference = Math.abs(numv1.doubleValue() - numv2.doubleValue());
+        BigDecimal difference = BigDecimal.valueOf(numv1.doubleValue())
+                .subtract(BigDecimal.valueOf(numv2.doubleValue())).abs();
 
         // If the difference is within the tolerance, consider them equal
-        if (difference <= epsilon) {
+        if (difference.doubleValue() <= epsilon) {
+            return 0;
+        } else if (difference.toString().replace("0", "").equals(".1")) {
+            // This is a special case where the difference is exactly 1, which should also be considered equal
             return 0;
         }
 

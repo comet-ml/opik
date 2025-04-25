@@ -1,6 +1,7 @@
 package com.comet.opik.domain.stats;
 
 import com.comet.opik.api.FeedbackScoreAverage;
+import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.ProjectStats;
 import io.r2dbc.spi.Row;
 
@@ -13,7 +14,6 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.ProjectStats.AvgValueStat;
 import static com.comet.opik.api.ProjectStats.CountValueStat;
 import static com.comet.opik.api.ProjectStats.PercentageValueStat;
-import static com.comet.opik.api.ProjectStats.PercentageValues;
 import static java.util.stream.Collectors.toMap;
 
 public class StatsMapper {
@@ -27,6 +27,7 @@ public class StatsMapper {
     public static final String METADATA = "metadata";
     public static final String TAGS = "tags";
     public static final String TRACE_COUNT = "trace_count";
+    public static final String GUARDRAILS_FAILED_COUNT = "guardrails_failed_count";
 
     public static ProjectStats mapProjectStats(Row row, String entityCountLabel) {
 
@@ -69,6 +70,13 @@ public class StatsMapper {
                     .sorted()
                     .forEach(key -> stats.add(new AvgValueStat("%s.%s".formatted(FEEDBACK_SCORE, key),
                             feedbackScores.get(key))));
+        }
+
+        // spans cannot accept guardrails and therefore will not have guardrails_failed_count in the result set
+        if (row.getMetadata().contains("guardrails_failed_count")) {
+            Optional.ofNullable(row.get("guardrails_failed_count", Long.class)).ifPresent(
+                    guardrailsFailedCount -> stats
+                            .add(new CountValueStat(GUARDRAILS_FAILED_COUNT, guardrailsFailedCount)));
         }
 
         return new ProjectStats(stats.build().toList());
@@ -116,6 +124,12 @@ public class StatsMapper {
     public static Long getStatsTraceCount(Map<String, Object> projectStats) {
         return Optional.ofNullable(projectStats)
                 .map(map -> (Long) map.get(TRACE_COUNT))
+                .orElse(null);
+    }
+
+    public static Long getStatsGuardrailsFailedCount(Map<String, Object> projectStats) {
+        return Optional.ofNullable(projectStats)
+                .map(map -> (Long) map.get(GUARDRAILS_FAILED_COUNT))
                 .orElse(null);
     }
 }

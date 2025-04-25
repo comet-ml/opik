@@ -5,16 +5,17 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.GuardrailsValidation;
+import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectRetrieve;
-import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
-import com.comet.opik.api.ProjectVisibility;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.BigDecimalCollectors;
@@ -28,6 +29,8 @@ import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
+import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
@@ -35,6 +38,8 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingFactory;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.GuardrailResult;
+import com.comet.opik.domain.GuardrailsMapper;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -45,6 +50,7 @@ import com.comet.opik.utils.ValidationUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -93,14 +99,14 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.ProjectStatsSummary.ProjectStatsSummaryItem;
-import static com.comet.opik.api.ProjectVisibility.PRIVATE;
-import static com.comet.opik.api.ProjectVisibility.PUBLIC;
+import static com.comet.opik.api.Visibility.PRIVATE;
+import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
-import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_RESPONSE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
@@ -111,6 +117,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static java.util.UUID.randomUUID;
 import static java.util.stream.Collectors.averagingDouble;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toMap;
@@ -126,7 +133,8 @@ class ProjectsResourceTest {
     public static final String URL_TEMPLATE = "%s/v1/private/projects";
     public static final String URL_TEMPLATE_TRACE = "%s/v1/private/traces";
     public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
-            "lastUpdatedTraceAt", "feedbackScores", "duration", "totalEstimatedCost", "usage", "traceCount"};
+            "lastUpdatedTraceAt", "feedbackScores", "duration", "totalEstimatedCost", "usage", "traceCount",
+            "guardrailsFailedCount"};
     public static final String[] IGNORED_FIELD_MIN = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
             "lastUpdatedTraceAt"};
 
@@ -165,6 +173,8 @@ class ProjectsResourceTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private ProjectResourceClient projectResourceClient;
+    private GuardrailsResourceClient guardrailsResourceClient;
+    private GuardrailsGenerator guardrailsGenerator;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi, ProjectService projectService) throws SQLException {
@@ -187,6 +197,8 @@ class ProjectsResourceTest {
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
+        this.guardrailsResourceClient = new GuardrailsResourceClient(this.client, baseURI);
+        this.guardrailsGenerator = new GuardrailsGenerator();
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -304,7 +316,7 @@ class ProjectsResourceTest {
         @ParameterizedTest
         @MethodSource("getProjectPublicCredentials")
         @DisplayName("get project by id: when api key is present, then return proper response")
-        void getProjectById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, ProjectVisibility visibility,
+        void getProjectById__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, Visibility visibility,
                 int expectedCode) {
 
             String workspaceName = UUID.randomUUID().toString();
@@ -324,8 +336,8 @@ class ProjectsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
                 if (expectedCode == 404) {
                     assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class))
-                            .isEqualTo(PROJECT_NOT_FOUND_RESPONSE);
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(id));
                 }
             }
         }
@@ -395,7 +407,7 @@ class ProjectsResourceTest {
         @ParameterizedTest
         @MethodSource("publicCredentials")
         @DisplayName("get projects: when api key is present, then return proper response")
-        void getProjects__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, ProjectVisibility visibility) {
+        void getProjects__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, Visibility visibility) {
 
             var workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -500,7 +512,7 @@ class ProjectsResourceTest {
         @MethodSource("getProjectPublicCredentials")
         @DisplayName("get project by id: when session token is present, then return proper response")
         void getProjectById__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                ProjectVisibility visibility,
+                Visibility visibility,
                 String workspaceName, int expectedCode) {
             var id = createProject(factory.manufacturePojo(Project.class).toBuilder().visibility(visibility).build());
             mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
@@ -515,8 +527,8 @@ class ProjectsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
                 if (expectedCode == 404) {
                     assertThat(actualResponse.hasEntity()).isTrue();
-                    assertThat(actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class))
-                            .isEqualTo(PROJECT_NOT_FOUND_RESPONSE);
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(id));
                 }
             }
         }
@@ -577,7 +589,7 @@ class ProjectsResourceTest {
         @MethodSource("publicCredentials")
         @DisplayName("get projects: when session token is present, then return proper response")
         void getProjects__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                ProjectVisibility visibility,
+                Visibility visibility,
                 String workspaceName) {
 
             String workspaceId = UUID.randomUUID().toString();
@@ -1291,6 +1303,7 @@ class ProjectsResourceTest {
                             .feedbackScores(project.feedbackScores())
                             .projectId(project.id())
                             .traceCount(project.traceCount())
+                            .guardrailsFailedCount(project.guardrailsFailedCount())
                             .build())
                     .toList();
         }
@@ -1481,6 +1494,12 @@ class ProjectsResourceTest {
         List<FeedbackScoreBatchItem> scores = PodamFactoryUtils.manufacturePojoList(factory,
                 FeedbackScoreBatchItem.class);
 
+        var guardrailsByTraceId = traces.stream()
+                .collect(Collectors.toMap(Trace::id, trace -> guardrailsGenerator.generateGuardrailsForTrace(
+                        trace.id(), randomUUID(), trace.projectName())));
+        guardrailsByTraceId.values().forEach(guardrail -> guardrailsResourceClient.addBatch(
+                guardrail, apiKey, workspaceName));
+
         traces = traces.stream().map(trace -> {
             List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
                     .map(span -> span.toBuilder()
@@ -1515,6 +1534,8 @@ class ProjectsResourceTest {
                                     .toList())
                     .usage(StatsUtils.aggregateSpansUsage(spans))
                     .totalEstimatedCost(StatsUtils.aggregateSpansCost(spans))
+                    .guardrailsValidations(GuardrailsMapper.INSTANCE.mapToValidations(
+                            guardrailsByTraceId.get(trace.id())))
                     .build();
         }).toList();
 
@@ -1525,7 +1546,7 @@ class ProjectsResourceTest {
                 List.of(0.5, 0.90, 0.99));
 
         return project.toBuilder()
-                .duration(new ProjectStats.PercentageValues(durations.get(0), durations.get(1), durations.get(2)))
+                .duration(new PercentageValues(durations.get(0), durations.get(1), durations.get(2)))
                 .totalEstimatedCost(getTotalEstimatedCost(traces))
                 .usage(traces.stream()
                         .map(Trace::usage)
@@ -1534,6 +1555,13 @@ class ProjectsResourceTest {
                 .feedbackScores(getScoreAverages(traces))
                 .lastUpdatedTraceAt(traces.stream().map(Trace::lastUpdatedAt).max(Instant::compareTo).orElse(null))
                 .traceCount((long) traces.size())
+                .guardrailsFailedCount(traces.stream()
+                        .map(Trace::guardrailsValidations)
+                        .flatMap(List::stream)
+                        .map(GuardrailsValidation::checks)
+                        .flatMap(List::stream)
+                        .filter(guardrail -> guardrail.result() == GuardrailResult.FAILED)
+                        .count())
                 .build();
     }
 
@@ -1932,7 +1960,7 @@ class ProjectsResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .method(HttpMethod.PATCH,
                             Entity.json(ProjectUpdate.builder().name(name).description(descriptionUpdate)
-                                    .visibility(ProjectVisibility.PUBLIC)
+                                    .visibility(Visibility.PUBLIC)
                                     .build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
@@ -1950,7 +1978,7 @@ class ProjectsResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
                 assertThat(actualEntity.description()).isEqualTo(descriptionUpdate);
-                assertThat(actualEntity.visibility()).isEqualTo(ProjectVisibility.PUBLIC);
+                assertThat(actualEntity.visibility()).isEqualTo(Visibility.PUBLIC);
                 assertThat(actualEntity.name()).isEqualTo(name);
             }
         }

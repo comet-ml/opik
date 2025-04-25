@@ -85,12 +85,14 @@ const GuardrailsCell = <TData,>(context: CellContext<TData, unknown>) => {
     getGuardrailComputedResult(guardrailValidations);
 
   if (!guardrailValidations.length) {
-    <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-    >
-      -
-    </CellWrapper>;
+    return (
+      <CellWrapper
+        metadata={context.column.columnDef.meta}
+        tableMetadata={context.table.options.meta}
+      >
+        -
+      </CellWrapper>
+    );
   }
 
   return (

@@ -168,6 +168,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
   python-backend:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
@@ -190,6 +192,24 @@ services:
       timeout: 60s
       retries: 30
       start_period: 2s
+
+  guardrails-backend:
+    image: ghcr.io/comet-ml/opik/opik-guardrails-backend:${OPIK_VERSION:-latest}
+    pull_policy: always
+    profiles:
+      - guardrails
+    build:
+      context: ../../apps/opik-guardrails-backend
+      dockerfile: Dockerfile
+    hostname: guardrails
+    environment:
+      OPIK_VERSION: ${OPIK_VERSION:-latest}
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget --spider --quiet http://127.0.0.1:5000/healthcheck"]
+      interval: 2s
+      timeout: 60s
+      retries: 30
+      start_period: 10s
 
   demo-data-generator:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
@@ -220,7 +240,7 @@ services:
     extra_hosts:
       - "apihost:host-gateway"
     volumes:
-      - ./nginx_default_local.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx_${OPIK_FRONTEND_FLAVOR:-default}_local.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       backend:
         condition: service_healthy

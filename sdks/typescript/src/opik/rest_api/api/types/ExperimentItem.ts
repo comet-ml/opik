@@ -13,6 +13,9 @@ export interface ExperimentItem {
     output?: OpikApi.JsonNode;
     feedbackScores?: OpikApi.FeedbackScore[];
     comments?: OpikApi.Comment[];
+    totalEstimatedCost?: number;
+    duration?: number;
+    usage?: Record<string, number>;
     createdAt?: Date;
     lastUpdatedAt?: Date;
     createdBy?: string;

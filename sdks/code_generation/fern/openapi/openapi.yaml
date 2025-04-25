@@ -1406,9 +1406,9 @@ paths:
     post:
       tags:
       - Guardrails
-      summary: Batch guardrails for traces
+      summary: Create guardrails for traces in a batch
       description: Batch guardrails for traces
-      operationId: addGuardrailsBatch
+      operationId: createGuardrails
       requestBody:
         content:
           application/json:
@@ -4330,6 +4330,11 @@ components:
           format: uuid
         name:
           type: string
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -4373,6 +4378,11 @@ components:
           format: uuid
         name:
           type: string
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -4496,6 +4506,20 @@ components:
           readOnly: true
           items:
             $ref: "#/components/schemas/Comment"
+        total_estimated_cost:
+          type: number
+          readOnly: true
+        duration:
+          type: number
+          format: double
+          readOnly: true
+        usage:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+            readOnly: true
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -4760,6 +4784,20 @@ components:
           readOnly: true
           items:
             $ref: "#/components/schemas/Comment_Compare"
+        total_estimated_cost:
+          type: number
+          readOnly: true
+        duration:
+          type: number
+          format: double
+          readOnly: true
+        usage:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+            readOnly: true
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -4844,6 +4882,11 @@ components:
           format: uuid
         name:
           type: string
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -5069,6 +5112,11 @@ components:
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
     Experiment:
       required:
       - dataset_name
@@ -5105,6 +5153,18 @@ components:
           type: string
           format: date-time
           readOnly: true
+        duration:
+          $ref: "#/components/schemas/PercentageValues"
+        total_estimated_cost:
+          type: number
+          readOnly: true
+        usage:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+            readOnly: true
+          readOnly: true
         last_updated_at:
           type: string
           format: date-time
@@ -5130,6 +5190,15 @@ components:
         name:
           type: string
         value:
+          type: number
+    PercentageValues:
+      type: object
+      properties:
+        p50:
+          type: number
+        p90:
+          type: number
+        p99:
           type: number
     PromptVersionLink:
       required:
@@ -5296,6 +5365,18 @@ components:
           type: string
           format: date-time
           readOnly: true
+        duration:
+          $ref: "#/components/schemas/PercentageValues_Public"
+        total_estimated_cost:
+          type: number
+          readOnly: true
+        usage:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+            readOnly: true
+          readOnly: true
         last_updated_at:
           type: string
           format: date-time
@@ -5325,6 +5406,15 @@ components:
       readOnly: true
     JsonNode_Public:
       type: object
+    PercentageValues_Public:
+      type: object
+      properties:
+        p50:
+          type: number
+        p90:
+          type: number
+        p99:
+          type: number
     PromptVersionLink_Public:
       required:
       - id
@@ -5794,18 +5884,7 @@ components:
           type: number
         min:
           type: number
-    GuardrailBatch:
-      required:
-      - guardrails
-      type: object
-      properties:
-        guardrails:
-          maxItems: 1000
-          minItems: 1
-          type: array
-          items:
-            $ref: "#/components/schemas/GuardrailBatchItem"
-    GuardrailBatchItem:
+    Guardrail:
       required:
       - config
       - details
@@ -5842,6 +5921,17 @@ components:
           $ref: "#/components/schemas/JsonNode"
         details:
           $ref: "#/components/schemas/JsonNode"
+    GuardrailBatch:
+      required:
+      - guardrails
+      type: object
+      properties:
+        guardrails:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/Guardrail"
     ProviderApiKeyPage_Public:
       type: object
       properties:
@@ -5965,15 +6055,6 @@ components:
           type: string
     ExportTraceServiceRequest:
       $ref: "#/components/schemas/JsonNode"
-    PercentageValues:
-      type: object
-      properties:
-        p50:
-          type: number
-        p90:
-          type: number
-        p99:
-          type: number
     Project:
       required:
       - name
@@ -6029,6 +6110,10 @@ components:
             readOnly: true
           readOnly: true
         trace_count:
+          type: integer
+          format: int64
+          readOnly: true
+        guardrails_failed_count:
           type: integer
           format: int64
           readOnly: true
@@ -6138,6 +6223,7 @@ components:
           - TOKEN_USAGE
           - DURATION
           - COST
+          - GUARDRAILS_FAILED_COUNT
         interval:
           type: string
           enum:
@@ -6168,6 +6254,7 @@ components:
           - TOKEN_USAGE
           - DURATION
           - COST
+          - GUARDRAILS_FAILED_COUNT
         interval:
           type: string
           enum:
@@ -6208,6 +6295,9 @@ components:
             type: number
             format: double
         trace_count:
+          type: integer
+          format: int64
+        guardrails_failed_count:
           type: integer
           format: int64
     FeedbackScoreAverage_Detailed:
@@ -6286,6 +6376,10 @@ components:
             readOnly: true
           readOnly: true
         trace_count:
+          type: integer
+          format: int64
+          readOnly: true
+        guardrails_failed_count:
           type: integer
           format: int64
           readOnly: true
@@ -7064,15 +7158,6 @@ components:
         properties:
           value:
             $ref: "#/components/schemas/PercentageValues_Public"
-    PercentageValues_Public:
-      type: object
-      properties:
-        p50:
-          type: number
-        p90:
-          type: number
-        p99:
-          type: number
     ProjectStatItemObject_Public:
       type: object
       properties:

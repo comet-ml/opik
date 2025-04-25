@@ -107,6 +107,8 @@ from .dataset_item_write import DatasetItemWrite
 from .dataset_item_write_source import DatasetItemWriteSource
 from .dataset_page_public import DatasetPagePublic
 from .dataset_public import DatasetPublic
+from .dataset_public_visibility import DatasetPublicVisibility
+from .dataset_visibility import DatasetVisibility
 from .delete_attachments_request import DeleteAttachmentsRequest
 from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEntityType
 from .delete_feedback_score import DeleteFeedbackScore
@@ -163,9 +165,9 @@ from .feedback_update import (
 )
 from .function import Function
 from .function_call import FunctionCall
-from .guardrail_batch_item import GuardrailBatchItem
-from .guardrail_batch_item_name import GuardrailBatchItemName
-from .guardrail_batch_item_result import GuardrailBatchItemResult
+from .guardrail import Guardrail
+from .guardrail_name import GuardrailName
+from .guardrail_result import GuardrailResult
 from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
 from .json_node import JsonNode
@@ -373,6 +375,8 @@ __all__ = [
     "DatasetItemWriteSource",
     "DatasetPagePublic",
     "DatasetPublic",
+    "DatasetPublicVisibility",
+    "DatasetVisibility",
     "DeleteAttachmentsRequest",
     "DeleteAttachmentsRequestEntityType",
     "DeleteFeedbackScore",
@@ -423,9 +427,9 @@ __all__ = [
     "Feedback_Numerical",
     "Function",
     "FunctionCall",
-    "GuardrailBatchItem",
-    "GuardrailBatchItemName",
-    "GuardrailBatchItemResult",
+    "Guardrail",
+    "GuardrailName",
+    "GuardrailResult",
     "GuardrailsValidation",
     "GuardrailsValidationPublic",
     "JsonNode",

@@ -1,6 +1,6 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.GuardrailBatchItem;
+import com.comet.opik.api.Guardrail;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -24,7 +24,7 @@ import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 
 @ImplementedBy(GuardrailsDAOImpl.class)
 public interface GuardrailsDAO {
-    Mono<Long> addGuardrails(EntityType entityType, List<GuardrailBatchItem> guardrails);
+    Mono<Long> addGuardrails(EntityType entityType, List<Guardrail> guardrails);
 }
 
 @Singleton
@@ -72,7 +72,7 @@ class GuardrailsDAOImpl implements GuardrailsDAO {
             """;
 
     @Override
-    public Mono<Long> addGuardrails(EntityType entityType, List<GuardrailBatchItem> guardrails) {
+    public Mono<Long> addGuardrails(EntityType entityType, List<Guardrail> guardrails) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(guardrails),
                 "Argument 'guardrails' must not be empty");
 
@@ -90,7 +90,7 @@ class GuardrailsDAOImpl implements GuardrailsDAO {
         });
     }
 
-    private void bindParameters(EntityType entityType, List<GuardrailBatchItem> guardrails, Statement statement) {
+    private void bindParameters(EntityType entityType, List<Guardrail> guardrails, Statement statement) {
         for (var i = 0; i < guardrails.size(); i++) {
             var guardrailBatchItem = guardrails.get(i);
 
