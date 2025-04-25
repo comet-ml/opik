@@ -687,7 +687,7 @@ class SpanDAO {
                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
             )
             SELECT
-                s.* <if(exclude_fields)>EXCEPT (<exclude_fields>) <else> EXCEPT (input, output, metadata)<endif>
+                s.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata) <else> EXCEPT (input, output, metadata)<endif>
                 <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(s.input, '<truncate>', '"[image]"') as input <else> s.input as input<endif> <endif>
                 <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(s.output, '<truncate>', '"[image]"') as output <else> s.output as output<endif> <endif>
                 <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(s.metadata, '<truncate>', '"[image]"') as metadata <else> s.metadata as metadata<endif> <endif>
