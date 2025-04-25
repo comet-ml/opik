@@ -1,4 +1,4 @@
-import { MaxFeedbackScore } from "@/types/shared";
+import { AggregatedFeedbackScore } from "@/types/shared";
 
 export enum OPTIMIZATION_STATUS {
   RUNNING = "running",
@@ -12,7 +12,7 @@ export interface Optimization {
   dataset_id: string;
   dataset_name: string;
   metadata?: object;
-  feedback_scores?: MaxFeedbackScore[];
+  feedback_scores?: AggregatedFeedbackScore[];
   num_trials: number;
   objective_name: string;
   status: OPTIMIZATION_STATUS;

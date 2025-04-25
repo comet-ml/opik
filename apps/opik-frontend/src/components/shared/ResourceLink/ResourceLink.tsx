@@ -6,6 +6,7 @@ import {
   FileTerminal,
   FlaskConical,
   LayoutGrid,
+  SparklesIcon,
 } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 
@@ -20,6 +21,7 @@ export enum RESOURCE_TYPE {
   dataset,
   prompt,
   experiment,
+  optimization,
 }
 
 const RESOURCE_MAP = {
@@ -46,6 +48,12 @@ const RESOURCE_MAP = {
     icon: FlaskConical,
     param: "datasetId",
     deleted: "Experiment deleted",
+  },
+  [RESOURCE_TYPE.optimization]: {
+    url: "/$workspaceName/optimizations/$datasetId/compare",
+    icon: SparklesIcon,
+    param: "datasetId",
+    deleted: "Optimization deleted",
   },
 };
 

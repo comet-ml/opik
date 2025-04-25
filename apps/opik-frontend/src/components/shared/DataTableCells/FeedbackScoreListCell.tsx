@@ -14,6 +14,7 @@ const COUNTER_WIDTH = 30;
 type CustomMeta<TData> = {
   getHoverCardName: (row: TData) => string;
   isAverageScores?: boolean;
+  isMaxScores?: boolean;
 };
 
 const calculateVisibleCount = (
@@ -63,8 +64,8 @@ const FeedbackScoreListCell = <TData,>(
   context: CellContext<TData, unknown>,
 ) => {
   const feedbackScoreList = context.getValue() as TraceFeedbackScore[];
-  const { getHoverCardName, isAverageScores } = (context.column.columnDef.meta
-    ?.custom ?? {}) as CustomMeta<TData>;
+  const { getHoverCardName, isAverageScores, isMaxScores } = (context.column
+    .columnDef.meta?.custom ?? {}) as CustomMeta<TData>;
 
   const hoverCardName = getHoverCardName(context.row.original);
   const isEmpty = !feedbackScoreList?.length;
@@ -102,6 +103,7 @@ const FeedbackScoreListCell = <TData,>(
           <FeedbackScoreHoverCard
             name={hoverCardName}
             isAverageScores={isAverageScores}
+            isMaxScores={isMaxScores}
             tagList={sortedList}
             hidden={!remainingCount}
           >

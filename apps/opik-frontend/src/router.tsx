@@ -32,6 +32,8 @@ import ConfigurationPage from "@/components/pages/ConfigurationPage/Configuratio
 import GetStartedPage from "@/components/pages/GetStartedPage/GetStartedPage";
 import AutomationLogsPage from "@/components/pages/AutomationLogsPage/AutomationLogsPage";
 import OnlineEvaluationPage from "@/components/pages/OnlineEvaluationPage/OnlineEvaluationPage";
+import OptimizationsPage from "@/components/pages/OptimizationsPage/OptimizationsPage";
+import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -296,6 +298,32 @@ const onlineEvaluationRoute = createRoute({
   component: OnlineEvaluationPage,
 });
 
+// --------- optimizations
+
+const optimizationsRoute = createRoute({
+  path: "/optimizations",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Optimizations",
+  },
+});
+
+const optimizationsListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => optimizationsRoute,
+  component: OptimizationsPage,
+});
+
+const compareOptimizationsRoute = createRoute({
+  path: "/$datasetId/compare",
+  getParentRoute: () => optimizationsRoute,
+  component: CompareOptimizationsPage,
+  staticData: {
+    param: "compare",
+    paramValue: "compare",
+  },
+});
+
 // ----------- Automation logs
 
 const automationLogsRoute = createRoute({
@@ -336,6 +364,10 @@ const routeTree = rootRoute.addChildren([
       playgroundRoute,
       configurationRoute,
       onlineEvaluationRoute,
+      optimizationsRoute.addChildren([
+        optimizationsListRoute,
+        compareOptimizationsRoute,
+      ]),
     ]),
   ]),
 ]);

@@ -7,6 +7,8 @@ import {
   GroupingState,
   Row,
 } from "@tanstack/react-table";
+import { ChevronDown, ChevronUp } from "lucide-react";
+
 import {
   COLUMN_NAME_ID,
   COLUMN_TYPE,
@@ -14,16 +16,9 @@ import {
   OnChangeFn,
 } from "@/types/shared";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp } from "lucide-react";
 import { mapColumnDataFields } from "@/lib/table";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import TypeHeader from "@/components/shared/DataTableHeaders/TypeHeader";
-import {
-  checkIsMoreRowId,
-  DEFAULT_EXPERIMENTS_PER_GROUP,
-  GroupedExperiment,
-  GROUPING_COLUMN,
-} from "@/hooks/useGroupedExperimentsList";
 import ResourceLink, {
   RESOURCE_TYPE,
 } from "@/components/shared/ResourceLink/ResourceLink";
@@ -33,19 +28,22 @@ import {
   getCommonPinningStyles,
   shiftCheckboxClickHandler,
 } from "@/components/shared/DataTable/utils";
+import { DEFAULT_ITEMS_PER_GROUP, GROUPING_COLUMN } from "@/constants/grouping";
 
 export const GROUPING_CONFIG = {
   groupedColumnMode: false as const,
   grouping: [GROUPING_COLUMN] as GroupingState,
 };
 
-export const getRowId = (e: GroupedExperiment) => e.id;
-export const getIsMoreRow = (row: Row<GroupedExperiment>) =>
-  checkIsMoreRowId(row?.original?.id || "");
+export const checkIsMoreRowId = (id: string) => {
+  return /^more_/.test(id);
+};
 
-// The goal to use shared handler between two different helpers to draw cells in Experiments table,
+export const getRowId = <TData extends { id: string }>(row: TData) => row.id;
+
+// The goal to use shared handler between two different helpers to draw cells in table with grouping,
 // to share in closure the previousSelectedRowID between two helpers
-// generateExperimentNameColumDef and generateGroupedCellDef
+// generateGroupedNameColumDef and generateGroupedCellDef
 export const getSharedShiftCheckboxClickHandler = () => {
   let previousSelectedRowID = "";
 
@@ -59,18 +57,27 @@ export const getSharedShiftCheckboxClickHandler = () => {
   };
 };
 
-export const generateExperimentNameColumDef = <TData,>(
+export const generateGroupedNameColumDef = <
+  TData extends {
+    id: string;
+    dataset_id: string;
+    dataset_name: string;
+    name: string;
+  },
+>(
   checkboxClickHandler: (
     event: React.MouseEvent<HTMLButtonElement>,
     context: CellContext<TData, unknown>,
   ) => void,
   sortable: boolean = false,
+  resourceType: RESOURCE_TYPE = RESOURCE_TYPE.experiment,
+  searchKey: string = "experiments",
 ) => {
   return {
     accessorKey: COLUMN_NAME_ID,
     header: TypeHeader,
     cell: (context) => {
-      const data = context.row.original as GroupedExperiment;
+      const data = context.row.original as TData;
       return (
         <CellWrapper
           metadata={context.column.columnDef.meta}
@@ -90,9 +97,9 @@ export const generateExperimentNameColumDef = <TData,>(
             <ResourceLink
               id={data.dataset_id}
               name={data.name}
-              resource={RESOURCE_TYPE.experiment}
+              resource={resourceType}
               search={{
-                experiments: [data.id],
+                [searchKey]: [data.id],
               }}
             />
           </div>
@@ -167,8 +174,8 @@ export const generateGroupedCellDef = <TData, TValue>(
   } as ColumnDef<TData, TValue>;
 };
 
-export const renderCustomRow = (
-  row: Row<GroupedExperiment>,
+export const renderCustomRow = <TData extends { dataset_id: string }>(
+  row: Row<TData>,
   setGroupLimit: OnChangeFn<Record<string, number>>,
   applyStickyWorkaround?: boolean,
 ) => {
@@ -220,13 +227,12 @@ export const renderCustomRow = (
                   ...state,
                   [row.original.dataset_id]:
                     (state[row.original.dataset_id] ||
-                      DEFAULT_EXPERIMENTS_PER_GROUP) +
-                    DEFAULT_EXPERIMENTS_PER_GROUP,
+                      DEFAULT_ITEMS_PER_GROUP) + DEFAULT_ITEMS_PER_GROUP,
                 };
               });
             }}
           >
-            Load {DEFAULT_EXPERIMENTS_PER_GROUP} more experiments
+            Load {DEFAULT_ITEMS_PER_GROUP} more items
           </Button>
         </td>
       </tr>
@@ -234,6 +240,8 @@ export const renderCustomRow = (
   }
 };
 
-export const getIsCustomRow = (row: Row<GroupedExperiment>) => {
-  return getIsMoreRow(row) || row.getIsGrouped();
+export const getIsCustomRow = <TData extends { id: string }>(
+  row: Row<TData>,
+) => {
+  return checkIsMoreRowId(row?.original?.id || "") || row.getIsGrouped();
 };

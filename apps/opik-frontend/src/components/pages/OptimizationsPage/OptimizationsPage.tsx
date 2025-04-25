@@ -1,10 +1,8 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Info, RotateCw } from "lucide-react";
-import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import {
   ColumnPinningState,
-  ColumnSort,
   Row,
   RowSelectionState,
 } from "@tanstack/react-table";
@@ -20,39 +18,34 @@ import get from "lodash/get";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
-import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
-import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
-import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
+import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
 import {
-  COLUMN_COMMENTS_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_TYPE,
   ColumnData,
-  DynamicColumn,
 } from "@/types/shared";
-import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
+import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
-import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
-import ExperimentsActionsPanel from "@/components/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
+import AddOptimizationDialog from "@/components/pages/OptimizationsPage/AddOptimizationDialog/AddOptimizationDialog";
+import OptimizationsActionsPanel from "@/components/pages/OptimizationsPage/OptimizationsActionsPanel/OptimizationsActionsPanel";
 import ExperimentsFiltersButton from "@/components/pages-shared/experiments/ExperimentsFiltersButton/ExperimentsFiltersButton";
-import ExperimentRowActionsCell from "@/components/pages/ExperimentsPage/ExperimentRowActionsCell";
-import FeedbackScoresChartsWrapper from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartsWrapper";
+import OptimizationRowActionsCell from "@/components/pages/OptimizationsPage/OptimizationRowActionsCell";
+import FeedbackScoresChartsWrapper from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartsWrapper"; // TODO lala check later
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
-import useGroupedExperimentsList, {
-  GroupedExperiment,
-} from "@/hooks/useGroupedExperimentsList";
+import useGroupedOptimizationsList, {
+  GroupedOptimization,
+} from "@/hooks/useGroupedOptimizationsList";
 import {
   checkIsMoreRowId,
   generateGroupedNameColumDef,
@@ -63,20 +56,16 @@ import {
   GROUPING_CONFIG,
   renderCustomRow,
 } from "@/components/pages-shared/experiments/table";
-import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/grouping";
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
-import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
-import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { formatNumericData } from "@/lib/utils";
+import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/grouping";
 
-const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
-const COLUMNS_WIDTH_KEY = "experiments-columns-width";
-const COLUMNS_ORDER_KEY = "experiments-columns-order";
-const COLUMNS_SORT_KEY = "experiments-columns-sort";
-const COLUMNS_SCORES_ORDER_KEY = "experiments-scores-columns-order";
+const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
+const COLUMNS_WIDTH_KEY = "optimizations-columns-width";
+const COLUMNS_ORDER_KEY = "optimizations-columns-order";
 
-export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
+export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
   {
     id: COLUMN_ID_ID,
     label: "ID",
@@ -95,28 +84,13 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     type: COLUMN_TYPE.string,
   },
   {
-    id: "prompt",
-    label: "Prompt commit",
-    type: COLUMN_TYPE.list,
-    accessorFn: (row) => get(row, ["prompt_versions"], []),
-    cell: MultiResourceCell as never,
-    customMeta: {
-      nameKey: "commit",
-      idKey: "prompt_id",
-      resource: RESOURCE_TYPE.prompt,
-      getSearch: (data: GroupedExperiment) => ({
-        activeVersionId: get(data, "id", null),
-      }),
-    },
-  },
-  {
-    id: "trace_count",
-    label: "Trace count",
+    id: "num_trials",
+    label: "Trial count",
     type: COLUMN_TYPE.number,
   },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores",
+    label: "Optimization scores (max.)",
     type: COLUMN_TYPE.numberDictionary,
     accessorFn: (row) =>
       get(row, "feedback_scores", []).map((score) => ({
@@ -125,15 +99,14 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
       })),
     cell: FeedbackScoreListCell as never,
     customMeta: {
-      getHoverCardName: (row: GroupedExperiment) => row.name,
-      isAverageScores: true,
+      getHoverCardName: (row: GroupedOptimization) => row.name,
+      isMaxScores: true,
     },
   },
   {
-    id: COLUMN_COMMENTS_ID,
-    label: "Comments",
+    id: "status",
+    label: "Status",
     type: COLUMN_TYPE.string,
-    cell: CommentsCell as never,
   },
 ];
 
@@ -144,11 +117,12 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
+  "num_trials",
   COLUMN_FEEDBACK_SCORES_ID,
-  COLUMN_COMMENTS_ID,
+  "status",
 ];
 
-const ExperimentsPage: React.FunctionComponent = () => {
+const OptimizationsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
@@ -176,51 +150,31 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const [sortedColumns, setSortedColumns] = useLocalStorageState<ColumnSort[]>(
-    COLUMNS_SORT_KEY,
-    {
-      defaultValue: [],
-    },
-  );
-
   const { checkboxClickHandler } = useMemo(() => {
     return {
       checkboxClickHandler: getSharedShiftCheckboxClickHandler(),
     };
   }, []);
 
-  const { data, isPending, refetch, datasetsData } = useGroupedExperimentsList({
-    workspaceName,
-    groupLimit,
-    datasetId: datasetId!,
-    sorting: sortedColumns,
-    search: search!,
-    page: page!,
-    size: DEFAULT_GROUPS_PER_PAGE,
-    polling: true,
-  });
+  const { data, isPending, refetch, datasetsData } =
+    useGroupedOptimizationsList({
+      workspaceName,
+      groupLimit,
+      datasetId: datasetId!,
+      search: search!,
+      page: page!,
+      size: DEFAULT_GROUPS_PER_PAGE,
+      polling: true,
+    });
 
-  const { data: feedbackScoresData, isPending: isFeedbackScoresPending } =
-    useExperimentsFeedbackScoresNames(
-      {},
-      {
-        placeholderData: keepPreviousData,
-        refetchInterval: 30000,
-      },
-    );
-
-  const experiments = useMemo(() => data?.content ?? [], [data?.content]);
-
-  const sortableBy: string[] = useMemo(
-    () => data?.sortable_by ?? [],
-    [data?.sortable_by],
-  );
+  const optimizations = useMemo(() => data?.content ?? [], [data?.content]);
 
   const groupIds = useMemo(() => data?.groupIds ?? [], [data?.groupIds]);
   const total = data?.total ?? 0;
   const noData = !search && !datasetId;
   const noDataText = noData
-    ? "There are no experiments yet"
+    ? "There are no optimizations yet\n" +
+      "Optimizations help improve your LLM application's performance, accuracy, and overall user experience"
     : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
@@ -237,58 +191,27 @@ const ExperimentsPage: React.FunctionComponent = () => {
     },
   );
 
-  const [scoresColumnsOrder, setScoresColumnsOrder] = useLocalStorageState<
-    string[]
-  >(COLUMNS_SCORES_ORDER_KEY, {
-    defaultValue: [],
-  });
-
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
   >(COLUMNS_WIDTH_KEY, {
     defaultValue: {},
   });
 
-  const dynamicScoresColumns = useMemo(() => {
-    return (feedbackScoresData?.scores ?? [])
-      .sort((c1, c2) => c1.name.localeCompare(c2.name))
-      .map<DynamicColumn>((c) => ({
-        id: `${COLUMN_FEEDBACK_SCORES_ID}.${c.name}`,
-        label: c.name,
-        columnType: COLUMN_TYPE.number,
-      }));
-  }, [feedbackScoresData?.scores]);
-
-  const scoresColumnsData = useMemo(() => {
-    return [
-      ...dynamicScoresColumns.map(
-        ({ label, id, columnType }) =>
-          ({
-            id,
-            label,
-            type: columnType,
-            header: FeedbackScoreHeader as never,
-            cell: FeedbackScoreCell as never,
-            accessorFn: (row) =>
-              row.feedback_scores?.find((f) => f.name === label),
-          }) as ColumnData<GroupedExperiment>,
-      ),
-    ];
-  }, [dynamicScoresColumns]);
-
-  const selectedRows: Array<GroupedExperiment> = useMemo(() => {
-    return experiments.filter(
+  const selectedRows: Array<GroupedOptimization> = useMemo(() => {
+    return optimizations.filter(
       (row) => rowSelection[row.id] && !checkIsMoreRowId(row.id),
     );
-  }, [rowSelection, experiments]);
+  }, [rowSelection, optimizations]);
 
   const columns = useMemo(() => {
     return [
-      generateGroupedNameColumDef<GroupedExperiment>(
+      generateGroupedNameColumDef<GroupedOptimization>(
         checkboxClickHandler,
-        isColumnSortable(COLUMN_NAME_ID, sortableBy),
+        false,
+        RESOURCE_TYPE.optimization,
+        "optimizations",
       ),
-      generateGroupedCellDef<GroupedExperiment, unknown>(
+      generateGroupedCellDef<GroupedOptimization, unknown>(
         {
           id: GROUPING_COLUMN,
           label: "Dataset",
@@ -302,43 +225,18 @@ const ExperimentsPage: React.FunctionComponent = () => {
         },
         checkboxClickHandler,
       ),
-      ...convertColumnDataToColumn<GroupedExperiment, GroupedExperiment>(
+      ...convertColumnDataToColumn<GroupedOptimization, GroupedOptimization>(
         DEFAULT_COLUMNS,
         {
           columnsOrder,
           selectedColumns,
-          sortableColumns: sortableBy,
-        },
-      ),
-      ...convertColumnDataToColumn<GroupedExperiment, GroupedExperiment>(
-        scoresColumnsData,
-        {
-          columnsOrder: scoresColumnsOrder,
-          selectedColumns,
-          sortableColumns: sortableBy,
         },
       ),
       generateActionsColumDef({
-        cell: ExperimentRowActionsCell,
+        cell: OptimizationRowActionsCell,
       }),
     ];
-  }, [
-    checkboxClickHandler,
-    sortableBy,
-    columnsOrder,
-    selectedColumns,
-    scoresColumnsData,
-    scoresColumnsOrder,
-  ]);
-
-  const sortConfig = useMemo(
-    () => ({
-      enabled: true,
-      sorting: sortedColumns,
-      setSorting: setSortedColumns,
-    }),
-    [setSortedColumns, sortedColumns],
-  );
+  }, [checkboxClickHandler, columnsOrder, selectedColumns]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -350,15 +248,15 @@ const ExperimentsPage: React.FunctionComponent = () => {
   );
 
   const handleRowClick = useCallback(
-    (row: GroupedExperiment) => {
+    (row: GroupedOptimization) => {
       navigate({
-        to: "/$workspaceName/experiments/$datasetId/compare",
+        to: "/$workspaceName/optimizations/$datasetId/compare",
         params: {
           datasetId: row.dataset_id,
           workspaceName,
         },
         search: {
-          experiments: [row.id],
+          optimizations: [row.id],
         },
       });
     },
@@ -369,37 +267,26 @@ const ExperimentsPage: React.FunctionComponent = () => {
     groupIds,
   });
 
-  const handleNewExperimentClick = useCallback(() => {
+  const handleNewOptimizationClick = useCallback(() => {
     setOpenDialog(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
   const renderCustomRowCallback = useCallback(
-    (row: Row<GroupedExperiment>, applyStickyWorkaround?: boolean) => {
+    (row: Row<GroupedOptimization>, applyStickyWorkaround?: boolean) => {
       return renderCustomRow(row, setGroupLimit, applyStickyWorkaround);
     },
     [setGroupLimit],
   );
 
-  const columnSections = useMemo(() => {
-    return [
-      {
-        title: "Feedback scores",
-        columns: scoresColumnsData,
-        order: scoresColumnsOrder,
-        onOrderChange: setScoresColumnsOrder,
-      },
-    ];
-  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
-
-  if (isPending || isFeedbackScoresPending) {
+  if (isPending) {
     return <Loader />;
   }
 
   return (
     <div className="pt-6">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Experiments</h1>
+        <h1 className="comet-title-l truncate break-words">Optimizations</h1>
       </div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
@@ -416,9 +303,9 @@ const ExperimentsPage: React.FunctionComponent = () => {
           />
         </div>
         <div className="flex items-center gap-2">
-          <ExperimentsActionsPanel experiments={selectedRows} />
+          <OptimizationsActionsPanel optimizations={selectedRows} />
           <Separator orientation="vertical" className="mx-1 h-4" />
-          <TooltipWrapper content="Refresh experiments list">
+          <TooltipWrapper content="Refresh optimizations list">
             <Button
               variant="outline"
               size="icon-sm"
@@ -434,30 +321,28 @@ const ExperimentsPage: React.FunctionComponent = () => {
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
-            sections={columnSections}
           ></ColumnsButton>
           <Button
             variant="outline"
             size="sm"
-            onClick={handleNewExperimentClick}
+            onClick={handleNewOptimizationClick}
           >
             <Info className="mr-2 size-3.5" />
-            Create new experiment
+            Create new optimization
           </Button>
         </div>
       </div>
       <FeedbackScoresChartsWrapper
-        entities={experiments}
+        entities={optimizations}
         datasetsData={datasetsData}
-        isAverageScores
+        isMaxScores
       />
       <DataTable
         columns={columns}
-        data={experiments}
+        data={optimizations}
         onRowClick={handleRowClick}
         renderCustomRow={renderCustomRowCallback}
         getIsCustomRow={getIsCustomRow}
-        sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{
           rowSelection,
@@ -470,8 +355,8 @@ const ExperimentsPage: React.FunctionComponent = () => {
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
-              <Button variant="link" onClick={handleNewExperimentClick}>
-                Create new experiment
+              <Button variant="link" onClick={handleNewOptimizationClick}>
+                Create new optimization
               </Button>
             )}
           </DataTableNoData>
@@ -485,7 +370,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
           total={total}
         ></DataTablePagination>
       </div>
-      <AddExperimentDialog
+      <AddOptimizationDialog
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
@@ -494,4 +379,4 @@ const ExperimentsPage: React.FunctionComponent = () => {
   );
 };
 
-export default ExperimentsPage;
+export default OptimizationsPage;

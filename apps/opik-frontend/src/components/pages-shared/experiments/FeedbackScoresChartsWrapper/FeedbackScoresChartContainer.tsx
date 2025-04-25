@@ -13,33 +13,28 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { Spinner } from "@/components/ui/spinner";
-import ExperimentChartContent from "./ExperimentChartContent";
+import FeedbackScoresChartContent, {
+  ChartData,
+} from "./FeedbackScoresChartContent";
 
-export type DataRecord = {
-  experimentId: string;
-  experimentName: string;
-  createdDate: string;
-  scores: Record<string, number>;
-};
-
-export type ChartData = {
-  dataset: Dataset;
-  data: DataRecord[];
-  lines: string[];
-};
-
-type ExperimentChartContainerProps = {
+type FeedbackScoresChartContainerProps = {
   className: string;
   chartData?: ChartData;
   chartId: string;
   dataset: Dataset;
+  isAverageScores: boolean;
+  isMaxScores: boolean;
 };
 
-const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
+const FeedbackScoresChartContainer: React.FC<
+  FeedbackScoresChartContainerProps
+> = ({
   chartData,
   chartId,
   dataset,
   className,
+  isAverageScores,
+  isMaxScores,
 }) => {
   const isPending = !chartData;
   const noData = useMemo(() => {
@@ -72,7 +67,7 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
     }
 
     return (
-      <ExperimentChartContent
+      <FeedbackScoresChartContent
         chartId={chartId}
         chartData={chartData}
         containerWidth={width}
@@ -84,13 +79,20 @@ const ExperimentChartContainer: React.FC<ExperimentChartContainerProps> = ({
     <Card className={cn("min-w-[400px]", className)} ref={ref}>
       <CardHeader className="space-y-0.5 px-4 pt-3">
         <CardTitle className="comet-body-s-accented">{dataset.name}</CardTitle>
-        <CardDescription className="comet-body-xs text-xs">
-          Average scores
-        </CardDescription>
+        {isAverageScores && (
+          <CardDescription className="comet-body-xs text-xs">
+            Average scores
+          </CardDescription>
+        )}
+        {isMaxScores && (
+          <CardDescription className="comet-body-xs text-xs">
+            Maximum scores
+          </CardDescription>
+        )}
       </CardHeader>
       <CardContent className="px-4 pb-3">{renderContent()}</CardContent>
     </Card>
   );
 };
 
-export default ExperimentChartContainer;
+export default FeedbackScoresChartContainer;

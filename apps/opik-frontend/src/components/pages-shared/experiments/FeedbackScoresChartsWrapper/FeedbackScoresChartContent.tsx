@@ -1,4 +1,3 @@
-import { ChartData } from "./ExperimentChartContainer";
 import { useState, useMemo, useCallback } from "react";
 import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
 import { Dot, LineChart } from "recharts";
@@ -12,20 +11,34 @@ import {
 } from "@/components/ui/chart";
 import { DEFAULT_CHART_TICK } from "@/constants/chart";
 import { CartesianGrid, YAxis, Line } from "recharts";
-import ExperimentChartLegendContent from "./ExperimentChartLegendContent";
+import FeedbackScoresChartLegendContent from "./FeedbackScoresChartLegendContent";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import { LineDot } from "recharts/types/cartesian/Line";
+import { Dataset } from "@/types/datasets";
 
 const MIN_LEGEND_WIDTH = 140;
 const MAX_LEGEND_WIDTH = 300;
 
-type ExperimentChartContentProps = {
+export type DataRecord = {
+  entityId: string;
+  entityName: string;
+  createdDate: string;
+  scores: Record<string, number>;
+};
+
+export type ChartData = {
+  dataset: Dataset;
+  data: DataRecord[];
+  lines: string[];
+};
+
+type FeedbackScoresChartContentProps = {
   chartId: string;
   chartData: ChartData;
   containerWidth: number;
 };
 
-const ExperimentChartContent: React.FC<ExperimentChartContentProps> = ({
+const FeedbackScoresChartContent: React.FC<FeedbackScoresChartContentProps> = ({
   chartId,
   chartData,
   containerWidth,
@@ -60,12 +73,12 @@ const ExperimentChartContent: React.FC<ExperimentChartContentProps> = ({
 
   const renderHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
-      const { experimentName, createdDate } = payload[0].payload;
+      const { entityName, createdDate } = payload[0].payload;
 
       return (
         <>
           <div className="comet-body-xs-accented mb-0.5 truncate">
-            {experimentName}
+            {entityName}
           </div>
           <div className="comet-body-xs mb-1 text-light-slate">
             {createdDate}
@@ -137,7 +150,7 @@ const ExperimentChartContent: React.FC<ExperimentChartContentProps> = ({
           layout="vertical"
           align="right"
           content={
-            <ExperimentChartLegendContent
+            <FeedbackScoresChartLegendContent
               setActiveLine={setActiveLine}
               chartId={chartId}
             />
@@ -175,4 +188,4 @@ const ExperimentChartContent: React.FC<ExperimentChartContentProps> = ({
   );
 };
 
-export default ExperimentChartContent;
+export default FeedbackScoresChartContent;

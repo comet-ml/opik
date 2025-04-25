@@ -1,10 +1,10 @@
 import uniq from "lodash/uniq";
-import { AverageFeedbackScore, ROW_HEIGHT } from "@/types/shared";
+import { AggregatedFeedbackScore, ROW_HEIGHT } from "@/types/shared";
 
 interface GetFeedbackScoreMapArguments {
   experiments: {
     id: string;
-    feedback_scores?: AverageFeedbackScore[];
+    feedback_scores?: AggregatedFeedbackScore[];
   }[];
 }
 

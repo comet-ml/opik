@@ -1,5 +1,5 @@
 import { TraceFeedbackScore } from "@/types/traces";
-import { AverageFeedbackScore, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
+import { AggregatedFeedbackScore, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
 import { CommentItems } from "./comment";
 
 export interface Dataset {
@@ -55,7 +55,7 @@ export interface Experiment {
   dataset_name: string;
   metadata?: object;
   name: string;
-  feedback_scores?: AverageFeedbackScore[];
+  feedback_scores?: AggregatedFeedbackScore[];
   // @deprecated
   prompt_version?: ExperimentPromptVersion;
   prompt_versions?: ExperimentPromptVersion[];

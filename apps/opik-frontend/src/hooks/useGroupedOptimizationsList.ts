@@ -16,11 +16,11 @@ import useOptimizationsList, {
 } from "@/api/optimizations/useOptimizationsList";
 import useDatasetById from "@/api/datasets/useDatasetById";
 import { OPTIMIZATIONS_KEY } from "@/api/api";
-
-export const DELETED_DATASET_ID = "deleted_dataset_id";
-export const DEFAULT_GROUPS_PER_PAGE = 5;
-export const DEFAULT_OPTIMIZATIONS_PER_GROUP = 25;
-export const GROUPING_COLUMN = "virtual_dataset_id";
+import {
+  DEFAULT_ITEMS_PER_GROUP,
+  DELETED_DATASET_ID,
+  GROUPING_COLUMN,
+} from "@/constants/grouping";
 
 // export const GROUP_SORTING = [{ id: "last_created_optimization_at", desc: true }]; // TODO lala
 export const GROUP_SORTING = [{ id: "last_created_experiment_at", desc: true }];
@@ -55,7 +55,7 @@ const extractPageSize = (
   groupId: string,
   groupLimit?: Record<string, number>,
 ) => {
-  return groupLimit?.[groupId] ?? DEFAULT_OPTIMIZATIONS_PER_GROUP;
+  return groupLimit?.[groupId] ?? DEFAULT_ITEMS_PER_GROUP;
 };
 
 const wrapOptimizationRow = (optimization: Optimization, dataset: Dataset) => {
@@ -68,10 +68,6 @@ const wrapOptimizationRow = (optimization: Optimization, dataset: Dataset) => {
 
 const buildMoreRowId = (id: string) => {
   return `more_${id}`;
-};
-
-export const checkIsMoreRowId = (id: string) => {
-  return /^more_/.test(id);
 };
 
 const generateMoreRow = (dataset: Dataset) => {
