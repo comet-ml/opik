@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 import Levenshtein
 
@@ -35,10 +35,12 @@ class LevenshteinRatio(base_metric.BaseMetric):
         case_sensitive: bool = False,
         name: str = "levenshtein_ratio_metric",
         track: bool = True,
+        project_name: Optional[str] = None,
     ):
         super().__init__(
             name=name,
             track=track,
+            project_name=project_name,
         )
 
         self._case_sensitive = case_sensitive

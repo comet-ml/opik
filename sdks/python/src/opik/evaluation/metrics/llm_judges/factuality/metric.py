@@ -44,10 +44,12 @@ class Factuality(base_metric.BaseMetric):
         name: str = "FactualityMetric",
         few_shot_examples: Optional[List[template.FewShotExampleFactuality]] = None,
         track: bool = True,
+        project_name: Optional[str] = None,
     ):
         super().__init__(
             name=name,
             track=track,
+            project_name=project_name,
         )
 
         self._init_model(model)

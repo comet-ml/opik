@@ -1,5 +1,5 @@
 import json
-from typing import Any
+from typing import Any, Optional
 
 from .. import base_metric, score_result
 
@@ -26,8 +26,13 @@ class IsJson(base_metric.BaseMetric):
         0.0
     """
 
-    def __init__(self, name: str = "is_json_metric", track: bool = True) -> None:
-        super().__init__(name, track)
+    def __init__(
+        self,
+        name: str = "is_json_metric",
+        track: bool = True,
+        project_name: Optional[str] = None,
+    ) -> None:
+        super().__init__(name=name, track=track, project_name=project_name)
 
     def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
         """

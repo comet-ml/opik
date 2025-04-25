@@ -49,8 +49,9 @@ class ROUGE(base_metric.BaseMetric):
         use_stemmer: bool = False,
         split_summaries: bool = False,
         tokenizer: Optional[Any] = None,
+        project_name: Optional[str] = None,
     ):
-        super().__init__(name=name, track=track)
+        super().__init__(name=name, track=track, project_name=project_name)
 
         if rouge_scorer is None:
             raise ImportError(

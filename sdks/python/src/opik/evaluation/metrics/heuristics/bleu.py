@@ -34,8 +34,9 @@ class BaseBLEU(base_metric.BaseMetric):
         n_grams: int,
         smoothing_method: str,
         weights: Optional[List[float]],
+        project_name: Optional[str],
     ):
-        super().__init__(name=name, track=track)
+        super().__init__(name=name, track=track, project_name=project_name)
 
         if nltk_bleu_score is None:
             raise ImportError(
@@ -89,6 +90,7 @@ class SentenceBLEU(BaseBLEU):
         n_grams: int = 4,
         smoothing_method: str = "method1",
         weights: Optional[List[float]] = None,
+        project_name: Optional[str] = None,
     ):
         super().__init__(
             name=name,
@@ -96,6 +98,7 @@ class SentenceBLEU(BaseBLEU):
             n_grams=n_grams,
             smoothing_method=smoothing_method,
             weights=weights,
+            project_name=project_name,
         )
 
     def score(
@@ -190,6 +193,7 @@ class CorpusBLEU(BaseBLEU):
         n_grams: int = 4,
         smoothing_method: str = "method1",
         weights: Optional[List[float]] = None,
+        project_name: Optional[str] = None,
     ):
         super().__init__(
             name=name,
@@ -197,6 +201,7 @@ class CorpusBLEU(BaseBLEU):
             n_grams=n_grams,
             smoothing_method=smoothing_method,
             weights=weights,
+            project_name=project_name,
         )
 
     def score(

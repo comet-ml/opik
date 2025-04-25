@@ -54,10 +54,12 @@ class AnswerRelevance(base_metric.BaseMetric):
         ] = None,
         require_context: bool = True,
         track: bool = True,
+        project_name: Optional[str] = None,
     ):
         super().__init__(
             name=name,
             track=track,
+            project_name=project_name,
         )
         self._require_context = require_context
         self._init_model(model)

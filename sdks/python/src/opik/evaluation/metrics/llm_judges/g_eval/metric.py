@@ -20,6 +20,7 @@ class GEval(base_metric.BaseMetric):
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,
         name: str = "g_eval_metric",
         track: bool = True,
+        project_name: Optional[str] = None,
     ):
         """
         A metric that evaluates an LLM output based on chain-of-thought built with the evaluation criteria provided
@@ -38,6 +39,7 @@ class GEval(base_metric.BaseMetric):
         super().__init__(
             name=name,
             track=track,
+            project_name=project_name,
         )
         self._init_model(model)
 

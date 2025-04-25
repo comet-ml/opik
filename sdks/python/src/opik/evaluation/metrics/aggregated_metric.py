@@ -25,8 +25,9 @@ class AggregatedMetric(
             [List[score_result.ScoreResult]], score_result.ScoreResult
         ],
         track: bool = True,
+        project_name: Optional[str] = None,
     ):
-        super().__init__(name=name, track=track)
+        super().__init__(name=name, track=track, project_name=project_name)
         self.metrics = metrics
         self.aggregator = aggregator
 

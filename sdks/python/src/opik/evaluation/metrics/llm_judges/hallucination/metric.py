@@ -46,8 +46,9 @@ class Hallucination(base_metric.BaseMetric):
         name: str = "hallucination_metric",
         few_shot_examples: Optional[List[template.FewShotExampleHallucination]] = None,
         track: bool = True,
+        project_name: Optional[str] = None,
     ):
-        super().__init__(name=name, track=track)
+        super().__init__(name=name, track=track, project_name=project_name)
         self._init_model(model)
         self.few_shot_examples = few_shot_examples
 
