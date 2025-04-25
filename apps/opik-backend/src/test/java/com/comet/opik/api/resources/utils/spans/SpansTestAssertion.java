@@ -45,6 +45,7 @@ public final class SpansTestAssertion implements SpanPageTestAssertion<Span, Spa
                 Optional.ofNullable(queryParams.get("trace_id")).map(UUID::fromString).orElse(null),
                 Optional.ofNullable(queryParams.get("type")).map(SpanType::valueOf).orElse(null),
                 filters,
+                List.of(),
                 List.of());
 
         SpanAssertions.assertPage(actualPage, page, expected.size(), expected.size());
