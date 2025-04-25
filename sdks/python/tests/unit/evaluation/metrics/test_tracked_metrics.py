@@ -1,8 +1,6 @@
 import pytest
 
-from opik.evaluation.metrics.heuristics import (
-    equals,
-)
+from opik.evaluation.metrics.heuristics import equals
 from opik.decorator import tracker
 from ....testlib import (
     ANY_BUT_NONE,
