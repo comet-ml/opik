@@ -92,9 +92,7 @@ def test_metric_equals__track_enabled__project_name_set__data_logged_to_the_spec
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_metric_equals__track_disabled__project_name_set__value_error_raised_on_instantiation(
-    fake_backend,
-):
+def test_metric_equals__track_disabled__project_name_set__value_error_raised_on_instantiation():
     with pytest.raises(ValueError):
         equals.Equals(
             name="equals_metric", track=False, project_name="metric-project-name"
