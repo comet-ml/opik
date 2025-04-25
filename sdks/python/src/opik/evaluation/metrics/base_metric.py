@@ -43,6 +43,9 @@ class BaseMetric(abc.ABC):
 
         config = opik_config.OpikConfig()
 
+        if not track and project_name is not None:
+            raise ValueError("project_name can be set only when `track` is set to True")
+
         if track and config.check_for_known_misconfigurations() is False:
             track_decorator = opik.track(name=self.name, project_name=project_name)
             self.score = track_decorator(self.score)  # type: ignore
