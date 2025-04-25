@@ -49,13 +49,14 @@ class TestOnlineScoring:
         # Navigate to rules tab
         logger.info("Navigating to rules tab")
         try:
-            expect(traces_page.page.get_by_role("tab", name="Online evaluation")).to_be_visible()
+            expect(
+                traces_page.page.get_by_role("tab", name="Online evaluation")
+            ).to_be_visible()
         except Exception as e:
             raise AssertionError(
-                f"Rules tab not found, possible error loading"
-                f"Error: {str(e)}"
+                f"Rules tab not found, possible error loading" f"Error: {str(e)}"
             ) from e
-        
+
         traces_page.page.get_by_role("tab", name="Online evaluation").click()
 
         # Create new rule
