@@ -165,9 +165,9 @@ from .feedback_update import (
 )
 from .function import Function
 from .function_call import FunctionCall
-from .guardrail_batch_item import GuardrailBatchItem
-from .guardrail_batch_item_name import GuardrailBatchItemName
-from .guardrail_batch_item_result import GuardrailBatchItemResult
+from .guardrail import Guardrail
+from .guardrail_name import GuardrailName
+from .guardrail_result import GuardrailResult
 from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
 from .json_node import JsonNode
@@ -427,9 +427,9 @@ __all__ = [
     "Feedback_Numerical",
     "Function",
     "FunctionCall",
-    "GuardrailBatchItem",
-    "GuardrailBatchItemName",
-    "GuardrailBatchItemResult",
+    "Guardrail",
+    "GuardrailName",
+    "GuardrailResult",
     "GuardrailsValidation",
     "GuardrailsValidationPublic",
     "JsonNode",
