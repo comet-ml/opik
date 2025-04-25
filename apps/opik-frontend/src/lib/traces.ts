@@ -3,6 +3,7 @@ import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 import isObject from "lodash/isObject";
 import isString from "lodash/isString";
+import isArray from "lodash/isArray";
 import { TAG_VARIANTS } from "@/components/ui/tag";
 import { ExperimentItem } from "@/types/datasets";
 
@@ -53,6 +54,28 @@ export const prettifyMessage = (
       message: unwrappedMessage,
       prettified: message !== unwrappedMessage,
     } as PrettifyMessageResponse;
+  }
+
+  if (isArray(unwrappedMessage)) {
+    // Add support for LangGraph message response format
+    const hasContentField = (msg: any) => msg && isObject(msg) && isString(get(msg, 'content'));
+    if (unwrappedMessage.every((msg: any) => hasContentField(msg))) {
+      const lastContent = get(unwrappedMessage[unwrappedMessage.length - 1], 'content');
+      return {
+        message: lastContent,
+        prettified: true,
+      } as PrettifyMessageResponse;
+    }
+
+    // Add support for OpenAI response message format
+    const hasMessageContentField = (msg: any) => msg && isObject(msg) && isObject(get(msg, 'message')) && isString(get(get(msg, 'message'), 'content'));
+    if (unwrappedMessage.every((msg: any) => hasMessageContentField(msg))) {
+      const lastContent = get(unwrappedMessage[unwrappedMessage.length - 1], 'message.content');
+      return {
+        message: lastContent,
+        prettified: true,
+      } as PrettifyMessageResponse;
+    }
   }
 
   if (isObject(unwrappedMessage)) {
