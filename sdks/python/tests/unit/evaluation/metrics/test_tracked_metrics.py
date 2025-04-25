@@ -9,12 +9,12 @@ from ....testlib import (
     assert_equal,
 )
 
-import mock
+import unittest.mock
 
 
 @pytest.fixture(autouse=True)
 def disable_misconfigurations_detection():
-    with mock.patch(
+    with unittest.mock.patch(
         "opik.config.OpikConfig.check_for_known_misconfigurations", return_value=False
     ):
         yield
