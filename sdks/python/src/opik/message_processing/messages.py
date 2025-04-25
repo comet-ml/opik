@@ -161,11 +161,10 @@ class GuardrailBatchItemMessage(BaseMessage):
     only as an item of BatchMessage
     """
 
-    id: Optional[str]
     project_name: Optional[str]
     entity_id: str
     secondary_id: str
-    name: Union[Literal["TOPIC", "PII"], Any]
+    name: str
     result: Union[Literal["passed", "failed"], Any]
     config: Dict[str, Any]
     details: Dict[str, Any]
