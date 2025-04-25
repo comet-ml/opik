@@ -16,7 +16,7 @@ export type UseSpansListParams = {
   page: number;
   size: number;
   truncate?: boolean;
-  excludeFields?: string[];
+  exclude?: string[];
 };
 
 export type UseSpansListResponse = {
@@ -37,7 +37,7 @@ const getSpansList = async (
     size,
     page,
     truncate,
-    excludeFields,
+    exclude,
   }: UseSpansListParams,
 ) => {
   const { data } = await api.get(SPANS_REST_ENDPOINT, {
@@ -48,18 +48,12 @@ const getSpansList = async (
       ...(type && { type }),
       ...processFilters(filters, generateSearchByIDFilters(search)),
       ...processSorting(sorting),
-      ...(excludeFields && { excludeFields: excludeFields.join(",") }),
+      ...(exclude && { exclude: JSON.stringify(exclude) }),
       size,
       page,
       truncate,
     },
   });
-
-  if (excludeFields) {
-    data.content.forEach((span: Span) => {
-      excludeFields.forEach((field) => delete span[field as keyof Span]);
-    });
-  }
 
   return data;
 };

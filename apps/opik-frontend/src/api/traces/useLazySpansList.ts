@@ -9,7 +9,7 @@ export default function useLazySpansList(
   options?: QueryConfig<UseSpansListResponse>,
 ) {
   const lightQuery = useSpansList(
-    { ...params, excludeFields: ["input", "output"] },
+    { ...params, exclude: ["input", "output"] },
     options,
   );
 
