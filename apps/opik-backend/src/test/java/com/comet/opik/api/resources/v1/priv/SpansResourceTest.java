@@ -113,6 +113,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -1372,6 +1373,7 @@ class SpansResourceTest {
                     spans.size(),
                     unexpectedSpans,
                     apiKey,
+                    List.of(),
                     List.of());
             getAndAssertPage(
                     workspaceName,
@@ -1386,6 +1388,7 @@ class SpansResourceTest {
                     spans.size(),
                     unexpectedSpans,
                     apiKey,
+                    List.of(),
                     List.of());
         }
 
@@ -1434,6 +1437,7 @@ class SpansResourceTest {
                     spans.size(),
                     unexpectedSpans,
                     apiKey,
+                    List.of(),
                     List.of());
 
             getAndAssertPage(
@@ -1449,6 +1453,7 @@ class SpansResourceTest {
                     spans.size(),
                     unexpectedSpans,
                     apiKey,
+                    List.of(),
                     List.of());
         }
 
@@ -1499,6 +1504,7 @@ class SpansResourceTest {
                     spans.size(),
                     unexpectedSpans,
                     apiKey,
+                    List.of(),
                     List.of());
             getAndAssertPage(
                     workspaceName,
@@ -1513,6 +1519,7 @@ class SpansResourceTest {
                     spans.size(),
                     unexpectedSpans,
                     apiKey,
+                    List.of(),
                     List.of());
         }
 
@@ -1569,6 +1576,7 @@ class SpansResourceTest {
                     spans.size(),
                     unexpectedSpans,
                     apiKey,
+                    List.of(),
                     List.of());
             getAndAssertPage(
                     workspaceName,
@@ -1583,6 +1591,7 @@ class SpansResourceTest {
                     spans.size(),
                     unexpectedSpans,
                     apiKey,
+                    List.of(),
                     List.of());
         }
 
@@ -1659,6 +1668,7 @@ class SpansResourceTest {
                             spans.size(),
                             List.of(),
                             apiKey,
+                            List.of(),
                             List.of());
                 }
             }
@@ -4217,7 +4227,7 @@ class SpansResourceTest {
                     .toList();
 
             getAndAssertPage(workspaceName, projectName, List.of(), spans, expectedSpans, List.of(), apiKey,
-                    List.of(sorting));
+                    List.of(sorting), List.of());
         }
 
         static Stream<Arguments> whenSortingByValidFields__thenReturnTracesSorted() {
@@ -4423,7 +4433,7 @@ class SpansResourceTest {
             List<SortingField> sortingFields = List.of(sortingField);
 
             getAndAssertPage(workspaceName, projectName, List.of(), spans, expectedSpans, List.of(), apiKey,
-                    sortingFields);
+                    sortingFields, List.of());
         }
 
         @Test
@@ -4453,6 +4463,103 @@ class SpansResourceTest {
             }
         }
 
+        @ParameterizedTest
+        @EnumSource(Span.SpanField.class)
+        void findSpans__whenExcludeParamIdDefined__thenReturnSpanExcludingFields(Span.SpanField field) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(20);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
+                    .map(span -> span.toBuilder().projectName(projectName).build())
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            Map<UUID, Comment> expectedComments = spans
+                    .stream()
+                    .map(span -> Map.entry(span.id(),
+                            spanResourceClient.generateAndCreateComment(span.id(), apiKey, workspaceName, 201)))
+                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            spans = spans.stream()
+                    .map(span -> span.toBuilder()
+                            .comments(List.of(expectedComments.get(span.id())))
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(span.startTime(),
+                                    span.endTime()))
+                            .build())
+                    .toList();
+
+            List<Span> finalSpans = spans;
+            List<FeedbackScoreBatchItem> scoreForSpan = IntStream.range(0, spans.size())
+                    .mapToObj(i -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .projectName(finalSpans.get(i).projectName())
+                            .id(finalSpans.get(i).id())
+                            .build())
+                    .toList();
+
+            spanResourceClient.feedbackScores(scoreForSpan, apiKey, workspaceName);
+
+            spans = spans.stream()
+                    .map(span -> span.toBuilder()
+                            .feedbackScores(
+                                    scoreForSpan
+                                            .stream()
+                                            .filter(score -> score.id().equals(span.id()))
+                                            .map(scores -> FeedbackScore.builder()
+                                                    .name(scores.name())
+                                                    .value(scores.value())
+                                                    .categoryName(scores.categoryName())
+                                                    .source(scores.source())
+                                                    .reason(scores.reason())
+                                                    .build())
+                                            .toList())
+                            .build())
+                    .toList();
+
+            spans = spans.stream()
+                    .map(span -> excludeFields(span, field))
+                    .toList();
+
+            List<Span.SpanField> exclude = List.of(field);
+
+            getAndAssertPage(workspaceName, projectName, List.of(), spans, spans.reversed(), List.of(), apiKey,
+                    List.of(), exclude);
+        }
+
+        private static Span excludeFields(Span span, Span.SpanField field) {
+
+            Map<Span.SpanField, Function<Span, Span>> excludeFunctions = new HashMap<>();
+            excludeFunctions.put(Span.SpanField.NAME, it -> it.toBuilder().name(null).build());
+            excludeFunctions.put(Span.SpanField.TYPE, it -> it.toBuilder().type(null).build());
+            excludeFunctions.put(Span.SpanField.START_TIME, it -> it.toBuilder().startTime(null).build());
+            excludeFunctions.put(Span.SpanField.END_TIME, it -> it.toBuilder().endTime(null).build());
+            excludeFunctions.put(Span.SpanField.INPUT, it -> it.toBuilder().input(null).build());
+            excludeFunctions.put(Span.SpanField.OUTPUT, it -> it.toBuilder().output(null).build());
+            excludeFunctions.put(Span.SpanField.METADATA, it -> it.toBuilder().metadata(null).build());
+            excludeFunctions.put(Span.SpanField.MODEL, it -> it.toBuilder().model(null).build());
+            excludeFunctions.put(Span.SpanField.PROVIDER, it -> it.toBuilder().provider(null).build());
+            excludeFunctions.put(Span.SpanField.TAGS, it -> it.toBuilder().tags(null).build());
+            excludeFunctions.put(Span.SpanField.USAGE, it -> it.toBuilder().usage(null).build());
+            excludeFunctions.put(Span.SpanField.ERROR_INFO, it -> it.toBuilder().errorInfo(null).build());
+            excludeFunctions.put(Span.SpanField.CREATED_AT, it -> it.toBuilder().createdAt(null).build());
+            excludeFunctions.put(Span.SpanField.CREATED_BY, it -> it.toBuilder().createdBy(null).build());
+            excludeFunctions.put(Span.SpanField.LAST_UPDATED_BY, it -> it.toBuilder().lastUpdatedBy(null).build());
+            excludeFunctions.put(Span.SpanField.FEEDBACK_SCORES, it -> it.toBuilder().feedbackScores(null).build());
+            excludeFunctions.put(Span.SpanField.COMMENTS, it -> it.toBuilder().comments(null).build());
+            excludeFunctions.put(Span.SpanField.TOTAL_ESTIMATED_COST,
+                    it -> it.toBuilder().totalEstimatedCost(null).build());
+            excludeFunctions.put(Span.SpanField.TOTAL_ESTIMATED_COST_VERSION,
+                    it -> it.toBuilder().totalEstimatedCostVersion(null).build());
+            excludeFunctions.put(Span.SpanField.DURATION, it -> it.toBuilder().duration(null).build());
+
+            return excludeFunctions.get(field).apply(span);
+        }
+
     }
 
     private void getAndAssertPage(
@@ -4463,7 +4570,8 @@ class SpansResourceTest {
             List<Span> expectedSpans,
             List<Span> unexpectedSpans,
             String apiKey,
-            List<SortingField> sortingFields) {
+            List<SortingField> sortingFields,
+            List<Span.SpanField> exclude) {
         int page = 1;
         int size = spans.size() + expectedSpans.size() + unexpectedSpans.size();
         getAndAssertPage(
@@ -4479,7 +4587,8 @@ class SpansResourceTest {
                 expectedSpans.size(),
                 unexpectedSpans,
                 apiKey,
-                sortingFields);
+                sortingFields,
+                exclude);
     }
 
     private void getAndAssertPage(
@@ -4495,7 +4604,8 @@ class SpansResourceTest {
             int expectedTotal,
             List<Span> unexpectedSpans,
             String apiKey,
-            List<SortingField> sortingFields) {
+            List<SortingField> sortingFields,
+            List<Span.SpanField> exclude) {
 
         Span.SpanPage actualPage = spanResourceClient.findSpans(
                 workspaceName,
@@ -4507,7 +4617,8 @@ class SpansResourceTest {
                 traceId,
                 type,
                 filters,
-                sortingFields);
+                sortingFields,
+                exclude);
 
         SpanAssertions.assertPage(actualPage, page, expectedSpans.size(), expectedTotal);
         SpanAssertions.assertSpan(actualPage.content(), expectedSpans, unexpectedSpans, USER);
@@ -4873,7 +4984,7 @@ class SpansResourceTest {
             batchCreateAndAssert(expectedSpans, API_KEY, TEST_WORKSPACE);
 
             getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), List.of(), expectedSpans.reversed(), List.of(),
-                    API_KEY, List.of());
+                    API_KEY, List.of(), List.of());
         }
 
         Stream<Arguments> batch__whenCreateSpans__thenReturnNoContent() {
@@ -4895,13 +5006,14 @@ class SpansResourceTest {
                             .endTime(null)
                             .usage(null)
                             .feedbackScores(null)
+                            .duration(null)
                             .build())
                     .toList();
 
             batchCreateAndAssert(expectedSpans, apiKey, workspaceName);
 
             getAndAssertPage(workspaceName, DEFAULT_PROJECT, List.of(), List.of(), expectedSpans.reversed(), List.of(),
-                    apiKey, List.of());
+                    apiKey, List.of(), List.of());
         }
 
         @Test
@@ -5030,7 +5142,7 @@ class SpansResourceTest {
             }
 
             getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), List.of(), expectedSpans.reversed(), List.of(),
-                    API_KEY, List.of());
+                    API_KEY, List.of(), List.of());
         }
 
         @ParameterizedTest
@@ -6424,7 +6536,7 @@ class SpansResourceTest {
                     .toList();
 
             getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), expectedSpansWithScores.reversed(),
-                    expectedSpansWithScores.reversed(), List.of(), API_KEY, List.of());
+                    expectedSpansWithScores.reversed(), List.of(), API_KEY, List.of(), List.of());
         }
 
         Stream<Arguments> feedback__whenLinkingByProjectName__thenReturnNoContent() {
@@ -6551,7 +6663,7 @@ class SpansResourceTest {
                     .toList();
 
             getAndAssertPage(TEST_WORKSPACE, projectName, List.of(), spans.reversed(), spans.reversed(), List.of(),
-                    API_KEY, List.of());
+                    API_KEY, List.of(), List.of());
         }
     }
 
