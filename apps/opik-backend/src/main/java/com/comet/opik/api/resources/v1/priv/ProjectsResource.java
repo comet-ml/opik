@@ -12,7 +12,7 @@ import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
-import com.comet.opik.api.resources.v1.priv.validate.IdParamsValidator;
+import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -248,7 +248,7 @@ public class ProjectsResource {
     public Response findFeedbackScoreNames(@QueryParam("project_ids") String projectIdsQueryParam) {
 
         var projectIds = Optional.ofNullable(projectIdsQueryParam)
-                .map(IdParamsValidator::getIds)
+                .map(ParamsValidator::getIds)
                 .orElse(Collections.emptySet());
 
         String workspaceId = requestContext.get().getWorkspaceId();

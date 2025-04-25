@@ -2,6 +2,7 @@ package com.comet.opik.api;
 
 import com.comet.opik.domain.SpanType;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -12,6 +13,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -26,7 +29,6 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record Span(
-
         @JsonView( {
                 Span.View.Public.class, Span.View.Write.class}) UUID id,
         @JsonView({
@@ -69,6 +71,36 @@ public record Span(
         public static SpanPage empty(int page, List<String> sortableBy) {
             return new SpanPage(page, 0, 0, List.of(), sortableBy);
         }
+    }
+
+    @RequiredArgsConstructor
+    @Getter
+    public enum SpanField {
+
+        NAME("name"),
+        TYPE("type"),
+        START_TIME("start_time"),
+        END_TIME("end_time"),
+        INPUT("input"),
+        OUTPUT("output"),
+        METADATA("metadata"),
+        MODEL("model"),
+        PROVIDER("provider"),
+        TAGS("tags"),
+        USAGE("usage"),
+        ERROR_INFO("error_info"),
+        CREATED_AT("created_at"),
+        CREATED_BY("created_by"),
+        LAST_UPDATED_BY("last_updated_by"),
+        FEEDBACK_SCORES("feedback_scores"),
+        COMMENTS("comments"),
+        TOTAL_ESTIMATED_COST("total_estimated_cost"),
+        TOTAL_ESTIMATED_COST_VERSION("total_estimated_cost_version"),
+        DURATION("duration");
+
+        @JsonValue
+        private final String value;
+
     }
 
     public static class View {

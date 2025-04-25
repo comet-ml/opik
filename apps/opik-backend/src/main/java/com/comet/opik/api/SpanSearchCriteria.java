@@ -6,7 +6,10 @@ import com.comet.opik.domain.SpanType;
 import lombok.Builder;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+
+import static com.comet.opik.api.Span.SpanField;
 
 @Builder(toBuilder = true)
 public record SpanSearchCriteria(
@@ -17,5 +20,6 @@ public record SpanSearchCriteria(
         List<? extends Filter> filters,
         boolean truncate,
         UUID lastReceivedSpanId,
-        List<SortingField> sortingFields) {
+        List<SortingField> sortingFields,
+        Set<SpanField> exclude) {
 }

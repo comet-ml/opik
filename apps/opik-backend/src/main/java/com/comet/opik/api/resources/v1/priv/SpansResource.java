@@ -16,6 +16,7 @@ import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.SpanFilter;
+import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SpanSortingFactory;
 import com.comet.opik.domain.CommentDAO;
 import com.comet.opik.domain.CommentService;
@@ -71,7 +72,9 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.Span.SpanField;
 import static com.comet.opik.api.Span.SpanPage;
+import static com.comet.opik.api.Span.View;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static com.comet.opik.utils.ValidationUtils.validateProjectNameAndProjectId;
 
@@ -97,7 +100,7 @@ public class SpansResource {
     @GET
     @Operation(operationId = "getSpansByProject", summary = "Get spans by project_name or project_id and optionally by trace_id and/or type", description = "Get spans by project_name or project_id and optionally by trace_id and/or type", responses = {
             @ApiResponse(responseCode = "200", description = "Spans resource", content = @Content(schema = @Schema(implementation = SpanPage.class)))})
-    @JsonView(Span.View.Public.class)
+    @JsonView(View.Public.class)
     @RateLimited(value = "getSpans:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response getSpansByProject(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
@@ -108,7 +111,8 @@ public class SpansResource {
             @QueryParam("type") SpanType type,
             @QueryParam("filters") String filters,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate,
-            @QueryParam("sorting") String sorting) {
+            @QueryParam("sorting") String sorting,
+            @QueryParam("exclude") String exclude) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         var spanFilters = filtersFactory.newFilters(filters, SpanFilter.LIST_TYPE_REFERENCE);
@@ -130,6 +134,7 @@ public class SpansResource {
                 .filters(spanFilters)
                 .truncate(truncate)
                 .sortingFields(sortingFields)
+                .exclude(ParamsValidator.get(exclude, SpanField.class, "exclude"))
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -154,7 +159,7 @@ public class SpansResource {
     @Operation(operationId = "getSpanById", summary = "Get span by id", description = "Get span by id", responses = {
             @ApiResponse(responseCode = "200", description = "Span resource", content = @Content(schema = @Schema(implementation = Span.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = Span.class)))})
-    @JsonView(Span.View.Public.class)
+    @JsonView(View.Public.class)
     @RateLimited(value = "getSpanById:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response getById(@PathParam("id") @NotNull UUID id) {
 
@@ -178,7 +183,7 @@ public class SpansResource {
     @RateLimited
     @UsageLimited
     public Response create(
-            @RequestBody(content = @Content(schema = @Schema(implementation = Span.class))) @JsonView(Span.View.Write.class) @NotNull @Valid Span span,
+            @RequestBody(content = @Content(schema = @Schema(implementation = Span.class))) @JsonView(View.Write.class) @NotNull @Valid Span span,
             @Context UriInfo uriInfo) {
         var workspaceId = requestContext.get().getWorkspaceId();
         log.info("Creating span with id '{}', projectName '{}', traceId '{}', parentSpanId '{}', workspaceId '{}'",
@@ -199,7 +204,7 @@ public class SpansResource {
     @RateLimited
     @UsageLimited
     public Response createSpans(
-            @RequestBody(content = @Content(schema = @Schema(implementation = SpanBatch.class))) @JsonView(Span.View.Write.class) @NotNull @Valid SpanBatch spans) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = SpanBatch.class))) @JsonView(View.Write.class) @NotNull @Valid SpanBatch spans) {
 
         spans.spans()
                 .stream()
@@ -383,7 +388,7 @@ public class SpansResource {
             }), maxItems = 2000))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
-    @JsonView(Span.View.Public.class)
+    @JsonView(View.Public.class)
     @RateLimited(value = "search_spans:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public ChunkedOutput<JsonNode> searchSpans(
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanSearchStreamRequest.class))) @NotNull @Valid SpanSearchStreamRequest request) {

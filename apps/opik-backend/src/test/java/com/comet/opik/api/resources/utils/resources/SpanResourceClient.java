@@ -229,7 +229,7 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
     public Span.SpanPage findSpans(String workspaceName, String apiKey, String projectName,
             UUID projectId, Integer page, Integer size, UUID traceId, SpanType type, List<? extends SpanFilter> filters,
-            List<SortingField> sortingFields) {
+            List<SortingField> sortingFields, List<Span.SpanField> exclude) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI));
 
         if (page != null) {
@@ -262,6 +262,10 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
         if (sortingFields != null) {
             webTarget = webTarget.queryParam("sorting", toURLEncodedQueryParam(sortingFields));
+        }
+
+        if (exclude != null && !exclude.isEmpty()) {
+            webTarget = webTarget.queryParam("exclude", toURLEncodedQueryParam(exclude));
         }
 
         try (var actualResponse = webTarget
