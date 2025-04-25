@@ -9,6 +9,8 @@ export interface Dataset {
   dataset_items_count: number;
   experiment_count: number;
   most_recent_experiment_at: string;
+  optimization_count: number;
+  most_recent_optimization_at: string;
   created_at: string;
   last_updated_at: string;
 }
