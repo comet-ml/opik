@@ -7,6 +7,8 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.SpansCountResponse;
+import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.SpanSortingFactory;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -689,8 +691,10 @@ class SpanDAO {
                 <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(s.input, '<truncate>', '"[image]"') as input <else> s.input as input<endif> <endif>
                 <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(s.output, '<truncate>', '"[image]"') as output <else> s.output as output<endif> <endif>
                 <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(s.metadata, '<truncate>', '"[image]"') as metadata <else> s.metadata as metadata<endif> <endif>
-                <if(!exclude_feedback_scores)>, fsa.feedback_scores_list as feedback_scores_list <endif>
+                <if(!exclude_feedback_scores)>
+                , fsa.feedback_scores_list as feedback_scores_list
                 , fsa.feedback_scores as feedback_scores
+                <endif>
                 <if(!exclude_comments)>, c.comments AS comments <endif>
             FROM spans_final s
             LEFT JOIN comments_final c ON s.id = c.entity_id
@@ -1525,23 +1529,9 @@ class SpanDAO {
 
         template = ImageUtils.addTruncateToTemplate(template, spanSearchCriteria.truncate());
 
+        bindTemplateExcludeFieldVariables(spanSearchCriteria, template);
+
         var finalTemplate = template;
-        Optional.ofNullable(spanSearchCriteria.exclude())
-                .filter(Predicate.not(Set::isEmpty))
-                .ifPresent(exclude -> {
-
-                    String fields = exclude.stream()
-                            .map(SpanField::getValue)
-                            .collect(Collectors.joining(", "));
-
-                    finalTemplate.add("exclude_fields", fields);
-                    finalTemplate.add("exclude_input", exclude.contains(SpanField.INPUT));
-                    finalTemplate.add("exclude_output", exclude.contains(SpanField.OUTPUT));
-                    finalTemplate.add("exclude_metadata", exclude.contains(SpanField.METADATA));
-                    finalTemplate.add("exclude_feedback_scores", exclude.contains(SpanField.FEEDBACK_SCORES));
-                    finalTemplate.add("exclude_comments", exclude.contains(SpanField.COMMENTS));
-                });
-
         Optional.ofNullable(sortingQueryBuilder.toOrderBySql(spanSearchCriteria.sortingFields()))
                 .ifPresent(sortFields -> {
 
@@ -1569,6 +1559,45 @@ class SpanDAO {
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                 .doFinally(signalType -> endSegment(segment));
+    }
+
+    private void bindTemplateExcludeFieldVariables(SpanSearchCriteria spanSearchCriteria, ST template) {
+        Optional.ofNullable(spanSearchCriteria.exclude())
+                .filter(Predicate.not(Set::isEmpty))
+                .ifPresent(exclude -> {
+
+                    // We need to keep the columns used for sorting in the select clause so that they are available when applying sorting.
+                    Set<String> sortingFields = Optional.ofNullable(spanSearchCriteria.sortingFields())
+                            .stream()
+                            .flatMap(List::stream)
+                            .map(SortingField::field)
+                            .collect(Collectors.toSet());
+
+                    Set<String> fields = exclude.stream()
+                            .map(SpanField::getValue)
+                            .filter(field -> !sortingFields.contains(field))
+                            .collect(Collectors.toSet());
+
+                    // check feedback_scores as well because it's a special case
+                    if (fields.contains(SpanField.FEEDBACK_SCORES.getValue())
+                            && sortingFields.stream().noneMatch(this::isFeedBackScoresField)) {
+
+                        template.add("exclude_feedback_scores", true);
+                    }
+
+                    if (!fields.isEmpty()) {
+                        template.add("exclude_fields", String.join(", ", fields));
+                        template.add("exclude_input", fields.contains(SpanField.INPUT.getValue()));
+                        template.add("exclude_output", fields.contains(SpanField.OUTPUT.getValue()));
+                        template.add("exclude_metadata", fields.contains(SpanField.METADATA.getValue()));
+                        template.add("exclude_comments", fields.contains(SpanField.COMMENTS.getValue()));
+                    }
+                });
+    }
+
+    private boolean isFeedBackScoresField(String field) {
+        return field
+                .startsWith(SortableFields.FEEDBACK_SCORES.substring(0, SortableFields.FEEDBACK_SCORES.length() - 1));
     }
 
     private Mono<Long> countTotal(SpanSearchCriteria spanSearchCriteria) {
