@@ -12,6 +12,8 @@ import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
@@ -51,6 +53,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
@@ -311,7 +314,7 @@ class TraceDAOImpl implements TraceDAO {
                 COUNT(s.id) AS span_count,
                 groupUniqArrayArray(c.comments_array) as comments,
                 any(fs.feedback_scores) as feedback_scores_list,
-                any(gr.guardrails) as guardrails_list
+                any(gr.guardrails) as guardrails_validations
             FROM (
                 SELECT
                     *,
@@ -552,7 +555,7 @@ class TraceDAOImpl implements TraceDAO {
             <endif>
             , traces_final AS (
                 SELECT
-                    t.*,
+                    t.* <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
                     if(end_time IS NOT NULL AND start_time IS NOT NULL
                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
@@ -603,30 +606,19 @@ class TraceDAOImpl implements TraceDAO {
                  LIMIT :limit <if(offset)>OFFSET :offset <endif>
             )
             SELECT
-                  t.id as id,
-                  t.workspace_id as workspace_id,
-                  t.project_id as project_id,
-                  t.name as name,
-                  t.start_time as start_time,
-                  t.end_time as end_time,
-                  <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
-                  <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>,
-                  <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif>,
-                  t.tags as tags,
-                  t.error_info as error_info,
-                  t.created_at as created_at,
-                  t.last_updated_at as last_updated_at,
-                  t.created_by as created_by,
-                  t.last_updated_by as last_updated_by,
-                  t.duration as duration,
-                  t.thread_id as thread_id,
-                  fsagg.feedback_scores_list as feedback_scores_list,
-                  fsagg.feedback_scores as feedback_scores,
-                  s.usage as usage,
-                  s.total_estimated_cost as total_estimated_cost,
-                  c.comments_array as comments,
-                  gagg.guardrails_list as guardrails_list,
-                  s.span_count AS span_count
+                  t.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata) <else> EXCEPT (input, output, metadata)<endif>
+                  <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif><endif>
+                  <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif><endif>
+                  <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif><endif>
+                  <if(!exclude_feedback_scores)>
+                  , fsagg.feedback_scores_list as feedback_scores_list
+                  , fsagg.feedback_scores as feedback_scores
+                  <endif>
+                  <if(!exclude_usage)>, s.usage as usage<endif>
+                  <if(!exclude_total_estimated_cost)>, s.total_estimated_cost as total_estimated_cost<endif>
+                  <if(!exclude_comments)>, c.comments_array as comments <endif>
+                  <if(!exclude_guardrails_validations)>, gagg.guardrails_list as guardrails_validations<endif>
+                  <if(!exclude_span_count)>, s.span_count AS span_count<endif>
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN spans_agg s ON t.id = s.trace_id
@@ -1524,7 +1516,7 @@ class TraceDAOImpl implements TraceDAO {
                         .map(this::mapFeedbackScores)
                         .filter(not(List::isEmpty))
                         .orElse(null))
-                .guardrailsValidations(Optional.ofNullable(row.get("guardrails_list", List.class))
+                .guardrailsValidations(Optional.ofNullable(row.get("guardrails_validations", List.class))
                         .map(this::mapGuardrails)
                         .filter(not(List::isEmpty))
                         .orElse(null))
@@ -1645,6 +1637,8 @@ class TraceDAOImpl implements TraceDAO {
             template.add("final", "final");
         }
 
+        bindTemplateExcludeFieldVariables(traceSearchCriteria, template);
+
         template.add("offset", offset);
 
         var finalTemplate = template;
@@ -1676,6 +1670,52 @@ class TraceDAOImpl implements TraceDAO {
 
         return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                 .doFinally(signalType -> endSegment(segment));
+    }
+
+    private void bindTemplateExcludeFieldVariables(TraceSearchCriteria traceSearchCriteria, ST template) {
+        Optional.ofNullable(traceSearchCriteria.exclude())
+                .filter(Predicate.not(Set::isEmpty))
+                .ifPresent(exclude -> {
+
+                    // We need to keep the columns used for sorting in the select clause so that they are available when applying sorting.
+                    Set<String> sortingFields = Optional.ofNullable(traceSearchCriteria.sortingFields())
+                            .stream()
+                            .flatMap(List::stream)
+                            .map(SortingField::field)
+                            .collect(Collectors.toSet());
+
+                    Set<String> fields = exclude.stream()
+                            .map(Trace.TraceField::getValue)
+                            .filter(field -> !sortingFields.contains(field))
+                            .collect(Collectors.toSet());
+
+                    // check feedback_scores as well because it's a special case
+                    if (fields.contains(Trace.TraceField.FEEDBACK_SCORES.getValue())
+                            && sortingFields.stream().noneMatch(this::isFeedBackScoresField)) {
+
+                        template.add("exclude_feedback_scores", true);
+                    }
+
+                    if (!fields.isEmpty()) {
+                        template.add("exclude_fields", String.join(", ", fields));
+                        template.add("exclude_input", fields.contains(Trace.TraceField.INPUT.getValue()));
+                        template.add("exclude_output", fields.contains(Trace.TraceField.OUTPUT.getValue()));
+                        template.add("exclude_metadata", fields.contains(Trace.TraceField.METADATA.getValue()));
+                        template.add("exclude_comments", fields.contains(Trace.TraceField.COMMENTS.getValue()));
+
+                        template.add("exclude_usage", fields.contains(Trace.TraceField.USAGE.getValue()));
+                        template.add("exclude_total_estimated_cost",
+                                fields.contains(Trace.TraceField.TOTAL_ESTIMATED_COST.getValue()));
+                        template.add("exclude_guardrails_validations",
+                                fields.contains(Trace.TraceField.GUARDRAILS_VALIDATIONS.getValue()));
+                        template.add("exclude_span_count", fields.contains(Trace.TraceField.SPAN_COUNT.getValue()));
+                    }
+                });
+    }
+
+    private boolean isFeedBackScoresField(String field) {
+        return field
+                .startsWith(SortableFields.FEEDBACK_SCORES.substring(0, SortableFields.FEEDBACK_SCORES.length() - 1));
     }
 
     private Mono<? extends Result> countTotal(TraceSearchCriteria traceSearchCriteria, Connection connection) {

@@ -5,6 +5,7 @@ import com.comet.opik.api.sorting.SortingField;
 import lombok.Builder;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
@@ -14,5 +15,6 @@ public record TraceSearchCriteria(
         List<? extends Filter> filters,
         List<SortingField> sortingFields,
         UUID lastReceivedTraceId,
-        boolean truncate) {
+        boolean truncate,
+        Set<Trace.TraceField> exclude) {
 }
