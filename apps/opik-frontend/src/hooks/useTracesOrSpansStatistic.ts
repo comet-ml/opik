@@ -10,6 +10,7 @@ import { ColumnsStatistic } from "@/types/shared";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import useTracesStatistic from "@/api/traces/useTracesStatistic";
 import useSpansStatistic from "@/api/traces/useSpansStatistic";
+import { useEffect, useMemo } from "react";
 
 type UseTracesOrSpansStatisticParams = {
   projectId: string;
@@ -67,6 +68,7 @@ export default function useTracesOrSpansStatistic(
   );
 
   const data = !isTracesData ? spansData : tracesData;
+
   const isError = !isTracesData ? isSpansError : isTracesError;
   const isPending = !isTracesData ? isSpansPending : isTracesPending;
   const isLoading = !isTracesData ? isSpansLoading : isTracesLoading;
