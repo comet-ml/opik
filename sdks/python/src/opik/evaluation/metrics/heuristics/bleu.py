@@ -25,6 +25,8 @@ class BaseBLEU(base_metric.BaseMetric):
         smoothing_method: One of NLTK's SmoothingFunction methods (e.g. "method0", "method1", etc.).
         weights: Optional custom weights for n-gram orders. Must sum to 1.0. If None,
                  defaults to uniform distribution across `n_grams`.
+        project_name: Optional project name to track the metric in for the cases when
+            there are no parent span/trace to inherit project name from.
     """
 
     def __init__(
