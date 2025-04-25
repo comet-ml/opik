@@ -15,6 +15,7 @@ class RegexMatch(base_metric.BaseMetric):
         regex: The regular expression pattern to match against. Can be a string or a compiled regex pattern.
         name: The name of the metric. Defaults to "regex_match_metric".
         track: Whether to track the metric. Defaults to True.
+        project_name: Optional project name to track the metric in for the cases when there are no parent span/trace to inherit project name from.
 
     Example:
         >>> from opik.evaluation.metrics import RegexMatch

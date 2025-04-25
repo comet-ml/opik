@@ -14,6 +14,7 @@ class IsJson(base_metric.BaseMetric):
     Args:
         name: The name of the metric. Defaults to "is_json_metric".
         track: Whether to track the metric. Defaults to True.
+        project_name: Optional project name to track the metric in for the cases when there are no parent span/trace to inherit project name from.
 
     Example:
         >>> from opik.evaluation.metrics import IsJson

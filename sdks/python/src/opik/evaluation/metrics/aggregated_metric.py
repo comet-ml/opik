@@ -10,11 +10,15 @@ class AggregatedMetric(
 ):
     """A metric that aggregates results obtained from a list of provided metrics using specified aggregation function.
 
+    project_name: Optional[str]
+        Optional project name to track the metric in for the cases when there are no parent span/trace to inherit project name from.
+
     Args:
         name: The name of the metric.
         metrics: A list of concrete metric instances that inherit the `opik.evaluation.base_metric.BaseMetric`.
         aggregator: The aggregation function to use for evaluation.
         track: Whether to track the metric. Defaults to True.
+        project_name: Optional project name to track the metric in for the cases when there are no parent span/trace to inherit project name from.
     """
 
     def __init__(

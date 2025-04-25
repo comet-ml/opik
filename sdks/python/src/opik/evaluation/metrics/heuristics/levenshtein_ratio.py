@@ -21,6 +21,7 @@ class LevenshteinRatio(base_metric.BaseMetric):
         case_sensitive: Whether the comparison should be case-sensitive. Defaults to False.
         name: The name of the metric. Defaults to "levenshtein_ratio_metric".
         track: Whether to track the metric. Defaults to True.
+        project_name: Optional project name to track the metric in for the cases when there are no parent span/trace to inherit project name from.
 
     Example:
         >>> from opik.evaluation.metrics import LevenshteinRatio
