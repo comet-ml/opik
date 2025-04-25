@@ -36,7 +36,7 @@ def prepare_difference_report(expected: Any, actual: Any) -> str:
         return diff_report_clean
     except Exception:
         LOGGER.debug("Failed to prepare difference report", exc_info=True)
-        return ""
+        return "Failed to prepare difference report"
 
 
 def assert_equal(expected, actual):
