@@ -16,7 +16,7 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
 
     The real message processor uses data from messages passed to `process` method to send
     data to the backend. Emulator does not send any requests, it accumulates the
-    data that came from messages in it's attributes.
+    data that came from messages in its attributes.
 
     Moreover, it doesn't just store the raw data. You can access full trace or span trees
     that were built with received messages. Those trees are specified via the model classes
@@ -50,7 +50,7 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
     @property
     def trace_trees(self):
         """
-        Builds list of trace trees based on the data from the processed messages.
+        Builds a list of trace trees based on the data from the processed messages.
         Before processing traces, builds span_trees
         """
         self.span_trees  # call to connect all spans
@@ -75,8 +75,8 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
     @property
     def span_trees(self):
         """
-        Builds list of span trees based on the data from the processed messages.
-        Children spans are sorted by creation time
+        Builds a list of span trees based on the data from the processed messages.
+        Children's spans are sorted by creation time
         """
         for span_id, parent_span_id in self._span_to_parent_span.items():
             if parent_span_id is None:
