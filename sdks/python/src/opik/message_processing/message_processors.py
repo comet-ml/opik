@@ -8,7 +8,7 @@ from .. import dict_utils
 from ..rest_api.types import (
     feedback_score_batch_item,
     trace_write,
-    guardrail_batch_item,
+    guardrail,
 )
 from ..rest_api.types import span_write
 from ..rest_api import core as rest_api_core
@@ -200,12 +200,10 @@ class MessageSender(BaseMessageProcessor):
         batch = []
 
         for message_item in message.batch:
-            guardrail_batch_item_message = guardrail_batch_item.GuardrailBatchItem(
-                **message_item.__dict__
-            )
+            guardrail_batch_item_message = guardrail.Guardrail(**message_item.__dict__)
             batch.append(guardrail_batch_item_message)
 
-        self._rest_client.guardrails.add_guardrails_batch(guardrails=batch)
+        self._rest_client.guardrails.create_guardrails(guardrails=batch)
 
 
 def _generate_error_fingerprint(
