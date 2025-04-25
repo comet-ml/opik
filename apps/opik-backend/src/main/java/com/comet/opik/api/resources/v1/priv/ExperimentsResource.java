@@ -12,7 +12,7 @@ import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentsDelete;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
-import com.comet.opik.api.resources.v1.priv.validate.IdParamsValidator;
+import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.EntityType;
@@ -315,7 +315,7 @@ public class ExperimentsResource {
     public Response findFeedbackScoreNames(@QueryParam("experiment_ids") String experimentIdsQueryParam) {
 
         var experimentIds = Optional.ofNullable(experimentIdsQueryParam)
-                .map(IdParamsValidator::getIds)
+                .map(ParamsValidator::getIds)
                 .orElse(Collections.emptySet());
 
         String workspaceId = requestContext.get().getWorkspaceId();
