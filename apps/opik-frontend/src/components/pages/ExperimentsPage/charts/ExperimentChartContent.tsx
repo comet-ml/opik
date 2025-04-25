@@ -78,28 +78,24 @@ const ExperimentChartContent: React.FC<ExperimentChartContentProps> = ({
 
   const isSinglePoint = chartData.data.length === 1;
 
-  const shouldShowDot = useCallback(
-    (dataIndex: number, line: string): boolean => {
-      if (isSinglePoint) return true;
+  const shouldShowDot = (dataIndex: number, line: string): boolean => {
+    if (isSinglePoint) return true;
 
-      const { data = [] } = chartData;
+    const { data = [] } = chartData;
 
-      const currentValue = data[dataIndex]?.scores?.[line];
-      if (currentValue === null || currentValue === undefined) return false;
+    const hasValueAt = (idx: number): boolean => {
+      const value = data[idx]?.scores?.[line];
+      return value !== null && value !== undefined;
+    };
 
-      const hasValueAt = (idx: number): boolean => {
-        const value = data[idx]?.scores?.[line];
-        return value !== null && value !== undefined;
-      };
+    if (!hasValueAt(dataIndex)) return false;
 
-      const hasPreviousValue = dataIndex > 0 && hasValueAt(dataIndex - 1);
-      const hasNextValue =
-        dataIndex < data.length - 1 && hasValueAt(dataIndex + 1);
+    const hasPreviousValue = dataIndex > 0 && hasValueAt(dataIndex - 1);
+    const hasNextValue =
+      dataIndex < data.length - 1 && hasValueAt(dataIndex + 1);
 
-      return !hasPreviousValue && !hasNextValue;
-    },
-    [chartData, isSinglePoint],
-  );
+    return !hasPreviousValue && !hasNextValue;
+  };
 
   const renderDot: LineDot = (props) => {
     if (shouldShowDot(props.index, props.name)) {
