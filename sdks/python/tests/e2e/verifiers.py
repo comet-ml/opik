@@ -18,7 +18,7 @@ def _try_get__dict__(instance: Any) -> Optional[Dict[str, Any]]:
     return instance.__dict__
 
 
-def _try_build_set(iterable: Optional[Iterable[Any]]) -> Optional[Set[str]]:
+def _try_build_set(iterable: Optional[Iterable[Any]]) -> Optional[Set[Any]]:
     if iterable is None:
         return iterable
 
