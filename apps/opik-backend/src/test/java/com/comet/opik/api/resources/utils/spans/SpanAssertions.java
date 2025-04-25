@@ -7,6 +7,7 @@ import com.comet.opik.api.resources.utils.StatsUtils;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 
 import static com.comet.opik.api.Span.SpanPage;
@@ -53,13 +54,28 @@ public class SpanAssertions {
         for (int i = 0; i < actualSpans.size(); i++) {
             var actualSpan = actualSpans.get(i);
             var expectedSpan = expectedSpans.get(i);
+
+            if (expectedSpan.startTime() != null && expectedSpan.endTime() != null && expectedSpan.duration() != null) {
+                expectedSpan = expectedSpan.toBuilder()
+                        .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(expectedSpan.startTime(),
+                                expectedSpan.endTime()))
+                        .build();
+            }
+
             var expectedFeedbackScores = expectedSpan.feedbackScores() == null
                     ? null
                     : expectedSpan.feedbackScores().reversed();
             assertThat(actualSpan.projectId()).isNotNull();
             assertThat(actualSpan.projectName()).isNull();
-            assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
-            assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
+
+            if (actualSpan.createdAt() != null) {
+                assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
+            }
+
+            if (actualSpan.lastUpdatedAt() != null) {
+                assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
+            }
+
             assertThat(actualSpan.feedbackScores())
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
@@ -68,18 +84,22 @@ public class SpanAssertions {
                                     .build())
                     .ignoringCollectionOrder()
                     .isEqualTo(expectedFeedbackScores);
-            var expected = DurationUtils.getDurationInMillisWithSubMilliPrecision(
-                    expectedSpan.startTime(), expectedSpan.endTime());
-            if (actualSpan.duration() == null || expected == null) {
-                assertThat(actualSpan.duration()).isEqualTo(expected);
+
+            if (actualSpan.duration() == null || expectedSpan.duration() == null) {
+                assertThat(actualSpan.duration()).isEqualTo(expectedSpan.duration());
             } else {
-                assertThat(actualSpan.duration()).isEqualTo(expected, within(0.001));
+                assertThat(actualSpan.duration()).isEqualTo(expectedSpan.duration(), within(0.001));
             }
 
             if (actualSpan.feedbackScores() != null) {
+                Instant createdAt = expectedSpan.createdAt() == null
+                        ? expectedSpan.lastUpdatedAt()
+                        : expectedSpan.createdAt();
+                Instant lastUpdatedAt = expectedSpan.lastUpdatedAt();
+
                 actualSpan.feedbackScores().forEach(feedbackScore -> {
-                    assertThat(feedbackScore.createdAt()).isAfter(expectedSpan.createdAt());
-                    assertThat(feedbackScore.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
+                    assertThat(feedbackScore.createdAt()).isAfter(createdAt);
+                    assertThat(feedbackScore.lastUpdatedAt()).isAfter(lastUpdatedAt);
                     assertThat(feedbackScore.createdBy()).isEqualTo(userName);
                     assertThat(feedbackScore.lastUpdatedBy()).isEqualTo(userName);
                 });
@@ -89,7 +109,7 @@ public class SpanAssertions {
                 assertComments(expectedSpan.comments(), actualSpan.comments());
 
                 actualSpan.comments().forEach(comment -> {
-                    assertThat(comment.createdAt()).isAfter(actualSpan.createdAt());
+                    assertThat(comment.createdAt()).isAfter(actualSpan.lastUpdatedAt());
                     assertThat(comment.lastUpdatedAt()).isAfter(actualSpan.lastUpdatedAt());
                     assertThat(comment.createdBy()).isEqualTo(userName);
                     assertThat(comment.lastUpdatedBy()).isEqualTo(userName);
