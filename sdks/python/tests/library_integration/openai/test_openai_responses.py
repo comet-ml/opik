@@ -7,6 +7,7 @@ import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.openai import track_openai
 
+from .constants import MODEL_FOR_TESTS, EXPECTED_OPENAI_USAGE_LOGGED_FORMAT
 from ...testlib import (
     ANY,
     ANY_BUT_NONE,
@@ -19,18 +20,6 @@ from ...testlib import (
 )
 
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
-
-MODEL_FOR_TESTS = "gpt-4o-mini"
-EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
-    "prompt_tokens": ANY_BUT_NONE,
-    "completion_tokens": ANY_BUT_NONE,
-    "total_tokens": ANY_BUT_NONE,
-    "original_usage.input_tokens": ANY_BUT_NONE,
-    "original_usage.output_tokens": ANY_BUT_NONE,
-    "original_usage.total_tokens": ANY_BUT_NONE,
-    "original_usage.input_tokens_details.cached_tokens": ANY_BUT_NONE,
-    "original_usage.output_tokens_details.reasoning_tokens": ANY_BUT_NONE,
-}
 
 
 def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):

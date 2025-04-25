@@ -10,9 +10,8 @@ LOGGER = logging.getLogger(__name__)
 
 def prepare_difference_report(expected: Any, actual: Any) -> str:
     try:
-        diff_report = deepdiff.DeepDiff(
-            expected, actual, exclude_types=[type(mock.ANY)]
-        ).pretty()
+        diff = deepdiff.DeepDiff(expected, actual, exclude_types=[type(mock.ANY)])
+        diff_report = diff.pretty()
 
         # Remove from report lines like that "X type changed from int to ANY_BUT_NONE"
         # But keep the lines like "X type changed from NoneType to ANY_BUT_NONE"

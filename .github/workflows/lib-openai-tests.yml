@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python_version: ["3.8", "3.12"]
+        python_version: ["3.9", "3.12"]
 
     steps:
       - name: Check out code
@@ -46,6 +46,7 @@ jobs:
         run: |
           cd ./tests
           pip install --no-cache-dir --disable-pip-version-check -r library_integration/openai/requirements.txt
+          pip list
 
       - name: Run tests
         run: |
