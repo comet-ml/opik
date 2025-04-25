@@ -1405,10 +1405,8 @@ class SpanDAO {
                             .filter(not(List::isEmpty))
                             .orElse(null))
                     .tags(Optional.ofNullable(getValue(excludedFields, SpanField.TAGS, row, "tags", String[].class))
-                            .map(Arrays::stream)
-                            .map(Stream::toList)
-                            .filter(not(List::isEmpty))
-                            .map(Set::copyOf)
+                            .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
+                            .filter(set -> !set.isEmpty())
                             .orElse(null))
                     .usage(getValue(excludedFields, SpanField.USAGE, row, "usage", Map.class))
                     .comments(Optional
