@@ -17,11 +17,13 @@ def _try_get__dict__(instance: Any) -> Optional[Dict[str, Any]]:
 
     return instance.__dict__
 
+
 def _try_build_set(iterable: Optional[Iterable[Any]]) -> Optional[Set[str]]:
     if iterable is None:
         return iterable
-    
+
     return set(iterable)
+
 
 def verify_trace(
     opik_client: opik.Opik,
@@ -54,8 +56,10 @@ def verify_trace(
     )
 
     if tags is not mock.ANY:
-        assert _try_build_set(trace.tags) == _try_build_set(tags), testlib.prepare_difference_report(trace.tags, tags)
-    
+        assert _try_build_set(trace.tags) == _try_build_set(
+            tags
+        ), testlib.prepare_difference_report(trace.tags, tags)
+
     if error_info is not mock.ANY:
         assert (
             _try_get__dict__(trace.error_info) == error_info
@@ -149,13 +153,15 @@ def verify_span(
     )
 
     if tags is not mock.ANY:
-        assert _try_build_set(span.tags) == _try_build_set(tags), testlib.prepare_difference_report(span.tags, tags)
-    
+        assert _try_build_set(span.tags) == _try_build_set(
+            tags
+        ), testlib.prepare_difference_report(span.tags, tags)
+
     if error_info is not mock.ANY:
         assert (
             _try_get__dict__(span.error_info) == error_info
         ), testlib.prepare_difference_report(span.error_info, error_info)
-    
+
     assert span.model == model, f"{span.model} != {model}"
     assert span.provider == provider, f"{span.provider} != {provider}"
     assert (
