@@ -8,8 +8,8 @@ import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
+import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.PromptVersion;
-import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
@@ -282,9 +282,7 @@ public class ExperimentService {
         var id = experiment.id() == null ? idGenerator.generateId() : experiment.id();
         IdGenerator.validateVersion(id, "Experiment");
         var name = StringUtils.getIfBlank(experiment.name(), nameGenerator::generateName);
-        return getOrCreateDataset(experiment.datasetName())
-                .onErrorResume(throwable -> handleDatasetCreationError(throwable, experiment.datasetName())
-                        .map(Dataset::id))
+        return datasetService.getOrCreateDataset(experiment.datasetName())
                 .flatMap(datasetId -> {
                     if (hasPromptVersionLinks(experiment)) {
                         return validatePromptVersion(experiment).flatMap(promptVersionMap -> {
@@ -335,16 +333,6 @@ public class ExperimentService {
                 });
     }
 
-    private Mono<UUID> getOrCreateDataset(String datasetName) {
-        return Mono.deferContextual(ctx -> {
-            String userName = ctx.get(RequestContext.USER_NAME);
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-
-            return Mono.fromCallable(() -> datasetService.getOrCreate(workspaceId, datasetName, userName))
-                    .subscribeOn(Schedulers.boundedElastic());
-        });
-    }
-
     private Mono<UUID> create(Experiment experiment, UUID id, String name, UUID datasetId) {
         var newExperiment = experiment.toBuilder()
                 .id(id)
@@ -363,36 +351,28 @@ public class ExperimentService {
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
-    private Mono<Dataset> handleDatasetCreationError(Throwable throwable, String datasetName) {
-        if (throwable instanceof EntityAlreadyExistsException) {
-            return Mono.deferContextual(ctx -> {
-                String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-
-                return Mono.fromCallable(() -> datasetService.findByName(workspaceId, datasetName))
-                        .subscribeOn(Schedulers.boundedElastic());
-            });
-        }
-        return Mono.error(throwable);
-    }
-
     private void postExperimentCreatedEvent(Experiment partialExperiment, String workspaceId, String userName) {
-        log.info("Posting experiment created event for experiment id '{}', datasetId '{}', workspaceId '{}'",
-                partialExperiment.id(), partialExperiment.datasetId(), workspaceId);
-        eventBus.post(new ExperimentCreated(
-                partialExperiment.id(),
-                partialExperiment.datasetId(),
-                // The createdAt field is not exactly the one persisted in the DB, but it doesn't matter:
-                // - The experiment.createdAt field in ClickHouse has precision 9,
-                // whereas for dataset.lastCreatedExperimentAt in MySQL has precision 6.
-                // - It's approximated enough for the event.
-                // - At the moment of writing this comment, the dataset.lastCreatedExperimentAt field is only used
-                // to optionally sort the datasets returned by the find datasets endpoint. There are no other usages
-                // in the UI or elsewhere.
-                partialExperiment.createdAt(),
-                workspaceId,
-                userName));
-        log.info("Posted experiment created event for experiment id '{}', datasetId '{}', workspaceId '{}'",
-                partialExperiment.id(), partialExperiment.datasetId(), workspaceId);
+        // This event should be posted only for Experiments with Regular type,
+        // not needed for Agent Optimizations related Experiments (Trials)
+        if (Optional.ofNullable(partialExperiment.type()).orElse(ExperimentType.REGULAR) == ExperimentType.REGULAR) {
+            log.info("Posting experiment created event for experiment id '{}', datasetId '{}', workspaceId '{}'",
+                    partialExperiment.id(), partialExperiment.datasetId(), workspaceId);
+            eventBus.post(new ExperimentCreated(
+                    partialExperiment.id(),
+                    partialExperiment.datasetId(),
+                    // The createdAt field is not exactly the one persisted in the DB, but it doesn't matter:
+                    // - The experiment.createdAt field in ClickHouse has precision 9,
+                    // whereas for dataset.lastCreatedExperimentAt in MySQL has precision 6.
+                    // - It's approximated enough for the event.
+                    // - At the moment of writing this comment, the dataset.lastCreatedExperimentAt field is only used
+                    // to optionally sort the datasets returned by the find datasets endpoint. There are no other usages
+                    // in the UI or elsewhere.
+                    partialExperiment.createdAt(),
+                    workspaceId,
+                    userName));
+            log.info("Posted experiment created event for experiment id '{}', datasetId '{}', workspaceId '{}'",
+                    partialExperiment.id(), partialExperiment.datasetId(), workspaceId);
+        }
     }
 
     private Mono<UUID> handleCreateError(Throwable throwable, UUID id) {

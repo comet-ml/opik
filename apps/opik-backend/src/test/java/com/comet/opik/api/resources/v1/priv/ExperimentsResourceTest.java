@@ -2103,6 +2103,8 @@ class ExperimentsResourceTest {
                                 .usage(null)
                                 .duration(null)
                                 .totalEstimatedCost(null)
+                                .type(null)
+                                .optimizationId(null)
                                 .build();
                         // Only 2 scores per experiment is enough for this test
                         var scores = IntStream.range(0, 2)
@@ -2404,6 +2406,8 @@ class ExperimentsResourceTest {
                     .duration(null)
                     .usage(null)
                     .totalEstimatedCost(null)
+                    .type(null)
+                    .optimizationId(null)
                     .build();
 
             var expectedId = createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);

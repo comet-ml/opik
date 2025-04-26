@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentsDelete;
+import com.comet.opik.api.Optimization;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -13,6 +14,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
+import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -88,6 +90,7 @@ class DatasetEventListenerTest {
     private String baseURI;
     private ClientSupport client;
     private ExperimentResourceClient experimentResourceClient;
+    private OptimizationResourceClient optimizationResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi) throws Exception {
@@ -107,6 +110,7 @@ class DatasetEventListenerTest {
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
 
         experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
+        optimizationResourceClient = new OptimizationResourceClient(client, baseURI, factory);
     }
 
     @AfterAll
@@ -226,6 +230,12 @@ class DatasetEventListenerTest {
                 .build();
     }
 
+    private Optimization generateOptimization(Dataset dataset) {
+        return optimizationResourceClient.createPartialOptimization()
+                .datasetName(dataset.name())
+                .build();
+    }
+
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class DeleteExperimentEvent {
@@ -315,6 +325,25 @@ class DatasetEventListenerTest {
                 assertThat(actualDataset.lastCreatedExperimentAt()).isNull();
             });
         }
+    }
+
+    @Test
+    @DisplayName("when a new optimization is created, it should be saved in the database")
+    void when__newOptimizationIsCreated__shouldBeSavedInTheDatabase() {
+        var dataset = factory.manufacturePojo(Dataset.class);
+        var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
+
+        var expectedOptimization = generateOptimization(dataset);
+        var optimizationId = optimizationResourceClient.create(expectedOptimization, API_KEY, TEST_WORKSPACE);
+
+        // get optimization by id and compare
+        var actualOptimization = optimizationResourceClient.get(optimizationId, API_KEY, TEST_WORKSPACE, 200);
+
+        Awaitility.await().untilAsserted(() -> {
+            var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
+            assertThat(actualDataset.lastCreatedOptimizationAt())
+                    .isCloseTo(actualOptimization.createdAt(), within(2, ChronoUnit.SECONDS));
+        });
     }
 
 }
