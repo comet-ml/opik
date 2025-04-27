@@ -21,6 +21,7 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
+import org.apache.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -213,6 +214,20 @@ public class GuardrailsResourceTest {
 
         assertThat(actualStats).isNotNull();
         assertThat(actualStats.stats()).contains(expected);
+    }
+
+    @Test
+    @DisplayName("test create guardrails fails if an id is provided")
+    void testCreateGuardrails_failIfIdIsProvided() {
+        String workspaceId = randomUUID().toString();
+        mockTargetWorkspace(API_KEY, TEST_WORKSPACE, workspaceId);
+
+        var guardrails = guardrailsGenerator.generateGuardrailsForTrace(randomUUID(), randomUUID(), DEFAULT_PROJECT)
+                .stream().map(guardrail -> guardrail.toBuilder().id(randomUUID()).build()).toList();
+
+        try (var response = guardrailsResourceClient.sendAddBatch(guardrails, API_KEY, TEST_WORKSPACE)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
     }
 
     private void assertGuardrailValidations(List<GuardrailsValidation> expected, List<GuardrailsValidation> actual) {
