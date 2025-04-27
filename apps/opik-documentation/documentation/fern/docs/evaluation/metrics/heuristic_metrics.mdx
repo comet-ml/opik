@@ -239,6 +239,29 @@ score = metric.score(
 print(score.value, score.reason)
 ```
 
+### AggregatedMetric
+
+You can use the AggregatedMetric function to compute averages across multiple metrics for
+each item in your experiment.
+
+You can define the metric as:
+
+```python
+from opik.evaluation.metrics import AggregatedMetric, Hallucination, GEval
+
+metric = AggregatedMetric(
+  name="average_score",
+  metrics=[
+    Hallucination(),
+    GEval(
+      task_introduction="Identify factual inaccuracies",
+      evaluation_criteria="Return a score of 1 if there are inaccuracies, 0 otherwise"
+    )
+  ],
+  aggregator=lambda metric_results: sum([score_result.value for score_result in metric_results]) / len(metric_results)
+)
+```
+
 #### References
 
 - [Understanding ROUGE Metrics](https://www.linkedin.com/pulse/mastering-rouge-matrix-your-guide-large-language-model-mamdouh/)

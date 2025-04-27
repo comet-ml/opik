@@ -19,7 +19,15 @@ In this notebook, we will create a simple LangGraph workflow and focus on how to
 ```python
 import opik
 
-opik.configure(use_local=False)
+opik.configure(use_local=True, url="http://localhost:5173/api/")
+```
+
+
+```python
+import opik
+
+client = opik.Opik()
+client.auth_check()
 ```
 
 ## Create the LangGraph graph

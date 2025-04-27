@@ -29,16 +29,16 @@ Opik uses an LLM as a Judge to compute context precision, for this we have a pro
 
 The template uses a few-shot prompting technique to compute context precision. The template is as follows:
 
-```
+```markdown
 YOU ARE AN EXPERT EVALUATOR SPECIALIZED IN ASSESSING THE "CONTEXT PRECISION" METRIC FOR LLM GENERATED OUTPUTS.
 YOUR TASK IS TO EVALUATE HOW PRECISELY A GIVEN ANSWER FROM AN LLM FITS THE EXPECTED ANSWER, GIVEN THE CONTEXT AND USER INPUT.
 
 ###INSTRUCTIONS###
 
 1. **EVALUATE THE CONTEXT PRECISION:**
-    - **ANALYZE** the provided user input, expected answer, answer from another LLM, and the context.
-    - **COMPARE** the answer from the other LLM with the expected answer, focusing on how well it aligns in terms of context, relevance, and accuracy.
-    - **ASSIGN A SCORE** from 0.0 to 1.0 based on the following scale:
+   - **ANALYZE** the provided user input, expected answer, answer from another LLM, and the context.
+   - **COMPARE** the answer from the other LLM with the expected answer, focusing on how well it aligns in terms of context, relevance, and accuracy.
+   - **ASSIGN A SCORE** from 0.0 to 1.0 based on the following scale:
 
 ###SCALE FOR CONTEXT PRECISION METRIC (0.0 - 1.0)###
 
@@ -50,13 +50,15 @@ YOUR TASK IS TO EVALUATE HOW PRECISELY A GIVEN ANSWER FROM AN LLM FITS THE EXPEC
 - **1.0:** PERFECTLY ACCURATE – The LLM's answer matches the expected answer precisely, with full adherence to the context and no errors.
 
 2. **PROVIDE A REASON FOR THE SCORE:**
-    - **JUSTIFY** why the specific score was given, considering the alignment with context, accuracy, relevance, and completeness.
+
+   - **JUSTIFY** why the specific score was given, considering the alignment with context, accuracy, relevance, and completeness.
 
 3. **RETURN THE RESULT IN A JSON FORMAT** as follows:
-    - `"{VERDICT_KEY}"`: The score between 0.0 and 1.0.
-    - `"{REASON_KEY}"`: A detailed explanation of why the score was assigned.
+   - `"{VERDICT_KEY}"`: The score between 0.0 and 1.0.
+   - `"{REASON_KEY}"`: A detailed explanation of why the score was assigned.
 
 ###WHAT NOT TO DO###
+
 - **DO NOT** assign a high score to answers that are off-topic or irrelevant, even if they contain some correct information.
 - **DO NOT** give a low score to an answer that is nearly correct but has minor errors or omissions; instead, accurately reflect its alignment with the context.
 - **DO NOT** omit the justification for the score; every score must be accompanied by a clear, reasoned explanation.
@@ -71,7 +73,9 @@ YOUR TASK IS TO EVALUATE HOW PRECISELY A GIVEN ANSWER FROM AN LLM FITS THE EXPEC
 NOW, EVALUATE THE PROVIDED INPUTS AND CONTEXT TO DETERMINE THE CONTEXT PRECISION SCORE.
 
 ###INPUTS:###
-***
+
+---
+
 Input:
 {input}
 
@@ -83,7 +87,8 @@ Expected Output:
 
 Context:
 {context}
-***
+
+---
 ```
 
 with `VERDICT_KEY` being `context_precision_score` and `REASON_KEY` being `reason`.

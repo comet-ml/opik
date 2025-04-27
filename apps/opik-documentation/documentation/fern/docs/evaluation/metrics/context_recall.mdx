@@ -29,7 +29,7 @@ Opik uses an LLM as a Judge to compute context recall, for this we have a prompt
 
 The template uses a few-shot prompting technique to compute context recall. The template is as follows:
 
-```
+```markdown
 YOU ARE AN EXPERT AI METRIC EVALUATOR SPECIALIZING IN CONTEXTUAL UNDERSTANDING AND RESPONSE ACCURACY.
 YOUR TASK IS TO EVALUATE THE "{VERDICT_KEY}" METRIC, WHICH MEASURES HOW WELL A GIVEN RESPONSE FROM
 AN LLM (Language Model) MATCHES THE EXPECTED ANSWER BASED ON THE PROVIDED CONTEXT AND USER INPUT.
@@ -37,43 +37,46 @@ AN LLM (Language Model) MATCHES THE EXPECTED ANSWER BASED ON THE PROVIDED CONTEX
 ###INSTRUCTIONS###
 
 1. **Evaluate the Response:**
-    - COMPARE the given **user input**, **expected answer**, **response from another LLM**, and **context**.
-    - DETERMINE how accurately the response from the other LLM matches the expected answer within the context provided.
+
+   - COMPARE the given **user input**, **expected answer**, **response from another LLM**, and **context**.
+   - DETERMINE how accurately the response from the other LLM matches the expected answer within the context provided.
 
 2. **Score Assignment:**
-    - ASSIGN a **{VERDICT_KEY}** score on a scale from **0.0 to 1.0**:
-        - **0.0**: The response from the LLM is entirely unrelated to the context or expected answer.
-        - **0.1 - 0.3**: The response is minimally relevant but misses key points or context.
-        - **0.4 - 0.6**: The response is partially correct, capturing some elements of the context and expected answer but lacking in detail or accuracy.
-        - **0.7 - 0.9**: The response is mostly accurate, closely aligning with the expected answer and context with minor discrepancies.
-        - **1.0**: The response perfectly matches the expected answer and context, demonstrating complete understanding.
+
+   - ASSIGN a **{VERDICT_KEY}** score on a scale from **0.0 to 1.0**:
+     - **0.0**: The response from the LLM is entirely unrelated to the context or expected answer.
+     - **0.1 - 0.3**: The response is minimally relevant but misses key points or context.
+     - **0.4 - 0.6**: The response is partially correct, capturing some elements of the context and expected answer but lacking in detail or accuracy.
+     - **0.7 - 0.9**: The response is mostly accurate, closely aligning with the expected answer and context with minor discrepancies.
+     - **1.0**: The response perfectly matches the expected answer and context, demonstrating complete understanding.
 
 3. **Reasoning:**
-    - PROVIDE a **detailed explanation** of the score, specifying why the response received the given score
-        based on its accuracy and relevance to the context.
+
+   - PROVIDE a **detailed explanation** of the score, specifying why the response received the given score
+     based on its accuracy and relevance to the context.
 
 4. **JSON Output Format:**
-    - RETURN the result as a JSON object containing:
-        - `"{VERDICT_KEY}"`: The score between 0.0 and 1.0.
-        - `"{REASON_KEY}"`: A detailed explanation of the score.
+   - RETURN the result as a JSON object containing:
+     - `"{VERDICT_KEY}"`: The score between 0.0 and 1.0.
+     - `"{REASON_KEY}"`: A detailed explanation of the score.
 
 ###CHAIN OF THOUGHTS###
 
 1. **Understand the Context:**
-    1.1. Analyze the context provided.
-    1.2. IDENTIFY the key elements that must be considered to evaluate the response.
+   1.1. Analyze the context provided.
+   1.2. IDENTIFY the key elements that must be considered to evaluate the response.
 
 2. **Compare the Expected Answer and LLM Response:**
-    2.1. CHECK the LLM's response against the expected answer.
-    2.2. DETERMINE how closely the LLM's response aligns with the expected answer, considering the nuances in the context.
+   2.1. CHECK the LLM's response against the expected answer.
+   2.2. DETERMINE how closely the LLM's response aligns with the expected answer, considering the nuances in the context.
 
 3. **Assign a Score:**
-    3.1. REFER to the scoring scale.
-    3.2. ASSIGN a score that reflects the accuracy of the response.
+   3.1. REFER to the scoring scale.
+   3.2. ASSIGN a score that reflects the accuracy of the response.
 
 4. **Explain the Score:**
-    4.1. PROVIDE a clear and detailed explanation.
-    4.2. INCLUDE specific examples from the response and context to justify the score.
+   4.1. PROVIDE a clear and detailed explanation.
+   4.2. INCLUDE specific examples from the response and context to justify the score.
 
 ###WHAT NOT TO DO###
 
@@ -88,7 +91,9 @@ AN LLM (Language Model) MATCHES THE EXPECTED ANSWER BASED ON THE PROVIDED CONTEX
 {examples_str}
 
 ###INPUTS:###
-***
+
+---
+
 Input:
 {input}
 
@@ -100,7 +105,8 @@ Expected Output:
 
 Context:
 {context}
-***
+
+---
 ```
 
 with `VERDICT_KEY` being `context_recall_score` and `REASON_KEY` being `reason`.

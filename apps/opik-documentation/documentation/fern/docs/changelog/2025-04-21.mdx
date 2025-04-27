@@ -1,0 +1,20 @@
+**Opik Dashboard**:
+
+- Released Python code metrics for online evaluations for both Opik Cloud and
+  self-hosted deployments. This allows you to define python functions to evaluate
+  your traces in production.
+
+<Frame>
+  <img src="/img/changelog/2025-04-21/python_code_metrics.png" />
+</Frame>
+
+**Python and JS / TS SDK**:
+
+- Fixed LLM as a judge metrics so they return an error rather than a score of
+  0.5 if the LLM returns a score that wasn't in the range 0 to 1.
+
+**Deployments**:
+
+- Updated Dockerfiles to ensure all containers run as non root users.
+
+_Release_: `1.7.11`

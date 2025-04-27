@@ -1,0 +1,17 @@
+**Opik Dashboard:**
+
+- Updated the feedback scores UI in the experiment page to make it easier to
+  annotate experiment results.
+- Fixed an issue with base64 encoded images in the experiment sidebar.
+- Improved the loading speeds of the traces table and traces sidebar for traces
+  that have very large payloads (25MB+).
+
+**Python and JS / TS SDK**:
+
+- Improved the robustness of LLM as a Judge metrics with better parsing.
+- Fix usage tracking for Anthropic models hosted on VertexAI.
+- When using LiteLLM, we fallback to using the LiteLLM cost if no model provider
+  or model is specified.
+- Added support for `thread_id` in the LangGraph integration.
+
+_Releases_: `1.7.4`, `1.7.5`, `1.7.6`. `1.7.7` and `1.7.8`.
