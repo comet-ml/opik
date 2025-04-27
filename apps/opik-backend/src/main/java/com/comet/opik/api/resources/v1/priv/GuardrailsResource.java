@@ -48,7 +48,8 @@ public class GuardrailsResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailBatch.class))) @NotNull @Valid GuardrailBatch batch) {
 
         if (batch.guardrails().stream().anyMatch(guardrail -> guardrail.id() != null)) {
-            throw new ClientErrorException("Guardrail ids must be null", HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            throw new ClientErrorException("Guardrail ids must be null on creation",
+                    HttpStatus.SC_UNPROCESSABLE_ENTITY);
         }
 
         String workspaceId = requestContext.get().getWorkspaceId();
