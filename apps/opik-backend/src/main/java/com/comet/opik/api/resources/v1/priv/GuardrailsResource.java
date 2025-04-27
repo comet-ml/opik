@@ -17,6 +17,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -26,6 +27,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.http.HttpStatus;
 
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
@@ -45,7 +47,11 @@ public class GuardrailsResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     public Response createGuardrails(
-            @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailBatch.class))) @NotNull @Valid @JsonView(Guardrail.View.Write.class) GuardrailBatch batch) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailBatch.class))) @NotNull @Valid GuardrailBatch batch) {
+
+        if (batch.guardrails().stream().anyMatch(guardrail -> guardrail.id() != null)) {
+            throw new ClientErrorException("Guardrail ids must be null", HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
