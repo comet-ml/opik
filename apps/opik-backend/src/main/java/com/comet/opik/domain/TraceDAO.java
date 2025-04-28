@@ -1028,6 +1028,7 @@ class TraceDAOImpl implements TraceDAO {
                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
                             NULL) as duration
                     FROM traces final
+                        LEFT JOIN guardrails_agg gagg ON guardrails_agg.entity_id = traces.id
                     <if(feedback_scores_empty_filters)>
                         LEFT JOIN fsc ON fsc.entity_id = traces.id
                     <endif>
