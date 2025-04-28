@@ -27,9 +27,9 @@
         <clickhouse-java.version>0.8.2</clickhouse-java.version>
         <google-protobuf.version>4.30.0</google-protobuf.version>
         <org.mapstruct.version>1.6.3</org.mapstruct.version>
-        <testcontainers.version>1.20.4</testcontainers.version>
+        <testcontainers.version>1.21.0</testcontainers.version>
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
-        <wiremock.version>3.12.0</wiremock.version>
+        <wiremock.version>3.13.0</wiremock.version>
         <redisson.version>3.45.0</redisson.version>
         <opentelmetry.version>2.15.0</opentelmetry.version>
         <aws.java.sdk.version>2.31.1</aws.java.sdk.version>

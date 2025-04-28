@@ -436,8 +436,6 @@ MODEL = "gpt-4o-mini"
 DENSITY_ITERATIONS = 2
 
 experiment_config = {
-    "iteration_summary_prompt": ITERATION_SUMMARY_PROMPT,
-    "final_summary_prompt": FINAL_SUMMARY_PROMPT,
     "model": MODEL,
     "density_iterations": DENSITY_ITERATIONS,
 }
@@ -447,8 +445,8 @@ res = evaluate(
     experiment_config=experiment_config,
     task=evaluation_task,
     scoring_metrics=[EvaluateSummary(name="summary-metrics")],
-    prompt=ITERATION_SUMMARY_PROMPT,
-    project_name="Chain of Density Summarization",
+    prompts=[ITERATION_SUMMARY_PROMPT, FINAL_SUMMARY_PROMPT],
+    project_name="Chain of Density Summarization - Experiments",
 )
 ```
 
@@ -491,8 +489,6 @@ MODEL = "gpt-4o-mini"
 DENSITY_ITERATIONS = 2
 
 experiment_config = {
-    "iteration_summary_prompt": ITERATION_SUMMARY_PROMPT,
-    "final_summary_prompt": FINAL_SUMMARY_PROMPT,
     "model": MODEL,
     "density_iterations": DENSITY_ITERATIONS,
 }
@@ -502,8 +498,8 @@ res = evaluate(
     experiment_config=experiment_config,
     task=evaluation_task,
     scoring_metrics=[EvaluateSummary(name="summary-metrics")],
-    prompt=ITERATION_SUMMARY_PROMPT,
-    project_name="Chain of Density Summarization",
+    prompts=[ITERATION_SUMMARY_PROMPT, FINAL_SUMMARY_PROMPT],
+    project_name="Chain of Density Summarization - Experiments",
 )
 ```
 

@@ -1,5 +1,6 @@
 numpy
 pytest
+pytest-asyncio
 pytest-cov
 pytest-env
 deepdiff
