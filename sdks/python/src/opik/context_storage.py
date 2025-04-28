@@ -5,8 +5,11 @@ from typing import List, Optional, Generator
 from opik.api_objects import span, trace
 
 
-class ContextStorage:
+class OpikContextStorage:
     """
+    Class responsible for keeping and providing access to the context of
+    spans and traces.
+
     Read if you are going to change this class.
 
     If you want to add or pop the span from the stack
@@ -73,7 +76,7 @@ class ContextStorage:
         self._spans_data_stack_context.set([])
 
 
-_context_storage = ContextStorage()
+_context_storage = OpikContextStorage()
 
 top_span_data = _context_storage.top_span_data
 pop_span_data = _context_storage.pop_span_data

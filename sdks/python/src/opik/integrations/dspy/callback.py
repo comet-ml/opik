@@ -6,7 +6,7 @@ from dspy.utils.callback import BaseCallback
 from opik import types, opik_context
 from opik.api_objects import helpers, span, trace
 from opik.api_objects.opik_client import get_client_cached
-from opik.context_storage import ContextStorage
+from opik.context_storage import OpikContextStorage
 from opik.decorator import error_info_collector
 
 ContextType = Union[span.SpanData, trace.TraceData]
@@ -22,7 +22,7 @@ class OpikCallback(BaseCallback):
 
         self._origins_metadata = {"created_from": "dspy"}
 
-        self._context_storage = ContextStorage()
+        self._context_storage = OpikContextStorage()
 
         self._project_name = project_name
 
