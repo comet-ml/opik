@@ -15,6 +15,7 @@ class AggregatedMetric(
         metrics: A list of concrete metric instances that inherit the `opik.evaluation.base_metric.BaseMetric`.
         aggregator: The aggregation function to use for evaluation.
         track: Whether to track the metric. Defaults to True.
+        project_name: Optional project name to track the metric in for the cases when there are no parent span/trace to inherit project name from.
     """
 
     def __init__(
@@ -25,8 +26,9 @@ class AggregatedMetric(
             [List[score_result.ScoreResult]], score_result.ScoreResult
         ],
         track: bool = True,
+        project_name: Optional[str] = None,
     ):
-        super().__init__(name=name, track=track)
+        super().__init__(name=name, track=track, project_name=project_name)
         self.metrics = metrics
         self.aggregator = aggregator
 

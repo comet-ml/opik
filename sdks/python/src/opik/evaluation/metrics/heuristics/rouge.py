@@ -29,6 +29,7 @@ class ROUGE(base_metric.BaseMetric):
         use_stemmer: Whether to use stemming when computing ROUGE. Defaults to False.
         split_summaries: Whether to split summaries into sentences. Defaults to False.
         tokenizer: A tokenizer to use when splitting summaries into sentences. Defaults to None.
+        project_name: Optional project name to track the metric in for the cases when there are no parent span/trace to inherit project name from.
 
     Example:
         >>> from opik.evaluation.metrics import ROUGE
@@ -49,8 +50,9 @@ class ROUGE(base_metric.BaseMetric):
         use_stemmer: bool = False,
         split_summaries: bool = False,
         tokenizer: Optional[Any] = None,
+        project_name: Optional[str] = None,
     ):
-        super().__init__(name=name, track=track)
+        super().__init__(name=name, track=track, project_name=project_name)
 
         if rouge_scorer is None:
             raise ImportError(
