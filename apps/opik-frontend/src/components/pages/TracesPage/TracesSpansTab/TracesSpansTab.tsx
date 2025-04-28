@@ -34,7 +34,6 @@ import {
   ColumnsStatistic,
   DynamicColumn,
   ROW_HEIGHT,
-  STATISTIC_AGGREGATION_TYPE,
 } from "@/types/shared";
 import { BaseTraceData, Span, Trace } from "@/types/traces";
 import {
