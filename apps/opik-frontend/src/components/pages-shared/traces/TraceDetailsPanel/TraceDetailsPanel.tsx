@@ -19,12 +19,12 @@ import TraceTreeViewer from "./TraceTreeViewer/TraceTreeViewer";
 import TraceAnnotateViewer from "./TraceAnnotateViewer/TraceAnnotateViewer";
 import NoData from "@/components/shared/NoData/NoData";
 import { Span } from "@/types/traces";
-import useSpansList from "@/api/traces/useSpansList";
 import ResizableSidePanel from "@/components/shared/ResizableSidePanel/ResizableSidePanel";
 import useTraceDeleteMutation from "@/api/traces/useTraceDeleteMutation";
 import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import CommentsViewer from "./CommentsViewer/CommentsViewer";
+import useLazySpansList from "@/api/traces/useLazySpansList";
 
 type TraceDetailsPanelProps = {
   projectId?: string;
@@ -83,7 +83,10 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
 
   const projectId = externalProjectId || trace?.project_id || "";
 
-  const { data: spansData, isPending: isSpansPending } = useSpansList(
+  const {
+    query: { data: spansData, isPending: isSpansPending },
+    isLazyLoading: isSpansLazyLoading,
+  } = useLazySpansList(
     {
       traceId,
       projectId,
@@ -137,6 +140,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
               spans={spansData?.content}
               rowId={spanId || traceId}
               onSelectRow={handleRowSelect}
+              isSpansLazyLoading={isSpansLazyLoading}
             />
           </ResizablePanel>
           <ResizableHandle />
@@ -149,6 +153,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
               traceId={traceId}
               lastSection={lastSection}
               setLastSection={setLastSection}
+              isSpansLazyLoading={isSpansLazyLoading}
             />
           </ResizablePanel>
           {Boolean(lastSection) && (

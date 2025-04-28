@@ -42,6 +42,7 @@ type TraceTreeViewerProps = {
   spans?: Span[];
   rowId: string;
   onSelectRow: (id: string) => void;
+  isSpansLazyLoading: boolean;
 };
 
 const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
@@ -49,6 +50,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
   spans,
   rowId,
   onSelectRow,
+  isSpansLazyLoading,
 }) => {
   const [search, setSearch] = useState("");
   const traceSpans = useMemo(() => spans ?? [], [spans]);
@@ -286,6 +288,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
               setSearchText={setSearch}
               placeholder="Search by all fields"
               dimension="sm"
+              disabled={isSpansLazyLoading}
             ></SearchInput>
           </div>
           <div className="flex items-center gap-2">
