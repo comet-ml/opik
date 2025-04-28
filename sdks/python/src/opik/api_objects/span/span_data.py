@@ -3,7 +3,7 @@ import datetime
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from opik import datetime_helpers, dict_utils, llm_usage
+from opik import Attachment, datetime_helpers, dict_utils, llm_usage
 from opik.types import (
     ErrorInfoDict,
     FeedbackScoreDict,
@@ -49,6 +49,7 @@ class SpanData:
     provider: Optional[Union[str, LLMProvider]] = None
     error_info: Optional[ErrorInfoDict] = None
     total_cost: Optional[float] = None
+    attachments: Optional[List[Attachment]] = None
 
     def update(self, **new_data: Any) -> "SpanData":
         for key, value in new_data.items():
@@ -70,6 +71,9 @@ class SpanData:
                 continue
             elif key == "input":
                 self._update_input(value)
+                continue
+            elif key == "attachments":
+                self._update_attachments(value)
                 continue
 
             self.__dict__[key] = value
@@ -98,3 +102,9 @@ class SpanData:
         self.end_time = datetime_helpers.local_timestamp()
 
         return self
+
+    def _update_attachments(self, attachments: List[Attachment]) -> None:
+        if self.attachments is None:
+            self.attachments = attachments
+        else:
+            self.attachments.extend(attachments)

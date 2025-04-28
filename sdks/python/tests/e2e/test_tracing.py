@@ -1,14 +1,29 @@
+import os
+import tempfile
 import time
-import pytest
 import uuid
 
+import numpy as np
+import pytest
+
 import opik
-from opik import opik_context, id_helpers
+from opik import opik_context, id_helpers, Attachment
 from opik.api_objects import helpers
+from opik.types import FeedbackScoreDict, ErrorInfoDict
 from . import verifiers
 from .conftest import OPIK_E2E_TESTS_PROJECT_NAME
-
 from ..testlib import ANY_STRING
+
+FILE_SIZE = 2 * 1024 * 1024
+
+
+@pytest.fixture
+def data_file():
+    with tempfile.NamedTemporaryFile(delete=True) as file:
+        file.write(np.random.bytes(FILE_SIZE))
+        file.seek(0)
+
+        yield file
 
 
 @pytest.mark.parametrize(
@@ -145,15 +160,15 @@ def test_tracked_function__error_inside_inner_function__caugth_in_top_level_span
         name="f_inner",
         input={"y": "inner-input"},
         output=None,
-        error_info={
-            "exception_type": "ValueError",
-            "message": "inner span error message",
-            "traceback": ANY_STRING(),
-        },
+        error_info=ErrorInfoDict(
+            exception_type="ValueError",
+            message="inner span error message",
+            traceback=ANY_STRING(),
+        ),
     )
 
 
-def test_tracked_function__error_inside_inner_function__error_not_caugth__trace_and_its_spans_have_error_info(
+def test_tracked_function__error_inside_inner_function__error_not_caught__trace_and_its_spans_have_error_info(
     opik_client,
 ):
     # Setup
@@ -184,11 +199,11 @@ def test_tracked_function__error_inside_inner_function__error_not_caugth__trace_
         name="f_outer",
         input={"x": "outer-input"},
         output=None,
-        error_info={
-            "exception_type": "ValueError",
-            "message": "inner span error message",
-            "traceback": ANY_STRING(),
-        },
+        error_info=ErrorInfoDict(
+            exception_type="ValueError",
+            message="inner span error message",
+            traceback=ANY_STRING(),
+        ),
     )
 
     # Verify top level span
@@ -200,11 +215,11 @@ def test_tracked_function__error_inside_inner_function__error_not_caugth__trace_
         name="f_outer",
         input={"x": "outer-input"},
         output=None,
-        error_info={
-            "exception_type": "ValueError",
-            "message": "inner span error message",
-            "traceback": ANY_STRING(),
-        },
+        error_info=ErrorInfoDict(
+            exception_type="ValueError",
+            message="inner span error message",
+            traceback=ANY_STRING(),
+        ),
     )
 
     # Verify nested span
@@ -216,11 +231,11 @@ def test_tracked_function__error_inside_inner_function__error_not_caugth__trace_
         name="f_inner",
         input={"y": "inner-input"},
         output=None,
-        error_info={
-            "exception_type": "ValueError",
-            "message": "inner span error message",
-            "traceback": ANY_STRING(),
-        },
+        error_info=ErrorInfoDict(
+            exception_type="ValueError",
+            message="inner span error message",
+            traceback=ANY_STRING(),
+        ),
     )
 
 
@@ -574,13 +589,13 @@ def test_copy_traces__happyflow(opik_client):
             input={"input": f"test input - {i}"},
             output={"output": f"test output - {i}"},
             feedback_scores=[
-                {
-                    "id": trace.id,
-                    "name": "score_trace",
-                    "value": i,
-                    "category_name": "category_",
-                    "reason": "reason_",
-                }
+                FeedbackScoreDict(
+                    id=trace.id,
+                    name="score_trace",
+                    value=i,
+                    category_name="category_",
+                    reason="reason_",
+                )
             ],
             metadata={"value": i},
             tags=["a", "b"],
@@ -654,4 +669,241 @@ def test_tracked_function__update_current_span_and_trace_called__happyflow(
         output={"trace-output": "trace-output-value"},
         metadata={"trace-metadata-key": "trace-metadata-value"},
         thread_id=THREAD_ID,
+    )
+
+
+def test_opik_trace__attachments(opik_client, data_file):
+    trace_id = helpers.generate_id()
+    file_name = os.path.basename(data_file.name)
+    names = [file_name + "_first", file_name + "_second"]
+    attachments = {
+        names[0]: Attachment(
+            data=data_file.name,
+            file_name=names[0],
+            content_type="application/octet-stream",
+        ),
+        names[1]: Attachment(
+            data=data_file.name,
+            file_name=names[1],
+            content_type="application/octet-stream",
+        ),
+    }
+    data_sizes = {
+        names[0]: FILE_SIZE,
+        names[1]: FILE_SIZE,
+    }
+
+    # Send a trace that matches the input filter
+    opik_client.trace(
+        id=trace_id,
+        name="trace-name",
+        input={"input": "Some random input"},
+        output={"output": "trace-output"},
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        attachments=attachments.values(),
+    )
+
+    opik_client.flush()
+
+    # check that the attachment was uploaded
+    verifiers.verify_attachments(
+        opik_client=opik_client,
+        entity_type="trace",
+        entity_id=trace_id,
+        attachments=attachments,
+        data_sizes=data_sizes,
+    )
+
+
+def test_tracked_function__update_current_trace__with_attachments(
+    opik_client, data_file
+):
+    # Setup
+    ID_STORAGE = {}
+    THREAD_ID = id_helpers.generate_id()
+
+    file_name = os.path.basename(data_file.name)
+    attachments = {
+        file_name: Attachment(
+            data=data_file.name,
+            file_name=file_name,
+            content_type="application/octet-stream",
+        )
+    }
+    data_sizes = {
+        file_name: FILE_SIZE,
+    }
+
+    @opik.track
+    def f():
+        opik_context.update_current_trace(
+            name="trace-name",
+            input={"trace-input": "trace-input-value"},
+            output={"trace-output": "trace-output-value"},
+            metadata={"trace-metadata-key": "trace-metadata-value"},
+            thread_id=THREAD_ID,
+            attachments=attachments.values(),
+        )
+        ID_STORAGE["f_trace-id"] = opik_context.get_current_trace_data().id
+
+    # Call
+    f()
+    opik.flush_tracker()
+
+    # check that the attachment was uploaded
+    verifiers.verify_attachments(
+        opik_client=opik_client,
+        entity_type="trace",
+        entity_id=ID_STORAGE["f_trace-id"],
+        attachments=attachments,
+        data_sizes=data_sizes,
+    )
+
+
+def test_opik_span__attachments(opik_client, data_file):
+    trace_id = helpers.generate_id()
+    file_name = os.path.basename(data_file.name)
+    names = [file_name + "_first", file_name + "_second"]
+    attachments = {
+        names[0]: Attachment(
+            data=data_file.name,
+            file_name=names[0],
+            content_type="application/octet-stream",
+        ),
+        names[1]: Attachment(
+            data=data_file.name,
+            file_name=names[1],
+            content_type="application/octet-stream",
+        ),
+    }
+    data_sizes = {
+        names[0]: FILE_SIZE,
+        names[1]: FILE_SIZE,
+    }
+
+    # Send a trace that matches the input filter
+    opik_client.trace(
+        id=trace_id,
+        name="trace-name",
+        input={"input": "Some random input"},
+        output={"output": "trace-output"},
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+    span = opik_client.span(
+        trace_id=trace_id,
+        name="span-name",
+        input={"input": "Some random input 2"},
+        output={"output": "span-output"},
+        attachments=attachments.values(),
+    )
+
+    opik_client.flush()
+
+    # check that the attachment was uploaded
+    verifiers.verify_attachments(
+        opik_client=opik_client,
+        entity_type="span",
+        entity_id=span.id,
+        attachments=attachments,
+        data_sizes=data_sizes,
+    )
+
+
+def test_trace_span__attachments(opik_client, data_file):
+    trace_id = helpers.generate_id()
+    file_name = os.path.basename(data_file.name)
+    names = [file_name + "_first", file_name + "_second"]
+    attachments = {
+        names[0]: Attachment(
+            data=data_file.name,
+            file_name=names[0],
+            content_type="application/octet-stream",
+        ),
+        names[1]: Attachment(
+            data=data_file.name,
+            file_name=names[1],
+            content_type="application/octet-stream",
+        ),
+    }
+    data_sizes = {
+        names[0]: FILE_SIZE,
+        names[1]: FILE_SIZE,
+    }
+
+    # Send a trace that matches the input filter
+    trace = opik_client.trace(
+        id=trace_id,
+        name="trace-name",
+        input={"input": "Some random input"},
+        output={"output": "trace-output"},
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+    span = trace.span(
+        name="span-name",
+        input={"input": "Some random input 2"},
+        output={"output": "span-output"},
+        attachments=attachments.values(),
+    )
+
+    opik_client.flush()
+
+    # check that the attachment was uploaded
+    verifiers.verify_attachments(
+        opik_client=opik_client,
+        entity_type="span",
+        entity_id=span.id,
+        attachments=attachments,
+        data_sizes=data_sizes,
+    )
+
+
+def test_tracked_function__update_current_span__with_attachments(
+    opik_client, data_file
+):
+    # Setup
+    ID_STORAGE = {}
+    THREAD_ID = id_helpers.generate_id()
+
+    file_name = os.path.basename(data_file.name)
+    attachments = {
+        file_name: Attachment(
+            data=data_file.name,
+            file_name=file_name,
+            content_type="application/octet-stream",
+        )
+    }
+    data_sizes = {
+        file_name: FILE_SIZE,
+    }
+
+    @opik.track
+    def f():
+        opik_context.update_current_span(
+            name="span-name",
+            input={"span-input": "span-input-value"},
+            output={"span-output": "span-output-value"},
+            metadata={"span-metadata-key": "span-metadata-value"},
+            total_cost=0.42,
+            attachments=attachments.values(),
+        )
+        opik_context.update_current_trace(
+            name="trace-name",
+            input={"trace-input": "trace-input-value"},
+            output={"trace-output": "trace-output-value"},
+            metadata={"trace-metadata-key": "trace-metadata-value"},
+            thread_id=THREAD_ID,
+        )
+        ID_STORAGE["f_span-id"] = opik_context.get_current_span_data().id
+
+    # Call
+    f()
+    opik.flush_tracker()
+
+    # check that the attachment was uploaded
+    verifiers.verify_attachments(
+        opik_client=opik_client,
+        entity_type="span",
+        entity_id=ID_STORAGE["f_span-id"],
+        attachments=attachments,
+        data_sizes=data_sizes,
     )

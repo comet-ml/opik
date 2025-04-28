@@ -1,4 +1,4 @@
-from typing import List, Any, Optional, Dict
+from typing import List, Any, Optional, Dict, Mapping
 from unittest import mock
 
 import logging
@@ -50,8 +50,8 @@ def assert_equal(expected, actual):
 
 
 def assert_dicts_equal(
-    dict1: Dict[str, Any],
-    dict2: Dict[str, Any],
+    dict1: Mapping[str, Any],
+    dict2: Mapping[str, Any],
     ignore_keys: Optional[List[str]] = None,
 ) -> None:
     dict1_copy, dict2_copy = {**dict1}, {**dict2}

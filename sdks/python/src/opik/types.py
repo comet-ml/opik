@@ -12,6 +12,7 @@ else:
 SpanType = Literal["general", "tool", "llm"]
 FeedbackType = Literal["numerical", "categorical"]
 CreatedByType = Literal["evaluation"]
+AttachmentEntityType = Literal["trace", "span"]
 
 
 class LLMProvider(str, enum.Enum):

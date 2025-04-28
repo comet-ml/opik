@@ -1,7 +1,7 @@
 import dataclasses
 import datetime
 from typing import Optional, Any, Dict, List, Union
-from ..types import SpanType, ErrorInfoDict, LLMProvider
+from ..types import SpanType, ErrorInfoDict, LLMProvider, AttachmentEntityType
 
 
 @dataclasses.dataclass
@@ -152,3 +152,14 @@ class CreateSpansBatchMessage(BaseMessage):
 @dataclasses.dataclass
 class CreateTraceBatchMessage(BaseMessage):
     batch: List[CreateTraceMessage]
+
+
+@dataclasses.dataclass
+class CreateAttachmentMessage(BaseMessage):
+    file_path: str
+    file_name: str
+    mime_type: Optional[str]
+    entity_type: AttachmentEntityType
+    entity_id: str
+    project_name: str
+    encoded_url_override: str
