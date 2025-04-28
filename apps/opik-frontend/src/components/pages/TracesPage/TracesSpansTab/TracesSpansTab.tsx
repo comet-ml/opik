@@ -356,24 +356,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     [data?.sortable_by],
   );
 
-  const columnsStatistic: ColumnsStatistic = useMemo(() => {
-    console.log([...(statisticData?.stats ?? [])] ?? [], "LALALLALALA");
-
-    return statisticData?.stats ?? [];
-
-    console.log([...(statisticData?.stats ?? [])] ?? [], "LALALLALALA");
-
-    return (
-      [
-        ...(statisticData?.stats ?? []),
-        {
-          name: "guardrails_validations",
-          type: STATISTIC_AGGREGATION_TYPE.COUNT,
-          value: 3,
-        },
-      ] ?? []
-    );
-  }, [statisticData]);
+  const columnsStatistic: ColumnsStatistic = useMemo(
+    () => statisticData?.stats ?? [],
+    [statisticData],
+  );
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
