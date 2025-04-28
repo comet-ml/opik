@@ -1,7 +1,7 @@
 import dataclasses
 import datetime
 from typing import Optional, Any, Dict, List, Union, Literal
-from ..types import SpanType, ErrorInfoDict, LLMProvider
+from ..types import SpanType, ErrorInfoDict, LLMProvider, AttachmentEntityType
 
 
 @dataclasses.dataclass
@@ -179,3 +179,14 @@ class GuardrailBatchMessage(BaseMessage):
         data = super().as_payload_dict()
         data.pop("supports_batching")
         return data
+
+
+@dataclasses.dataclass
+class CreateAttachmentMessage(BaseMessage):
+    file_path: str
+    file_name: str
+    mime_type: Optional[str]
+    entity_type: AttachmentEntityType
+    entity_id: str
+    project_name: str
+    encoded_url_override: str

@@ -1,9 +1,11 @@
+from unittest.mock import sentinel
+
 import pytest
 from unittest import mock
 from opik.message_processing import streamer_constructors
 from opik.message_processing import messages
 
-NOT_USED = None
+NOT_USED = sentinel.NOT_USED
 
 
 def create_span_message():
@@ -46,25 +48,28 @@ def create_trace_message():
 
 @pytest.fixture
 def batched_streamer_and_mock_message_processor():
+    tested = None
     try:
         mock_message_processor = mock.Mock()
         tested = streamer_constructors.construct_streamer(
             message_processor=mock_message_processor,
             n_consumers=1,
             use_batching=True,
+            file_upload_manager=mock.Mock(),
         )
 
         yield tested, mock_message_processor
     finally:
-        tested.close(timeout=5)
+        if tested is not None:
+            tested.close(timeout=5)
 
 
-def test_streamer__happyflow(batched_streamer_and_mock_message_processor):
+def test_streamer__happy_flow(batched_streamer_and_mock_message_processor):
     tested, mock_message_processor = batched_streamer_and_mock_message_processor
 
     tested.put("message-1")
     tested.put("message-2")
-    tested.flush(timeout=0.1)
+    assert tested.flush(timeout=0.1) is True
 
     mock_message_processor.process.assert_has_calls(
         [mock.call("message-1"), mock.call("message-2")]
@@ -82,11 +87,13 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
     obj,
 ):
     mock_message_processor = mock.Mock()
+    tested = None
     try:
         tested = streamer_constructors.construct_streamer(
             message_processor=mock_message_processor,
             n_consumers=1,
             use_batching=False,
+            file_upload_manager=mock.Mock(),
         )
 
         CREATE_MESSAGE = obj
@@ -94,7 +101,7 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
         tested.put(CREATE_MESSAGE)
         tested.put(CREATE_MESSAGE)
         tested.put(CREATE_MESSAGE)
-        tested.flush(0.1)
+        assert tested.flush(0.1) is True
 
         mock_message_processor.process.assert_has_calls(
             [
@@ -104,50 +111,39 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
             ]
         )
     finally:
-        tested.close(timeout=1)
+        if tested is not None:
+            tested.close(timeout=1)
 
 
-def test_streamer__span__batching_enabled__messages_that_support_batching_are_processed_in_batch():
-    mock_message_processor = mock.Mock()
-    try:
-        tested = streamer_constructors.construct_streamer(
-            message_processor=mock_message_processor,
-            n_consumers=1,
-            use_batching=True,
-        )
+def test_streamer__span__batching_enabled__messages_that_support_batching_are_processed_in_batch(
+    batched_streamer_and_mock_message_processor,
+):
+    tested, mock_message_processor = batched_streamer_and_mock_message_processor
 
-        CREATE_SPAN_MESSAGE = create_span_message()
+    CREATE_SPAN_MESSAGE = create_span_message()
 
-        tested.put(CREATE_SPAN_MESSAGE)
-        tested.put(CREATE_SPAN_MESSAGE)
-        tested.put(CREATE_SPAN_MESSAGE)
-        tested.flush(1.1)
+    tested.put(CREATE_SPAN_MESSAGE)
+    tested.put(CREATE_SPAN_MESSAGE)
+    tested.put(CREATE_SPAN_MESSAGE)
+    assert tested.flush(1.1) is True
 
-        mock_message_processor.process.assert_called_once_with(
-            messages.CreateSpansBatchMessage(batch=[CREATE_SPAN_MESSAGE] * 3)
-        )
-    finally:
-        tested.close(timeout=1)
+    mock_message_processor.process.assert_called_once_with(
+        messages.CreateSpansBatchMessage(batch=[CREATE_SPAN_MESSAGE] * 3)
+    )
 
 
-def test_streamer__trace__batching_enabled__messages_that_support_batching_are_processed_in_batch():
-    mock_message_processor = mock.Mock()
-    try:
-        tested = streamer_constructors.construct_streamer(
-            message_processor=mock_message_processor,
-            n_consumers=1,
-            use_batching=True,
-        )
+def test_streamer__trace__batching_enabled__messages_that_support_batching_are_processed_in_batch(
+    batched_streamer_and_mock_message_processor,
+):
+    tested, mock_message_processor = batched_streamer_and_mock_message_processor
 
-        CREATE_TRACE_MESSAGE = create_trace_message()
+    CREATE_TRACE_MESSAGE = create_trace_message()
 
-        tested.put(CREATE_TRACE_MESSAGE)
-        tested.put(CREATE_TRACE_MESSAGE)
-        tested.put(CREATE_TRACE_MESSAGE)
-        tested.flush(1.1)
+    tested.put(CREATE_TRACE_MESSAGE)
+    tested.put(CREATE_TRACE_MESSAGE)
+    tested.put(CREATE_TRACE_MESSAGE)
+    assert tested.flush(1.1) is True
 
-        mock_message_processor.process.assert_called_once_with(
-            messages.CreateTraceBatchMessage(batch=[CREATE_TRACE_MESSAGE] * 3)
-        )
-    finally:
-        tested.close(timeout=1)
+    mock_message_processor.process.assert_called_once_with(
+        messages.CreateTraceBatchMessage(batch=[CREATE_TRACE_MESSAGE] * 3)
+    )

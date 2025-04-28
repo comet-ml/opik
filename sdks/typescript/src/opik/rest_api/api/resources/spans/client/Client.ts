@@ -202,7 +202,18 @@ export class Spans {
         request: OpikApi.GetSpansByProjectRequest = {},
         requestOptions?: Spans.RequestOptions,
     ): Promise<OpikApi.SpanPagePublic> {
-        const { page, size, projectName, projectId, traceId, type: type_, filters, truncate, sorting } = request;
+        const {
+            page,
+            size,
+            projectName,
+            projectId,
+            traceId,
+            type: type_,
+            filters,
+            truncate,
+            sorting,
+            exclude,
+        } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -240,6 +251,10 @@ export class Spans {
 
         if (sorting != null) {
             _queryParams["sorting"] = sorting;
+        }
+
+        if (exclude != null) {
+            _queryParams["exclude"] = exclude;
         }
 
         const _response = await core.fetcher({
