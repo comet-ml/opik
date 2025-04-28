@@ -82,6 +82,10 @@ public class ClickHouseContainerUtils {
                     .withReuse(reusable)
                     .withEnv("CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT", "1")
                     .withNetwork(network)
+                    // Default user and password for test containers are test:test while for clickhouse it's default user and no password.
+                    // We need to override the default user and password so that we can use the same credentials as test containers.
+                    .withUsername("default")
+                    .withPassword("")
                     .withCopyFileToContainer(MountableFile.forClasspathResource("macros.xml"),
                             "/etc/clickhouse-server/config.d/macros.xml")
                     .withCopyFileToContainer(MountableFile.forClasspathResource("zookeeper.xml"),
