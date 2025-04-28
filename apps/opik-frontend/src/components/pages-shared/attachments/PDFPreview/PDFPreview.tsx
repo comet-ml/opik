@@ -75,7 +75,7 @@ const PDFPreview: React.FC<PDFPreviewProps> = ({
 
   return (
     <div className="size-full">
-      <div className="relative flex size-full items-center justify-center overflow-auto pb-10">
+      <div className="relative flex size-full justify-center overflow-auto pb-10">
         {renderContent()}
       </div>
       {renderNavigation()}
