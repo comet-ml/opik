@@ -216,6 +216,7 @@ class SpansClient:
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
+        exclude: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> SpanPagePublic:
         """
@@ -240,6 +241,8 @@ class SpansClient:
         truncate : typing.Optional[bool]
 
         sorting : typing.Optional[str]
+
+        exclude : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -272,6 +275,7 @@ class SpansClient:
                 "filters": filters,
                 "truncate": truncate,
                 "sorting": sorting,
+                "exclude": exclude,
             },
             request_options=request_options,
         )
@@ -1449,6 +1453,7 @@ class AsyncSpansClient:
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
+        exclude: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> SpanPagePublic:
         """
@@ -1473,6 +1478,8 @@ class AsyncSpansClient:
         truncate : typing.Optional[bool]
 
         sorting : typing.Optional[str]
+
+        exclude : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1513,6 +1520,7 @@ class AsyncSpansClient:
                 "filters": filters,
                 "truncate": truncate,
                 "sorting": sorting,
+                "exclude": exclude,
             },
             request_options=request_options,
         )

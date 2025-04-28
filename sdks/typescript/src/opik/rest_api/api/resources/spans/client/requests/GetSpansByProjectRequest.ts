@@ -18,4 +18,5 @@ export interface GetSpansByProjectRequest {
     filters?: string;
     truncate?: boolean;
     sorting?: string;
+    exclude?: string;
 }

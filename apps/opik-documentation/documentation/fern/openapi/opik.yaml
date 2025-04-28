@@ -2288,6 +2288,10 @@ paths:
         in: query
         schema:
           type: string
+      - name: exclude
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Spans resource
