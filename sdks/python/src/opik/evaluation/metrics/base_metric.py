@@ -1,5 +1,5 @@
 import abc
-from typing import Any, List, Union
+from typing import Any, List, Union, Optional
 
 import opik
 from opik import config as opik_config
@@ -14,6 +14,8 @@ class BaseMetric(abc.ABC):
     Args:
         name: The name of the metric.
         track: Whether to track the metric. Defaults to True.
+        project_name: Optional project name to track the metric in for the cases when
+            there are no parent span/trace to inherit project name from.
 
     Example:
         >>> from opik.evaluation.metrics import base_metric, score_result
@@ -33,15 +35,21 @@ class BaseMetric(abc.ABC):
         >>>         )
     """
 
-    def __init__(self, name: str, track: bool = True) -> None:
+    def __init__(
+        self, name: str, track: bool = True, project_name: Optional[str] = None
+    ) -> None:
         self.name = name
         self.track = track
 
         config = opik_config.OpikConfig()
 
+        if not track and project_name is not None:
+            raise ValueError("project_name can be set only when `track` is set to True")
+
         if track and config.check_for_known_misconfigurations() is False:
-            self.score = opik.track(name=self.name)(self.score)  # type: ignore
-            self.ascore = opik.track(name=self.name)(self.ascore)  # type: ignore
+            track_decorator = opik.track(name=self.name, project_name=project_name)
+            self.score = track_decorator(self.score)  # type: ignore
+            self.ascore = track_decorator(self.ascore)  # type: ignore
 
     @abc.abstractmethod
     def score(
