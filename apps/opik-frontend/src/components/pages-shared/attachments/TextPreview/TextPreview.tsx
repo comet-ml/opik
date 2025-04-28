@@ -34,17 +34,19 @@ const TextPreview: React.FC<TextPreviewProps> = ({ url }) => {
   const renderContent = () => {
     if (isPending) return <Loader />;
 
-    if (isError) return <NoData icon={null} message={error.message} />;
+    if (isError) return <NoData icon={null} message={error?.message} />;
 
     return isString(data) ? (
-      <MarkdownPreview>{data}</MarkdownPreview>
+      <div className="min-h-full min-w-[800px]">
+        <MarkdownPreview>{data}</MarkdownPreview>
+      </div>
     ) : (
       <NoData message="Data is not a text" icon={null} />
     );
   };
 
   return (
-    <div className="relative flex size-full items-center justify-center overflow-y-auto pb-10">
+    <div className="relative flex size-full justify-center overflow-y-auto pb-10">
       {renderContent()}
     </div>
   );

@@ -16,13 +16,15 @@ export const MINE_TYPE_TO_ATTACHMENT_TYPE_MAP: Record<string, ATTACHMENT_TYPE> =
     "image/jpeg": ATTACHMENT_TYPE.IMAGE,
     "image/png": ATTACHMENT_TYPE.IMAGE,
     "image/gif": ATTACHMENT_TYPE.IMAGE,
+    "image/svg+xml": ATTACHMENT_TYPE.IMAGE,
     "video/mp4": ATTACHMENT_TYPE.VIDEO,
-    "video/mpeg": ATTACHMENT_TYPE.VIDEO,
-    "audio/mpeg": ATTACHMENT_TYPE.AUDIO,
+    "video/webm": ATTACHMENT_TYPE.VIDEO,
     "audio/vorbis": ATTACHMENT_TYPE.AUDIO,
     "audio/wav": ATTACHMENT_TYPE.AUDIO,
+    "audio/x-wav": ATTACHMENT_TYPE.AUDIO,
     "text/plain": ATTACHMENT_TYPE.TEXT,
     "text/markdown": ATTACHMENT_TYPE.TEXT,
+    "application/json": ATTACHMENT_TYPE.TEXT,
     "application/octet-stream": ATTACHMENT_TYPE.OTHER,
   };
 
