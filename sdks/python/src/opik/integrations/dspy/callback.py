@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional, Union
 import dspy
 from dspy.utils.callback import BaseCallback
 
-from opik import types
+from opik import types, opik_context
 from opik.api_objects import helpers, span, trace
 from opik.api_objects.opik_client import get_client_cached
 from opik.context_storage import ContextStorage
@@ -34,6 +34,7 @@ class OpikCallback(BaseCallback):
         instance: Any,
         inputs: Dict[str, Any],
     ) -> None:
+        # First we check the callback's context
         if current_span_data := self._context_storage.top_span_data():
             self._attach_span_to_existing_span(
                 call_id=call_id,
@@ -48,7 +49,23 @@ class OpikCallback(BaseCallback):
                 instance=instance,
                 inputs=inputs,
             )
+        # Callback's context is empty, we check opik's context
+        elif current_span_data := opik_context.get_current_span_data():
+            self._attach_span_to_existing_span(
+                call_id=call_id,
+                current_span_data=current_span_data,
+                instance=instance,
+                inputs=inputs,
+            )
+        elif current_trace_data := opik_context.get_current_trace_data():
+            self._attach_span_to_existing_trace(
+                call_id=call_id,
+                current_trace_data=current_trace_data,
+                instance=instance,
+                inputs=inputs,
+            )
         else:
+            # Both callback's and opik's context are empty
             self._start_trace(
                 call_id=call_id,
                 instance=instance,
