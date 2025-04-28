@@ -10,7 +10,6 @@ import { ColumnsStatistic } from "@/types/shared";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import useTracesStatistic from "@/api/traces/useTracesStatistic";
 import useSpansStatistic from "@/api/traces/useSpansStatistic";
-import { useEffect, useMemo } from "react";
 
 type UseTracesOrSpansStatisticParams = {
   projectId: string;

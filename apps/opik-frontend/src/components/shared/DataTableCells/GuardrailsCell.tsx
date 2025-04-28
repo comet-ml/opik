@@ -48,34 +48,6 @@ const GeneralGuardrailData: React.FC<{ data: GuardrailComputedResult[] }> = ({
   ));
 };
 
-const SingleGuardrailData: React.FC<{ data: GuardrailValidation }> = ({
-  data,
-}) => {
-  return data.checks.map((guardrail, idx) => (
-    <div key={guardrail.name}>
-      {idx > 0 && <Separator className="my-1" />}
-      <div className="comet-body-xs-accented px-2 py-0.5 text-foreground">
-        {GuardrailNamesLabelMap[guardrail.name as GuardrailTypes]}
-      </div>
-
-      {guardrail.items.map((item) => (
-        <div key={item.name} className="flex items-center gap-1.5 px-2 py-1">
-          <GuardrailStatus status={GuardrailResult.FAILED} />
-          <span className="comet-body-xs-accented min-w-0 flex-1 truncate text-muted-slate">
-            {guardrail.name === GuardrailTypes.TOPIC
-              ? item.name
-              : PIIEntitiesLabelMap[item.name as PiiSupportedEntities] ||
-                item.name}
-          </span>
-          <span className="comet-body-xs-accented text-foreground">
-            {item.score}
-          </span>
-        </div>
-      ))}
-    </div>
-  ));
-};
-
 const GuardrailsCell = <TData,>(context: CellContext<TData, unknown>) => {
   const guardrailValidations = context.getValue() as GuardrailValidation[];
   const [isOpen, setIsOpen] = useState(false);
@@ -117,11 +89,7 @@ const GuardrailsCell = <TData,>(context: CellContext<TData, unknown>) => {
           align="end"
         >
           <div className="relative size-full max-h-[40vh] overflow-auto px-1.5 py-2">
-            {hasSingleGuardrailSpan ? (
-              <SingleGuardrailData data={guardrailValidations[0]} />
-            ) : (
-              <GeneralGuardrailData data={statusList} />
-            )}
+            <GeneralGuardrailData data={statusList} />
           </div>
         </HoverCardContent>
       </HoverCard>
