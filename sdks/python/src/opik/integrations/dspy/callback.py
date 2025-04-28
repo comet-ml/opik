@@ -19,7 +19,7 @@ class OpikCallback(BaseCallback):
     ):
         self._map_call_id_to_span_data: Dict[str, span.SpanData] = {}
         self._map_call_id_to_trace_data: Dict[str, trace.TraceData] = {}
-        
+
         self._origins_metadata = {"created_from": "dspy"}
 
         self._context_storage = ContextStorage()
@@ -72,7 +72,6 @@ class OpikCallback(BaseCallback):
                 inputs=inputs,
             )
 
-
     def _attach_span_to_existing_span(
         self,
         call_id: str,
@@ -123,7 +122,6 @@ class OpikCallback(BaseCallback):
         self._map_call_id_to_span_data[call_id] = span_data
         self._set_current_context_data(span_data)
 
-
     def _start_trace(
         self,
         call_id: str,
@@ -156,7 +154,7 @@ class OpikCallback(BaseCallback):
         if trace_data := self._map_call_id_to_trace_data.pop(call_id, None):
             trace_data.init_end_time()
             self._opik_client.trace(**trace_data.__dict__)
-            
+
             if self._context_storage.get_trace_data() == trace_data:
                 self._context_storage.set_trace_data(None)
 
@@ -179,7 +177,9 @@ class OpikCallback(BaseCallback):
             if current_span and current_span.id == span_data.id:
                 self._context_storage.pop_span_data()
 
-    def _collect_common_span_data(self, instance: Any, inputs: Dict[str, Any]) -> span.SpanData:
+    def _collect_common_span_data(
+        self, instance: Any, inputs: Dict[str, Any]
+    ) -> span.SpanData:
         current_callback_context_data = self._get_current_context_data()
         assert current_callback_context_data is not None
 
@@ -200,7 +200,9 @@ class OpikCallback(BaseCallback):
         return span.SpanData(
             trace_id=trace_id,
             parent_span_id=parent_span_id,
-            name=instance.name if hasattr(instance, "name") else instance.__class__.__name__,
+            name=instance.name
+            if hasattr(instance, "name")
+            else instance.__class__.__name__,
             input=inputs,
             type=span_type,
             project_name=project_name,
@@ -270,7 +272,7 @@ class OpikCallback(BaseCallback):
             self._context_storage.set_trace_data(value)
         else:
             raise ValueError(f"Invalid context type: {type(value)}")
-    
+
     def _get_current_context_data(self) -> Optional[ContextType]:
         if span_data := self._context_storage.top_span_data():
             return span_data

@@ -458,7 +458,7 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[
-                             SpanModel(
+                            SpanModel(
                                 id=ANY_STRING(),
                                 type="llm",
                                 name=ANY_STRING(startswith="LM"),

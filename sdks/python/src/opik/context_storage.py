@@ -26,10 +26,11 @@ class ContextStorage:
 
     The following functions provide an API to work with ContextVars this way
     """
-    def __init__(self):
-        self._current_trace_data_context: contextvars.ContextVar[Optional[trace.TraceData]] = (
-            contextvars.ContextVar("current_trace_data", default=None)
-        )
+
+    def __init__(self) -> None:
+        self._current_trace_data_context: contextvars.ContextVar[
+            Optional[trace.TraceData]
+        ] = contextvars.ContextVar("current_trace_data", default=None)
         self._spans_data_stack_context: contextvars.ContextVar[List[span.SpanData]] = (
             contextvars.ContextVar("spans_data_stack", default=[])
         )
