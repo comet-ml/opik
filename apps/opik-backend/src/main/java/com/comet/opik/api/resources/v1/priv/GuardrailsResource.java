@@ -1,11 +1,13 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailBatch;
 import com.comet.opik.domain.GuardrailsService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.AsyncUtils;
+import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -15,7 +17,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
-import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -25,7 +26,6 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.http.HttpStatus;
 
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
@@ -45,13 +45,7 @@ public class GuardrailsResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     public Response createGuardrails(
-            @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailBatch.class))) @NotNull @Valid GuardrailBatch batch) {
-
-        if (batch.guardrails().stream().anyMatch(guardrail -> guardrail.id() != null)) {
-            throw new ClientErrorException("Guardrail ids must be null on creation",
-                    HttpStatus.SC_UNPROCESSABLE_ENTITY);
-        }
-
+            @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailBatch.class))) @NotNull @Valid @JsonView(Guardrail.View.Write.class) GuardrailBatch batch) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Add guardrails batch, size {} on  workspaceId '{}'", batch.guardrails().size(),
