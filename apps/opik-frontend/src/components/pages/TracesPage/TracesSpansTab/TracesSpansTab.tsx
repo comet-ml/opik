@@ -24,6 +24,7 @@ import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns
 import {
   COLUMN_COMMENTS_ID,
   COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_GUARDRAIL_STATISTIC_ID,
   COLUMN_GUARDRAILS_ID,
   COLUMN_ID_ID,
   COLUMN_METADATA_ID,
@@ -524,6 +525,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             {
               id: COLUMN_GUARDRAILS_ID,
               label: "Guardrails",
+              statisticKey: COLUMN_GUARDRAIL_STATISTIC_ID,
               type: COLUMN_TYPE.guardrails,
               accessorFn: (row: BaseTraceData) =>
                 row.guardrails_validations || [],
