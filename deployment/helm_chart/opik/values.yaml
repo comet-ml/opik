@@ -323,6 +323,10 @@ clickhouse:
   backup: 
     enabled: false
     successfulJobsHistoryLimit: 1
+    # serviceAccount:
+    #     enabled: true
+    #     create: true
+    #     annotations: {}
     # bucketURL: ""
     # secretName: ""
     # schedule: ""
