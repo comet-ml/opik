@@ -22,6 +22,7 @@ export enum RESOURCE_TYPE {
   prompt,
   experiment,
   optimization,
+  trial,
 }
 
 const RESOURCE_MAP = {
@@ -51,6 +52,12 @@ const RESOURCE_MAP = {
   },
   [RESOURCE_TYPE.optimization]: {
     url: "/$workspaceName/optimizations/$datasetId/compare",
+    icon: SparklesIcon,
+    param: "datasetId",
+    deleted: "Optimization deleted",
+  },
+  [RESOURCE_TYPE.trial]: {
+    url: "/$workspaceName/optimizations/$datasetId/trials/compare",
     icon: SparklesIcon,
     param: "datasetId",
     deleted: "Optimization deleted",

@@ -49,10 +49,18 @@ export interface ExperimentPromptVersion {
   prompt_id: string;
 }
 
+export enum EXPERIMENT_TYPE {
+  REGULAR = "regular",
+  TRIAL = "trial",
+  MINI_BATCH = "mini-batch",
+}
+
 export interface Experiment {
   id: string;
   dataset_id: string;
   dataset_name: string;
+  type: EXPERIMENT_TYPE;
+  status: string;
   metadata?: object;
   name: string;
   feedback_scores?: AggregatedFeedbackScore[];

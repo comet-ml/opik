@@ -1,7 +1,7 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import isBoolean from "lodash/isBoolean";
 import api, { EXPERIMENTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
-import { Experiment } from "@/types/datasets";
+import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import { Sorting } from "@/types/sorting";
 import { processSorting } from "@/lib/sorting";
 
@@ -9,7 +9,9 @@ export type UseExperimentsListParams = {
   workspaceName: string;
   datasetId?: string;
   promptId?: string;
+  optimizationId?: string;
   datasetDeleted?: boolean;
+  type: EXPERIMENT_TYPE;
   sorting?: Sorting;
   search?: string;
   page: number;
@@ -28,7 +30,9 @@ export const getExperimentsList = async (
     workspaceName,
     datasetId,
     promptId,
+    optimizationId,
     datasetDeleted,
+    type,
     sorting,
     search,
     size,
@@ -43,7 +47,9 @@ export const getExperimentsList = async (
       ...processSorting(sorting),
       ...(search && { name: search }),
       ...(datasetId && { datasetId }),
+      ...(optimizationId && { optimization_id: optimizationId }),
       ...(promptId && { prompt_id: promptId }),
+      ...(type && { type }),
       size,
       page,
     },

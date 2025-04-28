@@ -34,6 +34,7 @@ import AutomationLogsPage from "@/components/pages/AutomationLogsPage/Automation
 import OnlineEvaluationPage from "@/components/pages/OnlineEvaluationPage/OnlineEvaluationPage";
 import OptimizationsPage from "@/components/pages/OptimizationsPage/OptimizationsPage";
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
+import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -324,6 +325,16 @@ const compareOptimizationsRoute = createRoute({
   },
 });
 
+const compareTrialsRoute = createRoute({
+  path: "/$datasetId/trials/compare",
+  getParentRoute: () => optimizationsRoute,
+  component: CompareTrialsPage,
+  staticData: {
+    param: "compare", // TODO lala verify this key. need to think about hierarchy
+    paramValue: "compare",
+  },
+});
+
 // ----------- Automation logs
 
 const automationLogsRoute = createRoute({
@@ -367,6 +378,7 @@ const routeTree = rootRoute.addChildren([
       optimizationsRoute.addChildren([
         optimizationsListRoute,
         compareOptimizationsRoute,
+        compareTrialsRoute,
       ]),
     ]),
   ]),
