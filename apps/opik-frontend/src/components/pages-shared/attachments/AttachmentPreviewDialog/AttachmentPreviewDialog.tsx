@@ -68,7 +68,7 @@ const AttachmentPreviewDialog: React.FC<AttachmentPreviewProps> = ({
           src={url}
           loading="lazy"
           alt={name}
-          className="size-full object-contain"
+          className="m-auto max-h-full max-w-full object-contain"
         />
       </div>
     );
