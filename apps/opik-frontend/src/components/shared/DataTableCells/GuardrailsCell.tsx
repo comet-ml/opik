@@ -7,18 +7,15 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
-import { Separator } from "@/components/ui/separator";
 import {
   GuardrailValidation,
   GuardrailTypes,
-  PiiSupportedEntities,
   GuardrailResult,
   GuardrailComputedResult,
 } from "@/types/guardrails";
 import {
   getGuardrailComputedResult,
   GuardrailNamesLabelMap,
-  PIIEntitiesLabelMap,
 } from "@/constants/guardrails";
 
 const GuardrailStatus: React.FC<{
@@ -52,7 +49,6 @@ const GuardrailsCell = <TData,>(context: CellContext<TData, unknown>) => {
   const guardrailValidations = context.getValue() as GuardrailValidation[];
   const [isOpen, setIsOpen] = useState(false);
 
-  const hasSingleGuardrailSpan = guardrailValidations.length === 1;
   const { statusList, generalStatus } =
     getGuardrailComputedResult(guardrailValidations);
 
