@@ -31,7 +31,7 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
       className="w-full"
       defaultValue={["attachments", "input", "output"]}
     >
-      <AttachmentsList data={data} images={images} enabled={false} />
+      <AttachmentsList data={data} images={images} />
       <AccordionItem className="group" value="input" disabled={isLoading}>
         <AccordionTrigger>Input</AccordionTrigger>
         <AccordionContent
