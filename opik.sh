@@ -204,7 +204,7 @@ print_banner() {
 # Check installation
 send_install_report() {
   uuid="$1"
-  event_completed="$2"  # Pass "true" to send opik_install_completed
+  event_completed="$2"  # Pass "true" to send opik_os_install_completed
   start_time="$3"  # Optional: start time in ISO 8601 format
 
   if [ "$OPIK_USAGE_REPORT_ENABLED" != "true" ] && [ "$OPIK_USAGE_REPORT_ENABLED" != "" ]; then
@@ -232,7 +232,18 @@ send_install_report() {
   timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
   if [ "$event_completed" = "true" ]; then
-    event_type="opik_install_completed"
+
+    if [ "$HTTP_TOOL" = "curl" ]; then
+      frontend_port=$(docker inspect -f '{{ (index (index .NetworkSettings.Ports "5173/tcp") 0).HostPort }}' opik-frontend-1 2>/dev/null)
+      ui_url="http://localhost:${frontend_port:-5173}"
+      opik_version=$(curl -s "$ui_url/api/is-alive/ver" | grep -o '"version":"[^"]*"' | sed 's/.*"version":"\([^"]*\)"/\1/')
+    else
+      frontend_port=$(docker inspect -f '{{ (index (index .NetworkSettings.Ports "5173/tcp") 0).HostPort }}' opik-frontend-1 2>/dev/null)
+      ui_url="http://localhost:${frontend_port:-5173}"
+      opik_version=$(wget -qO- "$ui_url/api/is-alive/ver" | grep -o '"version":"[^"]*"' | sed 's/.*"version":"\([^"]*\)"/\1/')
+    fi
+
+    event_type="opik_os_install_completed"
     end_time="$timestamp"
     json_payload=$(cat <<EOF
 {
@@ -240,19 +251,22 @@ send_install_report() {
   "event_type": "$event_type",
   "event_properties": {
     "start_time": "$start_time",
-    "end_time": "$end_time"
+    "end_time": "$end_time",
+    "script_type": "sh",
+    "opik_os_version": "$opik_version"
   }
 }
 EOF
 )
   else
-    event_type="opik_install_started"
+    event_type="opik_os_install_started"
     json_payload=$(cat <<EOF
 {
   "anonymous_id": "$uuid",
   "event_type": "$event_type",
   "event_properties": {
-    "start_time": "$start_time"
+    "start_time": "$start_time",
+    "script_type": "sh"
   }
 }
 EOF
@@ -270,7 +284,7 @@ EOF
     rm -f "$tmpfile"
   fi
 
-  if [ $event_type = "opik_install_completed" ]; then
+  if [ $event_type = "opik_os_install_completed" ]; then
     touch "$INSTALL_MARKER_FILE"
     [[ "$DEBUG_MODE" == true ]] && echo "[DEBUG] Post-install report sent successfully."
   else
