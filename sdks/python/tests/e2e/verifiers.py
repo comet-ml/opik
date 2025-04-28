@@ -1,11 +1,14 @@
-from typing import Optional, Dict, Any, List, Iterable, Set, Union
+import base64
+from typing import Optional, Dict, Any, List, Literal, Iterable, Set, Union
 import opik
 import json
 
 from opik.rest_api import ExperimentPublic
+from opik.rest_api.types import trace_public, span_public
+from opik.rest_api.types import attachment as rest_api_attachment
 from opik.types import FeedbackScoreDict, ErrorInfoDict
 from opik.api_objects.dataset import dataset_item
-from opik import Prompt, synchronization
+from opik import Prompt, synchronization, Attachment
 
 from .. import testlib
 from unittest import mock
@@ -31,7 +34,7 @@ def verify_trace(
     name: str = mock.ANY,  # type: ignore
     metadata: Dict[str, Any] = mock.ANY,  # type: ignore
     input: Dict[str, Any] = mock.ANY,  # type: ignore
-    output: Dict[str, Any] = mock.ANY,  # type: ignore
+    output: Optional[Dict[str, Any]] = mock.ANY,  # type: ignore
     tags: Union[List[str], Set[str]] = mock.ANY,  # type: ignore
     feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore
     project_name: Optional[str] = mock.ANY,  # type: ignore
@@ -86,13 +89,13 @@ def verify_trace(
         ), f"Expected amount of trace feedback scores ({len(feedback_scores)}) is not equal to actual amount ({len(actual_feedback_scores)})"
 
         actual_feedback_scores: List[FeedbackScoreDict] = [
-            {
-                "category_name": score.category_name,
-                "id": trace_id,
-                "name": score.name,
-                "reason": score.reason,
-                "value": score.value,
-            }
+            FeedbackScoreDict(
+                category_name=score.category_name,
+                id=trace_id,
+                name=score.name,
+                reason=score.reason,
+                value=score.value,
+            )
             for score in trace.feedback_scores
         ]
 
@@ -116,7 +119,7 @@ def verify_span(
     name: str = mock.ANY,  # type: ignore
     metadata: Dict[str, Any] = mock.ANY,  # type: ignore
     input: Dict[str, Any] = mock.ANY,  # type: ignore
-    output: Dict[str, Any] = mock.ANY,  # type: ignore
+    output: Optional[Dict[str, Any]] = mock.ANY,  # type: ignore
     tags: Union[List[str], Set[str]] = mock.ANY,  # type: ignore
     type: str = mock.ANY,  # type: ignore
     feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore
@@ -187,13 +190,13 @@ def verify_span(
         ), f"Expected amount of span feedback scores ({len(feedback_scores)}) is not equal to actual amount ({len(actual_feedback_scores)})"
 
         actual_feedback_scores: List[FeedbackScoreDict] = [
-            {
-                "category_name": score.category_name,
-                "id": span_id,
-                "name": score.name,
-                "reason": score.reason,
-                "value": score.value,
-            }
+            FeedbackScoreDict(
+                category_name=score.category_name,
+                id=span_id,
+                name=score.name,
+                reason=score.reason,
+                value=score.value,
+            )
             for score in span.feedback_scores
         ]
 
@@ -289,6 +292,102 @@ def verify_experiment(
     ), f"{actual_trace_count} != {traces_amount}"
 
     _verify_experiment_prompts(experiment_content, prompts)
+
+
+def verify_attachments(
+    opik_client: opik.Opik,
+    entity_type: Literal["trace", "span"],
+    entity_id: str,
+    attachments: Dict[str, Attachment],
+    data_sizes: Dict[str, int],
+) -> None:
+    if not synchronization.until(
+        lambda: (
+            _get_trace_or_span(
+                opik_client, entity_type=entity_type, entity_id=entity_id
+            )
+            is not None
+        ),
+        allow_errors=True,
+    ):
+        raise AssertionError(f"Failed to get {entity_type} with id {entity_id}.")
+
+    trace_or_span = _get_trace_or_span(
+        opik_client, entity_type=entity_type, entity_id=entity_id
+    )
+    url_override = opik_client._config.url_override
+    url_override_path = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
+
+    if not synchronization.until(
+        lambda: len(
+            _get_attachments(
+                opik_client=opik_client,
+                project_id=trace_or_span.project_id,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                url_override_path=url_override_path,
+            )
+        )
+        == len(attachments),
+        allow_errors=True,
+    ):
+        raise AssertionError(
+            f"Failed to get all expected attachments for {entity_type} with id {entity_id}."
+        )
+
+    attachment_list = _get_attachments(
+        opik_client=opik_client,
+        project_id=trace_or_span.project_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        url_override_path=url_override_path,
+    )
+
+    for attachment in attachment_list:
+        expected_attachment = attachments.get(attachment.file_name, None)
+        assert (
+            expected_attachment is not None
+        ), f"Attachment {attachment.file_name} not found in expected attachments"
+
+        assert (
+            attachment.file_size == data_sizes[expected_attachment.file_name]
+        ), f"Wrong size for attachment {attachment.file_name}: {attachment.file_size} != {data_sizes[expected_attachment.file_name]}"
+
+        assert (
+            attachment.mime_type == expected_attachment.content_type
+        ), f"Wrong content type for attachment {attachment.file_name}: {attachment.mime_type} != {expected_attachment.content_type}"
+
+        assert attachment.link.startswith(
+            url_override
+        ), f"Wrong link for attachment {attachment.file_name}: {attachment.link} does not start with {url_override}"
+
+
+def _get_attachments(
+    opik_client: opik.Opik,
+    entity_type: Literal["trace", "span"],
+    entity_id: str,
+    project_id: str,
+    url_override_path: str,
+) -> List[rest_api_attachment.Attachment]:
+    return opik_client._rest_client.attachments.attachment_list(
+        project_id=project_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        path=url_override_path,
+    ).content
+
+
+def _get_trace_or_span(
+    opik_client: opik.Opik,
+    entity_type: Literal["trace", "span"],
+    entity_id: str,
+) -> Union[trace_public.TracePublic, span_public.SpanPublic]:
+    if entity_type == "trace":
+        return opik_client.get_trace_content(id=entity_id)
+    elif entity_type == "span":
+        return opik_client.get_span_content(id=entity_id)
+    else:
+        raise ValueError(f"Invalid entity type: {entity_type}")
 
 
 def _verify_experiment_metadata(

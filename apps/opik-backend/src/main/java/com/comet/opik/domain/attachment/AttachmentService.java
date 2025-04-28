@@ -28,7 +28,6 @@ import reactor.core.publisher.Mono;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
 
 import java.io.InputStream;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
@@ -252,8 +251,8 @@ class AttachmentServiceImpl implements AttachmentService {
 
         UriBuilder uriBuilder = UriBuilder.fromUri(baseUrl)
                 .path("v1/private/attachment/upload")
-                .queryParam("file_name", URLEncoder.encode(uploadRequest.fileName(), StandardCharsets.UTF_8))
-                .queryParam("mime_type", URLEncoder.encode(getMimeType(uploadRequest), StandardCharsets.UTF_8))
+                .queryParam("file_name", uploadRequest.fileName())
+                .queryParam("mime_type", getMimeType(uploadRequest))
                 .queryParam("entity_type", uploadRequest.entityType().getValue())
                 .queryParam("entity_id", uploadRequest.entityId());
 
@@ -277,8 +276,8 @@ class AttachmentServiceImpl implements AttachmentService {
                 .path("v1/private/attachment/download")
                 .queryParam("workspace_name", workspaceName)
                 .queryParam("container_id", attachmentInfo.containerId())
-                .queryParam("file_name", URLEncoder.encode(attachmentInfo.fileName(), StandardCharsets.UTF_8))
-                .queryParam("mime_type", URLEncoder.encode(attachmentInfo.mimeType(), StandardCharsets.UTF_8))
+                .queryParam("file_name", attachmentInfo.fileName())
+                .queryParam("mime_type", attachmentInfo.mimeType())
                 .queryParam("entity_type", attachmentInfo.entityType().getValue())
                 .queryParam("entity_id", attachmentInfo.entityId())
                 .build();
