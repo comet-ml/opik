@@ -7,6 +7,8 @@ from .. import messages
 
 
 class BaseBatcher(abc.ABC):
+    _accumulated_messages: List[messages.BaseMessage] = []
+
     def __init__(
         self,
         flush_callback: Callable[[messages.BaseMessage], None],
@@ -15,7 +17,6 @@ class BaseBatcher(abc.ABC):
     ):
         self._flush_interval_seconds: float = flush_interval_seconds
         self._flush_callback: Callable[[messages.BaseMessage], None] = flush_callback
-        self._accumulated_messages: List[messages.BaseMessage] = []
         self._max_batch_size: int = max_batch_size
 
         self._last_time_flush_callback_called: float = time.time()
