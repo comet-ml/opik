@@ -124,7 +124,7 @@ class Opik:
             workspace=self._workspace,
             api_key=api_key,
             check_tls_certificate=check_tls_certificate,
-            enable_json_request_compression=enable_json_request_compression,
+            compress_json_requests=enable_json_request_compression,
         )
         self._rest_client = rest_api_client.OpikApi(
             base_url=base_url,

@@ -15,7 +15,9 @@ def test_upload_attachment__s3(rest_client_s3, attachment, respx_mock, capture_l
 
     file_upload_manager = upload_manager.FileUploadManager(
         rest_client=rest_client_s3,
-        httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
+        httpx_client=httpx_client.get(
+            None, None, check_tls_certificate=False, compress_json_requests=False
+        ),
         worker_count=1,
     )
     monitor = upload_manager.FileUploadManagerMonitor(file_upload_manager)
@@ -62,7 +64,9 @@ def test_upload_attachment__s3__failed_upload(rest_client_s3, attachment, respx_
 
     file_upload_manager = upload_manager.FileUploadManager(
         rest_client=rest_client_s3,
-        httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
+        httpx_client=httpx_client.get(
+            None, None, check_tls_certificate=False, compress_json_requests=False
+        ),
         worker_count=1,
     )
     monitor = upload_manager.FileUploadManagerMonitor(file_upload_manager)
@@ -95,7 +99,9 @@ def test_upload_attachment__local(
 
     file_upload_manager = upload_manager.FileUploadManager(
         rest_client=rest_client_local,
-        httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
+        httpx_client=httpx_client.get(
+            None, None, check_tls_certificate=False, compress_json_requests=False
+        ),
         worker_count=1,
     )
     monitor = upload_manager.FileUploadManagerMonitor(file_upload_manager)
@@ -139,7 +145,9 @@ def test_upload_attachment__local__failed_upload(
 
     file_upload_manager = upload_manager.FileUploadManager(
         rest_client=rest_client_local,
-        httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
+        httpx_client=httpx_client.get(
+            None, None, check_tls_certificate=False, compress_json_requests=False
+        ),
         worker_count=1,
     )
     monitor = upload_manager.FileUploadManagerMonitor(file_upload_manager)

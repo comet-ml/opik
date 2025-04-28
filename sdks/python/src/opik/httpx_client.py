@@ -21,7 +21,7 @@ def get(
     workspace: Optional[str],
     api_key: Optional[str],
     check_tls_certificate: bool,
-    enable_json_request_compression: bool,
+    compress_json_requests: bool,
 ) -> httpx.Client:
     limits = httpx.Limits(keepalive_expiry=KEEPALIVE_EXPIRY_SECONDS)
 
@@ -39,7 +39,7 @@ def get(
     )
 
     client = OpikHttpxClient(
-        use_json_compression=enable_json_request_compression,
+        compress_json_requests=compress_json_requests,
         limits=limits,
         verify=verify,
         timeout=timeout,
@@ -72,28 +72,30 @@ def _prepare_headers(
 
 
 class OpikHttpxClient(httpx.Client):
-    def __init__(self, use_json_compression: bool = True, **kwargs: Any) -> None:
+    def __init__(self, compress_json_requests: bool = True, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.use_json_compression = use_json_compression
+        self.compress_json_requests = compress_json_requests
 
     def build_request(
         self,
         method: str,
-        url: httpx.URL | str,
+        url: Union[httpx.URL, str],
         *,
-        content: Union[str, bytes, Iterable[bytes], AsyncIterable[bytes]] | None = None,
-        data: Mapping[str, Any] | None = None,
-        files: Any | None = None,
-        json: Any | None = None,
-        params: Any | None = None,
-        headers: Any | None = None,
-        cookies: Any | None = None,
+        content: Optional[
+            Union[str, bytes, Iterable[bytes], AsyncIterable[bytes]]
+        ] = None,
+        data: Optional[Mapping[str, Any]] = None,
+        files: Any = None,
+        json: Any = None,
+        params: Any = None,
+        headers: Any = None,
+        cookies: Any = None,
         timeout: Any = httpx.USE_CLIENT_DEFAULT,
-        extensions: Any | None = None,
+        extensions: Any = None,
     ) -> httpx.Request:
         # we override this method to allow compression of JSON requests that is handled
         # by httpx.Client.request() as well as by httpx.Client.stream() (both used in the OPIK)
-        if self.use_json_compression:
+        if self.compress_json_requests:
             if method in ("POST", "PUT", "PATCH") and json is not None:
                 json_data = jsonlib.dumps(json).encode("utf-8")
                 content = gzip.compress(json_data)
