@@ -34,26 +34,6 @@ class OpikCallback(BaseCallback):
         instance: Any,
         inputs: Dict[str, Any],
     ) -> None:
-        if current_callback_context_data := self._get_current_context_data():
-            if isinstance(current_callback_context_data, span.SpanData):
-                self._attach_span_to_existing_span(
-                    call_id=call_id,
-                    current_span_data=current_callback_context_data,
-                    instance=instance,
-                    inputs=inputs,
-                )
-            else:
-                self._attach_span_to_existing_trace(
-                    call_id=call_id,
-                    current_trace_data=current_callback_context_data,
-                    instance=instance,
-                    inputs=inputs,
-                )
-
-            new_span_data = self._map_call_id_to_span_data[call_id]
-            self._set_current_context_data(new_span_data)
-            return
-
         if current_span_data := self._context_storage.top_span_data():
             self._attach_span_to_existing_span(
                 call_id=call_id,
@@ -61,26 +41,19 @@ class OpikCallback(BaseCallback):
                 instance=instance,
                 inputs=inputs,
             )
-            new_span_data = self._map_call_id_to_span_data[call_id]
-            self._set_current_context_data(new_span_data)
-            return
-
-        if current_trace_data := self._context_storage.get_trace_data():
+        elif current_trace_data := self._context_storage.get_trace_data():
             self._attach_span_to_existing_trace(
                 call_id=call_id,
                 current_trace_data=current_trace_data,
                 instance=instance,
                 inputs=inputs,
             )
-            new_span_data = self._map_call_id_to_span_data[call_id]
-            self._set_current_context_data(new_span_data)
-            return
-
-        self._start_trace(
-            call_id=call_id,
-            instance=instance,
-            inputs=inputs,
-        )
+        else:
+            self._start_trace(
+                call_id=call_id,
+                instance=instance,
+                inputs=inputs,
+            )
 
 
     def _attach_span_to_existing_span(
@@ -106,6 +79,7 @@ class OpikCallback(BaseCallback):
             metadata=self._origins_metadata,
         )
         self._map_call_id_to_span_data[call_id] = span_data
+        self._set_current_context_data(span_data)
 
     def _attach_span_to_existing_trace(
         self,
@@ -130,6 +104,8 @@ class OpikCallback(BaseCallback):
             metadata=self._origins_metadata,
         )
         self._map_call_id_to_span_data[call_id] = span_data
+        self._set_current_context_data(span_data)
+
 
     def _start_trace(
         self,
