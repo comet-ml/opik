@@ -52,6 +52,9 @@ class OpikCallback(BaseCallback):
                     instance=instance,
                     inputs=inputs,
                 )
+            # Always set context to the new span
+            new_span_data = self._map_call_id_to_span_data[call_id]
+            self._callback_context_set(new_span_data)
             return
 
         if current_span_data := opik_context.get_current_span_data():
@@ -81,6 +84,7 @@ class OpikCallback(BaseCallback):
             instance=instance,
             inputs=inputs,
         )
+
 
     def _attach_span_to_existing_span(
         self,
@@ -185,12 +189,7 @@ class OpikCallback(BaseCallback):
             if token := self._map_span_id_or_trace_id_to_token.pop(span_data.id, None):
                 self._current_callback_context.reset(token)
 
-    def on_lm_start(
-        self,
-        call_id: str,
-        instance: Any,
-        inputs: Dict[str, Any],
-    ) -> None:
+    def _collect_common_span_data(self, instance: Any, inputs: Dict[str, Any]) -> span.SpanData:
         current_callback_context_data = self._current_callback_context.get()
         assert current_callback_context_data is not None
 
@@ -206,21 +205,36 @@ class OpikCallback(BaseCallback):
             trace_id = current_callback_context_data.id
             parent_span_id = None
 
-        provider, model = instance.model.split(r"/", 1)
         span_type = self._get_span_type(instance)
 
-        span_data = span.SpanData(
+        return span.SpanData(
             trace_id=trace_id,
-            name=instance.__class__.__name__,
             parent_span_id=parent_span_id,
-            type=span_type,
+            name=instance.name if hasattr(instance, "name") else instance.__class__.__name__,
             input=inputs,
+            type=span_type,
             project_name=project_name,
-            provider=provider,
-            model=model,
             metadata=self._origins_metadata,
         )
+
+    def on_lm_start(
+        self,
+        call_id: str,
+        instance: Any,
+        inputs: Dict[str, Any],
+    ) -> None:
+        span_data = self._collect_common_span_data(instance, inputs)
+
+        provider, model = instance.model.split(r"/", 1)
+
+        span_data.update(
+            provider=provider,
+            model=model,
+            #name=f"{span_data.name}: {provider} - {model}",
+        )
+        print(span_data.name)
         self._map_call_id_to_span_data[call_id] = span_data
+        self._callback_context_set(span_data)
 
     def on_lm_end(
         self,
@@ -233,7 +247,28 @@ class OpikCallback(BaseCallback):
             exception=exception,
             outputs=outputs,
         )
-        self._end_trace(call_id=call_id)
+
+    def on_tool_start(
+        self,
+        call_id: str,
+        instance: Any,
+        inputs: Dict[str, Any],
+    ) -> None:
+        span_data = self._collect_common_span_data(instance, inputs)
+        self._map_call_id_to_span_data[call_id] = span_data
+        self._callback_context_set(span_data)
+
+    def on_tool_end(
+        self,
+        call_id: str,
+        outputs: Optional[Dict[str, Any]],
+        exception: Optional[Exception] = None,
+    ) -> None:
+        self._end_span(
+            call_id=call_id,
+            exception=exception,
+            outputs=outputs,
+        )
 
     def flush(self) -> None:
         """Sends pending Opik data to the backend"""
@@ -248,4 +283,6 @@ class OpikCallback(BaseCallback):
             return "llm"
         elif isinstance(instance, dspy.LM):
             return "llm"
+        elif isinstance(instance, dspy.Tool):
+            return "tool"
         return "general"
