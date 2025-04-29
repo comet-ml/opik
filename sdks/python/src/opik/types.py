@@ -9,7 +9,7 @@ if sys.version_info < (3, 11):
 else:
     from typing import NotRequired, Required
 
-SpanType = Literal["general", "tool", "llm"]
+SpanType = Literal["general", "tool", "llm", "guardrail"]
 FeedbackType = Literal["numerical", "categorical"]
 CreatedByType = Literal["evaluation"]
 AttachmentEntityType = Literal["trace", "span"]

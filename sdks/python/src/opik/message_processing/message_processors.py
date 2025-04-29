@@ -5,7 +5,11 @@ from opik import logging_messages
 from . import messages
 from ..jsonable_encoder import encode
 from .. import dict_utils
-from ..rest_api.types import feedback_score_batch_item, trace_write
+from ..rest_api.types import (
+    feedback_score_batch_item,
+    trace_write,
+    guardrail,
+)
 from ..rest_api.types import span_write
 from ..rest_api import core as rest_api_core
 from ..rest_api import client as rest_api_client
@@ -36,6 +40,7 @@ class MessageSender(BaseMessageProcessor):
             messages.AddSpanFeedbackScoresBatchMessage: self._process_add_span_feedback_scores_batch_message,  # type: ignore
             messages.CreateSpansBatchMessage: self._process_create_span_batch_message,  # type: ignore
             messages.CreateTraceBatchMessage: self._process_create_trace_batch_message,  # type: ignore
+            messages.GuardrailBatchMessage: self._process_guardrail_batch_message,  # type: ignore
         }
 
     def process(self, message: messages.BaseMessage) -> None:
@@ -188,6 +193,17 @@ class MessageSender(BaseMessageProcessor):
             LOGGER.debug("Create trace batch request of size %d", len(batch))
             self._rest_client.traces.create_traces(traces=batch)
             LOGGER.debug("Sent trace batch of size %d", len(batch))
+
+    def _process_guardrail_batch_message(
+        self, message: messages.GuardrailBatchMessage
+    ) -> None:
+        batch = []
+
+        for message_item in message.batch:
+            guardrail_batch_item_message = guardrail.Guardrail(**message_item.__dict__)
+            batch.append(guardrail_batch_item_message)
+
+        self._rest_client.guardrails.create_guardrails(guardrails=batch)
 
 
 def _generate_error_fingerprint(
