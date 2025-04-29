@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
         "Function decorators",
         "OpenAI",
         "Anthropic",
-        "Bedrock",
+        #"Bedrock",
         "Gemini",
         "LangChain",
         "LangGraph",
