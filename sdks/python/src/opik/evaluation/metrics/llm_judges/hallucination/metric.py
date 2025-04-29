@@ -25,6 +25,8 @@ class Hallucination(base_metric.BaseMetric):
         name: The name of the metric.
         few_shot_examples: A list of few-shot examples to use for hallucination detection.  If None, default examples will be used.
         track: Whether to track the metric. Defaults to True.
+        project_name: Optional project name to track the metric in for the cases when
+            there are no parent span/trace to inherit project name from.
 
     Example:
         >>> from opik.evaluation.metrics import Hallucination
@@ -46,8 +48,9 @@ class Hallucination(base_metric.BaseMetric):
         name: str = "hallucination_metric",
         few_shot_examples: Optional[List[template.FewShotExampleHallucination]] = None,
         track: bool = True,
+        project_name: Optional[str] = None,
     ):
-        super().__init__(name=name, track=track)
+        super().__init__(name=name, track=track, project_name=project_name)
         self._init_model(model)
         self.few_shot_examples = few_shot_examples
 

@@ -25,8 +25,10 @@ RUN npm run build -- --mode $BUILD_MODE
 FROM amazonlinux:2023
 
 # Install packages
-RUN yum update -y && yum install -y nginx \
-    && yum clean all
+# Add nginx repo to get specific version
+RUN yum update -y && \
+    yum install -y nginx-1.26.3 && \
+    yum clean all
 
 # Add label for later inspection
 ARG BUILD_MODE=production
@@ -37,10 +39,12 @@ RUN rm -f /etc/nginx/nginx.conf.default && \
     sed -i '/access_log.*main/d' /etc/nginx/nginx.conf && \
     sed -i 's,listen       80;,listen       8080;,' /etc/nginx/nginx.conf && \
     sed -i 's,listen       \[::\]:80;,listen       \[::\]:8080;,' /etc/nginx/nginx.conf && \
-    sed -i '/user nginx/d' /etc/nginx/nginx.conf
+    sed -i '/user nginx/d' /etc/nginx/nginx.conf && \
+    sed -i 's/error_log\ \/var\/log\/nginx\/error.log/error_log\ \/dev\/stderr/' /etc/nginx/nginx.conf && \
+    sed -i 's/access_log\ \/var\/log\/nginx\/access.log/access_log\ \/dev\/stdout/' /etc/nginx/nginx.conf
 RUN mkdir -p /var/cache/nginx /var/log/nginx /run && \
-    chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx /run && \
-    chmod -R g+w /var/cache/nginx /var/log/nginx /etc/nginx /run
+    chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx /run /var/run && \
+    chmod -R g+w /var/cache/nginx /var/log/nginx /etc/nginx /run /var/run
 
 # Copy the built files from the builder stage
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
