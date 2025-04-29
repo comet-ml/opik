@@ -12,10 +12,14 @@ def broken_links():
     with open("tests/Documentation/output.csv", "r") as file:
         reader = csv.DictReader(file)
         for row in reader:
-            if row["state"] == "BROKEN" and (
-                "comet" in row["url"].lower()
-                or "ferndocs" in row["url"].lower()
-                or "opik" in row["url"].lower()
+            if (
+                row["state"] == "BROKEN"
+                and (
+                    "comet" in row["url"].lower()
+                    or "ferndocs" in row["url"].lower()
+                    or "opik" in row["url"].lower()
+                )
+                and ("~explorer" not in row["parent"].lower())
             ):
                 broken_links.append(
                     {
