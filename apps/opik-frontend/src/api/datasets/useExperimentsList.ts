@@ -11,7 +11,7 @@ export type UseExperimentsListParams = {
   promptId?: string;
   optimizationId?: string;
   datasetDeleted?: boolean;
-  type: EXPERIMENT_TYPE;
+  type?: EXPERIMENT_TYPE;
   sorting?: Sorting;
   search?: string;
   page: number;

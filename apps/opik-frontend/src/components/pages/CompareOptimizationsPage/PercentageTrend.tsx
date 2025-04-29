@@ -2,6 +2,7 @@ import React from "react";
 import { MoveRight, TrendingDown, TrendingUp } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 
+import { formatNumericData } from "@/lib/utils";
 import { Tag, TagProps } from "@/components/ui/tag";
 
 const getConfig = (percentage: number) => {
@@ -38,9 +39,11 @@ const PercentageTrend: React.FC<PercentageTrendProps> = ({
 
   return (
     <Tag size="md" variant={variant} className="flex-row flex-nowrap gap-1">
-      <div className="flex max-w-full items-center gap-0.5">
+      <div className="flex max-w-full items-center justify-between gap-0.5">
         <Icon className="size-3 shrink-0" />
-        <span>{percentage.toFixed(precision)}%</span>
+        <div className="min-w-8 text-right">
+          {formatNumericData(percentage, precision)}%
+        </div>
       </div>
     </Tag>
   );

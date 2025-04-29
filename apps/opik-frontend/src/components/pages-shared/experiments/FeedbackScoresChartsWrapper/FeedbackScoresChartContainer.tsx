@@ -23,19 +23,11 @@ type FeedbackScoresChartContainerProps = {
   chartId: string;
   dataset: Dataset;
   isAverageScores: boolean;
-  isMaxScores: boolean;
 };
 
 const FeedbackScoresChartContainer: React.FC<
   FeedbackScoresChartContainerProps
-> = ({
-  chartData,
-  chartId,
-  dataset,
-  className,
-  isAverageScores,
-  isMaxScores,
-}) => {
+> = ({ chartData, chartId, dataset, className, isAverageScores }) => {
   const isPending = !chartData;
   const noData = useMemo(() => {
     if (isPending) return false;
@@ -82,11 +74,6 @@ const FeedbackScoresChartContainer: React.FC<
         {isAverageScores && (
           <CardDescription className="comet-body-xs text-xs">
             Average scores
-          </CardDescription>
-        )}
-        {isMaxScores && (
-          <CardDescription className="comet-body-xs text-xs">
-            Maximum scores
           </CardDescription>
         )}
       </CardHeader>

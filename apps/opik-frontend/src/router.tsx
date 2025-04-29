@@ -185,6 +185,41 @@ const compareExperimentsRoute = createRoute({
   },
 });
 
+// Agent optimization
+const optimizationsRoute = createRoute({
+  path: "/optimizations",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Agent optimization",
+  },
+});
+
+const optimizationsListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => optimizationsRoute,
+  component: OptimizationsPage,
+});
+
+const compareOptimizationsRoute = createRoute({
+  path: "/$datasetId/compare",
+  getParentRoute: () => optimizationsRoute,
+  component: CompareOptimizationsPage,
+  staticData: {
+    param: "compare",
+    paramValue: "compare",
+  },
+});
+
+const compareTrialsRoute = createRoute({
+  path: "/$datasetId/trials/compare",
+  getParentRoute: () => optimizationsRoute,
+  component: CompareTrialsPage,
+  staticData: {
+    param: "compare", // TODO lala verify this key. need to think about hierarchy
+    paramValue: "compare",
+  },
+});
+
 // ----------- datasets
 const datasetsRoute = createRoute({
   path: "/datasets",
@@ -299,42 +334,6 @@ const onlineEvaluationRoute = createRoute({
   component: OnlineEvaluationPage,
 });
 
-// --------- optimizations
-
-const optimizationsRoute = createRoute({
-  path: "/optimizations",
-  getParentRoute: () => workspaceRoute,
-  staticData: {
-    title: "Optimizations",
-  },
-});
-
-const optimizationsListRoute = createRoute({
-  path: "/",
-  getParentRoute: () => optimizationsRoute,
-  component: OptimizationsPage,
-});
-
-const compareOptimizationsRoute = createRoute({
-  path: "/$datasetId/compare",
-  getParentRoute: () => optimizationsRoute,
-  component: CompareOptimizationsPage,
-  staticData: {
-    param: "compare",
-    paramValue: "compare",
-  },
-});
-
-const compareTrialsRoute = createRoute({
-  path: "/$datasetId/trials/compare",
-  getParentRoute: () => optimizationsRoute,
-  component: CompareTrialsPage,
-  staticData: {
-    param: "compare", // TODO lala verify this key. need to think about hierarchy
-    paramValue: "compare",
-  },
-});
-
 // ----------- Automation logs
 
 const automationLogsRoute = createRoute({
@@ -362,6 +361,11 @@ const routeTree = rootRoute.addChildren([
         experimentsListRoute,
         compareExperimentsRoute,
       ]),
+      optimizationsRoute.addChildren([
+        optimizationsListRoute,
+        compareOptimizationsRoute,
+        compareTrialsRoute,
+      ]),
       datasetsRoute.addChildren([
         datasetsListRoute,
         datasetRoute.addChildren([datasetItemsRoute]),
@@ -375,11 +379,6 @@ const routeTree = rootRoute.addChildren([
       playgroundRoute,
       configurationRoute,
       onlineEvaluationRoute,
-      optimizationsRoute.addChildren([
-        optimizationsListRoute,
-        compareOptimizationsRoute,
-        compareTrialsRoute,
-      ]),
     ]),
   ]),
 ]);

@@ -10,7 +10,7 @@ import FeedbackScoreReasonTooltip from "./FeedbackScoreReasonTooltip";
 
 type FeedbackScoreTagProps = {
   label: string;
-  value: number;
+  value: number | string;
   onDelete?: (name: string) => void;
   className?: string;
   lastUpdatedAt?: string;

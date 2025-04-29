@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { keepPreviousData } from "@tanstack/react-query";
 import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
@@ -11,20 +11,22 @@ import isUndefined from "lodash/isUndefined";
 import isObject from "lodash/isObject";
 
 import {
-  AggregatedFeedbackScore,
   COLUMN_CREATED_AT_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_TYPE,
   ColumnData,
+  ROW_HEIGHT,
 } from "@/types/shared";
 import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import { formatDate } from "@/lib/date";
 import { toString } from "@/lib/utils";
+import { getFeedbackScoreValue } from "@/lib/feedback-scores";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import useAppStore from "@/store/AppStore";
 import { Button } from "@/components/ui/button";
+import { Tag } from "@/components/ui/tag";
 import useOptimizationById from "@/api/optimizations/useOptimizationById";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
@@ -40,18 +42,17 @@ import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtual
 import DataTable from "@/components/shared/DataTable/DataTable";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
-import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import ObjectiveScoreCell from "@/components/pages/CompareOptimizationsPage/ObjectiveScoreCell";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import BestPrompt from "@/components/pages/CompareOptimizationsPage/BestPrompt";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import { STATUS_TO_VARIANT_MAP } from "@/constants/shared";
+import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 
 const REFETCH_INTERVAL = 30000;
 const MAX_EXPERIMENTS_LOADED = 1000;
 
 export const getRowId = (e: Experiment) => e.id;
-
-const getScore = (scores: AggregatedFeedbackScore[], scoreName: string) =>
-  scores.find(({ name }) => name === scoreName)?.value;
 
 const calculatePercentageChange = (
   baseValue: number,
@@ -118,6 +119,8 @@ const CompareOptimizationsPage: React.FC = () => {
   >(COLUMNS_WIDTH_KEY, {
     defaultValue: {},
   });
+
+  const [height, setHeight] = useState<ROW_HEIGHT>(ROW_HEIGHT.small);
 
   const optimizationId = optimizationsIds?.[0];
 
@@ -205,13 +208,16 @@ const CompareOptimizationsPage: React.FC = () => {
       return retVal;
 
     retVal.baseScore =
-      getScore(sortedRows[0].feedback_scores, optimization.objective_name) ?? 0;
+      getFeedbackScoreValue(
+        sortedRows[0].feedback_scores,
+        optimization.objective_name,
+      ) ?? 0;
 
     // if baseScore is 0, then we cannot calculate the relative score
     if (retVal.baseScore === 0) return retVal;
 
     rows.forEach((e) => {
-      const score = getScore(
+      const score = getFeedbackScoreValue(
         e.feedback_scores ?? [],
         optimization.objective_name,
       );
@@ -360,8 +366,17 @@ const CompareOptimizationsPage: React.FC = () => {
         direction="horizontal"
         limitWidth
       >
-        <div className="mb-4 flex min-h-8 items-center justify-between">
+        <div className="mb-4 flex min-h-8 flex-nowrap items-center gap-2">
           <h1 className="comet-title-l truncate break-words">{title}</h1>
+          {optimization?.status && (
+            <Tag
+              variant={STATUS_TO_VARIANT_MAP[optimization.status]}
+              size="md"
+              className="capitalize"
+            >
+              {optimization.status}
+            </Tag>
+          )}
         </div>
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
@@ -392,6 +407,10 @@ const CompareOptimizationsPage: React.FC = () => {
               <RotateCw />
             </Button>
           </TooltipWrapper>
+          <DataTableRowHeightSelector
+            type={height as ROW_HEIGHT}
+            setType={setHeight}
+          />
           <ColumnsButton
             columns={columnsDef}
             selectedColumns={selectedColumns}
@@ -421,6 +440,7 @@ const CompareOptimizationsPage: React.FC = () => {
         sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         getRowId={getRowId}
+        rowHeight={height}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}

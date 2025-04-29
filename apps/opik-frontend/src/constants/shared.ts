@@ -4,6 +4,8 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import React from "react";
+import { OPTIMIZATION_STATUS } from "@/types/optimizations";
+import { TagProps } from "@/components/ui/tag";
 
 export const DEMO_PROJECT_NAME = "Demo Project";
 export const USER_FEEDBACK_NAME = "User feedback";
@@ -33,4 +35,13 @@ export const CELL_HORIZONTAL_ALIGNMENT_MAP: Record<COLUMN_TYPE, string> = {
   [COLUMN_TYPE.dictionary]: "justify-start",
   [COLUMN_TYPE.numberDictionary]: "justify-start",
   [COLUMN_TYPE.guardrails]: "justify-start",
+};
+
+export const STATUS_TO_VARIANT_MAP: Record<
+  OPTIMIZATION_STATUS,
+  TagProps["variant"]
+> = {
+  [OPTIMIZATION_STATUS.RUNNING]: "green",
+  [OPTIMIZATION_STATUS.COMPLETED]: "gray",
+  [OPTIMIZATION_STATUS.CANCELLED]: "red",
 };

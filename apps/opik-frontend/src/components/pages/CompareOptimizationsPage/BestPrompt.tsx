@@ -18,6 +18,7 @@ const BestPrompt: React.FC<BestPromptProps> = ({
   experiment,
   optimization,
 }) => {
+  console.log(experiment, optimization);
   return (
     <Card className="h-[224px] w-[280px]">
       <CardHeader className="space-y-0.5 px-4 pt-3">

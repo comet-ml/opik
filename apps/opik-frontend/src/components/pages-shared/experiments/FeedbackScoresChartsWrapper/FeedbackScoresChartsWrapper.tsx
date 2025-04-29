@@ -13,7 +13,6 @@ type FeedbackScoresChartsWrapperProps<TEntity> = {
   entities: TEntity[];
   datasetsData: Dataset[];
   isAverageScores?: boolean;
-  isMaxScores?: boolean;
 };
 
 const FeedbackScoresChartsWrapper = <
@@ -29,7 +28,6 @@ const FeedbackScoresChartsWrapper = <
   entities,
   datasetsData,
   isAverageScores = false,
-  isMaxScores = false,
 }: FeedbackScoresChartsWrapperProps<TEntity>) => {
   const chartsData = useMemo(() => {
     const groupsMap: Record<string, ChartData> = {};
@@ -89,7 +87,6 @@ const FeedbackScoresChartsWrapper = <
           dataset={dataset}
           className={chartClassName}
           isAverageScores={isAverageScores}
-          isMaxScores={isMaxScores}
         />
       ))}
     </div>

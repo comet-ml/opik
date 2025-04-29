@@ -13,20 +13,20 @@ import {
   StringParam,
   useQueryParam,
 } from "use-query-params";
-import get from "lodash/get";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
-import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
+import FeedbackScoreTagCell from "@/components/shared/DataTableCells/FeedbackScoreTagCell";
+import OptimizationStatusCell from "@/components/pages/OptimizationsPage/OptimizationStatusCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
+import { getFeedbackScore } from "@/lib/feedback-scores";
 import {
-  COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_TYPE,
@@ -58,7 +58,6 @@ import {
 } from "@/components/pages-shared/experiments/table";
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
-import { formatNumericData } from "@/lib/utils";
 import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/grouping";
 
 const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
@@ -89,24 +88,27 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
     type: COLUMN_TYPE.number,
   },
   {
-    id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Optimization scores (max.)",
+    id: "objective_name",
+    label: "Best score",
     type: COLUMN_TYPE.numberDictionary,
     accessorFn: (row) =>
-      get(row, "feedback_scores", []).map((score) => ({
-        ...score,
-        value: formatNumericData(score.value),
-      })),
-    cell: FeedbackScoreListCell as never,
-    customMeta: {
-      getHoverCardName: (row: GroupedOptimization) => row.name,
-      isMaxScores: true,
-    },
+      getFeedbackScore(
+        row.feedback_scores ?? [],
+        row.objective_name ?? "levenshtein_ratio_metric",
+      ), // TODO lala delete this
+    cell: FeedbackScoreTagCell as never,
   },
   {
     id: "status",
     label: "Status",
     type: COLUMN_TYPE.string,
+    accessorFn: () =>
+      Math.random() > 0.05
+        ? "running"
+        : Math.random() > 0.5
+          ? "completed"
+          : "cancelled", // TODO lala delete this
+    cell: OptimizationStatusCell as never,
   },
 ];
 
@@ -118,7 +120,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
   "num_trials",
-  COLUMN_FEEDBACK_SCORES_ID,
+  "objective_name",
   "status",
 ];
 
@@ -286,7 +288,9 @@ const OptimizationsPage: React.FunctionComponent = () => {
   return (
     <div className="pt-6">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Optimizations</h1>
+        <h1 className="comet-title-l truncate break-words">
+          Agent optimization
+        </h1>
       </div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
@@ -335,7 +339,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
       <FeedbackScoresChartsWrapper
         entities={optimizations}
         datasetsData={datasetsData}
-        isMaxScores
       />
       <DataTable
         columns={columns}

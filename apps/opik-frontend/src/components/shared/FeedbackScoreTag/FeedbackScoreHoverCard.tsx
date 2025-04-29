@@ -10,7 +10,6 @@ import ColoredTagNew from "../ColoredTag/ColoredTagNew";
 type FeedbackScoreHoverCardProps = {
   name: string;
   isAverageScores?: boolean;
-  isMaxScores?: boolean;
   tagList: TraceFeedbackScore[];
   children: React.ReactNode;
   hidden?: boolean;
@@ -18,7 +17,6 @@ type FeedbackScoreHoverCardProps = {
 const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
   name,
   isAverageScores,
-  isMaxScores,
   tagList,
   children,
   hidden,
@@ -45,11 +43,6 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
             {isAverageScores && (
               <div className="comet-body-xs leading-none text-slate-400">
                 Average scores
-              </div>
-            )}
-            {isMaxScores && (
-              <div className="comet-body-xs leading-none text-slate-400">
-                Maximum scores
               </div>
             )}
           </div>
