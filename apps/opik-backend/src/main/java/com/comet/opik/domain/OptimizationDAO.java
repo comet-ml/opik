@@ -47,55 +47,55 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * That way only insert is allowed, but not update.
      */
     private static final String INSERT = """
-                    INSERT INTO optimizations (
-                        id,
-                        dataset_id,
-                        name,
-                        workspace_id,
-                        objective_name,
-                        status,
-                        metadata,
-                        created_by,
-                        last_updated_by
-                    )
-                    SELECT
-                        if(
-                            LENGTH(CAST(old.id AS Nullable(String))) > 0,
-                            leftPad('', 40, '*'),
-                            new.id
-                        ) as id,
-                        new.dataset_id,
-                        new.name,
-                        new.workspace_id,
-                        new.objective_name,
-                        new.status,
-                        new.metadata,
-                        new.created_by,
-                        new.last_updated_by
-                    FROM (
-                        SELECT
-                        :id AS id,
-                        :dataset_id AS dataset_id,
-                        :name AS name,
-                        :workspace_id AS workspace_id,
-                        :objective_name AS objective_name,
-                        :status AS status,
-                        :metadata AS metadata,
-                        :created_by AS created_by,
-                        :last_updated_by AS last_updated_by
-                    ) AS new
-                    LEFT JOIN (
-                        SELECT
-                        id
-                        FROM optimizations
-                        WHERE id = :id
-                        AND workspace_id = :workspace_id
-                        ORDER BY last_updated_at DESC
-                        LIMIT 1 BY id
-                    ) AS old
-                    ON new.id = old.id
-                    ;
-                    """;
+            INSERT INTO optimizations (
+                id,
+                dataset_id,
+                name,
+                workspace_id,
+                objective_name,
+                status,
+                metadata,
+                created_by,
+                last_updated_by
+            )
+            SELECT
+                if(
+                    LENGTH(CAST(old.id AS Nullable(String))) > 0,
+                    leftPad('', 40, '*'),
+                    new.id
+                ) as id,
+                new.dataset_id,
+                new.name,
+                new.workspace_id,
+                new.objective_name,
+                new.status,
+                new.metadata,
+                new.created_by,
+                new.last_updated_by
+            FROM (
+                SELECT
+                :id AS id,
+                :dataset_id AS dataset_id,
+                :name AS name,
+                :workspace_id AS workspace_id,
+                :objective_name AS objective_name,
+                :status AS status,
+                :metadata AS metadata,
+                :created_by AS created_by,
+                :last_updated_by AS last_updated_by
+            ) AS new
+            LEFT JOIN (
+                SELECT
+                id
+                FROM optimizations
+                WHERE id = :id
+                AND workspace_id = :workspace_id
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS old
+            ON new.id = old.id
+            ;
+            """;
 
     private static final String FIND = """
             WITH trace_final AS (
