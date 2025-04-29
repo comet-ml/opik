@@ -16,6 +16,7 @@ public class GuardrailsGenerator {
     public List<Guardrail> generateGuardrailsForTrace(UUID traceId, UUID spanId, String projectName) {
         return PodamFactoryUtils.manufacturePojoList(factory, Guardrail.class).stream()
                 .map(guardrail -> guardrail.toBuilder()
+                        .id(null)
                         .entityId(traceId)
                         .secondaryId(spanId)
                         .projectName(projectName)
