@@ -64,20 +64,6 @@ def test_dspy__happyflow(
             SpanModel(
                 id=ANY_STRING(),
                 type="llm",
-                name="LM",
-                provider="openai",
-                model="gpt-4o-mini",
-                input=ANY_DICT,
-                output=ANY_DICT,
-                metadata={"created_from": "dspy"},
-                start_time=ANY_BUT_NONE,
-                end_time=ANY_BUT_NONE,
-                project_name=expected_project_name,
-                spans=[],
-            ),
-            SpanModel(
-                id=ANY_STRING(),
-                type="llm",
                 name="Predict",
                 provider=None,
                 model=None,
@@ -87,13 +73,28 @@ def test_dspy__happyflow(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
-                spans=[],
+                spans=[
+                    SpanModel(
+                        id=ANY_STRING(),
+                        type="llm",
+                        name=ANY_STRING(startswith="LM"),
+                        provider="openai",
+                        model="gpt-4o-mini",
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        metadata={"created_from": "dspy"},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        project_name=expected_project_name,
+                        spans=[],
+                    ),
+                ],
             ),
         ],
     )
 
     assert len(fake_backend.trace_trees) == 1
-    assert len(fake_backend.span_trees) == 2
+    assert len(fake_backend.span_trees) == 1
 
     sort_spans_by_name(EXPECTED_TRACE_TREE)
     sort_spans_by_name(fake_backend.trace_trees[0])
@@ -145,37 +146,38 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=project_name,
-                spans=[],
                 error_info={
                     "exception_type": ANY_STRING(),
                     "message": ANY_STRING(),
                     "traceback": ANY_STRING(),
                 },
-            ),
-            SpanModel(
-                id=ANY_STRING(),
-                type="llm",
-                name="LM",
-                provider="openai",
-                model="gpt-3.5-turbo",
-                input=ANY_DICT,
-                output=ANY_DICT,
-                metadata={"created_from": "dspy"},
-                start_time=ANY_BUT_NONE,
-                end_time=ANY_BUT_NONE,
-                project_name=project_name,
-                spans=[],
-                error_info={
-                    "exception_type": ANY_STRING(),
-                    "message": ANY_STRING(),
-                    "traceback": ANY_STRING(),
-                },
+                spans=[
+                    SpanModel(
+                        id=ANY_STRING(),
+                        type="llm",
+                        name="LM",
+                        provider="openai",
+                        model="gpt-3.5-turbo",
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        metadata={"created_from": "dspy"},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        project_name=project_name,
+                        spans=[],
+                        error_info={
+                            "exception_type": ANY_STRING(),
+                            "message": ANY_STRING(),
+                            "traceback": ANY_STRING(),
+                        },
+                    ),
+                ],
             ),
         ],
     )
 
     assert len(fake_backend.trace_trees) == 1
-    assert len(fake_backend.span_trees) == 2
+    assert len(fake_backend.span_trees) == 1
 
     sort_spans_by_name(EXPECTED_TRACE_TREE)
     sort_spans_by_name(fake_backend.trace_trees[0])
@@ -253,21 +255,22 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
-                                spans=[],
-                            ),
-                            SpanModel(
-                                id=ANY_STRING(),
-                                type="llm",
-                                name="LM",
-                                provider="openai",
-                                model="gpt-3.5-turbo",
-                                input=ANY_DICT,
-                                output=ANY_DICT,
-                                metadata={"created_from": "dspy"},
-                                start_time=ANY_BUT_NONE,
-                                end_time=ANY_BUT_NONE,
-                                project_name=project_name,
-                                spans=[],
+                                spans=[
+                                    SpanModel(
+                                        id=ANY_STRING(),
+                                        type="llm",
+                                        name=ANY_STRING(startswith="LM: openai"),
+                                        provider="openai",
+                                        model="gpt-3.5-turbo",
+                                        input=ANY_DICT,
+                                        output=ANY_DICT,
+                                        metadata={"created_from": "dspy"},
+                                        start_time=ANY_BUT_NONE,
+                                        end_time=ANY_BUT_NONE,
+                                        project_name=project_name,
+                                        spans=[],
+                                    ),
+                                ],
                             ),
                         ],
                     )
@@ -356,20 +359,21 @@ def test_dspy_callback__used_when_there_was_already_existing_trace_without_span_
                         metadata={"created_from": "dspy"},
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
-                        spans=[],
-                    ),
-                    SpanModel(
-                        id=ANY_STRING(),
-                        type="llm",
-                        name="LM",
-                        provider="openai",
-                        model="gpt-3.5-turbo",
-                        input=ANY_DICT,
-                        output=ANY_DICT,
-                        metadata={"created_from": "dspy"},
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        spans=[],
+                        spans=[
+                            SpanModel(
+                                id=ANY_STRING(),
+                                type="llm",
+                                name=ANY_STRING(startswith="LM: openai"),
+                                provider="openai",
+                                model="gpt-3.5-turbo",
+                                input=ANY_DICT,
+                                output=ANY_DICT,
+                                metadata={"created_from": "dspy"},
+                                start_time=ANY_BUT_NONE,
+                                end_time=ANY_BUT_NONE,
+                                spans=[],
+                            ),
+                        ],
                     ),
                 ],
             )
@@ -445,19 +449,6 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
                     SpanModel(
                         id=ANY_STRING(),
                         type="llm",
-                        name="LM",
-                        provider="openai",
-                        model="gpt-3.5-turbo",
-                        input=ANY_DICT,
-                        output=ANY_DICT,
-                        metadata={"created_from": "dspy"},
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        spans=[],
-                    ),
-                    SpanModel(
-                        id=ANY_STRING(),
-                        type="llm",
                         name="Predict",
                         provider=None,
                         model=None,
@@ -466,7 +457,21 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
                         metadata={"created_from": "dspy"},
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
-                        spans=[],
+                        spans=[
+                            SpanModel(
+                                id=ANY_STRING(),
+                                type="llm",
+                                name=ANY_STRING(startswith="LM"),
+                                provider="openai",
+                                model="gpt-3.5-turbo",
+                                input=ANY_DICT,
+                                output=ANY_DICT,
+                                metadata={"created_from": "dspy"},
+                                start_time=ANY_BUT_NONE,
+                                end_time=ANY_BUT_NONE,
+                                spans=[],
+                            ),
+                        ],
                     ),
                 ],
             )
