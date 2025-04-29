@@ -87,8 +87,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
             LEFT JOIN (
                 SELECT
                 id
-                FROM experiments
+                FROM optimizations
                 WHERE id = :id
+                AND workspace_id = :workspace_id
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY id
             ) AS old

@@ -120,18 +120,4 @@ public class OptimizationsResource {
 
         return Response.created(uri).build();
     }
-
-    //    @POST
-    //    @Path("/delete")
-    //    @Operation(operationId = "deleteOptimizationsById", summary = "Delete optimizations by id", description = "Delete optimizations by id", responses = {
-    //            @ApiResponse(responseCode = "204", description = "No content")})
-    //    public Response deleteOptimizationsById(
-    //            @RequestBody(content = @Content(schema = @Schema(implementation = OptimizationsDelete.class))) @NotNull @Valid OptimizationsDelete request) {
-    //        log.info("Deleting optimizations, count '{}'", request.ids().size());
-    //        optimizationService.delete(request.ids())
-    //                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-    //                .block();
-    //        log.info("Deleted optimizations, count '{}'", request.ids().size());
-    //        return Response.noContent().build();
-    //    }
 }
