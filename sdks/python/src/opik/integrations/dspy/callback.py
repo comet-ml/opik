@@ -1,18 +1,16 @@
 from typing import Any, Dict, Optional, Union
 
 import dspy
-from dspy.utils.callback import BaseCallback
+from dspy.utils import callback as dspy_callback
 
-from opik import types, opik_context
-from opik.api_objects import helpers, span, trace
-from opik.api_objects.opik_client import get_client_cached
-from opik.context_storage import OpikContextStorage
+from opik import types, opik_context, context_storage
+from opik.api_objects import helpers, span, trace, opik_client
 from opik.decorator import error_info_collector
 
 ContextType = Union[span.SpanData, trace.TraceData]
 
 
-class OpikCallback(BaseCallback):
+class OpikCallback(dspy_callback.BaseCallback):
     def __init__(
         self,
         project_name: Optional[str] = None,
@@ -22,11 +20,11 @@ class OpikCallback(BaseCallback):
 
         self._origins_metadata = {"created_from": "dspy"}
 
-        self._context_storage = OpikContextStorage()
+        self._context_storage = context_storage.OpikContextStorage()
 
         self._project_name = project_name
 
-        self._opik_client = get_client_cached()
+        self._opik_client = opik_client.get_client_cached()
 
     def on_module_start(
         self,
