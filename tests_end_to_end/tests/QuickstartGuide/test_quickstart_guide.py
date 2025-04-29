@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
         "LangChain",
         "LangGraph",
         "LlamaIndex",
-        "Haystack",
+        #"Haystack",
         "LiteLLM",
         "Ragas",
         "Groq",
