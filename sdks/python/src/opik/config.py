@@ -191,6 +191,11 @@ class OpikConfig(pydantic_settings.BaseSettings):
     which makes HTTP requests not via the opik package.
     """
 
+    enable_json_request_compression: bool = True
+    """
+    If set to True - Opik will compress the JSON request body.
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)

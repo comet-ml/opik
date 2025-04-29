@@ -18,7 +18,7 @@ class TestIsInstanceActive:
             (500, False),
         ],
     )
-    @patch("opik.configurator.opik_rest_helpers.httpx.Client")
+    @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
     def test_is_instance_active(self, mock_httpx_client, status_code, expected_result):
         """
         Test various HTTP status code responses to check if the instance is active.
@@ -37,7 +37,7 @@ class TestIsInstanceActive:
 
         assert result == expected_result
 
-    @patch("opik.configurator.opik_rest_helpers.httpx.Client")
+    @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
     def test_is_instance_active_timeout(self, mock_httpx_client):
         """
         Test that a connection timeout results in False being returned.
@@ -54,7 +54,7 @@ class TestIsInstanceActive:
 
         assert result is False
 
-    @patch("opik.configurator.opik_rest_helpers.httpx.Client")
+    @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
     def test_is_instance_active_general_exception(self, mock_httpx_client):
         """
         Test that any general exception results in False being returned.
@@ -81,7 +81,7 @@ class TestIsWorkspaceNameCorrect:
             ("valid_api_key", "empty_workspace", [], False),
         ],
     )
-    @patch("opik.configurator.opik_rest_helpers.httpx.Client")
+    @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
     def test_workspace_valid_api_key(
         self, mock_httpx_client, api_key, workspace, workspace_names, expected_result
     ):
@@ -110,7 +110,7 @@ class TestIsWorkspaceNameCorrect:
         "status_code, response_text",
         [(500, "Internal Server Error"), (404, "Not Found"), (403, "Forbidden")],
     )
-    @patch("opik.configurator.opik_rest_helpers.httpx.Client")
+    @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
     def test_workspace_non_200_response(
         self, mock_httpx_client, status_code, response_text
     ):
@@ -144,7 +144,7 @@ class TestIsWorkspaceNameCorrect:
             (Exception("Unexpected error")),
         ],
     )
-    @patch("opik.configurator.opik_rest_helpers.httpx.Client")
+    @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
     def test_workspace_request_exceptions(self, mock_httpx_client, exception):
         """
         Test cases where an exception is raised during the HTTP request.
@@ -177,7 +177,7 @@ class TestIsApiKeyCorrect:
             (403, False),
         ],
     )
-    @patch("opik.configurator.opik_rest_helpers.httpx.Client")
+    @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
     def test_is_api_key_correct(self, mock_httpx_client, status_code, expected_result):
         """
         Test valid, invalid, and forbidden API key scenarios by simulating HTTP status codes.
@@ -202,7 +202,7 @@ class TestIsApiKeyCorrect:
         "status_code, response_text",
         [(500, "Internal Server Error")],
     )
-    @patch("opik.configurator.opik_rest_helpers.httpx.Client")
+    @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
     def test_is_api_key_correct_non_200_response(
         self, mock_httpx_client, status_code, response_text
     ):
@@ -231,7 +231,7 @@ class TestIsApiKeyCorrect:
             (Exception("Unexpected error")),
         ],
     )
-    @patch("opik.configurator.opik_rest_helpers.httpx.Client")
+    @patch("opik.configurator.opik_rest_helpers.httpx_client.get")
     def test_is_api_key_correct_exceptions(self, mock_httpx_client, exception):
         """
         Test that RequestError and general exceptions are properly raised as ConnectionError.

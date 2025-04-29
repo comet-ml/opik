@@ -98,6 +98,7 @@ class Opik:
             api_key=config_.api_key,
             check_tls_certificate=config_.check_tls_certificate,
             use_batching=_use_batching,
+            enable_json_request_compression=config_.enable_json_request_compression,
         )
         atexit.register(self.end, timeout=self._flush_timeout)
 
@@ -117,11 +118,13 @@ class Opik:
         api_key: Optional[str],
         check_tls_certificate: bool,
         use_batching: bool,
+        enable_json_request_compression: bool,
     ) -> None:
         httpx_client_ = httpx_client.get(
             workspace=self._workspace,
             api_key=api_key,
             check_tls_certificate=check_tls_certificate,
+            compress_json_requests=enable_json_request_compression,
         )
         self._rest_client = rest_api_client.OpikApi(
             base_url=base_url,
