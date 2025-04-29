@@ -1,11 +1,13 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailBatch;
 import com.comet.opik.domain.GuardrailsService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.AsyncUtils;
+import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -43,8 +45,7 @@ public class GuardrailsResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     public Response createGuardrails(
-            @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailBatch.class))) @NotNull @Valid GuardrailBatch batch) {
-
+            @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailBatch.class))) @NotNull @Valid @JsonView(Guardrail.View.Write.class) GuardrailBatch batch) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Add guardrails batch, size {} on  workspaceId '{}'", batch.guardrails().size(),
