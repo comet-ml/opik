@@ -96,7 +96,9 @@ completion = azure_client.chat.completions.create(
 
 The `track_openai` wrapper supports the following OpenAI methods:
 
-- `openai_client.chat.completions.create()`
+- `openai_client.chat.completions.create()`, including support for stream=True mode.
 - `openai_client.beta.chat.completions.parse()`
+- `openai_client.beta.chat.completions.stream()`
+- `openai_client.responses.create()`
 
 If you would like to track another OpenAI method, please let us know by opening an issue on [GitHub](https://github.com/comet-ml/opik/issues).
