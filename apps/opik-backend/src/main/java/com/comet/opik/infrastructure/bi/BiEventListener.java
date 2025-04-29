@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class BiEventListener {
 
-    public static final String FIRST_TRACE_REPORT_BI_EVENT = "opik_first_trace_created";
+    public static final String FIRST_TRACE_REPORT_BI_EVENT = "opik_os_first_trace_created";
 
     private final UsageReportService usageReportService;
     private final ProjectService projectService;

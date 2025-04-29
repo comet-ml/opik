@@ -30,7 +30,9 @@ def test_upload_attachment__s3(file_to_upload, rest_client_s3, respx_mock):
     file_uploader.upload_attachment(
         upload_options=file_to_upload,
         rest_client=rest_client_s3,
-        upload_httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
+        upload_httpx_client=httpx_client.get(
+            None, None, check_tls_certificate=False, compress_json_requests=False
+        ),
         monitor=monitor,
     )
 
@@ -49,7 +51,9 @@ def test_upload_attachment__s3__no_monitor(file_to_upload, rest_client_s3, respx
     file_uploader.upload_attachment(
         upload_options=file_to_upload,
         rest_client=rest_client_s3,
-        upload_httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
+        upload_httpx_client=httpx_client.get(
+            None, None, check_tls_certificate=False, compress_json_requests=False
+        ),
     )
 
     route = respx.put(rx_url)
@@ -66,7 +70,9 @@ def test_upload_attachment__local(file_to_upload, rest_client_local, respx_mock)
     file_uploader.upload_attachment(
         upload_options=file_to_upload,
         rest_client=rest_client_local,
-        upload_httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
+        upload_httpx_client=httpx_client.get(
+            None, None, check_tls_certificate=False, compress_json_requests=False
+        ),
         monitor=monitor,
     )
 
@@ -85,7 +91,9 @@ def test_upload_attachment__local__no_monitor(
     file_uploader.upload_attachment(
         upload_options=file_to_upload,
         rest_client=rest_client_local,
-        upload_httpx_client=httpx_client.get(None, None, check_tls_certificate=False),
+        upload_httpx_client=httpx_client.get(
+            None, None, check_tls_certificate=False, compress_json_requests=False
+        ),
     )
 
     route = respx.put(rx_url)
@@ -132,7 +140,7 @@ class TestUploadAttachmentRetry:
             upload_options=file_to_upload,
             rest_client=rest_client_local,
             upload_httpx_client=httpx_client.get(
-                None, None, check_tls_certificate=False
+                None, None, check_tls_certificate=False, compress_json_requests=False
             ),
             monitor=monitor,
         )
