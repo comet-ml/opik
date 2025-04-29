@@ -1,6 +1,6 @@
 import dataclasses
 import datetime
-from typing import Optional, Any, Dict, List, Union
+from typing import Optional, Any, Dict, List, Union, Literal
 from ..types import SpanType, ErrorInfoDict, LLMProvider, AttachmentEntityType
 
 
@@ -152,6 +152,33 @@ class CreateSpansBatchMessage(BaseMessage):
 @dataclasses.dataclass
 class CreateTraceBatchMessage(BaseMessage):
     batch: List[CreateTraceMessage]
+
+
+@dataclasses.dataclass
+class GuardrailBatchItemMessage(BaseMessage):
+    """
+    There is no handler for that in message processor, it exists
+    only as an item of BatchMessage
+    """
+
+    project_name: Optional[str]
+    entity_id: str
+    secondary_id: str
+    name: str
+    result: Union[Literal["passed", "failed"], Any]
+    config: Dict[str, Any]
+    details: Dict[str, Any]
+
+
+@dataclasses.dataclass
+class GuardrailBatchMessage(BaseMessage):
+    batch: List[GuardrailBatchItemMessage]
+    supports_batching: bool = True
+
+    def as_payload_dict(self) -> Dict[str, Any]:
+        data = super().as_payload_dict()
+        data.pop("supports_batching")
+        return data
 
 
 @dataclasses.dataclass

@@ -20,8 +20,8 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record Guardrail(
-        @JsonView( {
-                Guardrail.View.Public.class, Guardrail.View.Write.class}) UUID id,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) @JsonView( {
+                Guardrail.View.Public.class}) UUID id,
 
         // entity (trace or span) id
         @JsonView({
