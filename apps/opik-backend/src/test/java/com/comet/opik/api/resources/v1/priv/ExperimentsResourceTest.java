@@ -44,6 +44,7 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.DatasetEventInfoHolder;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -2911,7 +2912,8 @@ class ExperimentsResourceTest {
                             .forClass(ExperimentsDeleted.class);
                     Mockito.verify(defaultEventBus).post(experimentCaptor.capture());
 
-                    assertThat(experimentCaptor.getValue().datasetInfo()).isEqualTo(datasetIds);
+                    assertThat(experimentCaptor.getValue().datasetInfo().stream().map(DatasetEventInfoHolder::datasetId)
+                            .collect(toSet())).isEqualTo(datasetIds);
                 }
             }
 
