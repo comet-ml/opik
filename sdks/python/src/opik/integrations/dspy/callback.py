@@ -7,7 +7,7 @@ from opik import types, opik_context, context_storage
 from opik.api_objects import helpers, span, trace, opik_client
 from opik.decorator import error_info_collector
 
-ContextType = Union[span.SpanData, trace.TraceData]
+SpanOrTraceData = Union[span.SpanData, trace.TraceData]
 
 
 class OpikCallback(dspy_callback.BaseCallback):
@@ -33,14 +33,14 @@ class OpikCallback(dspy_callback.BaseCallback):
         inputs: Dict[str, Any],
     ) -> None:
         # First we check the callback's context
-        if current_span_data := self._context_storage.top_span_data():
+        if (current_span_data := self._context_storage.top_span_data()) is not None:
             self._attach_span_to_existing_span(
                 call_id=call_id,
                 current_span_data=current_span_data,
                 instance=instance,
                 inputs=inputs,
             )
-        elif current_trace_data := self._context_storage.get_trace_data():
+        elif (current_trace_data := self._context_storage.get_trace_data()) is not None:
             self._attach_span_to_existing_trace(
                 call_id=call_id,
                 current_trace_data=current_trace_data,
@@ -48,14 +48,14 @@ class OpikCallback(dspy_callback.BaseCallback):
                 inputs=inputs,
             )
         # Callback's context is empty, we check opik's context
-        elif current_span_data := opik_context.get_current_span_data():
+        elif (current_span_data := opik_context.get_current_span_data()) is not None:
             self._attach_span_to_existing_span(
                 call_id=call_id,
                 current_span_data=current_span_data,
                 instance=instance,
                 inputs=inputs,
             )
-        elif current_trace_data := opik_context.get_current_trace_data():
+        elif (current_trace_data := opik_context.get_current_trace_data()) is not None:
             self._attach_span_to_existing_trace(
                 call_id=call_id,
                 current_trace_data=current_trace_data,
@@ -263,7 +263,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         """Sends pending Opik data to the backend"""
         self._opik_client.flush()
 
-    def _set_current_context_data(self, value: ContextType) -> None:
+    def _set_current_context_data(self, value: SpanOrTraceData) -> None:
         if isinstance(value, span.SpanData):
             self._context_storage.add_span_data(value)
         elif isinstance(value, trace.TraceData):
@@ -271,7 +271,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         else:
             raise ValueError(f"Invalid context type: {type(value)}")
 
-    def _get_current_context_data(self) -> Optional[ContextType]:
+    def _get_current_context_data(self) -> Optional[SpanOrTraceData]:
         if span_data := self._context_storage.top_span_data():
             return span_data
         return self._context_storage.get_trace_data()
