@@ -439,7 +439,8 @@ class ExperimentDAO {
                 .bind("dataset_id", experiment.datasetId())
                 .bind("name", experiment.name())
                 .bind("metadata", getStringOrDefault(experiment.metadata()))
-                .bind("type", Optional.ofNullable(experiment.type()).orElse(ExperimentType.REGULAR).getValue());
+                .bind("type", Optional.ofNullable(experiment.type()).orElse(ExperimentType.REGULAR).getValue())
+                .bind("optimization_id", experiment.optimizationId() != null ? experiment.optimizationId() : "");
 
         if (experiment.promptVersion() != null) {
             statement.bind("prompt_version_id", experiment.promptVersion().id());
@@ -465,12 +466,6 @@ class ExperimentDAO {
         } else {
             statement.bind("prompt_ids", new UUID[]{});
             statement.bind("prompt_version_ids", new UUID[]{});
-        }
-
-        if (experiment.optimizationId() != null) {
-            statement.bind("optimization_id", experiment.optimizationId());
-        } else {
-            statement.bindNull("optimization_id", UUID.class);
         }
 
         return makeFluxContextAware((userName, workspaceId) -> {

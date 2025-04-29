@@ -293,7 +293,7 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var expectedExperiment = generateExperiment();
+            var expectedExperiment = generateExperiment().toBuilder().optimizationId(null).build();
 
             createAndAssert(expectedExperiment, okApikey, workspaceName);
 
