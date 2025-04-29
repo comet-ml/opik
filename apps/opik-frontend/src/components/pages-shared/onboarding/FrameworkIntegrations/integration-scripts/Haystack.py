@@ -19,4 +19,4 @@ messages = [
     ChatMessage.from_user("Write a haiku about AI engineering."),
 ]
 response = pipe.run(data={"prompt_builder": {"template": messages}})
-print(response["llm"]["replies"][0].content)
+print(response["llm"]["replies"][0].text)

@@ -3,9 +3,10 @@ openai
 boto3
 dspy
 google-genai
-haystack
+haystack-ai
 langchain
 langgraph
 llama_index
+llama-index-callbacks-opik
 langchain_openai
 ragas
