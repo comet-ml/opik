@@ -2,7 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
-import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.google.inject.ImplementedBy;
@@ -60,7 +59,6 @@ public interface ProjectMetricsDAO {
 class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private final @NonNull TransactionTemplateAsync template;
-    private final @NonNull OpikConfiguration configuration;
 
     private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
             TimeInterval.WEEKLY, "toIntervalWeek(1)",
@@ -76,15 +74,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                                 AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
                             NULL) AS duration
-                FROM traces <final>
+                FROM traces final
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 AND start_time >= parseDateTime64BestEffort(:start_time, 9)
                 AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
-                <if(!final)>
-                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
-                <endif>
             )
             SELECT <bucket> AS bucket,
                    arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration
@@ -118,28 +112,20 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 SELECT t.start_time,
                         fs.name,
                         fs.value
-                FROM feedback_scores fs <final>
+                FROM feedback_scores fs final
                 JOIN (
                     SELECT
                         id,
                         start_time
-                    FROM traces <final>
+                    FROM traces final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     AND start_time >= parseDateTime64BestEffort(:start_time, 9)
                     AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
-                    <if(!final)>
-                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                    <endif>
                 ) t ON t.id = fs.entity_id
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 AND entity_type = 'trace'
-                <if(!final)>
-                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                LIMIT 1 BY entity_id, name
-                <endif>
             )
             SELECT <bucket> AS bucket,
                     name,
@@ -162,27 +148,19 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     SELECT
                         start_time,
                         id
-                    FROM traces <final>
+                    FROM traces final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     AND start_time >= parseDateTime64BestEffort(:start_time, 9)
                     AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
-                    <if(!final)>
-                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                    <endif>
                 ) t
                 JOIN (
                     SELECT
                         trace_id,
                         usage
-                    FROM spans <final>
+                    FROM spans final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                    <if(!final)>
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                    <endif>
                 ) s ON s.trace_id = t.id
                 ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
             )
@@ -206,27 +184,19 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     SELECT
                         start_time,
                         id
-                    FROM traces <final>
+                    FROM traces final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     AND start_time >= parseDateTime64BestEffort(:start_time, 9)
                     AND start_time \\<= parseDateTime64BestEffort(:end_time, 9)
-                    <if(!final)>
-                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                    <endif>
                 ) t
                 JOIN (
                     SELECT
                         trace_id,
                         total_estimated_cost
-                    FROM spans <final>
+                    FROM spans final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                    <if(!final)>
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                    <endif>
                 ) s ON s.trace_id = t.id
             )
             SELECT <bucket> AS bucket,
@@ -249,7 +219,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                                 AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
                             NULL) AS duration
-                FROM traces <final>
+                FROM traces final
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 AND start_time >= parseDateTime64BestEffort(:start_time, 9)
@@ -364,10 +334,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .add("fill_from", wrapWeekly(request.interval(),
                         "toStartOfInterval(parseDateTimeBestEffort(:start_time), %s)"
                                 .formatted(intervalToSql(request.interval()))));
-
-        if (configuration.isEnableFinal()) {
-            template.add("final", "final");
-        }
 
         var statement = connection.createStatement(template.render())
                 .bind("project_id", projectId)
