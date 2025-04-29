@@ -93,7 +93,7 @@ function Test-ContainersStatus {
 function Send-InstallReport {
     param (
         [string]$Uuid,
-        [string]$EventCompleted = $null,   # Pass "true" to send opik_install_completed
+        [string]$EventCompleted = $null,   # Pass "true" to send opik_os_install_completed
         [string]$StartTime = $null         # Optional ISO 8601 format
     )
 
@@ -115,25 +115,28 @@ function Send-InstallReport {
     $Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
 
     if ($EventCompleted -eq "true") {
-        $EventType = "opik_install_completed"
+
+        $EventType = "opik_os_install_completed"
         $EndTime = $Timestamp
 
         $Payload = @{
             anonymous_id = $Uuid
             event_type   = $EventType
             event_properties = @{
-                start_time = $StartTime
-                end_time   = $EndTime
+                start_time  = $StartTime
+                end_time    = $EndTime
+                script_type = "ps1"
             }
         }
     } else {
-        $EventType = "opik_install_started"
+        $EventType = "opik_os_install_started"
 
         $Payload = @{
             anonymous_id = $Uuid
             event_type   = $EventType
             event_properties = @{
                 start_time = $StartTime
+                script_type = "ps1"
             }
         }
     }
@@ -148,7 +151,7 @@ function Send-InstallReport {
         return
     }
 
-    if ($EventType -eq "opik_install_completed") {
+    if ($EventType -eq "opik_os_install_completed") {
         New-Item -ItemType File -Path $InstallMarkerFile -Force | Out-Null
         if ($DebugMode) { Write-Host "[DEBUG] Post-install report sent successfully." }
     } else {
