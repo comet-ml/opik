@@ -7,11 +7,7 @@ from opik import jsonable_encoder
 
 def register() -> None:
     def encoder_extension(obj: genai_types.Blob) -> Union[str, Dict[str, Any]]:
-        if (
-            obj.mime_type is not None
-            and obj.data is not None
-            and obj.mime_type.startswith("image")
-        ):
+        if obj.mime_type is not None and obj.data is not None:
             return {
                 "data": base64.b64encode(obj.data).decode("utf-8"),
                 "mime_type": obj.mime_type,

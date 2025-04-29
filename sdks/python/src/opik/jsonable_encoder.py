@@ -1,3 +1,4 @@
+import base64
 import dataclasses
 import datetime as dt
 import logging
@@ -59,6 +60,8 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
             return datetime_utils.serialize_datetime(obj)
         if isinstance(obj, dt.date):
             return str(obj)
+        if isinstance(obj, bytes):
+            return base64.b64encode(obj).decode("utf-8")
         if isinstance(obj, dict):
             encoded_dict = {}
             allowed_keys = set(obj.keys())
