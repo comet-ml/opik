@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.Optimization;
+import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
@@ -24,7 +25,10 @@ public class OptimizationResourceClient {
     private final PodamFactory podamFactory;
 
     public Optimization.OptimizationBuilder createPartialOptimization() {
-        return podamFactory.manufacturePojo(Optimization.class).toBuilder();
+        return podamFactory.manufacturePojo(Optimization.class).toBuilder()
+                .status(OptimizationStatus.RUNNING)
+                .feedbackScores(null)
+                .numTrials(1L);
     }
 
     public UUID create(Optimization optimization, String apiKey, String workspaceName) {
