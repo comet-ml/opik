@@ -44,7 +44,7 @@ class GuardrailsServiceImpl implements GuardrailsService {
         Map<String, List<Guardrail>> guardrailsPerProject = guardrails
                 .stream()
                 .map(guardrail -> {
-                    UUID id = guardrail.id() == null ? idGenerator.generateId() : guardrail.id();
+                    UUID id = idGenerator.generateId();
                     IdGenerator.validateVersion(guardrail.entityId(), entityType.getType()); // validate trace id
 
                     return guardrail.toBuilder()

@@ -63,12 +63,12 @@ const AttachmentPreviewDialog: React.FC<AttachmentPreviewProps> = ({
 
   const renderImageContent = () => {
     return (
-      <div className="flex h-[80vh] w-full overflow-auto">
+      <div className="flex h-[80vh] w-full">
         <img
           src={url}
           loading="lazy"
           alt={name}
-          className="m-auto max-w-none"
+          className="m-auto max-h-full max-w-full object-contain"
         />
       </div>
     );

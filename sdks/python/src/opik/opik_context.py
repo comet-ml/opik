@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from opik import llm_usage
 from opik.api_objects import span, trace
+from opik.api_objects.attachment import Attachment
 from opik.types import DistributedTraceHeadersDict, FeedbackScoreDict, LLMProvider
 
 from . import context_storage, exceptions
@@ -56,6 +57,7 @@ def update_current_span(
     model: Optional[str] = None,
     provider: Optional[Union[str, LLMProvider]] = None,
     total_cost: Optional[float] = None,
+    attachments: Optional[List[Attachment]] = None,
 ) -> None:
     """
     Update the current span with the provided parameters. This method is usually called within a tracked function.
@@ -67,15 +69,16 @@ def update_current_span(
         metadata: The metadata of the span.
         tags: The tags of the span.
         usage: Usage data for the span. In order for input, output and total tokens to be visible in the UI,
-            the usage must contain OpenAI-formatted keys (they can be passed additionaly to original usage on the top level of the dict):  prompt_tokens, completion_tokens and total_tokens.
+            the usage must contain OpenAI-formatted keys (they can be passed additionally to the original usage on the top level of the dict): prompt_tokens, completion_tokens and total_tokens.
             If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
             format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
         feedback_scores: The feedback scores of the span.
         model: The name of LLM (in this case type parameter should be == llm)
         provider: The provider of LLM. You can find providers officially supported by Opik for cost tracking
-            in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
-            If your provider not in the list, you can still specify it but the cost tracking will not be available
+            in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our GitHub - https://github.com/comet-ml/opik.
+            If your provider is not in the list, you can still specify it, but the cost tracking will not be available
         total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
+        attachments: The list of attachments to be uploaded to the span.
     """
     new_params = {
         "name": name,
@@ -88,6 +91,7 @@ def update_current_span(
         "model": model,
         "provider": provider,
         "total_cost": total_cost,
+        "attachments": attachments,
     }
     current_span_data = context_storage.top_span_data()
     if current_span_data is None:
@@ -104,6 +108,7 @@ def update_current_trace(
     tags: Optional[List[str]] = None,
     feedback_scores: Optional[List[FeedbackScoreDict]] = None,
     thread_id: Optional[str] = None,
+    attachments: Optional[List[Attachment]] = None,
 ) -> None:
     """
     Update the current trace with the provided parameters. This method is usually called within a tracked function.
@@ -117,6 +122,7 @@ def update_current_trace(
         feedback_scores: The feedback scores of the trace.
         thread_id: Used to group multiple traces into a thread.
             The identifier is user-defined and has to be unique per project.
+        attachments: The list of attachments to be uploaded to the trace.
     """
     new_params = {
         "name": name,
@@ -126,6 +132,7 @@ def update_current_trace(
         "tags": tags,
         "feedback_scores": feedback_scores,
         "thread_id": thread_id,
+        "attachments": attachments,
     }
     current_trace_data = context_storage.get_trace_data()
     if current_trace_data is None:
