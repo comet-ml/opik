@@ -16,6 +16,8 @@ def broken_links():
                 "comet" in row["url"].lower()
                 or "ferndocs" in row["url"].lower()
                 or "opik" in row["url"].lower()
+            ) and (
+                "~explorer" not in row["parent"].lower()
             ):
                 broken_links.append(
                     {
