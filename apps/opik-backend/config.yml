@@ -363,5 +363,5 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Python evaluator is enabled
   pythonEvaluatorEnabled: ${TOGGLE_PYTHON_EVALUATOR_ENABLED:-"true"}
-  guardrailsEnabled: ${TOGGLE_GUARDRAILS_ENABLED:-"true"}
+  guardrailsEnabled: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
 
