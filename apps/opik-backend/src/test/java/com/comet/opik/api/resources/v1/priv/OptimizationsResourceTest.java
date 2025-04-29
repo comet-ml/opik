@@ -11,6 +11,7 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.OptimizationCreated;
+import com.comet.opik.api.events.OptimizationsDeleted;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -282,6 +283,26 @@ class OptimizationsResourceTest {
                     .isEqualTo(optimization);
         }
 
+    }
+
+    @Test
+    @DisplayName("Delete optimizers by ids")
+    void deleteByIds() {
+        Mockito.reset(defaultEventBus);
+
+        var id = optimizationResourceClient.create(API_KEY, TEST_WORKSPACE);
+
+        // verify optimization was created
+        optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE, 200);
+
+        // delete
+        optimizationResourceClient.delete(Set.of(id), API_KEY, TEST_WORKSPACE);
+
+        // verify optimization was deleted
+        optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE, 404);
+
+        ArgumentCaptor<OptimizationsDeleted> experimentCaptor = ArgumentCaptor.forClass(OptimizationsDeleted.class);
+        Mockito.verify(defaultEventBus).post(experimentCaptor.capture());
     }
 
 }

@@ -5,5 +5,5 @@ import lombok.Builder;
 import java.util.UUID;
 
 @Builder
-record ExperimentDatasetId(UUID datasetId) {
+public record DatasetIdHolder(UUID datasetId) {
 }

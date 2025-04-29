@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationSearchCriteria;
 import com.comet.opik.domain.EntityType;
@@ -119,5 +120,19 @@ public class OptimizationsResource {
                 id, optimization.name(), optimization.datasetName(), workspaceId);
 
         return Response.created(uri).build();
+    }
+
+    @POST
+    @Path("/delete")
+    @Operation(operationId = "deleteOptimizationsById", summary = "Delete optimizations by id", description = "Delete optimizations by id", responses = {
+            @ApiResponse(responseCode = "204", description = "No content")})
+    public Response deleteOptimizationsById(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DeleteIdsHolder.class))) @NotNull @Valid DeleteIdsHolder request) {
+        log.info("Deleting optimizations, count '{}'", request.ids().size());
+        optimizationService.delete(request.ids())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Deleted optimizations, count '{}'", request.ids().size());
+        return Response.noContent().build();
     }
 }

@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.resources.utils.TestUtils;
@@ -11,6 +12,7 @@ import org.testcontainers.shaded.com.google.common.net.HttpHeaders;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,6 +63,17 @@ public class OptimizationResourceClient {
             }
 
             return null;
+        }
+    }
+
+    public void delete(Set<UUID> ids, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(new DeleteIdsHolder(ids)))) {
+            assertThat(response.getStatus()).isEqualTo(204);
         }
     }
 }

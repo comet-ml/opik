@@ -71,7 +71,7 @@ public class ExperimentService {
                     .build())
                     .map(datasetIds -> datasetIds
                             .stream()
-                            .map(ExperimentDatasetId::datasetId)
+                            .map(DatasetIdHolder::datasetId)
                             .collect(Collectors.toSet()))
                     .flatMap(datasetIds -> makeMonoContextAware((userName, workspaceId) -> {
 
@@ -404,12 +404,12 @@ public class ExperimentService {
     public Mono<Void> delete(@NonNull Set<UUID> ids) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
 
-        return experimentDAO.getExperimentsDatasetIds(ids)
+        return experimentDAO.getRegularExperimentsDatasetIds(ids)
                 .flatMap(experimentDatasetIds -> Mono.deferContextual(ctx -> experimentDAO.delete(ids)
                         .then(Mono.defer(() -> experimentItemDAO.deleteByExperimentIds(ids)))
                         .doOnSuccess(unused -> eventBus.post(new ExperimentsDeleted(
                                 experimentDatasetIds.stream()
-                                        .map(ExperimentDatasetId::datasetId)
+                                        .map(DatasetIdHolder::datasetId)
                                         .collect(Collectors.toSet()),
                                 ctx.get(RequestContext.WORKSPACE_ID),
                                 ctx.get(RequestContext.USER_NAME))))))

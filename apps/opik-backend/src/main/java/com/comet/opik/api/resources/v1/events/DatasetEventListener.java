@@ -5,8 +5,10 @@ import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.api.events.OptimizationCreated;
+import com.comet.opik.api.events.OptimizationsDeleted;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.ExperimentService;
+import com.comet.opik.domain.OptimizationService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.events.BaseEvent;
 import com.google.common.eventbus.Subscribe;
@@ -30,11 +32,14 @@ public class DatasetEventListener {
 
     private final DatasetService datasetService;
     private final ExperimentService experimentService;
+    private final OptimizationService optimizationService;
 
     @Inject
-    public DatasetEventListener(DatasetService datasetService, ExperimentService experimentService) {
+    public DatasetEventListener(DatasetService datasetService, ExperimentService experimentService,
+            OptimizationService optimizationService) {
         this.datasetService = datasetService;
         this.experimentService = experimentService;
+        this.optimizationService = optimizationService;
     }
 
     @Subscribe
@@ -69,13 +74,26 @@ public class DatasetEventListener {
     public void onExperimentsDeleted(ExperimentsDeleted event) {
 
         if (event.datasetIds().isEmpty()) {
-            log.info("No datasets found for event '{}'", event);
+            log.info("No datasets found for ExperimentsDeleted event '{}'", event);
             return;
         }
 
         Set<UUID> updatedDatasets = updateAndGetDatasetsWithExperiments(event);
 
         updateDatasetsWithoutExperiments(event, updatedDatasets);
+    }
+
+    @Subscribe
+    public void onOptimizationsDeleted(OptimizationsDeleted event) {
+
+        if (event.datasetIds().isEmpty()) {
+            log.info("No datasets found for OptimizationsDeleted event '{}'", event);
+            return;
+        }
+
+        Set<UUID> updatedDatasets = updateAndGetDatasetsWithOptimizations(event);
+
+        updateDatasetsWithoutOptimizations(event, updatedDatasets);
     }
 
     private Set<UUID> updateAndGetDatasetsWithExperiments(ExperimentsDeleted event) {
@@ -122,6 +140,58 @@ public class DatasetEventListener {
                                             datasets);
                                 } else {
                                     log.info("Updated dataset '{}' with last experiment created time", datasets);
+                                }
+                            });
+
+                })
+                .contextWrite(ctx -> setContext(event, ctx))
+                .block();
+    }
+
+    private Set<UUID> updateAndGetDatasetsWithOptimizations(OptimizationsDeleted event) {
+        return optimizationService.getMostRecentCreatedOptimizationFromDatasets(event.datasetIds())
+                .collect(Collectors.toSet())
+                .flatMap(datasets -> {
+                    log.info("Updating datasets '{}' with last optimization created time", datasets);
+
+                    if (datasets.isEmpty()) {
+                        return Mono.just(new HashSet<UUID>());
+                    }
+
+                    return datasetService.recordOptimizations(datasets)
+                            .doFinally(signalType -> {
+                                if (signalType == SignalType.ON_ERROR) {
+                                    log.error("Failed to update datasets '{}' with last optimization created time",
+                                            datasets);
+                                } else {
+                                    log.info("Updated datasets '{}' with last optimization created time", datasets);
+                                }
+                            })
+                            .then(Mono.just(datasets.stream().map(DatasetLastOptimizationCreated::datasetId)
+                                    .collect(Collectors.toSet())));
+                })
+                .contextWrite(ctx -> setContext(event, ctx))
+                .block();
+    }
+
+    private void updateDatasetsWithoutOptimizations(OptimizationsDeleted event, Set<UUID> updatedDatasets) {
+        Flux.fromIterable(SetUtils.difference(event.datasetIds(), updatedDatasets))
+                .map(datasetId -> new DatasetLastOptimizationCreated(datasetId, null))
+                .collect(Collectors.toSet())
+                .flatMap(datasets -> {
+                    log.info("Updating datasets '{}' with last optimization created time null", datasets);
+
+                    if (datasets.isEmpty()) {
+                        return Mono.empty();
+                    }
+
+                    return datasetService.recordOptimizations(datasets)
+                            .doFinally(signalType -> {
+                                if (signalType == SignalType.ON_ERROR) {
+                                    log.error("Failed to update dataset '{}' with last optimization created time null",
+                                            datasets);
+                                } else {
+                                    log.info("Updated dataset '{}' with last optimization created time", datasets);
                                 }
                             });
 

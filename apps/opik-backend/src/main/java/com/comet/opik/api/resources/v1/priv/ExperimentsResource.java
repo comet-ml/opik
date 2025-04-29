@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemSearchCriteria;
@@ -9,7 +10,6 @@ import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
-import com.comet.opik.api.ExperimentsDelete;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.resources.v1.priv.validate.IdParamsValidator;
@@ -178,7 +178,7 @@ public class ExperimentsResource {
     @Operation(operationId = "deleteExperimentsById", summary = "Delete experiments by id", description = "Delete experiments by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content")})
     public Response deleteExperimentsById(
-            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentsDelete.class))) @NotNull @Valid ExperimentsDelete request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = DeleteIdsHolder.class))) @NotNull @Valid DeleteIdsHolder request) {
 
         log.info("Deleting experiments, count '{}'", request.ids());
         experimentService.delete(request.ids())

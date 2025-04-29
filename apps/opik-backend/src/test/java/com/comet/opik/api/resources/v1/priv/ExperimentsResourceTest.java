@@ -4,13 +4,13 @@ import com.comet.opik.api.Comment;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
 import com.comet.opik.api.ExperimentStreamRequest;
-import com.comet.opik.api.ExperimentsDelete;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatch;
@@ -390,7 +390,7 @@ class ExperimentsResourceTest {
 
             Set<UUID> ids = experiments.stream().map(Experiment::id).collect(toSet());
 
-            var deleteRequest = new ExperimentsDelete(ids);
+            var deleteRequest = new DeleteIdsHolder(ids);
 
             try (var actualResponse = client.target(getExperimentsPath())
                     .path("delete")
@@ -636,7 +636,7 @@ class ExperimentsResourceTest {
 
             Set<UUID> ids = experiments.stream().map(Experiment::id).collect(toSet());
 
-            var deleteRequest = new ExperimentsDelete(ids);
+            var deleteRequest = new DeleteIdsHolder(ids);
 
             try (var actualResponse = client.target(getExperimentsPath())
                     .path("delete")
@@ -2901,7 +2901,7 @@ class ExperimentsResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(new ExperimentsDelete(ids)))) {
+                    .post(Entity.json(new DeleteIdsHolder(ids)))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
 
