@@ -21,6 +21,8 @@ export const COLUMN_COMMENTS_ID = "comments";
 export const COLUMN_GUARDRAILS_ID = "guardrails";
 export const COLUMN_CREATED_AT_ID = "created_at";
 
+export const COLUMN_GUARDRAIL_STATISTIC_ID = "guardrails_failed_count";
+
 export enum COLUMN_TYPE {
   string = "string",
   number = "number",
