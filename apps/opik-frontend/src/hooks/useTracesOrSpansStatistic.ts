@@ -67,6 +67,7 @@ export default function useTracesOrSpansStatistic(
   );
 
   const data = !isTracesData ? spansData : tracesData;
+
   const isError = !isTracesData ? isSpansError : isTracesError;
   const isPending = !isTracesData ? isSpansPending : isTracesPending;
   const isLoading = !isTracesData ? isSpansLoading : isTracesLoading;

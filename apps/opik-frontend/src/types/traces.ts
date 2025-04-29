@@ -46,7 +46,7 @@ export interface BaseTraceData {
   usage?: UsageData;
   total_estimated_cost?: number;
   error_info?: BaseTraceDataErrorInfo;
-  guardrail_validations?: GuardrailValidation[];
+  guardrails_validations?: GuardrailValidation[];
 }
 
 export interface Trace extends BaseTraceData {

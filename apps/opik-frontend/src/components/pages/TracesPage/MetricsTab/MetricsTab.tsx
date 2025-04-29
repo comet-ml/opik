@@ -250,7 +250,6 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
                   intervalEnd={intervalEnd}
                   projectId={projectId}
                   disableLoadingData={!isValidDays}
-                  renderValue={renderCostTooltipValue}
                   chartType="bar"
                 />
               </div>

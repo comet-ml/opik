@@ -46,6 +46,7 @@ const predefinedColorMap = {
   completion_tokens: TAG_VARIANTS_COLOR_MAP.turquoise,
   prompt_tokens: TAG_VARIANTS_COLOR_MAP.burgundy,
   total_tokens: TAG_VARIANTS_COLOR_MAP.purple,
+  failed: TAG_VARIANTS_COLOR_MAP.pink,
 };
 
 const METRIC_CHART_TYPE = {

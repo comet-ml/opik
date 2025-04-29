@@ -172,14 +172,15 @@ const ProjectsPage: React.FunctionComponent = () => {
               id: COLUMN_GUARDRAILS_ID,
               label: "Guardrails",
               type: COLUMN_TYPE.guardrails,
-              /// TODO should be redefined once BE done
               accessorFn: (row: ProjectWithStatistic) =>
-                row.failed_guardrails && isNumber(row.failed_guardrails)
-                  ? `${row.failed_guardrails} failed`
+                row.guardrails_failed_count &&
+                isNumber(row.guardrails_failed_count)
+                  ? `${row.guardrails_failed_count} failed`
                   : "-",
             },
           ]
         : []),
+
       {
         id: "last_updated_at",
         label: "Last updated",
