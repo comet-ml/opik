@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, cast
 
 from . import base_batcher
 from .. import messages
@@ -10,7 +10,7 @@ class CreateSpanMessageBatcher(base_batcher.BaseBatcher):
     ) -> messages.CreateSpansBatchMessage:
         return messages.CreateSpansBatchMessage(batch=self._accumulated_messages)  # type: ignore
 
-    def add(self, message: messages.CreateSpansBatchMessage) -> None:  # type: ignore
+    def add(self, message: messages.CreateSpanMessage) -> None:  # type: ignore
         return super().add(message)
 
 
@@ -20,7 +20,7 @@ class CreateTraceMessageBatcher(base_batcher.BaseBatcher):
     ) -> messages.CreateTraceBatchMessage:
         return messages.CreateTraceBatchMessage(batch=self._accumulated_messages)  # type: ignore
 
-    def add(self, message: messages.CreateTraceBatchMessage) -> None:  # type: ignore
+    def add(self, message: messages.CreateTraceMessage) -> None:  # type: ignore
         return super().add(message)
 
 
@@ -84,3 +84,21 @@ class AddTraceFeedbackScoresBatchMessageBatcher(
             batch=self._accumulated_messages,  # type: ignore
             supports_batching=False,
         )
+
+
+class GuardrailBatchMessageBatcher(base_batcher.BaseBatcher):
+    def _create_batch_from_accumulated_messages(
+        self,
+    ) -> messages.GuardrailBatchMessage:  # type: ignore
+        batch = []
+
+        for batch_message in self._accumulated_messages:
+            batch_of_message_item = cast(
+                messages.GuardrailBatchMessage, batch_message
+            ).batch
+            batch.extend(batch_of_message_item)
+
+        return messages.GuardrailBatchMessage(batch=batch, supports_batching=False)  # type: ignore
+
+    def add(self, message: messages.GuardrailBatchMessage) -> None:  # type: ignore
+        return super().add(message)
