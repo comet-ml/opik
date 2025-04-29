@@ -63,7 +63,7 @@ The documentation is made up of two main parts:
 
 The documentation website is built with [Fern](https://www.buildwithfern.com/) and is located in `apps/opik-documentation/documentation`.
 
-In order to run the documentation website locally, you need to have Node.js and npm installed. You can follow this guide to install Node.js and npm [here] (https://docs.npmjs.com/downloading-and-installing-node-js-and-npm/).
+In order to run the documentation website locally, you need to have Node.js and npm installed. You can follow this guide to install Node.js and npm [here](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm/).
 
 Once installed, you can run the documentation locally using the following command:
 
