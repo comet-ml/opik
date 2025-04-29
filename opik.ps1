@@ -114,19 +114,7 @@ function Send-InstallReport {
 
     $Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
 
-    $frontendPort = docker inspect -f '{{ (index (index .NetworkSettings.Ports "5173/tcp") 0).HostPort }}' opik-frontend-1 2>$null
-    if (-not $frontendPort) { $frontendPort = 5173 }
-    $uiUrl = "http://localhost:$frontendPort"
-
     if ($EventCompleted -eq "true") {
-
-        try {
-            $response = Invoke-WebRequest -Uri "$uiUrl/api/is-alive/ver" -UseBasicParsing -TimeoutSec 2
-            if ($response.StatusCode -eq 200) {
-                $json = $response.Content | ConvertFrom-Json
-                $Opikversion = $json.version
-            }
-        } catch {}
 
         $EventType = "opik_os_install_completed"
         $EndTime = $Timestamp
@@ -138,7 +126,6 @@ function Send-InstallReport {
                 start_time  = $StartTime
                 end_time    = $EndTime
                 script_type = "ps1"
-                opik_os_version = $Opikversion
             }
         }
     } else {

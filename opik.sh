@@ -233,16 +233,6 @@ send_install_report() {
 
   if [ "$event_completed" = "true" ]; then
 
-    if [ "$HTTP_TOOL" = "curl" ]; then
-      frontend_port=$(docker inspect -f '{{ (index (index .NetworkSettings.Ports "5173/tcp") 0).HostPort }}' opik-frontend-1 2>/dev/null)
-      ui_url="http://localhost:${frontend_port:-5173}"
-      opik_version=$(curl -s "$ui_url/api/is-alive/ver" | grep -o '"version":"[^"]*"' | sed 's/.*"version":"\([^"]*\)"/\1/')
-    else
-      frontend_port=$(docker inspect -f '{{ (index (index .NetworkSettings.Ports "5173/tcp") 0).HostPort }}' opik-frontend-1 2>/dev/null)
-      ui_url="http://localhost:${frontend_port:-5173}"
-      opik_version=$(wget -qO- "$ui_url/api/is-alive/ver" | grep -o '"version":"[^"]*"' | sed 's/.*"version":"\([^"]*\)"/\1/')
-    fi
-
     event_type="opik_os_install_completed"
     end_time="$timestamp"
     json_payload=$(cat <<EOF
@@ -252,8 +242,7 @@ send_install_report() {
   "event_properties": {
     "start_time": "$start_time",
     "end_time": "$end_time",
-    "script_type": "sh",
-    "opik_os_version": "$opik_version"
+    "script_type": "sh"
   }
 }
 EOF
