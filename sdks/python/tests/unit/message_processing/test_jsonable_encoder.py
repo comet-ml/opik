@@ -1,3 +1,4 @@
+import base64
 import dataclasses
 from datetime import date, datetime, timezone
 from threading import Lock
@@ -161,4 +162,4 @@ def test_jsonable_encoder__non_serializable_lock_inside_dataclass__lock_converte
 def test_jsonable_encoder__non_serializable_to_text__bytes():
     data = b"deadbeef"
 
-    assert str(data) == jsonable_encoder.encode(data)
+    assert base64.b64encode(data).decode("utf-8") == jsonable_encoder.encode(data)
