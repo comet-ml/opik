@@ -41,7 +41,7 @@ public interface OptimizationDAO {
 
     Mono<Optimization> getById(UUID id);
 
-    Mono<List<DatasetIdHolder>> getOptimizationDatasetIds(Set<UUID> ids);
+    Mono<List<DatasetEventInfoHolder>> getOptimizationDatasetIds(Set<UUID> ids);
 
     Mono<Long> delete(Set<UUID> ids);
 
@@ -288,7 +288,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     @Override
-    public Mono<List<DatasetIdHolder>> getOptimizationDatasetIds(Set<UUID> ids) {
+    public Mono<List<DatasetEventInfoHolder>> getOptimizationDatasetIds(Set<UUID> ids) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
 
         return Mono.from(connectionFactory.create())
@@ -378,8 +378,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
         });
     }
 
-    private Publisher<DatasetIdHolder> mapDatasetId(Result result) {
-        return result.map((row, rowMetadata) -> new DatasetIdHolder(row.get("dataset_id", UUID.class)));
+    private Publisher<DatasetEventInfoHolder> mapDatasetId(Result result) {
+        return result.map((row, rowMetadata) -> new DatasetEventInfoHolder(row.get("dataset_id", UUID.class), null));
     }
 
     private Flux<? extends Result> delete(Set<UUID> ids, Connection connection) {

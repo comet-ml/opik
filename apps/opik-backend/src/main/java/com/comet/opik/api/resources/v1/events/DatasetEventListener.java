@@ -2,10 +2,12 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
+import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.api.events.OptimizationCreated;
 import com.comet.opik.api.events.OptimizationsDeleted;
+import com.comet.opik.domain.DatasetEventInfoHolder;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.OptimizationService;
@@ -44,13 +46,17 @@ public class DatasetEventListener {
 
     @Subscribe
     public void onExperimentCreated(ExperimentCreated event) {
-        log.info("Recording experiment for dataset '{}'", event.datasetId());
+        log.info("Recording experiment for dataset '{}', experiment type '{}'", event.datasetId(), event.type());
+        if (event.type() != ExperimentType.REGULAR) {
+            log.info("Skipping experiment type is not regular for event '{}'", event);
+            return;
+        }
 
         datasetService.recordExperiments(Set.of(new DatasetLastExperimentCreated(event.datasetId(), event.createdAt())))
                 .contextWrite(ctx -> setContext(event, ctx))
                 .block();
 
-        log.info("Recorded experiment for dataset '{}'", event.datasetId());
+        log.info("Recorded experiment for dataset '{}', experiment type '{}'", event.datasetId(), event.type());
     }
 
     @Subscribe
@@ -73,7 +79,7 @@ public class DatasetEventListener {
     @Subscribe
     public void onExperimentsDeleted(ExperimentsDeleted event) {
 
-        if (event.datasetIds().isEmpty()) {
+        if (event.datasetInfo().isEmpty()) {
             log.info("No datasets found for ExperimentsDeleted event '{}'", event);
             return;
         }
@@ -97,7 +103,8 @@ public class DatasetEventListener {
     }
 
     private Set<UUID> updateAndGetDatasetsWithExperiments(ExperimentsDeleted event) {
-        return experimentService.getMostRecentCreatedExperimentFromDatasets(event.datasetIds())
+        return experimentService
+                .getMostRecentCreatedExperimentFromDatasets(getDatasetIds(event, ExperimentType.REGULAR))
                 .collect(Collectors.toSet())
                 .flatMap(datasets -> {
                     log.info("Updating datasets '{}' with last experiment created time", datasets);
@@ -123,7 +130,7 @@ public class DatasetEventListener {
     }
 
     private void updateDatasetsWithoutExperiments(ExperimentsDeleted event, Set<UUID> updatedDatasets) {
-        Flux.fromIterable(SetUtils.difference(event.datasetIds(), updatedDatasets))
+        Flux.fromIterable(SetUtils.difference(getDatasetIds(event, ExperimentType.REGULAR), updatedDatasets))
                 .map(datasetId -> new DatasetLastExperimentCreated(datasetId, null))
                 .collect(Collectors.toSet())
                 .flatMap(datasets -> {
@@ -198,5 +205,12 @@ public class DatasetEventListener {
                 })
                 .contextWrite(ctx -> setContext(event, ctx))
                 .block();
+    }
+
+    private Set<UUID> getDatasetIds(ExperimentsDeleted event, ExperimentType type) {
+        return event.datasetInfo().stream()
+                .filter(datasetInfoHolder -> datasetInfoHolder.type() == type)
+                .map(DatasetEventInfoHolder::datasetId)
+                .collect(Collectors.toSet());
     }
 }

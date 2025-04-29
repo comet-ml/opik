@@ -2911,7 +2911,7 @@ class ExperimentsResourceTest {
                             .forClass(ExperimentsDeleted.class);
                     Mockito.verify(defaultEventBus).post(experimentCaptor.capture());
 
-                    assertThat(experimentCaptor.getValue().datasetIds()).isEqualTo(datasetIds);
+                    assertThat(experimentCaptor.getValue().datasetInfo()).isEqualTo(datasetIds);
                 }
             }
 

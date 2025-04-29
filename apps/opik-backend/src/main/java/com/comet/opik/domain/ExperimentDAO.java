@@ -395,11 +395,10 @@ class ExperimentDAO {
 
     private static final String FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS = """
             SELECT
-                distinct dataset_id
+                distinct dataset_id, type
             FROM experiments
             WHERE workspace_id = :workspace_id
             <if(experiment_ids)> AND id IN :experiment_ids <endif>
-            <if(type)> AND type = :type <endif>
             <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
@@ -786,25 +785,23 @@ class ExperimentDAO {
     }
 
     @WithSpan
-    public Mono<List<DatasetIdHolder>> getRegularExperimentsDatasetIds(Set<UUID> ids) {
+    public Mono<List<DatasetEventInfoHolder>> getExperimentsDatasetInfo(Set<UUID> ids) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     ST template = new ST(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
                     template.add("experiment_ids", ids);
-                    template.add("type", ExperimentType.REGULAR.getValue());
                     var statement = connection.createStatement(template.render());
                     statement.bind("experiment_ids", ids.toArray(UUID[]::new));
-                    statement.bind("type", ExperimentType.REGULAR.getValue());
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
-                .flatMap(this::mapDatasetId)
+                .flatMap(this::mapDatasetInfo)
                 .collectList();
     }
 
     @WithSpan
-    public Mono<List<DatasetIdHolder>> findAllDatasetIds(@NonNull DatasetCriteria criteria) {
+    public Mono<List<DatasetEventInfoHolder>> findAllDatasetIds(@NonNull DatasetCriteria criteria) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     ST template = new ST(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
@@ -817,7 +814,7 @@ class ExperimentDAO {
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
-                .flatMap(this::mapDatasetId)
+                .flatMap(this::mapDatasetInfo)
                 .collectList();
     }
 
@@ -833,8 +830,9 @@ class ExperimentDAO {
         }
     }
 
-    private Publisher<DatasetIdHolder> mapDatasetId(Result result) {
-        return result.map((row, rowMetadata) -> new DatasetIdHolder(row.get("dataset_id", UUID.class)));
+    private Publisher<DatasetEventInfoHolder> mapDatasetInfo(Result result) {
+        return result.map((row, rowMetadata) -> new DatasetEventInfoHolder(row.get("dataset_id", UUID.class),
+                ExperimentType.fromString(row.get("type", String.class))));
     }
 
     public Mono<Long> getDailyCreatedCount() {

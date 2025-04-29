@@ -118,7 +118,7 @@ class OptimizationServiceImpl implements OptimizationService {
                 .flatMap(optimizationDatasetIds -> Mono.deferContextual(ctx -> optimizationDAO.delete(ids)
                         .doOnSuccess(unused -> eventBus.post(new OptimizationsDeleted(
                                 optimizationDatasetIds.stream()
-                                        .map(DatasetIdHolder::datasetId)
+                                        .map(DatasetEventInfoHolder::datasetId)
                                         .collect(Collectors.toSet()),
                                 ctx.get(RequestContext.WORKSPACE_ID),
                                 ctx.get(RequestContext.USER_NAME))))))
