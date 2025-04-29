@@ -17,6 +17,7 @@ def _get_httpx_client(api_key: Optional[str] = None) -> httpx.Client:
         workspace=None,
         api_key=api_key,
         check_tls_certificate=config_.check_tls_certificate,
+        compress_json_requests=config_.enable_json_request_compression,
     )
 
     return client
