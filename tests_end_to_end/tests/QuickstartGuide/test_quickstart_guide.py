@@ -7,7 +7,9 @@ import allure
 
 logger = logging.getLogger(__name__)
 
-
+#TODO
+# unskip bedrock once AWS credentials set up in automation repo
+# unskip Haystack once fix to snippet is deployed to prod
 @pytest.mark.parametrize(
     "integration",
     [
