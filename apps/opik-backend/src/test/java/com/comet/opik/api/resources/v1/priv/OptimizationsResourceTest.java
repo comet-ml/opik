@@ -10,6 +10,7 @@ import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.api.events.OptimizationCreated;
 import com.comet.opik.api.events.OptimizationsDeleted;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -41,6 +42,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.testcontainers.clickhouse.ClickHouseContainer;
@@ -58,11 +62,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -303,6 +309,40 @@ class OptimizationsResourceTest {
 
         ArgumentCaptor<OptimizationsDeleted> experimentCaptor = ArgumentCaptor.forClass(OptimizationsDeleted.class);
         Mockito.verify(defaultEventBus).post(experimentCaptor.capture());
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("Update optimizer by id")
+    void updateById(OptimizationUpdate update) {
+
+        // Create optimization
+        var optimization = optimizationResourceClient.createPartialOptimization().build();
+        var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE);
+
+        // Update optimization
+        optimizationResourceClient.update(id, update, API_KEY, TEST_WORKSPACE, 204);
+
+        optimization = optimization.toBuilder().id(id)
+                .name(update.name() != null ? update.name() : optimization.name())
+                .status(update.status() != null ? update.status() : optimization.status())
+                .build();
+
+        var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE, 200);
+
+        assertThat(actualOptimization)
+                .usingRecursiveComparison()
+                .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                .isEqualTo(optimization);
+
+    }
+
+    private Stream<Arguments> updateById() {
+        return Stream.of(
+                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class)),
+                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().name(null).build()),
+                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().status(null).build()));
     }
 
 }

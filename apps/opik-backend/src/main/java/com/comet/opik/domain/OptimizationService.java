@@ -5,6 +5,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationSearchCriteria;
+import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.api.events.OptimizationCreated;
 import com.comet.opik.api.events.OptimizationsDeleted;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -33,6 +34,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
 @ImplementedBy(OptimizationServiceImpl.class)
 public interface OptimizationService {
@@ -46,6 +48,8 @@ public interface OptimizationService {
     Mono<Void> delete(@NonNull Set<UUID> ids);
 
     Flux<DatasetLastOptimizationCreated> getMostRecentCreatedOptimizationFromDatasets(Set<UUID> datasetIds);
+
+    Mono<Long> update(UUID commentId, OptimizationUpdate update);
 }
 
 @Singleton
@@ -131,6 +135,17 @@ class OptimizationServiceImpl implements OptimizationService {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(datasetIds), "Argument 'datasetIds' must not be empty");
 
         return optimizationDAO.getMostRecentCreatedExperimentFromDatasets(datasetIds);
+    }
+
+    @Override
+    public Mono<Long> update(@NonNull UUID id, @NonNull OptimizationUpdate update) {
+        if (update.name() == null && update.status() == null) {
+            return Mono.empty();
+        }
+
+        return optimizationDAO.getById(id)
+                .switchIfEmpty(Mono.error(failWithNotFound("Optimization", id)))
+                .then(Mono.defer(() -> optimizationDAO.update(id, update)));
     }
 
     private Mono<UUID> handleCreateError(Throwable throwable, UUID id) {

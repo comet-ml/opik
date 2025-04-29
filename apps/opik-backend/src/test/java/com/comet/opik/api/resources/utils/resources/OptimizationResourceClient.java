@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.utils.resources;
 import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
+import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
@@ -74,6 +75,18 @@ public class OptimizationResourceClient {
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(new DeleteIdsHolder(ids)))) {
             assertThat(response.getStatus()).isEqualTo(204);
+        }
+    }
+
+    public void update(UUID id, OptimizationUpdate update, String apiKey, String workspaceName, int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(update))) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
         }
     }
 }

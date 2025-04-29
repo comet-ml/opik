@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationSearchCriteria;
+import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.OptimizationService;
@@ -27,6 +28,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -133,6 +135,23 @@ public class OptimizationsResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Deleted optimizations, count '{}'", request.ids().size());
+        return Response.noContent().build();
+    }
+
+    @PUT
+    @Path("/{id}")
+    @Operation(operationId = "updateOptimizationsById", summary = "Update optimization by id", description = "Update optimization by id", responses = {
+            @ApiResponse(responseCode = "204", description = "No content")})
+    public Response updateOptimizationsById(@PathParam("id") UUID id,
+            @RequestBody(content = @Content(schema = @Schema(implementation = OptimizationUpdate.class))) @NotNull OptimizationUpdate request) {
+        log.info("Update optimization with id '{}', with request '{}'", id, request);
+
+        optimizationService.update(id, request)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Updates optimization with id '{}'", id);
+
         return Response.noContent().build();
     }
 }

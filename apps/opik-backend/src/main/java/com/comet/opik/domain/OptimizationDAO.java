@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
+import com.comet.opik.api.OptimizationUpdate;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -25,9 +26,11 @@ import reactor.core.publisher.SignalType;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.ExperimentDAO.getFeedbackScores;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -46,6 +49,8 @@ public interface OptimizationDAO {
     Mono<Long> delete(Set<UUID> ids);
 
     Flux<DatasetLastOptimizationCreated> getMostRecentCreatedExperimentFromDatasets(Set<UUID> datasetIds);
+
+    Mono<Long> update(UUID id, OptimizationUpdate update);
 }
 
 @Singleton
@@ -246,6 +251,28 @@ class OptimizationDAOImpl implements OptimizationDAO {
             ;
             """;
 
+    private static final String UPDATE_BY_ID = """
+            INSERT INTO optimizations (
+            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_by
+            ) SELECT
+                id,
+                dataset_id,
+                <if(name)> :name <else> name <endif> as name,
+                workspace_id,
+                objective_name,
+                <if(status)> :status <else> status <endif> as status,
+                metadata,
+                created_at,
+                created_by,
+                :user_name as last_updated_by
+            FROM optimizations
+            WHERE id = :id
+            AND workspace_id = :workspace_id
+            ORDER BY id DESC, last_updated_at DESC
+            LIMIT 1
+            ;
+            """;
+
     private static final String FIND_MOST_RECENT_CREATED_OPTIMIZATION_BY_DATASET_IDS = """
             SELECT
             	dataset_id,
@@ -334,6 +361,21 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         row.get("created_at", Instant.class))));
     }
 
+    @Override
+    public Mono<Long> update(@NonNull UUID id, @NonNull OptimizationUpdate update) {
+        log.info("Update optimization by id '{}'", id);
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> update(id, update, connection))
+                .flatMap(Result::getRowsUpdated)
+                .reduce(Long::sum)
+                .doFinally(signalType -> {
+                    if (signalType == SignalType.ON_COMPLETE) {
+                        log.info("Updated optimization by id '{}'", id);
+                    }
+                });
+    }
+
     private Publisher<? extends Result> insert(Optimization optimization, Connection connection) {
         var statement = connection.createStatement(INSERT)
                 .bind("id", optimization.id())
@@ -388,5 +430,38 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .bind("ids", ids);
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+    }
+
+    private Flux<? extends Result> update(UUID id, OptimizationUpdate update, Connection connection) {
+        ST template = buildUpdateTemplate(update);
+        var statement = createUpdateStatement(id, update, connection, template.render());
+
+        return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement));
+    }
+
+    private ST buildUpdateTemplate(OptimizationUpdate update) {
+        ST template = new ST(UPDATE_BY_ID);
+
+        Optional.ofNullable(update.name())
+                .ifPresent(name -> template.add("name", name));
+
+        Optional.ofNullable(update.status())
+                .ifPresent(status -> template.add("status", status.getValue()));
+
+        return template;
+    }
+
+    private Statement createUpdateStatement(UUID id, OptimizationUpdate update, Connection connection, String sql) {
+        Statement statement = connection.createStatement(sql);
+
+        Optional.ofNullable(update.name())
+                .ifPresent(name -> statement.bind("name", name));
+
+        Optional.ofNullable(update.status())
+                .ifPresent(status -> statement.bind("status", status.getValue()));
+
+        statement.bind("id", id);
+
+        return statement;
     }
 }
