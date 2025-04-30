@@ -4,13 +4,13 @@ import com.comet.opik.api.Comment;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
 import com.comet.opik.api.ExperimentStreamRequest;
-import com.comet.opik.api.ExperimentsDelete;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatch;
@@ -44,6 +44,7 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.DatasetEventInfoHolder;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -123,6 +124,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoresIgnoredFieldsAndSetThemToNull;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
@@ -130,7 +132,6 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
-import static com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.utils.ValidationUtils.SCALE;
@@ -293,7 +294,7 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var expectedExperiment = generateExperiment();
+            var expectedExperiment = generateExperiment().toBuilder().optimizationId(null).build();
 
             createAndAssert(expectedExperiment, okApikey, workspaceName);
 
@@ -390,7 +391,7 @@ class ExperimentsResourceTest {
 
             Set<UUID> ids = experiments.stream().map(Experiment::id).collect(toSet());
 
-            var deleteRequest = new ExperimentsDelete(ids);
+            var deleteRequest = new DeleteIdsHolder(ids);
 
             try (var actualResponse = client.target(getExperimentsPath())
                     .path("delete")
@@ -636,7 +637,7 @@ class ExperimentsResourceTest {
 
             Set<UUID> ids = experiments.stream().map(Experiment::id).collect(toSet());
 
-            var deleteRequest = new ExperimentsDelete(ids);
+            var deleteRequest = new DeleteIdsHolder(ids);
 
             try (var actualResponse = client.target(getExperimentsPath())
                     .path("delete")
@@ -2103,6 +2104,8 @@ class ExperimentsResourceTest {
                                 .usage(null)
                                 .duration(null)
                                 .totalEstimatedCost(null)
+                                .type(null)
+                                .optimizationId(null)
                                 .build();
                         // Only 2 scores per experiment is enough for this test
                         var scores = IntStream.range(0, 2)
@@ -2404,6 +2407,8 @@ class ExperimentsResourceTest {
                     .duration(null)
                     .usage(null)
                     .totalEstimatedCost(null)
+                    .type(null)
+                    .optimizationId(null)
                     .build();
 
             var expectedId = createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
@@ -2897,7 +2902,7 @@ class ExperimentsResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(new ExperimentsDelete(ids)))) {
+                    .post(Entity.json(new DeleteIdsHolder(ids)))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
 
@@ -2907,7 +2912,8 @@ class ExperimentsResourceTest {
                             .forClass(ExperimentsDeleted.class);
                     Mockito.verify(defaultEventBus).post(experimentCaptor.capture());
 
-                    assertThat(experimentCaptor.getValue().datasetIds()).isEqualTo(datasetIds);
+                    assertThat(experimentCaptor.getValue().datasetInfo().stream().map(DatasetEventInfoHolder::datasetId)
+                            .collect(toSet())).isEqualTo(datasetIds);
                 }
             }
 
@@ -3412,7 +3418,7 @@ class ExperimentsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils#quotaLimitsTestProvider")
+        @MethodSource("com.comet.opik.api.resources.utils.QuotaLimitTestUtils#quotaLimitsTestProvider")
         void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
                 List<Quota> quotas, boolean isLimitReached) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);

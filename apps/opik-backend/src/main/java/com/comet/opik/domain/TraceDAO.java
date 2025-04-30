@@ -12,6 +12,8 @@ import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
@@ -27,6 +29,7 @@ import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
+import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -50,6 +53,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
@@ -59,7 +63,6 @@ import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
-import static com.comet.opik.domain.CommentResultMapper.getComments;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -310,7 +313,7 @@ class TraceDAOImpl implements TraceDAO {
                 COUNT(s.id) AS span_count,
                 groupUniqArrayArray(c.comments_array) as comments,
                 any(fs.feedback_scores) as feedback_scores_list,
-                any(gr.guardrails) as guardrails_list
+                any(gr.guardrails) as guardrails_validations
             FROM (
                 SELECT
                     *,
@@ -522,7 +525,7 @@ class TraceDAOImpl implements TraceDAO {
             <endif>
             , traces_final AS (
                 SELECT
-                    t.*,
+                    t.* <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
                     if(end_time IS NOT NULL AND start_time IS NOT NULL
                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
@@ -573,30 +576,19 @@ class TraceDAOImpl implements TraceDAO {
                  LIMIT :limit <if(offset)>OFFSET :offset <endif>
             )
             SELECT
-                  t.id as id,
-                  t.workspace_id as workspace_id,
-                  t.project_id as project_id,
-                  t.name as name,
-                  t.start_time as start_time,
-                  t.end_time as end_time,
-                  <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
-                  <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>,
-                  <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif>,
-                  t.tags as tags,
-                  t.error_info as error_info,
-                  t.created_at as created_at,
-                  t.last_updated_at as last_updated_at,
-                  t.created_by as created_by,
-                  t.last_updated_by as last_updated_by,
-                  t.duration as duration,
-                  t.thread_id as thread_id,
-                  fsagg.feedback_scores_list as feedback_scores_list,
-                  fsagg.feedback_scores as feedback_scores,
-                  s.usage as usage,
-                  s.total_estimated_cost as total_estimated_cost,
-                  c.comments_array as comments,
-                  gagg.guardrails_list as guardrails_list,
-                  s.span_count AS span_count
+                  t.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata) <else> EXCEPT (input, output, metadata)<endif>
+                  <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif><endif>
+                  <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif><endif>
+                  <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif><endif>
+                  <if(!exclude_feedback_scores)>
+                  , fsagg.feedback_scores_list as feedback_scores_list
+                  , fsagg.feedback_scores as feedback_scores
+                  <endif>
+                  <if(!exclude_usage)>, s.usage as usage<endif>
+                  <if(!exclude_total_estimated_cost)>, s.total_estimated_cost as total_estimated_cost<endif>
+                  <if(!exclude_comments)>, c.comments_array as comments <endif>
+                  <if(!exclude_guardrails_validations)>, gagg.guardrails_list as guardrails_validations<endif>
+                  <if(!exclude_span_count)>, s.span_count AS span_count<endif>
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN spans_agg s ON t.id = s.trace_id
@@ -1353,7 +1345,7 @@ class TraceDAOImpl implements TraceDAO {
     @WithSpan
     public Mono<Trace> findById(@NonNull UUID id, @NonNull Connection connection) {
         return getById(id, connection)
-                .flatMap(this::mapToDto)
+                .flatMap(result -> mapToDto(result, Set.of()))
                 .singleOrEmpty();
     }
 
@@ -1364,53 +1356,76 @@ class TraceDAOImpl implements TraceDAO {
                 .singleOrEmpty();
     }
 
-    private Publisher<Trace> mapToDto(Result result) {
+    private <T> T getValue(Set<Trace.TraceField> exclude, Trace.TraceField field, Row row, String fieldName,
+            Class<T> clazz) {
+        return exclude.contains(field) ? null : row.get(fieldName, clazz);
+    }
+
+    private Publisher<Trace> mapToDto(Result result, Set<Trace.TraceField> exclude) {
+
         return result.map((row, rowMetadata) -> Trace.builder()
                 .id(row.get("id", UUID.class))
                 .projectId(row.get("project_id", UUID.class))
-                .name(row.get("name", String.class))
-                .startTime(row.get("start_time", Instant.class))
-                .endTime(row.get("end_time", Instant.class))
-                .input(Optional.ofNullable(row.get("input", String.class))
-                        .filter(it -> !it.isBlank())
+                .name(getValue(exclude, Trace.TraceField.NAME, row, "name", String.class))
+                .startTime(getValue(exclude, Trace.TraceField.START_TIME, row, "start_time", Instant.class))
+                .endTime(getValue(exclude, Trace.TraceField.END_TIME, row, "end_time", Instant.class))
+                .input(Optional.ofNullable(getValue(exclude, Trace.TraceField.INPUT, row, "input", String.class))
+                        .filter(str -> !str.isBlank())
                         .map(JsonUtils::getJsonNodeFromString)
                         .orElse(null))
-                .output(Optional.ofNullable(row.get("output", String.class))
-                        .filter(it -> !it.isBlank())
+                .output(Optional.ofNullable(getValue(exclude, Trace.TraceField.OUTPUT, row, "output", String.class))
+                        .filter(str -> !str.isBlank())
                         .map(JsonUtils::getJsonNodeFromString)
                         .orElse(null))
-                .metadata(Optional.ofNullable(row.get("metadata", String.class))
-                        .filter(it -> !it.isBlank())
+                .metadata(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.METADATA, row, "metadata", String.class))
+                        .filter(str -> !str.isBlank())
                         .map(JsonUtils::getJsonNodeFromString)
                         .orElse(null))
-                .tags(Optional.of(Arrays.stream(row.get("tags", String[].class))
-                        .collect(Collectors.toSet()))
-                        .filter(it -> !it.isEmpty())
+                .tags(Optional.ofNullable(getValue(exclude, Trace.TraceField.TAGS, row, "tags", String[].class))
+                        .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
+                        .filter(set -> !set.isEmpty())
                         .orElse(null))
-                .comments(getComments(row.get("comments", List[].class)))
-                .feedbackScores(Optional.ofNullable(row.get("feedback_scores_list", List.class))
+                .comments(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.COMMENTS, row, "comments", List[].class))
+                        .map(CommentResultMapper::getComments)
+                        .filter(not(List::isEmpty))
+                        .orElse(null))
+                .feedbackScores(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.FEEDBACK_SCORES, row, "feedback_scores_list",
+                                List.class))
+                        .filter(not(List::isEmpty))
                         .map(this::mapFeedbackScores)
                         .filter(not(List::isEmpty))
                         .orElse(null))
-                .guardrailsValidations(Optional.ofNullable(row.get("guardrails_list", List.class))
+                .guardrailsValidations(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.GUARDRAILS_VALIDATIONS, row,
+                                "guardrails_validations", List.class))
                         .map(this::mapGuardrails)
                         .filter(not(List::isEmpty))
                         .orElse(null))
-                .spanCount(row.get("span_count", Integer.class))
-                .usage(row.get("usage", Map.class))
-                .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class).compareTo(BigDecimal.ZERO) == 0
-                        ? null
-                        : row.get("total_estimated_cost", BigDecimal.class))
-                .errorInfo(Optional.ofNullable(row.get("error_info", String.class))
+                .spanCount(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.SPAN_COUNT, row, "span_count", Integer.class))
+                        .orElse(0))
+                .usage(getValue(exclude, Trace.TraceField.USAGE, row, "usage", Map.class))
+                .totalEstimatedCost(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.TOTAL_ESTIMATED_COST, row,
+                                "total_estimated_cost", BigDecimal.class))
+                        .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
+                        .orElse(null))
+                .errorInfo(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.ERROR_INFO, row, "error_info", String.class))
                         .filter(str -> !str.isBlank())
                         .map(errorInfo -> JsonUtils.readValue(errorInfo, ERROR_INFO_TYPE))
                         .orElse(null))
-                .createdAt(row.get("created_at", Instant.class))
+                .createdAt(getValue(exclude, Trace.TraceField.CREATED_AT, row, "created_at", Instant.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                .createdBy(row.get("created_by", String.class))
-                .lastUpdatedBy(row.get("last_updated_by", String.class))
-                .duration(row.get("duration", Double.class))
-                .threadId(Optional.ofNullable(row.get("thread_id", String.class))
+                .createdBy(getValue(exclude, Trace.TraceField.CREATED_BY, row, "created_by", String.class))
+                .lastUpdatedBy(
+                        getValue(exclude, Trace.TraceField.LAST_UPDATED_BY, row, "last_updated_by", String.class))
+                .duration(getValue(exclude, Trace.TraceField.DURATION, row, "duration", Double.class))
+                .threadId(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.THREAD_ID, row, "thread_id", String.class))
                         .filter(StringUtils::isNotEmpty)
                         .orElse(null))
                 .build());
@@ -1472,7 +1487,7 @@ class TraceDAOImpl implements TraceDAO {
         return countTotal(traceSearchCriteria, connection)
                 .flatMap(result -> Mono.from(result.map((row, rowMetadata) -> row.get("count", Long.class))))
                 .flatMap(total -> getTracesByProjectId(size, page, traceSearchCriteria, connection) //Get count then pagination
-                        .flatMapMany(this::mapToDto)
+                        .flatMapMany(result1 -> mapToDto(result1, traceSearchCriteria.exclude()))
                         .collectList()
                         .map(traces -> new TracePage(page, traces.size(), total, traces,
                                 sortingFactory.getSortableFields())));
@@ -1509,6 +1524,8 @@ class TraceDAOImpl implements TraceDAO {
 
         var template = newFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria);
 
+        bindTemplateExcludeFieldVariables(traceSearchCriteria, template);
+
         template.add("offset", offset);
 
         var finalTemplate = template;
@@ -1540,6 +1557,52 @@ class TraceDAOImpl implements TraceDAO {
 
         return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                 .doFinally(signalType -> endSegment(segment));
+    }
+
+    private void bindTemplateExcludeFieldVariables(TraceSearchCriteria traceSearchCriteria, ST template) {
+        Optional.ofNullable(traceSearchCriteria.exclude())
+                .filter(Predicate.not(Set::isEmpty))
+                .ifPresent(exclude -> {
+
+                    // We need to keep the columns used for sorting in the select clause so that they are available when applying sorting.
+                    Set<String> sortingFields = Optional.ofNullable(traceSearchCriteria.sortingFields())
+                            .stream()
+                            .flatMap(List::stream)
+                            .map(SortingField::field)
+                            .collect(Collectors.toSet());
+
+                    Set<String> fields = exclude.stream()
+                            .map(Trace.TraceField::getValue)
+                            .filter(field -> !sortingFields.contains(field))
+                            .collect(Collectors.toSet());
+
+                    // check feedback_scores as well because it's a special case
+                    if (fields.contains(Trace.TraceField.FEEDBACK_SCORES.getValue())
+                            && sortingFields.stream().noneMatch(this::isFeedBackScoresField)) {
+
+                        template.add("exclude_feedback_scores", true);
+                    }
+
+                    if (!fields.isEmpty()) {
+                        template.add("exclude_fields", String.join(", ", fields));
+                        template.add("exclude_input", fields.contains(Trace.TraceField.INPUT.getValue()));
+                        template.add("exclude_output", fields.contains(Trace.TraceField.OUTPUT.getValue()));
+                        template.add("exclude_metadata", fields.contains(Trace.TraceField.METADATA.getValue()));
+                        template.add("exclude_comments", fields.contains(Trace.TraceField.COMMENTS.getValue()));
+
+                        template.add("exclude_usage", fields.contains(Trace.TraceField.USAGE.getValue()));
+                        template.add("exclude_total_estimated_cost",
+                                fields.contains(Trace.TraceField.TOTAL_ESTIMATED_COST.getValue()));
+                        template.add("exclude_guardrails_validations",
+                                fields.contains(Trace.TraceField.GUARDRAILS_VALIDATIONS.getValue()));
+                        template.add("exclude_span_count", fields.contains(Trace.TraceField.SPAN_COUNT.getValue()));
+                    }
+                });
+    }
+
+    private boolean isFeedBackScoresField(String field) {
+        return field
+                .startsWith(SortableFields.FEEDBACK_SCORES.substring(0, SortableFields.FEEDBACK_SCORES.length() - 1));
     }
 
     private Mono<? extends Result> countTotal(TraceSearchCriteria traceSearchCriteria, Connection connection) {
@@ -1929,7 +1992,7 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     public Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria) {
         return asyncTemplate.stream(connection -> findTraceStream(limit, criteria, connection))
-                .flatMap(this::mapToDto)
+                .flatMap(result -> mapToDto(result, Set.of()))
                 .buffer(limit > 100 ? limit / 2 : limit)
                 .concatWith(Mono.just(List.of()))
                 .flatMap(Flux::fromIterable);
