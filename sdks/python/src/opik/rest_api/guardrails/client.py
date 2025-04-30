@@ -2,7 +2,7 @@
 
 import typing
 from ..core.client_wrapper import SyncClientWrapper
-from ..types.guardrail import Guardrail
+from ..types.guardrail_write import GuardrailWrite
 from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
 from json.decoder import JSONDecodeError
@@ -20,7 +20,7 @@ class GuardrailsClient:
     def create_guardrails(
         self,
         *,
-        guardrails: typing.Sequence[Guardrail],
+        guardrails: typing.Sequence[GuardrailWrite],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -28,7 +28,7 @@ class GuardrailsClient:
 
         Parameters
         ----------
-        guardrails : typing.Sequence[Guardrail]
+        guardrails : typing.Sequence[GuardrailWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -39,7 +39,7 @@ class GuardrailsClient:
 
         Examples
         --------
-        from Opik import Guardrail, OpikApi
+        from Opik import GuardrailWrite, OpikApi
 
         client = OpikApi(
             api_key="YOUR_API_KEY",
@@ -47,7 +47,7 @@ class GuardrailsClient:
         )
         client.guardrails.create_guardrails(
             guardrails=[
-                Guardrail(
+                GuardrailWrite(
                     entity_id="entity_id",
                     secondary_id="secondary_id",
                     name="TOPIC",
@@ -64,7 +64,7 @@ class GuardrailsClient:
             json={
                 "guardrails": convert_and_respect_annotation_metadata(
                     object_=guardrails,
-                    annotation=typing.Sequence[Guardrail],
+                    annotation=typing.Sequence[GuardrailWrite],
                     direction="write",
                 ),
             },
@@ -90,7 +90,7 @@ class AsyncGuardrailsClient:
     async def create_guardrails(
         self,
         *,
-        guardrails: typing.Sequence[Guardrail],
+        guardrails: typing.Sequence[GuardrailWrite],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -98,7 +98,7 @@ class AsyncGuardrailsClient:
 
         Parameters
         ----------
-        guardrails : typing.Sequence[Guardrail]
+        guardrails : typing.Sequence[GuardrailWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -111,7 +111,7 @@ class AsyncGuardrailsClient:
         --------
         import asyncio
 
-        from Opik import AsyncOpikApi, Guardrail
+        from Opik import AsyncOpikApi, GuardrailWrite
 
         client = AsyncOpikApi(
             api_key="YOUR_API_KEY",
@@ -122,7 +122,7 @@ class AsyncGuardrailsClient:
         async def main() -> None:
             await client.guardrails.create_guardrails(
                 guardrails=[
-                    Guardrail(
+                    GuardrailWrite(
                         entity_id="entity_id",
                         secondary_id="secondary_id",
                         name="TOPIC",
@@ -142,7 +142,7 @@ class AsyncGuardrailsClient:
             json={
                 "guardrails": convert_and_respect_annotation_metadata(
                     object_=guardrails,
-                    annotation=typing.Sequence[Guardrail],
+                    annotation=typing.Sequence[GuardrailWrite],
                     direction="write",
                 ),
             },
