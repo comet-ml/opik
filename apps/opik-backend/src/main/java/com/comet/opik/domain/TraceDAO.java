@@ -50,6 +50,7 @@ import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -138,6 +139,7 @@ class TraceDAOImpl implements TraceDAO {
                 output,
                 metadata,
                 tags,
+                last_updated_at,
                 error_info,
                 created_by,
                 last_updated_by,
@@ -155,6 +157,7 @@ class TraceDAOImpl implements TraceDAO {
                         :output<item.index>,
                         :metadata<item.index>,
                         :tags<item.index>,
+                        if(:last_updated_at<item.index> IS NULL, NULL, parseDateTime64BestEffort(:last_updated_at<item.index>, 6)),
                         :error_info<item.index>,
                         :user_name,
                         :user_name,
@@ -283,7 +286,7 @@ class TraceDAOImpl implements TraceDAO {
             	id,
             	project_id,
             	workspace_id,
-            	name,
+            	<if(name)> :name <else> name <endif> as name,
             	start_time,
             	<if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> end_time <endif> as end_time,
             	<if(input)> :input <else> input <endif> as input,
@@ -758,7 +761,8 @@ class TraceDAOImpl implements TraceDAO {
                 new_trace.workspace_id as workspace_id,
                 multiIf(
                     LENGTH(new_trace.name) > 0, new_trace.name,
-                    old_trace.name
+                    LENGTH(old_trace.name) > 0, old_trace.name,
+                    new_trace.name
                 ) as name,
                 multiIf(
                     notEquals(old_trace.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND old_trace.start_time >= toDateTime64('1970-01-01 00:00:00.000', 9), old_trace.start_time,
@@ -812,7 +816,7 @@ class TraceDAOImpl implements TraceDAO {
                     :id as id,
                     :project_id as project_id,
                     :workspace_id as workspace_id,
-                    '' as name,
+                    <if(name)> :name <else> '' <endif> as name,
                     toDateTime64('1970-01-01 00:00:00.000', 9) as start_time,
                     <if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> null <endif> as end_time,
                     <if(input)> :input <else> '' <endif> as input,
@@ -840,7 +844,6 @@ class TraceDAOImpl implements TraceDAO {
 
     private static final String SELECT_PARTIAL_BY_ID = """
             SELECT
-                name,
                 project_id,
                 start_time
             FROM traces
@@ -1000,7 +1003,7 @@ class TraceDAOImpl implements TraceDAO {
 
     /***
      * When treating a list of traces as threads, a number of aggregation are performed to get the thread details.
-     *
+     * <p>
      * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
      ***/
     private static final String SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS = """
@@ -1045,7 +1048,7 @@ class TraceDAOImpl implements TraceDAO {
 
     /***
      * When treating a list of traces as threads, a number of aggregation are performed to get the thread details.
-     *
+     * <p>
      * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
      ***/
     private static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
@@ -1094,7 +1097,7 @@ class TraceDAOImpl implements TraceDAO {
 
     /***
      * When treating a list of traces as threads, a number of aggregation are performed to get the thread details.
-     *
+     * <p>
      * Among the aggregation performed are:
      *  - The duration of the thread, which is calculated as the difference between the start_time and end_time of the first and last trace in the list.
      *  - The first message in the thread, which is the input of the first trace in the list.
@@ -1168,29 +1171,15 @@ class TraceDAOImpl implements TraceDAO {
         Statement statement = connection.createStatement(template.render())
                 .bind("id", trace.id())
                 .bind("project_id", trace.projectId())
-                .bind("name", trace.name())
-                .bind("start_time", trace.startTime().toString());
-
-        if (trace.input() != null) {
-            statement.bind("input", trace.input().toString());
-        } else {
-            statement.bind("input", "");
-        }
-
-        if (trace.output() != null) {
-            statement.bind("output", trace.output().toString());
-        } else {
-            statement.bind("output", "");
-        }
+                .bind("name", StringUtils.defaultIfBlank(trace.name(), ""))
+                .bind("start_time", trace.startTime().toString())
+                .bind("input", Objects.toString(trace.input(), ""))
+                .bind("output", Objects.toString(trace.output(), ""))
+                .bind("metadata", Objects.toString(trace.metadata(), ""))
+                .bind("thread_id", StringUtils.defaultIfBlank(trace.threadId(), ""));
 
         if (trace.endTime() != null) {
             statement.bind("end_time", trace.endTime().toString());
-        }
-
-        if (trace.metadata() != null) {
-            statement.bind("metadata", trace.metadata().toString());
-        } else {
-            statement.bind("metadata", "");
         }
 
         if (trace.tags() != null) {
@@ -1203,12 +1192,6 @@ class TraceDAOImpl implements TraceDAO {
             statement.bind("error_info", JsonUtils.readTree(trace.errorInfo()).toString());
         } else {
             statement.bind("error_info", "");
-        }
-
-        if (trace.threadId() != null) {
-            statement.bind("thread_id", trace.threadId());
-        } else {
-            statement.bind("thread_id", "");
         }
 
         return statement;
@@ -1253,6 +1236,10 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private void bindUpdateParams(TraceUpdate traceUpdate, Statement statement) {
+        if (StringUtils.isNotBlank(traceUpdate.name())) {
+            statement.bind("name", traceUpdate.name());
+        }
+
         Optional.ofNullable(traceUpdate.input())
                 .ifPresent(input -> statement.bind("input", input.toString()));
 
@@ -1271,12 +1258,17 @@ class TraceDAOImpl implements TraceDAO {
         Optional.ofNullable(traceUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
 
-        Optional.ofNullable(traceUpdate.threadId())
-                .ifPresent(threadId -> statement.bind("thread_id", threadId));
+        if (StringUtils.isNotBlank(traceUpdate.threadId())) {
+            statement.bind("thread_id", traceUpdate.threadId());
+        }
     }
 
     private ST buildUpdateTemplate(TraceUpdate traceUpdate, String update) {
         ST template = new ST(update);
+
+        if (StringUtils.isNotBlank(traceUpdate.name())) {
+            template.add("name", traceUpdate.name());
+        }
 
         Optional.ofNullable(traceUpdate.input())
                 .ifPresent(input -> template.add("input", input.toString()));
@@ -1296,8 +1288,9 @@ class TraceDAOImpl implements TraceDAO {
         Optional.ofNullable(traceUpdate.errorInfo())
                 .ifPresent(errorInfo -> template.add("error_info", JsonUtils.readTree(errorInfo).toString()));
 
-        Optional.ofNullable(traceUpdate.threadId())
-                .ifPresent(threadId -> template.add("thread_id", threadId));
+        if (StringUtils.isNotBlank(traceUpdate.threadId())) {
+            template.add("thread_id", traceUpdate.threadId());
+        }
 
         return template;
     }
@@ -1366,7 +1359,8 @@ class TraceDAOImpl implements TraceDAO {
         return result.map((row, rowMetadata) -> Trace.builder()
                 .id(row.get("id", UUID.class))
                 .projectId(row.get("project_id", UUID.class))
-                .name(getValue(exclude, Trace.TraceField.NAME, row, "name", String.class))
+                .name(StringUtils.defaultIfBlank(
+                        getValue(exclude, Trace.TraceField.NAME, row, "name", String.class), null))
                 .startTime(getValue(exclude, Trace.TraceField.START_TIME, row, "start_time", Instant.class))
                 .endTime(getValue(exclude, Trace.TraceField.END_TIME, row, "end_time", Instant.class))
                 .input(Optional.ofNullable(getValue(exclude, Trace.TraceField.INPUT, row, "input", String.class))
@@ -1424,10 +1418,8 @@ class TraceDAOImpl implements TraceDAO {
                 .lastUpdatedBy(
                         getValue(exclude, Trace.TraceField.LAST_UPDATED_BY, row, "last_updated_by", String.class))
                 .duration(getValue(exclude, Trace.TraceField.DURATION, row, "duration", Double.class))
-                .threadId(Optional
-                        .ofNullable(getValue(exclude, Trace.TraceField.THREAD_ID, row, "thread_id", String.class))
-                        .filter(StringUtils::isNotEmpty)
-                        .orElse(null))
+                .threadId(StringUtils.defaultIfBlank(
+                        getValue(exclude, Trace.TraceField.THREAD_ID, row, "thread_id", String.class), null))
                 .build());
     }
 
@@ -1453,17 +1445,15 @@ class TraceDAOImpl implements TraceDAO {
         return GuardrailsMapper.INSTANCE.mapToValidations(Optional.ofNullable(guardrails)
                 .orElse(List.of())
                 .stream()
-                .map(guardrail -> {
-                    return Guardrail.builder()
-                            .entityId(UUID.fromString((String) guardrail.get(0)))
-                            .secondaryId(UUID.fromString((String) guardrail.get(1)))
-                            .projectId(UUID.fromString((String) guardrail.get(2)))
-                            .name(GuardrailType.fromString((String) guardrail.get(3)))
-                            .result(GuardrailResult.fromString((String) guardrail.get(4)))
-                            .config(JsonNodeFactory.instance.objectNode())
-                            .details(JsonNodeFactory.instance.objectNode())
-                            .build();
-                })
+                .map(guardrail -> Guardrail.builder()
+                        .entityId(UUID.fromString((String) guardrail.get(0)))
+                        .secondaryId(UUID.fromString((String) guardrail.get(1)))
+                        .projectId(UUID.fromString((String) guardrail.get(2)))
+                        .name(GuardrailType.fromString((String) guardrail.get(3)))
+                        .result(GuardrailResult.fromString((String) guardrail.get(4)))
+                        .config(JsonNodeFactory.instance.objectNode())
+                        .details(JsonNodeFactory.instance.objectNode())
+                        .build())
                 .toList());
     }
 
@@ -1703,7 +1693,7 @@ class TraceDAOImpl implements TraceDAO {
 
                 statement.bind("id" + i, trace.id())
                         .bind("project_id" + i, trace.projectId())
-                        .bind("name" + i, trace.name())
+                        .bind("name" + i, StringUtils.defaultIfBlank(trace.name(), ""))
                         .bind("start_time" + i, trace.startTime().toString())
                         .bind("input" + i, getOrDefault(trace.input()))
                         .bind("output" + i, getOrDefault(trace.output()))
@@ -1711,12 +1701,18 @@ class TraceDAOImpl implements TraceDAO {
                         .bind("tags" + i, trace.tags() != null ? trace.tags().toArray(String[]::new) : new String[]{})
                         .bind("error_info" + i,
                                 trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "")
-                        .bind("thread_id" + i, trace.threadId() != null ? trace.threadId() : "");
+                        .bind("thread_id" + i, StringUtils.defaultIfBlank(trace.threadId(), ""));
 
                 if (trace.endTime() != null) {
                     statement.bind("end_time" + i, trace.endTime().toString());
                 } else {
                     statement.bindNull("end_time" + i, String.class);
+                }
+
+                if (trace.lastUpdatedAt() != null) {
+                    statement.bind("last_updated_at" + i, trace.lastUpdatedAt().toString());
+                } else {
+                    statement.bindNull("last_updated_at" + i, String.class);
                 }
 
                 i++;
@@ -1850,30 +1846,28 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     public Mono<TraceThreadPage> findThreads(int size, int page, @NonNull TraceSearchCriteria criteria) {
 
-        return asyncTemplate.nonTransaction(connection -> {
-            return countThreadTotal(criteria, connection)
-                    .flatMap(count -> {
+        return asyncTemplate.nonTransaction(connection -> countThreadTotal(criteria, connection)
+                .flatMap(count -> {
 
-                        ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
+                    ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
 
-                        template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+                    template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
-                        var statement = connection.createStatement(template.render())
-                                .bind("project_id", criteria.projectId())
-                                .bind("limit", size)
-                                .bind("offset", (page - 1) * size);
+                    var statement = connection.createStatement(template.render())
+                            .bind("project_id", criteria.projectId())
+                            .bind("limit", size)
+                            .bind("offset", (page - 1) * size);
 
-                        bindSearchCriteria(criteria, statement);
+                    bindSearchCriteria(criteria, statement);
 
-                        Segment segment = startSegment("traces", "Clickhouse", "findThreads");
+                    Segment segment = startSegment("traces", "Clickhouse", "findThreads");
 
-                        return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                                .flatMap(this::mapThreadToDto)
-                                .collectList()
-                                .doFinally(signalType -> endSegment(segment))
-                                .map(threads -> new TraceThreadPage(page, threads.size(), count, threads));
-                    });
-        });
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                            .flatMap(this::mapThreadToDto)
+                            .collectList()
+                            .doFinally(signalType -> endSegment(segment))
+                            .map(threads -> new TraceThreadPage(page, threads.size(), count, threads));
+                }));
     }
 
     private Publisher<TraceThread> mapThreadToDto(Result result) {
@@ -1983,7 +1977,6 @@ class TraceDAOImpl implements TraceDAO {
 
     private Publisher<Trace> mapToPartialDto(Result result) {
         return result.map((row, rowMetadata) -> Trace.builder()
-                .name(row.get("name", String.class))
                 .startTime(row.get("start_time", Instant.class))
                 .projectId(row.get("project_id", UUID.class))
                 .build());
@@ -2040,5 +2033,4 @@ class TraceDAOImpl implements TraceDAO {
                     endSegment(segment);
                 });
     }
-
 }

@@ -4,6 +4,7 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteTraceThreads;
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
@@ -14,7 +15,6 @@ import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
-import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadIdentifier;
@@ -274,10 +274,6 @@ class TracesResourceTest {
         return projectResourceClient.getByName(projectName, apiKey, workspaceName).id();
     }
 
-    private void createProject(String projectName, String workspaceName, String apiKey) {
-        projectResourceClient.createProject(projectName, apiKey, workspaceName);
-    }
-
     @Nested
     @DisplayName("Api Key Authentication:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -434,7 +430,7 @@ class TracesResourceTest {
                     .visibility(visibility).build();
             projectResourceClient.createProject(project, okApikey, workspaceName);
 
-            int tracesCount = setupTracesForWorkspace(workspaceName, workspaceId, okApikey);
+            int tracesCount = setupTracesForWorkspace(workspaceName, okApikey);
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .queryParam("project_name", DEFAULT_PROJECT)
@@ -4297,7 +4293,9 @@ class TracesResourceTest {
             var actualThread = actualTraces.get(i);
 
             assertThat(actualThread.createdAt()).isBetween(expectedThread.createdAt(), Instant.now());
-            assertThat(actualThread.lastUpdatedAt()).isBetween(expectedThread.lastUpdatedAt(), Instant.now());
+            assertThat(actualThread.lastUpdatedAt())
+                    // Some JVMs can resolve higher than microseconds, such as nanoseconds in the Ubuntu AMD64 JVM
+                    .isBetween(expectedThread.lastUpdatedAt().truncatedTo(ChronoUnit.MICROS), Instant.now());
         }
     }
 
@@ -4868,7 +4866,7 @@ class TracesResourceTest {
                                 .projectName(projectName)
                                 .traceId(trace.id())
                                 .build())
-                        .collect(Collectors.toList());
+                        .toList();
                 allSpans.addAll(spansForTrace);
             }
             spanResourceClient.batchCreateSpans(allSpans, apiKey, workspaceName);
@@ -5114,23 +5112,22 @@ class TracesResourceTest {
             batchCreateSpansAndAssert(spans, apiKey, workspaceName);
 
             traces = traces.stream()
-                    .map(trace -> {
-                        return trace.toBuilder()
-                                .totalEstimatedCost(spans.stream()
-                                        .filter(span -> span.traceId().equals(trace.id()))
-                                        .map(Span::totalEstimatedCost)
-                                        .reduce(BigDecimal.ZERO, BigDecimal::add))
-                                .spanCount((int) spans.stream()
-                                        .filter(span -> span.traceId().equals(trace.id()))
-                                        .count())
-                                .usage(spans.stream()
-                                        .filter(span -> span.traceId().equals(trace.id()))
-                                        .map(Span::usage)
-                                        .flatMap(map -> map.entrySet().stream())
-                                        .collect(Collectors.groupingBy(Map.Entry::getKey,
-                                                Collectors.summingLong(Map.Entry::getValue))))
-                                .build();
-                    }).toList();
+                    .map(trace -> trace.toBuilder()
+                            .totalEstimatedCost(spans.stream()
+                                    .filter(span -> span.traceId().equals(trace.id()))
+                                    .map(Span::totalEstimatedCost)
+                                    .reduce(BigDecimal.ZERO, BigDecimal::add))
+                            .spanCount((int) spans.stream()
+                                    .filter(span -> span.traceId().equals(trace.id()))
+                                    .count())
+                            .usage(spans.stream()
+                                    .filter(span -> span.traceId().equals(trace.id()))
+                                    .map(Span::usage)
+                                    .flatMap(map -> map.entrySet().stream())
+                                    .collect(Collectors.groupingBy(Map.Entry::getKey,
+                                            Collectors.summingLong(Map.Entry::getValue))))
+                            .build())
+                    .toList();
 
             List<Trace> finalTraces = traces;
             List<FeedbackScoreBatchItem> scoreForSpan = IntStream.range(0, traces.size())
@@ -5548,10 +5545,15 @@ class TracesResourceTest {
         traceResourceClient.feedbackScore(entityId, score, workspaceName, apiKey);
     }
 
-    private Trace getAndAssert(Trace expectedTrace, UUID projectId, String apiKey, String workspaceName) {
+    private Trace getAndAssert(Trace expectedTrace, UUID expectedProjectId, String apiKey, String workspaceName) {
         var actualTrace = traceResourceClient.getById(expectedTrace.id(), workspaceName, apiKey);
 
-        assertThat(actualTrace.projectId()).isEqualTo(projectId);
+        if (expectedProjectId == null) {
+            assertThat(actualTrace.projectId()).isNotNull();
+        } else {
+            assertThat(actualTrace.projectId()).isEqualTo(expectedProjectId);
+        }
+
         TraceAssertions.assertTraces(List.of(actualTrace), List.of(expectedTrace), USER);
 
         return actualTrace;
@@ -5579,160 +5581,89 @@ class TracesResourceTest {
         @Test
         @DisplayName("Success")
         void testCreateTrace() {
-            var id = generator.generate();
-            var trace = createTrace().toBuilder()
-                    .id(id)
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(DEFAULT_PROJECT)
                     .usage(null)
                     .feedbackScores(null)
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
-            var projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
+            var projectId = projectResourceClient.getByName(trace.projectName(), API_KEY, TEST_WORKSPACE).id();
             getAndAssert(trace, projectId, API_KEY, TEST_WORKSPACE);
         }
 
         @Test
         @DisplayName("when creating traces with different project names, then return created traces")
         void create__whenCreatingTracesWithDifferentProjectNames__thenReturnCreatedTraces() {
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-
-            var trace1 = createTrace()
-                    .toBuilder()
-                    .projectName(DEFAULT_PROJECT)
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    // when project name is null, uses the default project
+                    .projectName(null)
                     .usage(null)
                     .feedbackScores(null)
                     .build();
-            var trace2 = createTrace()
-                    .toBuilder()
-                    .projectName(projectName)
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName("project-" + RandomStringUtils.secure().nextAlphanumeric(32))
                     .usage(null)
                     .feedbackScores(null)
                     .build();
-            create(trace1, API_KEY, TEST_WORKSPACE);
-            create(trace2, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(trace1, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(trace2, API_KEY, TEST_WORKSPACE);
 
-            var projectId1 = getProjectId(DEFAULT_PROJECT, TEST_WORKSPACE, API_KEY);
-            var projectId2 = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
-
+            var projectId1 = projectResourceClient.getByName(DEFAULT_PROJECT, API_KEY, TEST_WORKSPACE).id();
+            var projectId2 = projectResourceClient.getByName(trace2.projectName(), API_KEY, TEST_WORKSPACE).id();
             getAndAssert(trace1, projectId1, API_KEY, TEST_WORKSPACE);
             getAndAssert(trace2, projectId2, API_KEY, TEST_WORKSPACE);
         }
 
         @Test
-        void createWithMissingId() {
-            var trace = createTrace().toBuilder()
-                    .id(null)
-                    .usage(null)
-                    .feedbackScores(null)
+        void createWithMissingFields() {
+            var trace = Trace.builder()
+                    .projectName("project" + RandomStringUtils.secure().nextAlphanumeric(32))
+                    .startTime(Instant.now())
+                    .createdAt(Instant.now())
                     .build();
-            var id = create(trace, API_KEY, TEST_WORKSPACE);
+            var id = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
-            trace = trace.toBuilder().id(id).build();
-            var projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
-            getAndAssert(trace, projectId, API_KEY, TEST_WORKSPACE);
-        }
-
-        @Test
-        @DisplayName("when project doesn't exist, then accept and create project")
-        void create__whenProjectDoesNotExist__thenAcceptAndCreateProject() {
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var trace = createTrace().toBuilder()
-                    .projectName(projectName)
-                    .build();
-
-            traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
-
-            Project project = projectResourceClient.getByName(projectName, API_KEY, TEST_WORKSPACE);
-
-            assertThat(project).isNotNull();
-        }
-
-        @Test
-        @DisplayName("when project name is null, then accept and use default project")
-        void create__whenProjectNameIsNull__thenAcceptAndUseDefaultProject() {
-
-            var id = generator.generate();
-
-            var trace = createTrace().toBuilder()
-                    .id(id)
-                    .projectName(null)
-                    .build();
-
-            traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
-
-            var actualEntity = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
-
-            UUID projectId = getProjectId(DEFAULT_PROJECT, TEST_WORKSPACE, API_KEY);
-
-            assertThat(actualEntity.projectId()).isEqualTo(projectId);
+            var expectedTrace = trace.toBuilder().id(id).build();
+            getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
         }
 
         @Test
         @DisplayName("when trace input is big, then accept and create trace")
         void createAndGet__whenTraceInputIsBig__thenReturnSpan() {
-
             int size = 1000;
-
-            Map<String, String> jsonMap = IntStream.range(0, size)
+            var jsonMap = IntStream.range(0, size)
                     .mapToObj(
-                            i -> Map.entry(RandomStringUtils.randomAlphabetic(10), RandomStringUtils.randomAscii(size)))
+                            i -> Map.entry(
+                                    RandomStringUtils.secure().nextAlphabetic(10),
+                                    RandomStringUtils.secure().nextAlphabetic(size)))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-
-            var expectedTrace = createTrace().toBuilder()
-                    .projectId(null)
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .input(JsonUtils.readTree(jsonMap))
                     .output(JsonUtils.readTree(jsonMap))
-                    .feedbackScores(null)
                     .usage(null)
-                    .build();
-
-            create(expectedTrace, API_KEY, TEST_WORKSPACE);
-
-            UUID projectId = getProjectId(expectedTrace.projectName(), TEST_WORKSPACE, API_KEY);
-            getAndAssert(expectedTrace, projectId, API_KEY, TEST_WORKSPACE);
-        }
-
-        @Test
-        @DisplayName("when trace has threadId, then accept and create trace")
-        void createAndGet__whenTraceHasThreadId__thenReturnTrace() {
-
-            var threadId = UUID.randomUUID().toString();
-
-            var expectedTrace = createTrace().toBuilder()
-                    .projectId(null)
-                    .threadId(threadId)
                     .feedbackScores(null)
-                    .usage(null)
                     .build();
+            traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
-            create(expectedTrace, API_KEY, TEST_WORKSPACE);
-
-            UUID projectId = getProjectId(expectedTrace.projectName(), TEST_WORKSPACE, API_KEY);
-            getAndAssert(expectedTrace, projectId, API_KEY, TEST_WORKSPACE);
+            getAndAssert(trace, null, API_KEY, TEST_WORKSPACE);
         }
 
         @ParameterizedTest
         @MethodSource("com.comet.opik.api.resources.utils.QuotaLimitTestUtils#quotaLimitsTestProvider")
         void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
                 List<Quota> quotas, boolean isLimitReached) {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
             var workspaceId = UUID.randomUUID().toString();
-
             AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, workspaceName, workspaceId, USER, quotas);
 
-            var trace = createTrace().toBuilder()
-                    .projectId(null)
-                    .projectName(DEFAULT_PROJECT)
-                    .feedbackScores(null)
-                    .build();
-
+            var trace = factory.manufacturePojo(Trace.class);
             try (var actualResponse = traceResourceClient.callCreateTrace(trace, API_KEY, workspaceName)) {
+
                 if (isLimitReached) {
                     assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_PAYMENT_REQUIRED);
-                    var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
-                            ERR_USAGE_LIMIT_EXCEEDED);
+                    var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
+                            HttpStatus.SC_PAYMENT_REQUIRED, ERR_USAGE_LIMIT_EXCEEDED);
                     var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                     assertThat(actualError).isEqualTo(expectedError);
                 } else {
@@ -5747,161 +5678,163 @@ class TracesResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class BatchInsert {
 
+        Stream<Arguments> batch__whenCreateTraces__thenReturnNoContent() {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            return Stream.of(
+                    arguments(projectName, projectName),
+                    arguments(null, DEFAULT_PROJECT));
+        }
+
         @ParameterizedTest
         @MethodSource
-        void batch__whenCreateTraces__thenReturnNoContent(Function<String, String> projectNameModifier) {
+        void batch__whenCreateTraces__thenReturnNoContent(String projectName, String expectedProjectName) {
+            // Use dedicated workspace to avoid collisions with other tests in the default project
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(API_KEY, workspaceName, workspaceId);
 
-            var projectName = UUID.randomUUID().toString();
-
-            createProject(projectName, TEST_WORKSPACE, API_KEY);
-
-            var expectedTraces = IntStream.range(0, 1000)
-                    .mapToObj(i -> createTrace().toBuilder()
-                            .projectName(projectNameModifier.apply(projectName))
-                            .endTime(null)
-                            .duration(null)
+            var expectedTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
                             .build())
                     .toList();
+            traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, workspaceName);
 
-            traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
-
-            getAndAssertPage(TEST_WORKSPACE, projectName, null, List.of(), List.of(), expectedTraces.reversed(),
+            getAndAssertPage(
+                    workspaceName,
+                    expectedProjectName.toUpperCase(), // Testing case sensitivity
+                    null,
+                    List.of(),
+                    List.of(),
+                    expectedTraces.reversed(),
                     List.of(),
                     API_KEY);
         }
 
-        Stream<Arguments> batch__whenCreateTraces__thenReturnNoContent() {
-            return getProjectNameModifierArgs();
-        }
-
-        @Test
-        void batch__whenTraceProjectNameIsNull__thenUserDefaultProjectAndReturnNoContent() {
-
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var expectedTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectName(null)
-                            .endTime(null)
-                            .usage(null)
-                            .duration(null)
-                            .feedbackScores(null)
-                            .threadId(null)
-                            .build())
-                    .toList();
-
-            traceResourceClient.batchCreateTraces(expectedTraces, apiKey, workspaceName);
-
-            getAndAssertPage(workspaceName, DEFAULT_PROJECT, null, List.of(), List.of(), expectedTraces.reversed(),
-                    List.of(),
-                    apiKey);
-        }
-
         @Test
         void batch__whenSendingMultipleTracesWithSameId__thenReturn422() {
-            var trace = createTrace().toBuilder()
-                    .projectId(null)
-                    .feedbackScores(null)
-                    .build();
-
-            var expectedTrace = trace.toBuilder()
-                    .tags(Set.of())
-                    .endTime(Instant.now())
-                    .output(JsonUtils.getJsonNodeFromString("{ \"output\": \"data\"}"))
-                    .build();
-
-            List<Trace> traces = List.of(trace, expectedTrace);
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("batch")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(TraceBatch.builder().traces(traces).build()))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
-                assertThat(actualResponse.hasEntity()).isTrue();
-
-                var errorMessage = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(errorMessage.getMessage()).isEqualTo("Duplicate trace id '%s'".formatted(trace.id()));
-            }
-        }
-
-        @ParameterizedTest
-        @MethodSource
-        void batch__whenBatchIsInvalid__thenReturn422(List<Trace> traces, String errorMessage) {
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("batch")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(TraceBatch.builder().traces(traces).build()))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
-                assertThat(actualResponse.hasEntity()).isTrue();
-
-                var responseBody = actualResponse.readEntity(ErrorMessage.class);
-                assertThat(responseBody.errors()).contains(errorMessage);
-            }
-        }
-
-        Stream<Arguments> batch__whenBatchIsInvalid__thenReturn422() {
-            return Stream.of(
-                    Arguments.of(List.of(), "traces size must be between 1 and 1000"),
-                    Arguments.of(IntStream.range(0, 1001)
-                            .mapToObj(i -> createTrace().toBuilder()
-                                    .projectId(null)
-                                    .feedbackScores(null)
-                                    .build())
-                            .toList(), "traces size must be between 1 and 1000"));
-        }
-
-        @Test
-        void batch__whenSendingMultipleTracesWithNoId__thenReturnNoContent() {
-            var newTrace = createTrace().toBuilder()
-                    .projectId(null)
-                    .id(null)
-                    .feedbackScores(null)
-                    .build();
-
-            var expectedTrace = newTrace.toBuilder()
-                    .tags(Set.of())
-                    .endTime(Instant.now())
-                    .output(JsonUtils.getJsonNodeFromString("{ \"output\": \"data\"}"))
-                    .build();
-
-            List<Trace> expectedTraces = List.of(newTrace, expectedTrace);
-
-            traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
-        }
-
-        @Test
-        void batch__whenTraceHasThreadId__thenReturnNoContent() {
-            var threadId = UUID.randomUUID().toString();
-            var projectName = UUID.randomUUID().toString();
-
-            var expectedTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+            var id = generator.generate();
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                     .map(trace -> trace.toBuilder()
-                            .projectId(null)
-                            .threadId(threadId)
-                            .projectName(projectName)
-                            .endTime(trace.startTime().plusMillis(randomNumber()))
-                            .feedbackScores(null)
-                            .usage(null)
+                            .id(id)
                             .build())
                     .toList();
+            try (var actualResponse = traceResourceClient.callBatchCreateTraces(traces, API_KEY, TEST_WORKSPACE)) {
 
+                assertThat(actualResponse.getStatusInfo().getStatusCode())
+                        .isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                var actualErrorMessage = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                var expectedErrorMessage = new io.dropwizard.jersey.errors.ErrorMessage(
+                        HttpStatus.SC_UNPROCESSABLE_ENTITY, "Duplicate trace id '%s'".formatted(id));
+                assertThat(actualErrorMessage).isEqualTo(expectedErrorMessage);
+            }
+        }
+
+        @Test
+        void batch__whenMissingFields__thenReturnNoContent() {
+            var projectName = "project" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var expectedTraces = IntStream.range(0, 5)
+                    .mapToObj(i -> Trace.builder()
+                            .projectName(projectName)
+                            .startTime(Instant.now())
+                            .build())
+                    .toList();
             traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
+        }
 
-            getAndAssertPage(TEST_WORKSPACE, projectName, null, List.of(), List.of(), expectedTraces.reversed(),
+        @Test
+        void upsert() {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            // Ingesting traces with the minimum required fields
+            var expectedTraces0 = IntStream.range(0, 5)
+                    .mapToObj(i -> Trace.builder()
+                            .projectName(projectName)
+                            .id(generator.generate())
+                            .startTime(Instant.now())
+                            .createdAt(Instant.now())
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(expectedTraces0, API_KEY, TEST_WORKSPACE);
+            getAndAssertPage(
+                    TEST_WORKSPACE,
+                    projectName,
+                    null,
                     List.of(),
+                    List.of(),
+                    expectedTraces0.reversed(),
+                    List.of(),
+                    API_KEY);
+
+            // The traces are overwritten, by using a server side generated last_updated_at
+            var expectedTraces1 = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .id(expectedTraces0.get(i).id())
+                            .name("name-01-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                            .startTime(expectedTraces0.get(i).startTime())
+                            .lastUpdatedAt(null)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(expectedTraces1, API_KEY, TEST_WORKSPACE);
+            getAndAssertPage(
+                    TEST_WORKSPACE,
+                    projectName,
+                    null,
+                    List.of(),
+                    List.of(),
+                    expectedTraces1.reversed(), // Finds the updated
+                    expectedTraces0, // Does not find the previous
+                    API_KEY);
+
+            // The trace are overwritten, by using a client side generated last_updated_at
+            var expectedTraces2 = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .id(expectedTraces0.get(i).id())
+                            .name("name-02-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                            .startTime(expectedTraces0.get(i).startTime())
+                            .lastUpdatedAt(Instant.now().plus(1, ChronoUnit.DAYS))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(expectedTraces2, API_KEY, TEST_WORKSPACE);
+            getAndAssertPage(
+                    TEST_WORKSPACE,
+                    projectName,
+                    null,
+                    List.of(),
+                    List.of(),
+                    expectedTraces2.reversed(), // Finds the updated
+                    expectedTraces1, // Does not find the previous
+                    API_KEY);
+
+            // The trace is not overwritten, the client side last_updated_at is older
+            var unexpectedTraces = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .id(expectedTraces0.get(i).id())
+                            .name("name-03-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                            .startTime(expectedTraces0.get(i).startTime())
+                            .lastUpdatedAt(Instant.now().minus(1, ChronoUnit.DAYS))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(unexpectedTraces, API_KEY, TEST_WORKSPACE);
+            getAndAssertPage(
+                    TEST_WORKSPACE,
+                    projectName,
+                    null,
+                    List.of(),
+                    List.of(),
+                    expectedTraces2.reversed(), // finds the previous
+                    unexpectedTraces, // Does not find the update attempt
                     API_KEY);
         }
 
@@ -5909,23 +5842,18 @@ class TracesResourceTest {
         @MethodSource("com.comet.opik.api.resources.utils.QuotaLimitTestUtils#quotaLimitsTestProvider")
         void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
                 List<Quota> quotas, boolean isLimitReached) {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
             var workspaceId = UUID.randomUUID().toString();
-
             AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, workspaceName, workspaceId, USER, quotas);
 
-            var trace = createTrace().toBuilder()
-                    .projectId(null)
-                    .projectName(DEFAULT_PROJECT)
-                    .feedbackScores(null)
-                    .build();
+            var trace = factory.manufacturePojo(Trace.class);
+            try (var actualResponse = traceResourceClient.callBatchCreateTraces(
+                    List.of(trace), API_KEY, workspaceName)) {
 
-            try (var actualResponse = traceResourceClient.callBatchCreateTraces(List.of(trace), API_KEY,
-                    workspaceName)) {
                 if (isLimitReached) {
                     assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_PAYMENT_REQUIRED);
-                    var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED,
-                            ERR_USAGE_LIMIT_EXCEEDED);
+                    var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
+                            HttpStatus.SC_PAYMENT_REQUIRED, ERR_USAGE_LIMIT_EXCEEDED);
                     var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                     assertThat(actualError).isEqualTo(expectedError);
                 } else {
@@ -6332,393 +6260,362 @@ class TracesResourceTest {
 
         @BeforeEach
         void setUp() {
-            trace = createTrace()
-                    .toBuilder()
-                    .endTime(null)
-                    .output(null)
-                    .duration(null)
+            trace = Trace.builder()
+                    .projectName("project-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                    .id(generator.generate())
                     .startTime(Instant.now().minusSeconds(10))
-                    .metadata(null)
-                    .tags(null)
-                    .projectId(null)
-                    .usage(null)
-                    .feedbackScores(null)
+                    .createdAt(Instant.now())
                     .build();
-
-            id = create(trace, API_KEY, TEST_WORKSPACE);
+            id = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
         }
 
         @Test
         @DisplayName("when trace does not exist and id is invalid, then return 400")
         void when__traceDoesNotExistAndIdIsInvalid__thenReturn400() {
-            var id = UUID.randomUUID().toString();
-
-            var traceUpdate = TraceUpdate.builder()
-                    .output(JsonUtils.getJsonNodeFromString("{ \"output\": \"data\"}"))
+            var id = UUID.randomUUID();
+            var traceUpdate = factory.manufacturePojo(TraceUpdate.class).toBuilder()
+                    .projectId(null)
                     .build();
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(id)
-                    .request()
-                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .method(HttpMethod.PATCH, Entity.json(traceUpdate))) {
-
-                assertErrorResponse(actualResponse, "Trace id must be a version 7 UUID", HttpStatus.SC_BAD_REQUEST);
+            try (var actualResponse = traceResourceClient.updateTrace(
+                    id, traceUpdate, API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST)) {
+                assertErrorResponse(
+                        actualResponse, "Trace id must be a version 7 UUID", HttpStatus.SC_BAD_REQUEST);
             }
         }
 
         @Test
         @DisplayName("when trace does not exist, then return create it")
         void when__traceDoesNotExist__thenReturnCreateIt() {
-            var id = factory.manufacturePojo(UUID.class);
+            var id = generator.generate();
             var traceUpdate = factory.manufacturePojo(TraceUpdate.class).toBuilder()
                     .projectId(null)
+                    .name(null)
                     .build();
+            var expectedTrace = Trace.builder()
+                    .id(id)
+                    .name(null)
+                    .startTime(Instant.EPOCH)
+                    .endTime(traceUpdate.endTime())
+                    .input(traceUpdate.input())
+                    .output(traceUpdate.output())
+                    .metadata(traceUpdate.metadata())
+                    .tags(traceUpdate.tags())
+                    .createdAt(Instant.now())
+                    .errorInfo(traceUpdate.errorInfo())
+                    .threadId(traceUpdate.threadId())
+                    .build();
+            traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
-            runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
-
-            var actualEntity = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
-
-            assertThat(actualEntity.id()).isEqualTo(id);
-
-            assertThat(actualEntity.input()).isEqualTo(traceUpdate.input());
-            assertThat(actualEntity.output()).isEqualTo(traceUpdate.output());
-            assertThat(actualEntity.endTime()).isEqualTo(traceUpdate.endTime());
-            assertThat(actualEntity.metadata()).isEqualTo(traceUpdate.metadata());
-            assertThat(actualEntity.tags()).isEqualTo(traceUpdate.tags());
-
-            UUID projectId = getProjectId(traceUpdate.projectName(), TEST_WORKSPACE, API_KEY);
-
-            assertThat(actualEntity.name()).isEmpty();
-            assertThat(actualEntity.startTime()).isEqualTo(Instant.EPOCH);
-            assertThat(actualEntity.projectId()).isEqualTo(projectId);
+            var projectId = projectResourceClient.getByName(traceUpdate.projectName(), API_KEY, TEST_WORKSPACE).id();
+            getAndAssert(expectedTrace, projectId, API_KEY, TEST_WORKSPACE);
         }
 
         @Test
         @DisplayName("when trace update and insert are processed out of other, then return trace")
         void when__traceUpdateAndInsertAreProcessedOutOfOther__thenReturnTrace() {
-            var id = factory.manufacturePojo(UUID.class);
-
+            var id = generator.generate();
+            var createdAt = Instant.now();
             var traceUpdate = factory.manufacturePojo(TraceUpdate.class).toBuilder()
                     .projectId(null)
                     .build();
+            traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
-            runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
-
-            var newTrace = createTrace().toBuilder()
+            var newTrace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(traceUpdate.projectName())
                     .id(id)
+                    .createdAt(createdAt)
+                    .usage(null)
+                    .feedbackScores(null)
                     .build();
+            traceResourceClient.createTrace(newTrace, API_KEY, TEST_WORKSPACE);
 
-            create(newTrace, API_KEY, TEST_WORKSPACE);
-
-            var actualEntity = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
-
-            assertThat(actualEntity.id()).isEqualTo(id);
-
-            assertThat(actualEntity.input()).isEqualTo(traceUpdate.input());
-            assertThat(actualEntity.output()).isEqualTo(traceUpdate.output());
-            assertThat(actualEntity.endTime()).isEqualTo(traceUpdate.endTime());
-            assertThat(actualEntity.metadata()).isEqualTo(traceUpdate.metadata());
-            assertThat(actualEntity.tags()).isEqualTo(traceUpdate.tags());
-
-            assertThat(actualEntity.name()).isEqualTo(newTrace.name());
-            assertThat(actualEntity.startTime()).isEqualTo(newTrace.startTime());
-            assertThat(actualEntity.createdAt()).isBefore(newTrace.createdAt());
+            var expectedTrace = newTrace.toBuilder()
+                    .name(traceUpdate.name())
+                    .endTime(traceUpdate.endTime())
+                    .input(traceUpdate.input())
+                    .output(traceUpdate.output())
+                    .metadata(traceUpdate.metadata())
+                    .tags(traceUpdate.tags())
+                    .errorInfo(traceUpdate.errorInfo())
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                            newTrace.startTime(), traceUpdate.endTime()))
+                    .threadId(traceUpdate.threadId())
+                    .build();
+            getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
         }
 
         @Test
         @DisplayName("when multiple trace update and insert are processed out of other and concurrent, then return trace")
         void when__multipleTraceUpdateAndInsertAreProcessedOutOfOtherAndConcurrent__thenReturnTrace() {
-            var id = factory.manufacturePojo(UUID.class);
-
-            var projectName = UUID.randomUUID().toString();
-
+            var id = generator.generate();
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
             var traceUpdate1 = TraceUpdate.builder()
-                    .metadata(JsonUtils.getJsonNodeFromString("{ \"metadata\": \"data\" }"))
                     .projectName(projectName)
+                    .metadata(factory.manufacturePojo(JsonNode.class))
                     .build();
-
-            var startCreation = Instant.now();
-
             var traceUpdate2 = TraceUpdate.builder()
-                    .input(JsonUtils.getJsonNodeFromString("{ \"input\": \"data2\"}"))
-                    .tags(Set.of("tag1", "tag2"))
                     .projectName(projectName)
+                    .input(factory.manufacturePojo(JsonNode.class))
+                    .tags(PodamFactoryUtils.manufacturePojoSet(factory, String.class))
                     .build();
-
             var traceUpdate3 = TraceUpdate.builder()
-                    .output(JsonUtils.getJsonNodeFromString("{ \"output\": \"data\"}"))
-                    .endTime(Instant.now())
                     .projectName(projectName)
+                    .output(factory.manufacturePojo(JsonNode.class))
+                    .endTime(Instant.now())
                     .build();
-
-            var newTrace = createTrace().toBuilder()
+            var newTrace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(traceUpdate1.projectName())
-                    .endTime(null)
                     .id(id)
+                    .endTime(null)
+                    .usage(null)
+                    .feedbackScores(null)
                     .build();
-
-            var create = Mono.fromRunnable(() -> create(newTrace, API_KEY, TEST_WORKSPACE));
-            var update1 = Mono.fromRunnable(() -> runPatchAndAssertStatus(id, traceUpdate1, API_KEY, TEST_WORKSPACE));
-            var update3 = Mono.fromRunnable(() -> runPatchAndAssertStatus(id, traceUpdate2, API_KEY, TEST_WORKSPACE));
-            var update2 = Mono.fromRunnable(() -> runPatchAndAssertStatus(id, traceUpdate3, API_KEY, TEST_WORKSPACE));
-
+            var create = Mono.fromRunnable(() -> traceResourceClient.createTrace(newTrace, API_KEY, TEST_WORKSPACE));
+            var update1 = Mono.fromRunnable(() -> traceResourceClient.updateTrace(
+                    id, traceUpdate1, API_KEY, TEST_WORKSPACE));
+            var update3 = Mono.fromRunnable(() -> traceResourceClient.updateTrace(
+                    id, traceUpdate2, API_KEY, TEST_WORKSPACE));
+            var update2 = Mono.fromRunnable(() -> traceResourceClient.updateTrace(
+                    id, traceUpdate3, API_KEY, TEST_WORKSPACE));
             Flux.merge(update1, update2, create, update3).blockLast();
 
-            var created = Instant.now();
-
-            var actualEntity = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
-
-            assertThat(actualEntity.id()).isEqualTo(id);
-
-            assertThat(actualEntity.endTime()).isEqualTo(traceUpdate3.endTime());
-            assertThat(actualEntity.input()).isEqualTo(traceUpdate2.input());
-            assertThat(actualEntity.output()).isEqualTo(traceUpdate3.output());
-            assertThat(actualEntity.metadata()).isEqualTo(traceUpdate1.metadata());
-            assertThat(actualEntity.tags()).isEqualTo(traceUpdate2.tags());
-
-            assertThat(actualEntity.name()).isEqualTo(newTrace.name());
-            assertThat(actualEntity.startTime()).isEqualTo(newTrace.startTime());
-            assertThat(actualEntity.createdAt()).isBetween(startCreation, created);
-        }
-
-        private void runPatchAndAssertStatus(UUID id, TraceUpdate traceUpdate3, String apiKey, String workspaceName) {
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(id.toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .method(HttpMethod.PATCH, Entity.json(traceUpdate3))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                assertThat(actualResponse.hasEntity()).isFalse();
-            }
+            var expectedTrace = newTrace.toBuilder()
+                    .endTime(traceUpdate3.endTime())
+                    .input(traceUpdate2.input())
+                    .output(traceUpdate3.output())
+                    .metadata(traceUpdate1.metadata())
+                    .tags(traceUpdate2.tags())
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                            newTrace.startTime(), traceUpdate3.endTime()))
+                    .build();
+            getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
         }
 
         @Test
         @DisplayName("Success")
         void update() {
-            var traceUpdate = TraceUpdate.builder()
-                    .endTime(Instant.now())
-                    .input(JsonUtils.getJsonNodeFromString("{ \"input\": \"data\"}"))
-                    .output(JsonUtils.getJsonNodeFromString("{ \"output\": \"data\"}"))
-                    .metadata(JsonUtils.getJsonNodeFromString("{ \"metadata\": \"data\" }"))
-                    .tags(Set.of("tag1", "tag2"))
+            var traceUpdate = factory.manufacturePojo(TraceUpdate.class).toBuilder()
                     .projectName(trace.projectName())
+                    .projectId(null)
                     .build();
+            traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
-            runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
-
-            var actualEntity = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
-
-            assertThat(actualEntity.id()).isEqualTo(id);
-            assertThat(actualEntity.input()).isEqualTo(traceUpdate.input());
-            assertThat(actualEntity.output()).isEqualTo(traceUpdate.output());
-            assertThat(actualEntity.metadata()).isEqualTo(traceUpdate.metadata());
-            assertThat(actualEntity.tags()).isEqualTo(traceUpdate.tags());
-
-            assertThat(actualEntity.projectId()).isNotNull();
-            assertThat(actualEntity.name()).isEqualTo(trace.name());
-
-            assertThat(actualEntity.endTime()).isEqualTo(traceUpdate.endTime());
-            assertThat(actualEntity.startTime()).isEqualTo(trace.startTime());
-
-            assertThat(actualEntity.createdAt()).isAfter(trace.createdAt());
-            assertThat(actualEntity.lastUpdatedAt()).isAfter(traceUpdate.endTime());
+            var expectedTrace = trace.toBuilder()
+                    .name(traceUpdate.name())
+                    .endTime(traceUpdate.endTime())
+                    .input(traceUpdate.input())
+                    .output(traceUpdate.output())
+                    .metadata(traceUpdate.metadata())
+                    .tags(traceUpdate.tags())
+                    .errorInfo(traceUpdate.errorInfo())
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                            trace.startTime(), traceUpdate.endTime()))
+                    .threadId(traceUpdate.threadId())
+                    .build();
+            getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
         }
 
-        @Test
-        @DisplayName("when only output is not null, then accept update")
-        void update__whenOutputIsNotNull__thenAcceptUpdate() {
-
-            var traceUpdate = TraceUpdate.builder()
-                    .projectName(trace.projectName())
-                    .output(JsonUtils.getJsonNodeFromString("{ \"output\": \"data\"}"))
-                    .build();
-
-            runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
+        Stream<Arguments> updateOnlyName() {
+            var name = RandomStringUtils.secure().nextAlphanumeric(32);
+            return Stream.of(
+                    arguments(name, name),
+                    arguments(null, null),
+                    arguments("", null),
+                    arguments("   ", null));
         }
 
-        @Test
-        @DisplayName("when end time is not null, then accept update")
-        void update__whenEndTimeIsNotNull__thenAcceptUpdate() {
-
+        @ParameterizedTest
+        @MethodSource
+        void updateOnlyName(String name, String expectedName) {
             var traceUpdate = TraceUpdate.builder()
                     .projectName(trace.projectName())
-                    .endTime(Instant.now())
+                    .name(name)
                     .build();
+            traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
-            runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
+            var actualTrace = getAndAssert(
+                    trace.toBuilder().name(expectedName).build(), null, API_KEY, TEST_WORKSPACE);
+            assertThat(actualTrace.name()).isEqualTo(expectedName);
         }
 
-        @Test
-        @DisplayName("when input is not null, then accept update")
-        void update__whenInputIsNotNull__thenAcceptUpdate() {
+        Stream<Instant> updateOnlyEndTime() {
+            return Stream.of(Instant.now(), null);
+        }
 
+        @ParameterizedTest
+        @MethodSource
+        void updateOnlyEndTime(Instant endTime) {
             var traceUpdate = TraceUpdate.builder()
                     .projectName(trace.projectName())
-                    .input(JsonUtils.getJsonNodeFromString("{ \"input\": \"data\"}"))
+                    .endTime(endTime)
                     .build();
+            traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
-            runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
+            var expectedTrace = trace.toBuilder()
+                    .endTime(endTime)
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(), endTime))
+                    .build();
+            var actualTrace = getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
+            assertThat(actualTrace.endTime()).isEqualTo(traceUpdate.endTime());
         }
 
-        @Test
-        @DisplayName("when metadata is not null, then accept update")
-        void update__whenMetadataIsNotNull__thenAcceptUpdate() {
-
-            var traceUpdate = TraceUpdate.builder()
-                    .projectName(trace.projectName())
-                    .metadata(JsonUtils.getJsonNodeFromString("{ \"metadata\": \"data\"}"))
-                    .build();
-
-            runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
+        Stream<JsonNode> updateOnlyInput() {
+            return Stream.of(
+                    factory.manufacturePojo(JsonNode.class),
+                    JsonUtils.getJsonNodeFromString("{}"),
+                    null);
         }
 
-        @Test
-        @DisplayName("when tags is not null, then accept update")
-        void update__whenTagsIsNotNull__thenAcceptUpdate() {
-
-            var traceUpdate = TraceUpdate.builder()
-                    .projectName(trace.projectName())
-                    .tags(Set.of("tag1", "tag2"))
-                    .build();
-
-            runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
-        }
-
-        @Test
-        @DisplayName("when tags is empty, then accept update")
-        void update__whenTagsIsEmpty__thenAcceptUpdate() {
-
-            var traceUpdate = TraceUpdate.builder()
-                    .projectName(trace.projectName())
-                    .tags(Set.of())
-                    .build();
-
-            runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
-
-            UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
-
-            var actualTrace = getAndAssert(trace, projectId, API_KEY,
-                    TEST_WORKSPACE);
-
-            assertThat(actualTrace.tags()).isNull();
-        }
-
-        @Test
-        @DisplayName("when metadata is empty, then accept update")
-        void update__whenMetadataIsEmpty__thenAcceptUpdate() {
-
-            JsonNode metadata = JsonUtils.getJsonNodeFromString("{}");
-
-            var traceUpdate = TraceUpdate.builder()
-                    .projectName(trace.projectName())
-                    .metadata(metadata)
-                    .build();
-
-            runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
-
-            UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
-
-            var actualTrace = getAndAssert(trace.toBuilder().metadata(metadata).build(), projectId,
-                    API_KEY, TEST_WORKSPACE);
-
-            assertThat(actualTrace.metadata()).isEqualTo(metadata);
-        }
-
-        @Test
-        @DisplayName("when input is empty, then accept update")
-        void update__whenInputIsEmpty__thenAcceptUpdate() {
-
-            JsonNode input = JsonUtils.getJsonNodeFromString("{}");
-
+        @ParameterizedTest
+        @MethodSource
+        void updateOnlyInput(JsonNode input) {
             var traceUpdate = TraceUpdate.builder()
                     .projectName(trace.projectName())
                     .input(input)
                     .build();
+            traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
-            runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
-
-            UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
-
-            var actualTrace = getAndAssert(trace.toBuilder().input(input).build(), projectId,
-                    API_KEY, TEST_WORKSPACE);
-
-            assertThat(actualTrace.input()).isEqualTo(input);
+            var actualTrace = getAndAssert(
+                    trace.toBuilder().input(input).build(), null, API_KEY, TEST_WORKSPACE);
+            assertThat(actualTrace.input()).isEqualTo(traceUpdate.input());
         }
 
-        @Test
-        @DisplayName("when output is empty, then accept update")
-        void update__whenOutputIsEmpty__thenAcceptUpdate() {
+        Stream<JsonNode> updateOnlyOutput() {
+            return Stream.of(
+                    factory.manufacturePojo(JsonNode.class),
+                    JsonUtils.getJsonNodeFromString("{}"),
+                    null);
+        }
 
-            JsonNode output = JsonUtils.getJsonNodeFromString("{}");
-
+        @ParameterizedTest
+        @MethodSource
+        void updateOnlyOutput(JsonNode output) {
             var traceUpdate = TraceUpdate.builder()
                     .projectName(trace.projectName())
                     .output(output)
                     .build();
+            traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
-            runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
+            var actualTrace = getAndAssert(
+                    trace.toBuilder().output(output).build(), null, API_KEY, TEST_WORKSPACE);
+            assertThat(actualTrace.output()).isEqualTo(traceUpdate.output());
+        }
 
-            UUID projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
+        Stream<JsonNode> updateOnlyMetadata() {
+            return Stream.of(
+                    factory.manufacturePojo(JsonNode.class),
+                    JsonUtils.getJsonNodeFromString("{}"),
+                    null);
+        }
 
-            var actualTrace = getAndAssert(trace.toBuilder().output(output).build(), projectId,
-                    API_KEY, TEST_WORKSPACE);
+        @ParameterizedTest
+        @MethodSource
+        void updateOnlyMetadata(JsonNode metadata) {
+            var traceUpdate = TraceUpdate.builder()
+                    .projectName(trace.projectName())
+                    .metadata(metadata)
+                    .build();
+            traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
-            assertThat(actualTrace.output()).isEqualTo(output);
+            var actualTrace = getAndAssert(
+                    trace.toBuilder().metadata(metadata).build(), null, API_KEY, TEST_WORKSPACE);
+            assertThat(actualTrace.metadata()).isEqualTo(traceUpdate.metadata());
+        }
+
+        Stream<Arguments> updateOnlyTags() {
+            var tags = PodamFactoryUtils.manufacturePojoSet(factory, String.class);
+            return Stream.of(
+                    arguments(tags, tags),
+                    arguments(Set.of(), null),
+                    arguments(null, null));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void updateOnlyTags(Set<String> tags, Set<String> expectedTags) {
+            var traceUpdate = TraceUpdate.builder()
+                    .projectName(trace.projectName())
+                    .tags(tags)
+                    .build();
+            traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
+
+            var actualTrace = getAndAssert(
+                    trace.toBuilder().tags(expectedTags).build(), null, API_KEY, TEST_WORKSPACE);
+            assertThat(actualTrace.tags()).isEqualTo(expectedTags);
+        }
+
+        Stream<ErrorInfo> updateOnlyErrorInfo() {
+            return Stream.of(factory.manufacturePojo(ErrorInfo.class), null);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void updateOnlyErrorInfo(ErrorInfo errorInfo) {
+            var traceUpdate = TraceUpdate.builder()
+                    .projectName(trace.projectName())
+                    .errorInfo(errorInfo)
+                    .build();
+            traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
+
+            var actualTrace = getAndAssert(
+                    trace.toBuilder().errorInfo(errorInfo).build(), null, API_KEY, TEST_WORKSPACE);
+            assertThat(actualTrace.errorInfo()).isEqualTo(traceUpdate.errorInfo());
+        }
+
+        Stream<Arguments> updateOnlyThreadId() {
+            var name = RandomStringUtils.secure().nextAlphanumeric(32);
+            return Stream.of(
+                    arguments(name, name),
+                    arguments(null, null),
+                    arguments("", null),
+                    arguments("   ", null));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void updateOnlyThreadId(String threadId, String expectedThreadId) {
+            var traceUpdate = TraceUpdate.builder()
+                    .projectName(trace.projectName())
+                    .threadId(threadId)
+                    .build();
+            traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
+
+            var actualTrace = getAndAssert(
+                    trace.toBuilder().threadId(expectedThreadId).build(), null, API_KEY, TEST_WORKSPACE);
+            assertThat(actualTrace.threadId()).isEqualTo(expectedThreadId);
         }
 
         @Test
         @DisplayName("when updating using projectId, then accept update")
         void update__whenUpdatingUsingProjectId__thenAcceptUpdate() {
+            var newTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+            traceResourceClient.createTrace(newTrace, API_KEY, TEST_WORKSPACE);
 
-            var projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
-
+            var projectId = projectResourceClient.getByName(newTrace.projectName(), API_KEY, TEST_WORKSPACE).id();
             var traceUpdate = factory.manufacturePojo(TraceUpdate.class).toBuilder()
                     .projectId(projectId)
                     .build();
+            traceResourceClient.updateTrace(newTrace.id(), traceUpdate, API_KEY, TEST_WORKSPACE);
 
-            runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
-
-            var updatedTrace = trace.toBuilder()
-                    .projectId(projectId)
+            var updatedTrace = newTrace.toBuilder()
+                    .name(traceUpdate.name())
                     .metadata(traceUpdate.metadata())
                     .input(traceUpdate.input())
                     .output(traceUpdate.output())
                     .endTime(traceUpdate.endTime())
                     .tags(traceUpdate.tags())
                     .errorInfo(traceUpdate.errorInfo())
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                            newTrace.startTime(), traceUpdate.endTime()))
                     .threadId(traceUpdate.threadId())
                     .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(),
                             traceUpdate.endTime()))
                     .build();
-
             getAndAssert(updatedTrace, projectId, API_KEY, TEST_WORKSPACE);
         }
-
-        @Test
-        @DisplayName("when updating trace to add thread id, then accept update")
-        void update__whenUpdatingTraceToAddThreadId__thenAcceptUpdate() {
-
-            var threadId = UUID.randomUUID().toString();
-
-            var projectId = getProjectId(trace.projectName(), TEST_WORKSPACE, API_KEY);
-
-            var traceUpdate = TraceUpdate.builder()
-                    .threadId(threadId)
-                    .projectId(projectId)
-                    .build();
-
-            runPatchAndAssertStatus(id, traceUpdate, API_KEY, TEST_WORKSPACE);
-
-            var actualTrace = traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
-
-            assertThat(actualTrace.threadId()).isEqualTo(threadId);
-        }
-
     }
 
     @Nested
@@ -7454,7 +7351,7 @@ class TracesResourceTest {
 
             String projectName = UUID.randomUUID().toString();
 
-            createProject(projectName.toUpperCase(), TEST_WORKSPACE, API_KEY);
+            projectResourceClient.createProject(projectName.toUpperCase(), API_KEY, TEST_WORKSPACE);
 
             var traces = IntStream.range(0, 10)
                     .mapToObj(i -> createTrace().toBuilder()
@@ -7609,7 +7506,7 @@ class TracesResourceTest {
         @DisplayName("when trace thread does not exist, then return no content")
         void deleteTraceThread__whenTraceDoesNotExist__thenReturnNotFound() {
             var trace = createTrace();
-            var id = create(trace, API_KEY, TEST_WORKSPACE);
+            create(trace, API_KEY, TEST_WORKSPACE);
 
             traceResourceClient.deleteTraceThreads(List.of(UUID.randomUUID().toString()), trace.projectName(), null,
                     API_KEY, TEST_WORKSPACE);
@@ -7622,7 +7519,7 @@ class TracesResourceTest {
                     .threadId(UUID.randomUUID().toString())
                     .build();
 
-            var id = create(trace, API_KEY, TEST_WORKSPACE);
+            create(trace, API_KEY, TEST_WORKSPACE);
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("threads")
@@ -7780,7 +7677,7 @@ class TracesResourceTest {
         }
     }
 
-    private int setupTracesForWorkspace(String workspaceName, String workspaceId, String okApikey) {
+    private int setupTracesForWorkspace(String workspaceName, String okApikey) {
         var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                 .stream()
                 .map(t -> t.toBuilder()

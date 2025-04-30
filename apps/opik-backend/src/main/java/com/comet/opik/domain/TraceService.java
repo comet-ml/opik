@@ -17,7 +17,6 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesUpdated;
-import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -116,7 +115,6 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull LockService lockService;
     private final @NonNull EventBus eventBus;
-    private final @NonNull TraceSortingFactory sortingFactory;
 
     @Override
     @WithSpan
@@ -230,8 +228,7 @@ class TraceServiceImpl implements TraceService {
     private Mono<UUID> insertTrace(Trace newTrace, Project project, UUID id, Trace existingTrace) {
         return Mono.defer(() -> {
             // check if a partial trace exists caused by a patch request
-            if (existingTrace.name().isBlank()
-                    && existingTrace.startTime().equals(Instant.EPOCH)
+            if (existingTrace.startTime().equals(Instant.EPOCH)
                     && existingTrace.projectId().equals(project.id())) {
 
                 return create(newTrace, project, id);

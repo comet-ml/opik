@@ -54,6 +54,7 @@ import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
@@ -85,6 +86,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -1362,71 +1364,75 @@ class ProjectsResourceTest {
         @Test
         @DisplayName("when projects is with traces created in batch, then return project with last updated trace at")
         void getProjects__whenProjectsHasTracesBatch__thenReturnProjectWithLastUpdatedTraceAt() {
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
+            // Use dedicated workspace to avoid collisions with other tests when finding all projects
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(API_KEY, workspaceName, workspaceId);
 
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var project = factory.manufacturePojo(Project.class);
+            var project1 = factory.manufacturePojo(Project.class);
             var project2 = factory.manufacturePojo(Project.class);
             var project3 = factory.manufacturePojo(Project.class);
 
-            var id = createProject(project, apiKey, workspaceName);
-            var id2 = createProject(project2, apiKey, workspaceName);
-            var id3 = createProject(project3, apiKey, workspaceName);
+            var id1 = createProject(project1, API_KEY, workspaceName);
+            var id2 = createProject(project2, API_KEY, workspaceName);
+            var id3 = createProject(project3, API_KEY, workspaceName);
 
-            List<Trace> traces = IntStream.range(0, 5)
+            var traces1 = IntStream.range(0, 5)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
-                            .projectName(project.name())
+                            .projectName(project1.name())
+                            .lastUpdatedAt(null) // Server side
                             .build())
                     .toList();
-            List<Trace> traces2 = IntStream.range(0, 5)
+            var traces2 = IntStream.range(0, 5)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(project2.name())
                             .build())
                     .toList();
-            List<Trace> traces3 = IntStream.range(0, 5)
+            var traces3 = IntStream.range(0, 5)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(project3.name())
+                            .lastUpdatedAt(Instant.now().plus(1, ChronoUnit.HOURS))
                             .build())
                     .toList();
 
             traceResourceClient.batchCreateTraces(
-                    Stream.concat(Stream.concat(traces.stream(), traces2.stream()), traces3.stream()).toList(),
-                    apiKey, workspaceName);
+                    Stream.of(traces1, traces2, traces3).flatMap(List::stream).toList(),
+                    API_KEY,
+                    workspaceName);
 
-            // all projects should have the same "last_updated_trace_at"
-            Trace actualTrace = traceResourceClient.getById(traces.getFirst().id(), workspaceName, apiKey);
+            var latestActualTrace1 = traceResourceClient.getById(traces1.getLast().id(), workspaceName, API_KEY);
+            var latestActualTrace2 = traceResourceClient.getById(traces2.getLast().id(), workspaceName, API_KEY);
+            var latestActualTrace3 = traceResourceClient.getById(traces3.getLast().id(), workspaceName, API_KEY);
 
-            Project expectedProject = project.toBuilder().id(id)
-                    .lastUpdatedTraceAt(actualTrace.lastUpdatedAt()).build();
-            Project expectedProject2 = project2.toBuilder().id(id2)
-                    .lastUpdatedTraceAt(actualTrace.lastUpdatedAt()).build();
-            Project expectedProject3 = project3.toBuilder().id(id3)
-                    .lastUpdatedTraceAt(actualTrace.lastUpdatedAt()).build();
+            var expectedProject1 = project1.toBuilder().id(id1)
+                    .lastUpdatedTraceAt(latestActualTrace1.lastUpdatedAt()).build();
+            var expectedProject2 = project2.toBuilder().id(id2)
+                    .lastUpdatedTraceAt(latestActualTrace2.lastUpdatedAt()).build();
+            var expectedProject3 = project3.toBuilder().id(id3)
+                    .lastUpdatedTraceAt(latestActualTrace3.lastUpdatedAt()).build();
 
             var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, workspaceName)
                     .get();
 
+            assertThat(actualResponse.hasEntity()).isTrue();
             var actualEntity = actualResponse.readEntity(Project.ProjectPage.class);
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
             assertThat(actualEntity.content().stream().map(Project::id).toList())
-                    .isEqualTo(List.of(id3, id2, id));
+                    .isEqualTo(List.of(id3, id2, id1));
 
             assertThat(actualEntity.content().get(0).lastUpdatedTraceAt())
                     .isEqualTo(expectedProject3.lastUpdatedTraceAt());
             assertThat(actualEntity.content().get(1).lastUpdatedTraceAt())
                     .isEqualTo(expectedProject2.lastUpdatedTraceAt());
             assertThat(actualEntity.content().get(2).lastUpdatedTraceAt())
-                    .isEqualTo(expectedProject.lastUpdatedTraceAt());
+                    .isEqualTo(expectedProject1.lastUpdatedTraceAt());
 
-            assertAllProjectsHavePersistedLastTraceAt(workspaceId, List.of(expectedProject, expectedProject2,
-                    expectedProject3));
+            assertAllProjectsHavePersistedLastTraceAt(
+                    workspaceId, List.of(expectedProject1, expectedProject2, expectedProject3));
         }
 
         @Test

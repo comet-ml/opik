@@ -157,16 +157,21 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public void updateTrace(UUID id, TraceUpdate traceUpdate, String apiKey, String workspaceName) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+        try (var actualResponse = updateTrace(id, traceUpdate, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT)) {
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public Response updateTrace(
+            UUID id, TraceUpdate traceUpdate, String apiKey, String workspaceName, int expectedStatus) {
+        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .method(HttpMethod.PATCH, Entity.json(traceUpdate))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
+                .method(HttpMethod.PATCH, Entity.json(traceUpdate));
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        return actualResponse;
     }
 
     public List<List<FeedbackScoreBatchItem>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
