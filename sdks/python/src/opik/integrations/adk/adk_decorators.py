@@ -25,8 +25,8 @@ LOGGER = logging.Logger(__name__)
 @dataclasses.dataclass
 class UsageData:
     opik_usage: opik_usage.OpikUsage
-    model: str
-    provider: str
+    model: Optional[str]
+    provider: Optional[str]
 
 
 def convert_adk_base_models(arg: Any) -> Dict[str, Any]:
@@ -54,6 +54,9 @@ def pop_opik_usage(**result_dict: Dict[str, Any]) -> Optional[UsageData]:
         logger=LOGGER,
         error_message="Failed to log token usage from ADK Gemini call",
     )
+    if usage is None:
+        return None
+
     return UsageData(opik_usage=usage, model=model, provider=provider)
 
 
