@@ -299,6 +299,8 @@ class ExperimentDAO {
                 e.prompt_version_id as prompt_version_id,
                 e.prompt_id as prompt_id,
                 e.prompt_versions as prompt_versions,
+                e.optimization_id as optimization_id,
+                e.type as type,
                 fs.feedback_scores as feedback_scores,
                 ed.trace_count as trace_count,
                 ed.duration_values AS duration,
@@ -311,6 +313,8 @@ class ExperimentDAO {
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
+                <if(optimization_id)> AND optimization_id = :optimization_id <endif>
+                <if(types)> AND type IN :types <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
                 <if(id)> AND id = :id <endif>
@@ -335,6 +339,8 @@ class ExperimentDAO {
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
+                <if(optimization_id)> AND optimization_id = :optimization_id <endif>
+                <if(types)> AND type IN :types <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
@@ -541,6 +547,11 @@ class ExperimentDAO {
                     .usage(row.get("usage", Map.class))
                     .promptVersion(promptVersions.stream().findFirst().orElse(null))
                     .promptVersions(promptVersions.isEmpty() ? null : promptVersions)
+                    .optimizationId(Optional.ofNullable(row.get("optimization_id", String.class))
+                            .filter(str -> !str.isBlank())
+                            .map(UUID::fromString)
+                            .orElse(null))
+                    .type(ExperimentType.fromString(row.get("type", String.class)))
                     .build();
         });
     }
@@ -674,6 +685,10 @@ class ExperimentDAO {
                 .ifPresent(datasetIds -> template.add("dataset_ids", datasetIds));
         Optional.ofNullable(criteria.promptId())
                 .ifPresent(promptId -> template.add("prompt_ids", promptId));
+        Optional.ofNullable(criteria.optimizationId())
+                .ifPresent(optimizationId -> template.add("optimization_id", optimizationId));
+        Optional.ofNullable(criteria.types())
+                .ifPresent(types -> template.add("types", types));
         return template;
     }
 
@@ -686,6 +701,10 @@ class ExperimentDAO {
                 .ifPresent(datasetIds -> statement.bind("dataset_ids", datasetIds.toArray(UUID[]::new)));
         Optional.ofNullable(criteria.promptId())
                 .ifPresent(promptId -> statement.bind("prompt_ids", List.of(promptId).toArray(UUID[]::new)));
+        Optional.ofNullable(criteria.optimizationId())
+                .ifPresent(optimizationId -> statement.bind("optimization_id", optimizationId));
+        Optional.ofNullable(criteria.types())
+                .ifPresent(types -> statement.bind("types", types));
         if (!isCount) {
             statement.bind("entity_type", criteria.entityType().getType());
         }

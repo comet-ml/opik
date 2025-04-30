@@ -5,6 +5,7 @@ import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentStreamRequest;
+import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -59,7 +60,7 @@ public class ExperimentResourceClient {
                 .promptVersions(null)
                 .duration(null)
                 .totalEstimatedCost(null)
-                .type(null)
+                .type(ExperimentType.REGULAR)
                 .optimizationId(null)
                 .usage(null);
     }
@@ -72,7 +73,7 @@ public class ExperimentResourceClient {
                         .duration(null)
                         .totalEstimatedCost(null)
                         .usage(null)
-                        .type(null)
+                        .type(ExperimentType.REGULAR)
                         .optimizationId(null)
                         .build())
                 .toList();
