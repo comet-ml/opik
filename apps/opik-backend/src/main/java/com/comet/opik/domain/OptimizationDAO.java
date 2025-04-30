@@ -243,108 +243,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
             """;
 
     private static final String COUNT = """
-            WITH trace_final AS (
-                SELECT
-                    id
-                FROM traces
-                WHERE workspace_id = :workspace_id
-            ),
-            feedback_scores_agg AS (
-                SELECT
-                    experiment_id,
-                    if(
-                        notEmpty(arrayFilter(x -> length(x) > 0, groupArray(name))),
-                        mapFromArrays(
-                            arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(name))),
-                            arrayMap(
-                                vName -> if(
-                                    arrayReduce(
-                                        'SUM',
-                                        arrayMap(
-                                            vNameAndValue -> vNameAndValue.2,
-                                            arrayFilter(
-                                                pair -> pair.1 = vName,
-                                                groupArray(DISTINCT tuple(name, count_value, trace_id))
-                                            )
-                                        )
-                                    ) = 0,
-                                    0,
-                                    arrayReduce(
-                                        'SUM',
-                                        arrayMap(
-                                            vNameAndValue -> vNameAndValue.2,
-                                            arrayFilter(
-                                                pair -> pair.1 = vName,
-                                                groupArray(DISTINCT tuple(name, total_value, trace_id))
-                                            )
-                                        )
-                                    ) / arrayReduce(
-                                        'SUM',
-                                        arrayMap(
-                                            vNameAndValue -> vNameAndValue.2,
-                                            arrayFilter(
-                                                pair -> pair.1 = vName,
-                                                groupArray(DISTINCT tuple(name, count_value, trace_id))
-                                            )
-                                        )
-                                    )
-                                ),
-                                arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(name)))
-                            )
-                        ),
-                        map()
-                    ) as feedback_scores
-                FROM (
-                    SELECT
-                        ei.experiment_id,
-                        tfs.name,
-                        tfs.total_value,
-                        tfs.count_value,
-                        tfs.trace_id as trace_id
-                    FROM experiment_items ei
-                    JOIN (
-                        SELECT
-                            entity_id as trace_id,
-                            name,
-                            SUM(value) as total_value,
-                            COUNT(value) as count_value
-                        FROM (
-                            SELECT
-                                entity_id,
-                                name,
-                                value
-                            FROM feedback_scores
-                            WHERE workspace_id = :workspace_id
-                            AND entity_type = :entity_type
-                            AND entity_id IN (SELECT id FROM trace_final)
-                            ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                            LIMIT 1 BY entity_id, name
-                        )
-                        GROUP BY
-                            entity_id,
-                            name
-                    ) AS tfs ON ei.trace_id = tfs.trace_id
-                    WHERE ei.trace_id IN (SELECT id FROM trace_final)
-                )
-                GROUP BY experiment_id
-            ), experiments_fs AS (
-                SELECT
-                    e.id as id,
-                    e.optimization_id as optimization_id,
-                    fs.feedback_scores as feedback_scores
-                FROM (
-                    SELECT
-                        id,
-                        optimization_id
-                    FROM experiments
-                    WHERE workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS e
-                LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
-            )
             SELECT
-                COUNT(o.id) as count
+                COUNT(id) as count
             FROM (
                 SELECT
                     id
@@ -356,9 +256,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
-            ) AS o
-            LEFT JOIN experiments_fs AS efs ON o.id = efs.optimization_id
-            GROUP BY o.*
+            )
             ;
             """;
 
@@ -522,7 +420,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .flatMapMany(connection -> {
                     Statement statement = connection.createStatement(template.render());
 
-                    bindQueryParams(searchCriteria, statement);
+                    bindQueryParams(searchCriteria, statement, false);
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
@@ -547,7 +445,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                             .bind("limit", size)
                             .bind("offset", offset);
 
-                    bindQueryParams(searchCriteria, statement);
+                    bindQueryParams(searchCriteria, statement, true);
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
@@ -572,7 +470,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .ifPresent(entityType -> template.add("entity_type", EntityType.TRACE.getType()));
     }
 
-    private void bindQueryParams(OptimizationSearchCriteria searchCriteria, Statement statement) {
+    private void bindQueryParams(OptimizationSearchCriteria searchCriteria, Statement statement, boolean isFindQuery) {
 
         Optional.ofNullable(searchCriteria.datasetDeleted())
                 .ifPresent(datasetDeleted -> statement.bind("dataset_deleted", datasetDeleted));
@@ -583,8 +481,10 @@ class OptimizationDAOImpl implements OptimizationDAO {
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> statement.bind("name", name));
 
-        Optional.ofNullable(searchCriteria.entityType())
-                .ifPresent(entityType -> statement.bind("entity_type", EntityType.TRACE.getType()));
+        if (isFindQuery) {
+            Optional.ofNullable(searchCriteria.entityType())
+                    .ifPresent(entityType -> statement.bind("entity_type", EntityType.TRACE.getType()));
+        }
     }
 
     private Publisher<? extends Result> insert(Optimization optimization, Connection connection) {
