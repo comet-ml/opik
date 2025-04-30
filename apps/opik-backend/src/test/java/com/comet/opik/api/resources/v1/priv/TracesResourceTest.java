@@ -8,6 +8,7 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.ScoreSource;
@@ -115,7 +116,9 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -153,6 +156,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.UUID.randomUUID;
+import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -170,6 +174,33 @@ class TracesResourceTest {
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
+
+    public static final Map<Trace.TraceField, Function<Trace, Trace>> EXCLUDE_FUNCTIONS = new EnumMap<>(
+            Trace.TraceField.class);
+
+    static {
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.NAME, it -> it.toBuilder().name(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.START_TIME, it -> it.toBuilder().startTime(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.END_TIME, it -> it.toBuilder().endTime(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.INPUT, it -> it.toBuilder().input(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.OUTPUT, it -> it.toBuilder().output(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.METADATA, it -> it.toBuilder().metadata(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.TAGS, it -> it.toBuilder().tags(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.USAGE, it -> it.toBuilder().usage(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.ERROR_INFO, it -> it.toBuilder().errorInfo(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.CREATED_AT, it -> it.toBuilder().createdAt(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.CREATED_BY, it -> it.toBuilder().createdBy(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.LAST_UPDATED_BY, it -> it.toBuilder().lastUpdatedBy(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.FEEDBACK_SCORES, it -> it.toBuilder().feedbackScores(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.COMMENTS, it -> it.toBuilder().comments(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.GUARDRAILS_VALIDATIONS,
+                it -> it.toBuilder().guardrailsValidations(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.SPAN_COUNT, it -> it.toBuilder().spanCount(0).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.TOTAL_ESTIMATED_COST,
+                it -> it.toBuilder().totalEstimatedCost(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.THREAD_ID, it -> it.toBuilder().threadId(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.DURATION, it -> it.toBuilder().duration(null).build());
+    }
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
@@ -1455,6 +1486,7 @@ class TracesResourceTest {
                         .toBuilder()
                         .projectName(projectName)
                         .endTime(null)
+                        .duration(null)
                         .output(null)
                         .tags(null)
                         .feedbackScores(null)
@@ -1489,6 +1521,7 @@ class TracesResourceTest {
                     .toBuilder()
                     .projectName(projectName)
                     .endTime(null)
+                    .duration(null)
                     .output(null)
                     .projectId(null)
                     .tags(null)
@@ -1587,6 +1620,7 @@ class TracesResourceTest {
                         .toBuilder()
                         .projectName(projectName)
                         .endTime(null)
+                        .duration(null)
                         .output(null)
                         .projectId(null)
                         .tags(null)
@@ -4755,7 +4789,7 @@ class TracesResourceTest {
                             workspaceName,
                             apiKey,
                             List.of(),
-                            traces.size());
+                            traces.size(), Set.of());
                 }
             }
         }
@@ -4796,7 +4830,7 @@ class TracesResourceTest {
             List<SortingField> sortingFields = List.of(sorting);
 
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, expectedTraces, List.of(), apiKey,
-                    sortingFields);
+                    sortingFields, Set.of());
         }
 
         @Test
@@ -5035,9 +5069,125 @@ class TracesResourceTest {
             List<SortingField> sortingFields = List.of(sortingField);
 
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, expectedTraces, List.of(), apiKey,
-                    sortingFields);
+                    sortingFields, Set.of());
         }
 
+        @ParameterizedTest
+        @EnumSource(Trace.TraceField.class)
+        void getTracesByProject__whenExcludeParamIdDefined__thenReturnSpanExcludingFields(Trace.TraceField field) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(20);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder().projectName(projectName).build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            Map<UUID, Comment> expectedComments = traces
+                    .stream()
+                    .map(trace -> Map.entry(trace.id(),
+                            traceResourceClient.generateAndCreateComment(trace.id(), apiKey, workspaceName, 201)))
+                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            traces = traces.stream()
+                    .map(span -> span.toBuilder()
+                            .comments(List.of(expectedComments.get(span.id())))
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(span.startTime(),
+                                    span.endTime()))
+                            .build())
+                    .toList();
+
+            List<Span> spans = traces.stream()
+                    .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(trace.projectName())
+                            .traceId(trace.id())
+                            .build())
+                    .toList();
+
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            traces = traces.stream()
+                    .map(trace -> {
+                        return trace.toBuilder()
+                                .totalEstimatedCost(spans.stream()
+                                        .filter(span -> span.traceId().equals(trace.id()))
+                                        .map(Span::totalEstimatedCost)
+                                        .reduce(BigDecimal.ZERO, BigDecimal::add))
+                                .spanCount((int) spans.stream()
+                                        .filter(span -> span.traceId().equals(trace.id()))
+                                        .count())
+                                .usage(spans.stream()
+                                        .filter(span -> span.traceId().equals(trace.id()))
+                                        .map(Span::usage)
+                                        .flatMap(map -> map.entrySet().stream())
+                                        .collect(Collectors.groupingBy(Map.Entry::getKey,
+                                                Collectors.summingLong(Map.Entry::getValue))))
+                                .build();
+                    }).toList();
+
+            List<Trace> finalTraces = traces;
+            List<FeedbackScoreBatchItem> scoreForSpan = IntStream.range(0, traces.size())
+                    .mapToObj(i -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .projectName(finalTraces.get(i).projectName())
+                            .id(finalTraces.get(i).id())
+                            .build())
+                    .toList();
+
+            traceResourceClient.feedbackScores(scoreForSpan, apiKey, workspaceName);
+
+            traces = traces.stream()
+                    .map(trace -> trace.toBuilder()
+                            .feedbackScores(
+                                    scoreForSpan
+                                            .stream()
+                                            .filter(score -> score.id().equals(trace.id()))
+                                            .map(scores -> FeedbackScore.builder()
+                                                    .name(scores.name())
+                                                    .value(scores.value())
+                                                    .categoryName(scores.categoryName())
+                                                    .source(scores.source())
+                                                    .reason(scores.reason())
+                                                    .build())
+                                            .toList())
+                            .build())
+                    .toList();
+
+            List<Guardrail> guardrailsByTraceId = traces.stream()
+                    .map(trace -> guardrailsGenerator.generateGuardrailsForTrace(trace.id(), randomUUID(),
+                            trace.projectName()))
+                    .flatMap(Collection::stream)
+                    .toList();
+
+            traces = traces.stream()
+                    .map(trace -> trace.toBuilder()
+                            .guardrailsValidations(
+                                    GuardrailsMapper.INSTANCE.mapToValidations(
+                                            guardrailsByTraceId
+                                                    .stream()
+                                                    .filter(gr -> gr.entityId().equals(trace.id()))
+                                                    .toList()))
+                            .build())
+                    .toList();
+
+            guardrailsResourceClient.addBatch(guardrailsByTraceId, apiKey, workspaceName);
+
+            traces = traces.stream()
+                    .map(span -> EXCLUDE_FUNCTIONS.get(field).apply(span))
+                    .toList();
+
+            Set<Trace.TraceField> exclude = Set.of(field);
+
+            getAndAssertPage(workspaceName, projectName, null, List.of(), traces, traces.reversed(), List.of(), apiKey,
+                    List.of(), exclude);
+
+        }
     }
 
     private Integer randomNumber() {
@@ -5053,24 +5203,28 @@ class TracesResourceTest {
             List<Trace> traces,
             List<Trace> expectedTraces, List<Trace> unexpectedTraces, String apiKey) {
         getAndAssertPage(workspaceName, projectName, projectId, filters, traces, expectedTraces, unexpectedTraces,
-                apiKey, null);
+                apiKey, null, Set.of());
     }
 
     private void getAndAssertPage(String workspaceName, String projectName, UUID projectId,
             List<? extends Filter> filters,
             List<Trace> traces,
-            List<Trace> expectedTraces, List<Trace> unexpectedTraces, String apiKey, List<SortingField> sortingFields) {
+            List<Trace> expectedTraces,
+            List<Trace> unexpectedTraces,
+            String apiKey,
+            List<SortingField> sortingFields,
+            Set<Trace.TraceField> exclude) {
         int page = 1;
 
         int size = traces.size() + expectedTraces.size() + unexpectedTraces.size();
         getAndAssertPage(page, size, projectName, projectId, filters, expectedTraces, unexpectedTraces,
-                workspaceName, apiKey, sortingFields, expectedTraces.size());
+                workspaceName, apiKey, sortingFields, expectedTraces.size(), exclude);
     }
 
     private void getAndAssertPage(int page, int size, String projectName, UUID projectId,
             List<? extends Filter> filters,
             List<Trace> expectedTraces, List<Trace> unexpectedTraces, String workspaceName, String apiKey,
-            List<SortingField> sortingFields, int total) {
+            List<SortingField> sortingFields, int total, Set<Trace.TraceField> exclude) {
 
         WebTarget target = client.target(URL_TEMPLATE.formatted(baseURI));
 
@@ -5093,6 +5247,10 @@ class TracesResourceTest {
 
         if (projectId != null) {
             target = target.queryParam("project_id", projectId);
+        }
+
+        if (CollectionUtils.isNotEmpty(exclude)) {
+            target = target.queryParam("exclude", toURLEncodedQueryParam(List.copyOf(exclude)));
         }
 
         var actualResponse = target
@@ -5252,6 +5410,7 @@ class TracesResourceTest {
                     .id(null)
                     .projectName(projectName)
                     .endTime(null)
+                    .duration(null)
                     .input(null)
                     .output(null)
                     .metadata(null)
@@ -5377,7 +5536,6 @@ class TracesResourceTest {
                 .threadId(null)
                 .comments(null)
                 .totalEstimatedCost(null)
-                .duration(null)
                 .usage(null)
                 .build();
     }
@@ -5601,6 +5759,7 @@ class TracesResourceTest {
                     .mapToObj(i -> createTrace().toBuilder()
                             .projectName(projectNameModifier.apply(projectName))
                             .endTime(null)
+                            .duration(null)
                             .usage(null)
                             .feedbackScores(null)
                             .build())
@@ -5631,6 +5790,7 @@ class TracesResourceTest {
                             .projectName(null)
                             .endTime(null)
                             .usage(null)
+                            .duration(null)
                             .feedbackScores(null)
                             .threadId(null)
                             .build())
@@ -6176,6 +6336,7 @@ class TracesResourceTest {
                     .toBuilder()
                     .endTime(null)
                     .output(null)
+                    .duration(null)
                     .startTime(Instant.now().minusSeconds(10))
                     .metadata(null)
                     .tags(null)
@@ -6531,6 +6692,8 @@ class TracesResourceTest {
                     .tags(traceUpdate.tags())
                     .errorInfo(traceUpdate.errorInfo())
                     .threadId(traceUpdate.threadId())
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(),
+                            traceUpdate.endTime()))
                     .build();
 
             getAndAssert(updatedTrace, projectId, API_KEY, TEST_WORKSPACE);
@@ -6669,7 +6832,7 @@ class TracesResourceTest {
 
             getAndAssertPage(1, traces.size(), projectName, null, List.of(), traces.reversed(), List.of(),
                     TEST_WORKSPACE,
-                    API_KEY, null, traces.size());
+                    API_KEY, null, traces.size(), Set.of());
         }
 
         @Test
@@ -6829,6 +6992,7 @@ class TracesResourceTest {
                     .projectName(DEFAULT_PROJECT)
                     .endTime(null)
                     .output(null)
+                    .duration(null)
                     .metadata(null)
                     .tags(null)
                     .usage(null)
@@ -6857,6 +7021,7 @@ class TracesResourceTest {
                     .endTime(null)
                     .output(null)
                     .metadata(null)
+                    .duration(null)
                     .tags(null)
                     .usage(null)
                     .feedbackScores(null)
@@ -6881,6 +7046,7 @@ class TracesResourceTest {
                     .toBuilder()
                     .projectName(DEFAULT_PROJECT)
                     .endTime(null)
+                    .duration(null)
                     .output(null)
                     .metadata(null)
                     .tags(null)
@@ -7019,6 +7185,7 @@ class TracesResourceTest {
                     .toBuilder()
                     .projectName(DEFAULT_PROJECT)
                     .endTime(null)
+                    .duration(null)
                     .output(null)
                     .metadata(null)
                     .build();
@@ -7029,6 +7196,7 @@ class TracesResourceTest {
                     .endTime(null)
                     .output(null)
                     .metadata(null)
+                    .duration(null)
                     .tags(null)
                     .usage(null)
                     .feedbackScores(null)
@@ -7142,6 +7310,7 @@ class TracesResourceTest {
                     .projectName(DEFAULT_PROJECT)
                     .endTime(null)
                     .output(null)
+                    .duration(null)
                     .metadata(null)
                     .tags(null)
                     .usage(null)
@@ -7175,6 +7344,7 @@ class TracesResourceTest {
                     .projectName(projectName)
                     .endTime(null)
                     .output(null)
+                    .duration(null)
                     .metadata(null)
                     .tags(null)
                     .usage(null)
@@ -7206,6 +7376,7 @@ class TracesResourceTest {
                     .toBuilder()
                     .projectName(projectName)
                     .endTime(null)
+                    .duration(null)
                     .output(null)
                     .metadata(null)
                     .tags(null)

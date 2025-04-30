@@ -4,6 +4,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 import jakarta.ws.rs.BadRequestException;
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -33,7 +34,7 @@ public class ParamsValidator {
         }
     }
 
-    public static <T> Set<T> get(String listParamValue, Class<T> clazz, String paramName) {
+    public static <T> Set<T> get(String listParamValue, @NonNull Class<T> clazz, @NonNull String paramName) {
         var message = "Invalid query param %s '%s'".formatted(paramName, listParamValue);
         try {
 
