@@ -1,4 +1,4 @@
-package com.comet.opik.api.resources.v1.priv;
+package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.domain.ImageUtils;
 import com.fasterxml.jackson.databind.JsonNode;

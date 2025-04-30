@@ -135,6 +135,7 @@ import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertTra
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertUpdatedComment;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NAME_NOT_FOUND_MESSAGE;
@@ -142,7 +143,6 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
-import static com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -4417,7 +4417,7 @@ class TracesResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.api.resources.v1.priv.ImageTruncationArgProvider#provideTestArguments")
+        @MethodSource("com.comet.opik.api.resources.utils.ImageTruncationArgProvider#provideTestArguments")
         void findWithImageTruncation(JsonNode original, JsonNode expected, boolean truncate) {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var threadId = UUID.randomUUID().toString();
@@ -4608,7 +4608,7 @@ class TracesResourceTest {
     class FindTraces {
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.api.resources.v1.priv.ImageTruncationArgProvider#provideTestArguments")
+        @MethodSource("com.comet.opik.api.resources.utils.ImageTruncationArgProvider#provideTestArguments")
         void findWithImageTruncation(JsonNode original, JsonNode expected, boolean truncate) {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = Stream.of(createTrace())
@@ -4656,7 +4656,7 @@ class TracesResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.api.resources.v1.priv.ImageTruncationArgProvider#provideTestArguments")
+        @MethodSource("com.comet.opik.api.resources.utils.ImageTruncationArgProvider#provideTestArguments")
         void searchWithImageTruncation(JsonNode original, JsonNode expected, boolean truncate) {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = Stream.of(createTrace())
@@ -5556,7 +5556,7 @@ class TracesResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils#quotaLimitsTestProvider")
+        @MethodSource("com.comet.opik.api.resources.utils.QuotaLimitTestUtils#quotaLimitsTestProvider")
         void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
                 List<Quota> quotas, boolean isLimitReached) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
@@ -5746,7 +5746,7 @@ class TracesResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils#quotaLimitsTestProvider")
+        @MethodSource("com.comet.opik.api.resources.utils.QuotaLimitTestUtils#quotaLimitsTestProvider")
         void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
                 List<Quota> quotas, boolean isLimitReached) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);

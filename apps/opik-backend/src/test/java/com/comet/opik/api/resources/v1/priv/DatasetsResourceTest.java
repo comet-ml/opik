@@ -177,7 +177,7 @@ class DatasetsResourceTest {
             "createdBy", "lastUpdatedBy"};
     public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt", "lastCreatedExperimentAt",
-            "datasetItemsCount"};
+            "datasetItemsCount", "lastCreatedOptimizationAt"};
 
     public static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -3557,7 +3557,7 @@ class DatasetsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.api.resources.v1.priv.ImageTruncationArgProvider#provideTestArguments")
+        @MethodSource("com.comet.opik.api.resources.utils.ImageTruncationArgProvider#provideTestArguments")
         void getDatasetItemsByDatasetId_withTruncation(JsonNode original, JsonNode expected, boolean truncate) {
 
             UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
@@ -4085,7 +4085,7 @@ class DatasetsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.api.resources.v1.priv.ImageTruncationArgProvider#provideTestArguments")
+        @MethodSource("com.comet.opik.api.resources.utils.ImageTruncationArgProvider#provideTestArguments")
         void findWithImageTruncation(JsonNode original, JsonNode expected, boolean truncate) {
             var workspaceName = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();

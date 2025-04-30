@@ -1,0 +1,140 @@
+package com.comet.opik.domain;
+
+import com.clickhouse.client.ClickHouseException;
+import com.comet.opik.api.Dataset;
+import com.comet.opik.api.Optimization;
+import com.comet.opik.api.OptimizationSearchCriteria;
+import com.comet.opik.api.events.OptimizationCreated;
+import com.comet.opik.infrastructure.auth.RequestContext;
+import com.google.common.eventbus.EventBus;
+import com.google.inject.ImplementedBy;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
+import jakarta.ws.rs.NotFoundException;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+
+@ImplementedBy(OptimizationServiceImpl.class)
+public interface OptimizationService {
+
+    Mono<UUID> create(@NonNull Optimization optimization);
+
+    Mono<Optimization> getById(UUID id);
+
+    Mono<Optimization.OptimizationPage> find(int page, int size, OptimizationSearchCriteria searchCriteria);
+}
+
+@Singleton
+@RequiredArgsConstructor(onConstructor = @__(@Inject))
+@Slf4j
+class OptimizationServiceImpl implements OptimizationService {
+
+    private final @NonNull OptimizationDAO optimizationDAO;
+    private final @NonNull DatasetService datasetService;
+    private final @NonNull IdGenerator idGenerator;
+    private final @NonNull NameGenerator nameGenerator;
+    private final @NonNull EventBus eventBus;
+
+    @Override
+    @WithSpan
+    public Mono<Optimization> getById(@NonNull UUID id) {
+        log.info("Getting optimization by id '{}'", id);
+        return optimizationDAO.getById(id)
+                .flatMap(optimization -> Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    return Mono.just(enrichOptimizations(List.of(optimization), workspaceId).getFirst());
+                }))
+                .switchIfEmpty(Mono.defer(
+                        () -> Mono.error(new NotFoundException("Not found optimization with id '%s'".formatted(id)))));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Optimization.OptimizationPage> find(int page, int size,
+            @NonNull OptimizationSearchCriteria searchCriteria) {
+        return Mono.empty();
+    }
+
+    @Override
+    @WithSpan
+    public Mono<UUID> create(@NonNull Optimization optimization) {
+        UUID id = optimization.id() == null ? idGenerator.generateId() : optimization.id();
+        IdGenerator.validateVersion(id, "Optimization");
+        var name = StringUtils.getIfBlank(optimization.name(), nameGenerator::generateName);
+
+        return datasetService.getOrCreateDataset(optimization.datasetName())
+                .flatMap(datasetId -> {
+                    var newOptimization = optimization.toBuilder()
+                            .id(id)
+                            .name(name)
+                            .datasetId(datasetId)
+                            // The createdAt field is set to later post the ExperimentCreated event, but it is not persisted in the
+                            // database as the default now64(9) is used instead.
+                            .createdAt(Instant.now())
+                            .build();
+
+                    return makeMonoContextAware((userName, workspaceId) -> optimizationDAO.insert(newOptimization)
+                            .thenReturn(newOptimization.id())
+                            // The event is posted only when the experiment is successfully created.
+                            .doOnSuccess(experimentId -> postOptimizationCreatedEvent(newOptimization, workspaceId,
+                                    userName)))
+                            .subscribeOn(Schedulers.boundedElastic());
+                })
+                // If a conflict occurs, we just return the id of the existing experiment.
+                // If any other error occurs, we throw it. The event is not posted for both cases.
+                .onErrorResume(throwable -> handleCreateError(throwable, id));
+    }
+
+    private Mono<UUID> handleCreateError(Throwable throwable, UUID id) {
+        if (throwable instanceof ClickHouseException
+                && throwable.getMessage().contains("TOO_LARGE_STRING_SIZE")
+                && throwable.getMessage().contains("_CAST(id, FixedString(36))")) {
+            log.warn("Already exists optimization with id '{}'", id);
+            return Mono.just(id);
+        }
+        log.error("Unexpected exception creating optimization with id '{}'", id);
+        return Mono.error(throwable);
+    }
+
+    private void postOptimizationCreatedEvent(Optimization newOptimization, String workspaceId, String userName) {
+        log.info("Posting optimization created event for optimization id '{}', datasetId '{}', workspaceId '{}'",
+                newOptimization.id(), newOptimization.datasetId(), workspaceId);
+        eventBus.post(new OptimizationCreated(
+                newOptimization.id(),
+                newOptimization.datasetId(),
+                newOptimization.createdAt(),
+                workspaceId,
+                userName));
+        log.info("Posted optimization created event for optimization id '{}', datasetId '{}', workspaceId '{}'",
+                newOptimization.id(), newOptimization.datasetId(), workspaceId);
+    }
+
+    private List<Optimization> enrichOptimizations(List<Optimization> optimizations, String workspaceId) {
+        var ids = optimizations.stream().map(Optimization::datasetId).collect(Collectors.toUnmodifiableSet());
+        var datasetMap = datasetService.findByIds(ids, workspaceId)
+                .stream().collect(Collectors.toMap(Dataset::id, Function.identity()));
+
+        return optimizations.stream()
+                .map(optimization -> optimization.toBuilder()
+                        .datasetName(Optional
+                                .ofNullable(datasetMap.get(optimization.datasetId()))
+                                .map(Dataset::name)
+                                .orElse(null))
+                        .build())
+                .toList();
+    }
+}

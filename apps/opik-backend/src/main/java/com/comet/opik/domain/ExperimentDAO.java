@@ -6,12 +6,11 @@ import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
+import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
-import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -49,6 +48,8 @@ import static com.comet.opik.api.Experiment.PromptVersionLink;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.CommentResultMapper.getComments;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
+import static com.comet.opik.utils.JsonUtils.getJsonNodeOrDefault;
+import static com.comet.opik.utils.JsonUtils.getStringOrDefault;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;
@@ -73,7 +74,9 @@ class ExperimentDAO {
                 last_updated_by,
                 prompt_version_id,
                 prompt_id,
-                prompt_versions
+                prompt_versions,
+                type,
+                optimization_id
             )
             SELECT
                 if(
@@ -89,7 +92,9 @@ class ExperimentDAO {
                 new.last_updated_by,
                 new.prompt_version_id,
                 new.prompt_id,
-                new.prompt_versions
+                new.prompt_versions,
+                new.type,
+                new.optimization_id
             FROM (
                 SELECT
                 :id AS id,
@@ -101,7 +106,9 @@ class ExperimentDAO {
                 :last_updated_by AS last_updated_by,
                 :prompt_version_id AS prompt_version_id,
                 :prompt_id AS prompt_id,
-                mapFromArrays(:prompt_ids, :prompt_version_ids) AS prompt_versions
+                mapFromArrays(:prompt_ids, :prompt_version_ids) AS prompt_versions,
+                :type AS type,
+                :optimization_id AS optimization_id
             ) AS new
             LEFT JOIN (
                 SELECT
@@ -431,7 +438,9 @@ class ExperimentDAO {
                 .bind("id", experiment.id())
                 .bind("dataset_id", experiment.datasetId())
                 .bind("name", experiment.name())
-                .bind("metadata", getOrDefault(experiment.metadata()));
+                .bind("metadata", getStringOrDefault(experiment.metadata()))
+                .bind("type", Optional.ofNullable(experiment.type()).orElse(ExperimentType.REGULAR).getValue())
+                .bind("optimization_id", experiment.optimizationId() != null ? experiment.optimizationId() : "");
 
         if (experiment.promptVersion() != null) {
             statement.bind("prompt_version_id", experiment.promptVersion().id());
@@ -467,10 +476,6 @@ class ExperimentDAO {
                     .bind("workspace_id", workspaceId);
             return Flux.from(statement.execute());
         });
-    }
-
-    private String getOrDefault(JsonNode jsonNode) {
-        return Optional.ofNullable(jsonNode).map(JsonNode::toString).orElse("");
     }
 
     @WithSpan
@@ -523,7 +528,7 @@ class ExperimentDAO {
                     .id(row.get("id", UUID.class))
                     .datasetId(row.get("dataset_id", UUID.class))
                     .name(row.get("name", String.class))
-                    .metadata(getOrDefault(row.get("metadata", String.class)))
+                    .metadata(getJsonNodeOrDefault(row.get("metadata", String.class)))
                     .createdAt(row.get("created_at", Instant.class))
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))
@@ -584,14 +589,7 @@ class ExperimentDAO {
                 .toList();
     }
 
-    private JsonNode getOrDefault(String field) {
-        return Optional.ofNullable(field)
-                .filter(s -> !s.isBlank())
-                .map(JsonUtils::getJsonNodeFromString)
-                .orElse(null);
-    }
-
-    private static List<FeedbackScoreAverage> getFeedbackScores(Row row) {
+    public static List<FeedbackScoreAverage> getFeedbackScores(Row row) {
         List<FeedbackScoreAverage> feedbackScoresAvg = Optional
                 .ofNullable(row.get("feedback_scores", Map.class))
                 .map(map -> (Map<String, BigDecimal>) map)

@@ -123,6 +123,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoresIgnoredFieldsAndSetThemToNull;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
@@ -130,7 +131,6 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
-import static com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.utils.ValidationUtils.SCALE;
@@ -293,7 +293,7 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var expectedExperiment = generateExperiment();
+            var expectedExperiment = generateExperiment().toBuilder().optimizationId(null).build();
 
             createAndAssert(expectedExperiment, okApikey, workspaceName);
 
@@ -2103,6 +2103,8 @@ class ExperimentsResourceTest {
                                 .usage(null)
                                 .duration(null)
                                 .totalEstimatedCost(null)
+                                .type(null)
+                                .optimizationId(null)
                                 .build();
                         // Only 2 scores per experiment is enough for this test
                         var scores = IntStream.range(0, 2)
@@ -2404,6 +2406,8 @@ class ExperimentsResourceTest {
                     .duration(null)
                     .usage(null)
                     .totalEstimatedCost(null)
+                    .type(null)
+                    .optimizationId(null)
                     .build();
 
             var expectedId = createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
@@ -3412,7 +3416,7 @@ class ExperimentsResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils#quotaLimitsTestProvider")
+        @MethodSource("com.comet.opik.api.resources.utils.QuotaLimitTestUtils#quotaLimitsTestProvider")
         void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
                 List<Quota> quotas, boolean isLimitReached) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);

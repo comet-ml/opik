@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
+import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
@@ -135,6 +136,10 @@ public interface DatasetDAO {
     @SqlBatch("UPDATE datasets SET last_created_experiment_at = :experimentCreatedAt WHERE id = :datasetId AND workspace_id = :workspace_id")
     int[] recordExperiments(@Bind("workspace_id") String workspaceId,
             @BindMethods Collection<DatasetLastExperimentCreated> datasets);
+
+    @SqlBatch("UPDATE datasets SET last_created_optimization_at = :optimizationCreatedAt WHERE id = :datasetId AND workspace_id = :workspace_id")
+    int[] recordOptimizations(@Bind("workspace_id") String workspaceId,
+            @BindMethods Collection<DatasetLastOptimizationCreated> datasets);
 
     @SqlQuery("""
                 SELECT workspace_id, created_by AS user, COUNT(DISTINCT id) AS count

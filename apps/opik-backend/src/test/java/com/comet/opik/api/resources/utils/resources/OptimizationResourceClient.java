@@ -1,0 +1,66 @@
+package com.comet.opik.api.resources.utils.resources;
+
+import com.comet.opik.api.Optimization;
+import com.comet.opik.api.OptimizationStatus;
+import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.infrastructure.auth.RequestContext;
+import jakarta.ws.rs.client.Entity;
+import lombok.RequiredArgsConstructor;
+import org.apache.http.HttpStatus;
+import org.testcontainers.shaded.com.google.common.net.HttpHeaders;
+import ru.vyarus.dropwizard.guice.test.ClientSupport;
+import uk.co.jemos.podam.api.PodamFactory;
+
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+@RequiredArgsConstructor
+public class OptimizationResourceClient {
+
+    private static final String RESOURCE_PATH = "%s/v1/private/optimizations";
+
+    private final ClientSupport client;
+    private final String baseURI;
+    private final PodamFactory podamFactory;
+
+    public Optimization.OptimizationBuilder createPartialOptimization() {
+        return podamFactory.manufacturePojo(Optimization.class).toBuilder()
+                .status(OptimizationStatus.RUNNING)
+                .feedbackScores(null)
+                .numTrials(1L);
+    }
+
+    public UUID create(Optimization optimization, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(optimization))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
+            return TestUtils.getIdFromLocation(response.getLocation());
+        }
+    }
+
+    public UUID create(String apiKey, String workspaceName) {
+        var optimization = createPartialOptimization().build();
+        return create(optimization, apiKey, workspaceName);
+    }
+
+    public Optimization get(UUID id, String apiKey, String workspaceName, int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return response.readEntity(Optimization.class);
+            }
+
+            return null;
+        }
+    }
+}

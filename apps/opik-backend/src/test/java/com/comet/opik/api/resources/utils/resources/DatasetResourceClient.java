@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.client.Entity;
@@ -42,6 +43,21 @@ public class DatasetResourceClient {
             assertThat(id.version()).isEqualTo(7);
 
             return id;
+        }
+    }
+
+    public void createDatasetItems(DatasetItemBatch batch, String workspaceName, String apiKey) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(jakarta.ws.rs.core.HttpHeaders.AUTHORIZATION, apiKey)
+                .header(jakarta.ws.rs.core.HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(batch))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            assertThat(actualResponse.hasEntity()).isFalse();
         }
     }
 
