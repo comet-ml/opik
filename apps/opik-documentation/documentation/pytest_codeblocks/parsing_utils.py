@@ -1,16 +1,18 @@
 from mrkdwn_analysis import MarkdownAnalyzer
 import logging
 from . import evaluators
-from typing import List, Union
+from typing import List, Union, Optional
 
 LOGGER = logging.getLogger(__name__)
 
 
-def _get_code_block_language(language: str):
+def _get_code_block_language(language: Optional[str]):
     """
     This method extracts the language of the code block based on the string that is
     after ``` in each code block.
     """
+    if language is None:
+        return None
     params = language.split(" ")
     if (len(params) == 1) and params[0] == "":
         return None
