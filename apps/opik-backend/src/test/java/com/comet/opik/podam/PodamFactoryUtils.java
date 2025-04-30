@@ -36,6 +36,7 @@ import uk.co.jemos.podam.api.RandomDataProviderStrategy;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.FeedbackDefinition.CategoricalFeedbackDefinition;
@@ -76,5 +77,9 @@ public class PodamFactoryUtils {
 
     public static <T> List<T> manufacturePojoList(PodamFactory podamFactory, Class<T> pojoClass) {
         return podamFactory.manufacturePojo(ArrayList.class, pojoClass);
+    }
+
+    public static <T> Set<T> manufacturePojoSet(PodamFactory podamFactory, Class<T> pojoClass) {
+        return podamFactory.manufacturePojo(Set.class, pojoClass);
     }
 }
