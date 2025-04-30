@@ -8,6 +8,7 @@ import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
@@ -75,11 +76,11 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class OptimizationsResourceTest {
 
     public static final String[] OPTIMIZATION_IGNORED_FIELDS = {"datasetId", "createdAt",
-            "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
+            "lastUpdatedAt", "createdBy", "lastUpdatedBy", "datasetName"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
-    private static final String TEST_WORKSPACE = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
+    private static final String TEST_WORKSPACE_NAME = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -146,7 +147,7 @@ class OptimizationsResourceTest {
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, podamFactory);
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
 
-        mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
+        mockTargetWorkspace(API_KEY, TEST_WORKSPACE_NAME, WORKSPACE_ID);
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -163,7 +164,7 @@ class OptimizationsResourceTest {
     void createOptimizer() {
         Mockito.reset(defaultEventBus);
 
-        optimizationResourceClient.create(API_KEY, TEST_WORKSPACE);
+        optimizationResourceClient.create(API_KEY, TEST_WORKSPACE_NAME);
 
         ArgumentCaptor<OptimizationCreated> experimentCaptor = ArgumentCaptor.forClass(OptimizationCreated.class);
         Mockito.verify(defaultEventBus).post(experimentCaptor.capture());
@@ -178,9 +179,9 @@ class OptimizationsResourceTest {
         void getById() {
             var optimization = optimizationResourceClient.createPartialOptimization().build();
 
-            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE);
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
 
-            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE, 200);
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
 
             assertThat(actualOptimization)
                     .usingRecursiveComparison()
@@ -194,12 +195,12 @@ class OptimizationsResourceTest {
         void getByIdWithFeedbackScores() {
             // Create dataset
             Dataset dataset = podamFactory.manufacturePojo(Dataset.class);
-            datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+            datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE_NAME);
 
             List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
             DatasetItemBatch itemBatch = new DatasetItemBatch(null, dataset.id(), items);
 
-            datasetResourceClient.createDatasetItems(itemBatch, TEST_WORKSPACE, API_KEY);
+            datasetResourceClient.createDatasetItems(itemBatch, TEST_WORKSPACE_NAME, API_KEY);
 
             // Create experiment and attach it to the created dataset and optimizer
             List<FeedbackScoreAverage> feedbackScoreItems = PodamFactoryUtils.manufacturePojoList(podamFactory,
@@ -210,7 +211,7 @@ class OptimizationsResourceTest {
                     .objectiveName(feedbackScoreItems.getFirst().name())
                     .build();
 
-            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE);
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
 
             Experiment experiment = experimentResourceClient.createPartialExperiment()
                     .datasetId(dataset.id())
@@ -219,13 +220,13 @@ class OptimizationsResourceTest {
                     .type(ExperimentType.TRIAL)
                     .build();
 
-            experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+            experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE_NAME);
 
             Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
                     .name("Experiment-%s".formatted(dataset.name()))
                     .build();
 
-            projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+            projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE_NAME);
 
             Set<ExperimentItem> experimentItems = new HashSet<>();
             List<Trace> traces = new ArrayList<>();
@@ -252,8 +253,8 @@ class OptimizationsResourceTest {
                 traces.add(trace);
             }
 
-            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
-            experimentResourceClient.createExperimentItem(experimentItems, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE_NAME);
+            experimentResourceClient.createExperimentItem(experimentItems, API_KEY, TEST_WORKSPACE_NAME);
 
             List<FeedbackScoreBatchItem> scoreBatchItems = traces.stream()
                     .flatMap(trace -> feedbackScoreItems.stream()
@@ -264,7 +265,7 @@ class OptimizationsResourceTest {
                                     .build()))
                     .toList();
 
-            traceResourceClient.feedbackScores(scoreBatchItems, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.feedbackScores(scoreBatchItems, API_KEY, TEST_WORKSPACE_NAME);
 
             optimization = optimization.toBuilder()
                     .feedbackScores(
@@ -279,13 +280,13 @@ class OptimizationsResourceTest {
                     .build();
 
             // then
-            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE, 200);
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
 
             assertThat(actualOptimization)
                     .usingRecursiveComparison()
                     .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                    .ignoringCollectionOrder()
+                    .ignoringCollectionOrderInFields("feedbackScores")
                     .isEqualTo(optimization);
         }
 
@@ -296,16 +297,16 @@ class OptimizationsResourceTest {
     void deleteByIds() {
         Mockito.reset(defaultEventBus);
 
-        var id = optimizationResourceClient.create(API_KEY, TEST_WORKSPACE);
+        var id = optimizationResourceClient.create(API_KEY, TEST_WORKSPACE_NAME);
 
         // verify optimization was created
-        optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE, 200);
+        optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
 
         // delete
-        optimizationResourceClient.delete(Set.of(id), API_KEY, TEST_WORKSPACE);
+        optimizationResourceClient.delete(Set.of(id), API_KEY, TEST_WORKSPACE_NAME);
 
         // verify optimization was deleted
-        optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE, 404);
+        optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 404);
 
         ArgumentCaptor<OptimizationsDeleted> experimentCaptor = ArgumentCaptor.forClass(OptimizationsDeleted.class);
         Mockito.verify(defaultEventBus).post(experimentCaptor.capture());
@@ -318,17 +319,17 @@ class OptimizationsResourceTest {
 
         // Create optimization
         var optimization = optimizationResourceClient.createPartialOptimization().build();
-        var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE);
+        var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
 
         // Update optimization
-        optimizationResourceClient.update(id, update, API_KEY, TEST_WORKSPACE, 204);
+        optimizationResourceClient.update(id, update, API_KEY, TEST_WORKSPACE_NAME, 204);
 
         optimization = optimization.toBuilder().id(id)
                 .name(update.name() != null ? update.name() : optimization.name())
                 .status(update.status() != null ? update.status() : optimization.status())
                 .build();
 
-        var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE, 200);
+        var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
 
         assertThat(actualOptimization)
                 .usingRecursiveComparison()
@@ -343,6 +344,287 @@ class OptimizationsResourceTest {
                 arguments(podamFactory.manufacturePojo(OptimizationUpdate.class)),
                 arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().name(null).build()),
                 arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().status(null).build()));
+    }
+
+    @Nested
+    @DisplayName("Find optimizations")
+    class FindOptimizations {
+
+        private void assertOptimizationPage(Optimization.OptimizationPage page, int expectedPage,
+                int expectedSize, int expectedContentSize,
+                List<Optimization> expectedOptimizations) {
+            // Validate page metadata
+            assertThat(page).isNotNull();
+            assertThat(page.page()).isEqualTo(expectedPage);
+            assertThat(page.size()).isEqualTo(expectedSize);
+            assertThat(page.content()).hasSize(expectedContentSize);
+
+            // Validate that all expected optimizations are found with correct values
+            assertThat(page.content())
+                    .usingRecursiveComparison()
+                    .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .ignoringCollectionOrderInFields("feedbackScores")
+                    .isEqualTo(expectedOptimizations);
+        }
+
+        @Test
+        @DisplayName("Find optimizations with default parameters")
+        void findWithDefaultParameters() {
+
+            // Mock target workspace
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create multiple optimizations
+            var optimization1 = optimizationResourceClient.createPartialOptimization().build();
+            var optimization2 = optimizationResourceClient.createPartialOptimization().build();
+
+            var id1 = optimizationResourceClient.create(optimization1, apiKey, workspaceName);
+            var id2 = optimizationResourceClient.create(optimization2, apiKey, workspaceName);
+
+            // Update optimizations with IDs
+            optimization1 = optimization1.toBuilder().id(id1).build();
+            optimization2 = optimization2.toBuilder().id(id2).build();
+
+            List<Optimization> expectedOptimizations = List.of(optimization1, optimization2);
+
+            // Find optimizations with default parameters
+            var optimizationPage = optimizationResourceClient.find(
+                    apiKey, workspaceName, 1, 10, null, null, false, 200);
+
+            // Verify results
+            assertOptimizationPage(optimizationPage, 1, 2,
+                    optimizationPage.content().size(), expectedOptimizations.reversed());
+        }
+
+        @Test
+        @DisplayName("Find optimizations by name")
+        void findByName() {
+
+            // Mock target workspace
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create optimization with specific name
+            var uniqueName = "UniqueOptimizationName-" + UUID.randomUUID();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .name(uniqueName)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+            optimization = optimization.toBuilder().id(id).build();
+
+            // Find optimizations by name
+            var optimizationPage = optimizationResourceClient.find(
+                    apiKey, workspaceName, 1, 1, null, uniqueName, false, 200);
+
+            // Verify results
+            assertOptimizationPage(optimizationPage, 1, 1, 1, List.of(optimization));
+        }
+
+        @Test
+        @DisplayName("Find optimizations by dataset ID")
+        void findByDatasetId() {
+            // Mock target workspace
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset
+            Dataset dataset = podamFactory.manufacturePojo(Dataset.class);
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            // Create optimization with specific dataset ID
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(dataset.id())
+                    .datasetName(dataset.name())
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+            optimization = optimization.toBuilder().id(id).build();
+
+            // Find optimizations by dataset ID
+            var optimizationPage = optimizationResourceClient.find(
+                    apiKey, workspaceName, 1, 10, dataset.id(), null, false, 200);
+
+            // Verify results
+            assertOptimizationPage(optimizationPage, 1, 1, 1, List.of(optimization));
+        }
+
+        @Test
+        @DisplayName("Find optimizations with pagination")
+        void findWithPagination() {
+
+            // Mock target workspace
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create multiple optimizations with unique names to ensure we can identify them
+            var optimizations = new ArrayList<Optimization>();
+
+            for (int i = 0; i < 5; i++) {
+                var name = "PaginationTest-" + i + "-" + UUID.randomUUID();
+                var optimization = optimizationResourceClient.createPartialOptimization()
+                        .name(name)
+                        .build();
+
+                var id = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+                optimizations.add(optimization.toBuilder().id(id).build());
+            }
+
+            // Find first page with size 2
+            var page1 = optimizationResourceClient.find(
+                    apiKey, workspaceName, 1, 2, null, null, false, 200);
+
+            // Find second page with size 2
+            var page2 = optimizationResourceClient.find(
+                    apiKey, workspaceName, 2, 2, null, null, false, 200);
+
+            // Verify pagination
+            assertOptimizationPage(page1, 1, 2, 2, optimizations.reversed().subList(0, 2));
+            assertOptimizationPage(page2, 2, 2, 2, optimizations.reversed().subList(2, 4));
+        }
+
+        @Test
+        @DisplayName("Find optimizations with empty result")
+        void findWithEmptyResult() {
+            // Mock target workspace
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Find optimizations with non-existent name
+            var nonExistentName = "NonExistentName-" + UUID.randomUUID();
+            var optimizationPage = optimizationResourceClient.find(
+                    apiKey, workspaceName, 1, 10, null, nonExistentName, false, 200);
+
+            // Verify empty results
+            assertOptimizationPage(optimizationPage, 1, 0, 0, List.of());
+        }
+
+        @Test
+        @DisplayName("Find optimizations with feedback scores")
+        void findWithFeedbackScores() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset
+            Dataset dataset = podamFactory.manufacturePojo(Dataset.class);
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            DatasetItemBatch itemBatch = new DatasetItemBatch(null, dataset.id(), items);
+
+            datasetResourceClient.createDatasetItems(itemBatch, workspaceName, apiKey);
+
+            // Create feedback score items
+            List<FeedbackScoreAverage> feedbackScoreItems = PodamFactoryUtils.manufacturePojoList(podamFactory,
+                    FeedbackScoreAverage.class);
+
+            // Create optimization with dataset and objective name
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(dataset.id())
+                    .datasetName(dataset.name())
+                    .objectiveName(feedbackScoreItems.getFirst().name())
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            // Create experiment and attach it to the created dataset and optimizer
+            Experiment experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetId(dataset.id())
+                    .optimizationId(id)
+                    .datasetName(dataset.name())
+                    .type(ExperimentType.TRIAL)
+                    .build();
+
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            // Create project
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Experiment-%s".formatted(dataset.name()))
+                    .build();
+
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Create experiment items and traces
+            Set<ExperimentItem> experimentItems = new HashSet<>();
+            List<Trace> traces = new ArrayList<>();
+
+            for (DatasetItem datasetItem : items) {
+                Trace trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                        .projectId(project.id())
+                        .projectName(project.name())
+                        .guardrailsValidations(null)
+                        .threadId(null)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build();
+
+                ExperimentItem experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                        .experimentId(experiment.id())
+                        .traceId(trace.id())
+                        .input(JsonUtils.readTree(datasetItem.data()))
+                        .datasetItemId(datasetItem.id())
+                        .build();
+
+                experimentItems.add(experimentItem);
+                traces.add(trace);
+            }
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            experimentResourceClient.createExperimentItem(experimentItems, apiKey, workspaceName);
+
+            // Create feedback scores
+            List<FeedbackScoreBatchItem> scoreBatchItems = traces.stream()
+                    .flatMap(trace -> feedbackScoreItems.stream()
+                            .map(score -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .projectName(project.name())
+                                    .id(trace.id())
+                                    .name(score.name())
+                                    .build()))
+                    .toList();
+
+            traceResourceClient.feedbackScores(scoreBatchItems, apiKey, workspaceName);
+
+            // Update optimization with expected feedback scores
+            optimization = optimization.toBuilder()
+                    .id(id)
+                    .feedbackScores(
+                            StatsUtils.calculateFeedbackBatchAverage(scoreBatchItems)
+                                    .entrySet()
+                                    .stream()
+                                    .map(entry -> FeedbackScoreAverage.builder()
+                                            .name(entry.getKey())
+                                            .value(BigDecimal.valueOf(entry.getValue()))
+                                            .build())
+                                    .toList())
+                    .build();
+
+            // Find optimization
+            var optimizationPage = optimizationResourceClient.find(
+                    apiKey, workspaceName, 1, 10, dataset.id(), null, false, 200);
+
+            // Verify results with feedback scores
+            assertOptimizationPage(optimizationPage, 1, 1, 1, List.of(optimization));
+        }
     }
 
 }

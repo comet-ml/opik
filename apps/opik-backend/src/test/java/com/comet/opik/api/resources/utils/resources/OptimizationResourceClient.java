@@ -7,6 +7,7 @@ import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
 import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import org.testcontainers.shaded.com.google.common.net.HttpHeaders;
@@ -64,6 +65,36 @@ public class OptimizationResourceClient {
             }
 
             return null;
+        }
+    }
+
+    public Optimization.OptimizationPage find(String apiKey, String workspaceName, int page, int size,
+            UUID datasetId, String name, Boolean datasetDeleted, int expectedStatus) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .queryParam("page", page)
+                .queryParam("size", size);
+
+        if (datasetId != null) {
+            webTarget = webTarget.queryParam("dataset_id", datasetId);
+        }
+
+        if (name != null) {
+            webTarget = webTarget.queryParam("name", name);
+        }
+
+        if (datasetDeleted != null) {
+            webTarget = webTarget.queryParam("dataset_deleted", datasetDeleted);
+        }
+
+        try (var response = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+            return response.readEntity(Optimization.OptimizationPage.class);
         }
     }
 
