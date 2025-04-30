@@ -45,7 +45,7 @@ export class Guardrails {
     /**
      * Batch guardrails for traces
      *
-     * @param {OpikApi.GuardrailBatch} request
+     * @param {OpikApi.GuardrailBatchWrite} request
      * @param {Guardrails.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
@@ -65,7 +65,7 @@ export class Guardrails {
      *     })
      */
     public async createGuardrails(
-        request: OpikApi.GuardrailBatch,
+        request: OpikApi.GuardrailBatchWrite,
         requestOptions?: Guardrails.RequestOptions,
     ): Promise<void> {
         const _response = await core.fetcher({
@@ -89,7 +89,7 @@ export class Guardrails {
             },
             contentType: "application/json",
             requestType: "json",
-            body: serializers.GuardrailBatch.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            body: serializers.GuardrailBatchWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
             withCredentials: true,
