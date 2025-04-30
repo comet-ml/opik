@@ -2,8 +2,8 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.Dataset.DatasetPage;
+import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
-import com.comet.opik.api.ExperimentsDelete;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -180,7 +180,7 @@ class DatasetExperimentE2ETest {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(new ExperimentsDelete(ids)))) {
+                .post(Entity.json(new DeleteIdsHolder(ids)))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
         }

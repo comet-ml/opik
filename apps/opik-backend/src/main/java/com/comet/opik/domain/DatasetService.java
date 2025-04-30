@@ -346,7 +346,7 @@ class DatasetServiceImpl implements DatasetService {
             Mono<Set<UUID>> datasetIds = experimentDAO.findAllDatasetIds(criteria)
                     .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
                     .map(dto -> dto.stream()
-                            .map(ExperimentDatasetId::datasetId)
+                            .map(DatasetEventInfoHolder::datasetId)
                             .collect(toSet()));
 
             DatasetPage datasetPage = datasetIds.flatMap(ids -> {

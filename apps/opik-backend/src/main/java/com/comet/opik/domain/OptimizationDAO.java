@@ -1,10 +1,12 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
+import com.comet.opik.api.OptimizationUpdate;
 import com.google.common.base.Function;
+import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
-import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
@@ -14,14 +16,21 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.SignalType;
 
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.ExperimentDAO.getFeedbackScores;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -35,6 +44,13 @@ public interface OptimizationDAO {
 
     Mono<Optimization> getById(UUID id);
 
+    Mono<List<DatasetEventInfoHolder>> getOptimizationDatasetIds(Set<UUID> ids);
+
+    Mono<Long> delete(Set<UUID> ids);
+
+    Flux<DatasetLastOptimizationCreated> getMostRecentCreatedExperimentFromDatasets(Set<UUID> datasetIds);
+
+    Mono<Long> update(UUID id, OptimizationUpdate update);
 }
 
 @Singleton
@@ -217,9 +233,68 @@ class OptimizationDAOImpl implements OptimizationDAO {
             ;
             """;
 
+    private static final String FIND_OPTIMIZATIONS_DATASET_IDS = """
+            SELECT
+                distinct dataset_id
+            FROM optimizations
+            WHERE workspace_id = :workspace_id
+            <if(experiment_ids)> AND id IN :experiment_ids <endif>
+            ORDER BY id DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            ;
+            """;
+
+    private static final String DELETE_BY_IDS = """
+            DELETE FROM optimizations
+            WHERE id IN :ids
+            AND workspace_id = :workspace_id
+            ;
+            """;
+
+    private static final String UPDATE_BY_ID = """
+            INSERT INTO optimizations (
+            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_by
+            ) SELECT
+                id,
+                dataset_id,
+                <if(name)> :name <else> name <endif> as name,
+                workspace_id,
+                objective_name,
+                <if(status)> :status <else> status <endif> as status,
+                metadata,
+                created_at,
+                created_by,
+                :user_name as last_updated_by
+            FROM optimizations
+            WHERE id = :id
+            AND workspace_id = :workspace_id
+            ORDER BY id DESC, last_updated_at DESC
+            LIMIT 1
+            ;
+            """;
+
+    private static final String FIND_MOST_RECENT_CREATED_OPTIMIZATION_BY_DATASET_IDS = """
+            SELECT
+            	dataset_id,
+            	max(created_at) as created_at
+            FROM (
+                SELECT
+                    id,
+                    dataset_id,
+                    created_at
+                FROM optimizations
+                WHERE dataset_id IN :dataset_ids
+            	AND workspace_id = :workspace_id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            GROUP BY dataset_id;
+            ;
+            """;
+
     private final @NonNull ConnectionFactory connectionFactory;
 
-    @WithSpan
+    @Override
     public Mono<Void> insert(@NonNull Optimization optimization) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> insert(optimization, connection))
@@ -237,6 +312,68 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         statement -> statement.bind("id", id)))
                 .flatMap(this::mapToDto)
                 .singleOrEmpty();
+    }
+
+    @Override
+    public Mono<List<DatasetEventInfoHolder>> getOptimizationDatasetIds(Set<UUID> ids) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    ST template = new ST(FIND_OPTIMIZATIONS_DATASET_IDS);
+                    template.add("experiment_ids", ids);
+                    var statement = connection.createStatement(template.render());
+                    statement.bind("experiment_ids", ids);
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(this::mapDatasetId)
+                .collectList();
+    }
+
+    @Override
+    public Mono<Long> delete(Set<UUID> ids) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
+        log.info("Deleting optimizations by ids [{}]", Arrays.toString(ids.toArray()));
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> delete(ids, connection))
+                .flatMap(Result::getRowsUpdated)
+                .reduce(Long::sum)
+                .doFinally(signalType -> {
+                    if (signalType == SignalType.ON_COMPLETE) {
+                        log.info("Deleted optimizations by ids [{}]", Arrays.toString(ids.toArray()));
+                    }
+                });
+    }
+
+    @Override
+    public Flux<DatasetLastOptimizationCreated> getMostRecentCreatedExperimentFromDatasets(Set<UUID> datasetIds) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(datasetIds), "Argument 'datasetIds' must not be empty");
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(FIND_MOST_RECENT_CREATED_OPTIMIZATION_BY_DATASET_IDS);
+                    statement.bind("dataset_ids", datasetIds);
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> new DatasetLastOptimizationCreated(
+                        row.get("dataset_id", UUID.class),
+                        row.get("created_at", Instant.class))));
+    }
+
+    @Override
+    public Mono<Long> update(@NonNull UUID id, @NonNull OptimizationUpdate update) {
+        log.info("Update optimization by id '{}'", id);
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> update(id, update, connection))
+                .flatMap(Result::getRowsUpdated)
+                .reduce(Long::sum)
+                .doFinally(signalType -> {
+                    if (signalType == SignalType.ON_COMPLETE) {
+                        log.info("Updated optimization by id '{}'", id);
+                    }
+                });
     }
 
     private Publisher<? extends Result> insert(Optimization optimization, Connection connection) {
@@ -281,5 +418,50 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     .numTrials(row.get("num_trials", Long.class))
                     .build();
         });
+    }
+
+    private Publisher<DatasetEventInfoHolder> mapDatasetId(Result result) {
+        return result.map((row, rowMetadata) -> new DatasetEventInfoHolder(row.get("dataset_id", UUID.class), null));
+    }
+
+    private Flux<? extends Result> delete(Set<UUID> ids, Connection connection) {
+
+        var statement = connection.createStatement(DELETE_BY_IDS)
+                .bind("ids", ids);
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+    }
+
+    private Flux<? extends Result> update(UUID id, OptimizationUpdate update, Connection connection) {
+        ST template = buildUpdateTemplate(update);
+        var statement = createUpdateStatement(id, update, connection, template.render());
+
+        return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement));
+    }
+
+    private ST buildUpdateTemplate(OptimizationUpdate update) {
+        ST template = new ST(UPDATE_BY_ID);
+
+        Optional.ofNullable(update.name())
+                .ifPresent(name -> template.add("name", name));
+
+        Optional.ofNullable(update.status())
+                .ifPresent(status -> template.add("status", status.getValue()));
+
+        return template;
+    }
+
+    private Statement createUpdateStatement(UUID id, OptimizationUpdate update, Connection connection, String sql) {
+        Statement statement = connection.createStatement(sql);
+
+        Optional.ofNullable(update.name())
+                .ifPresent(name -> statement.bind("name", name));
+
+        Optional.ofNullable(update.status())
+                .ifPresent(status -> statement.bind("status", status.getValue()));
+
+        statement.bind("id", id);
+
+        return statement;
     }
 }
