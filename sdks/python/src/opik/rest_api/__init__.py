@@ -87,6 +87,7 @@ from .types import (
     DeleteAttachmentsRequest,
     DeleteAttachmentsRequestEntityType,
     DeleteFeedbackScore,
+    DeleteIdsHolder,
     Delta,
     DeltaRole,
     ErrorInfo,
@@ -102,6 +103,8 @@ from .types import (
     ExperimentItemPublic,
     ExperimentPagePublic,
     ExperimentPublic,
+    ExperimentPublicType,
+    ExperimentType,
     ExportTraceServiceRequest,
     Feedback,
     FeedbackCreate,
@@ -178,6 +181,11 @@ from .types import (
     NumericalFeedbackDetailCreate,
     NumericalFeedbackDetailPublic,
     NumericalFeedbackDetailUpdate,
+    Optimization,
+    OptimizationPagePublic,
+    OptimizationPublic,
+    OptimizationPublicStatus,
+    OptimizationStatus,
     PageColumns,
     PercentageValueStatPublic,
     PercentageValues,
@@ -278,6 +286,7 @@ from . import (
     guardrails,
     llm_provider_key,
     open_telemetry_ingestion,
+    optimizations,
     projects,
     prompts,
     redirect,
@@ -295,8 +304,10 @@ from .attachments import (
 from .client import AsyncOpikApi, OpikApi
 from .datasets import DatasetUpdateVisibility, DatasetWriteVisibility
 from .environment import OpikApiEnvironment
+from .experiments import ExperimentWriteType
 from .feedback_definitions import FindFeedbackDefinitionsRequestType
 from .llm_provider_key import ProviderApiKeyWriteProvider
+from .optimizations import OptimizationUpdateStatus, OptimizationWriteStatus
 from .projects import (
     ProjectMetricRequestPublicInterval,
     ProjectMetricRequestPublicMetricType,
@@ -404,6 +415,7 @@ __all__ = [
     "DeleteAttachmentsRequest",
     "DeleteAttachmentsRequestEntityType",
     "DeleteFeedbackScore",
+    "DeleteIdsHolder",
     "Delta",
     "DeltaRole",
     "DownloadAttachmentRequestEntityType",
@@ -420,6 +432,9 @@ __all__ = [
     "ExperimentItemPublic",
     "ExperimentPagePublic",
     "ExperimentPublic",
+    "ExperimentPublicType",
+    "ExperimentType",
+    "ExperimentWriteType",
     "ExportTraceServiceRequest",
     "Feedback",
     "FeedbackCreate",
@@ -505,6 +520,13 @@ __all__ = [
     "NumericalFeedbackDetailUpdate",
     "OpikApi",
     "OpikApiEnvironment",
+    "Optimization",
+    "OptimizationPagePublic",
+    "OptimizationPublic",
+    "OptimizationPublicStatus",
+    "OptimizationStatus",
+    "OptimizationUpdateStatus",
+    "OptimizationWriteStatus",
     "PageColumns",
     "PercentageValueStatPublic",
     "PercentageValues",
@@ -605,6 +627,7 @@ __all__ = [
     "guardrails",
     "llm_provider_key",
     "open_telemetry_ingestion",
+    "optimizations",
     "projects",
     "prompts",
     "redirect",
