@@ -80,7 +80,8 @@ class OptimizationServiceImpl implements OptimizationService {
     @WithSpan
     public Mono<Optimization.OptimizationPage> find(int page, int size,
             @NonNull OptimizationSearchCriteria searchCriteria) {
-        return Mono.empty();
+        log.info("Finding optimizations by '{}'", searchCriteria);
+        return optimizationDAO.find(page, size, searchCriteria);
     }
 
     @Override

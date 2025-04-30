@@ -2,11 +2,13 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.Optimization;
+import com.comet.opik.api.OptimizationSearchCriteria;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.OptimizationUpdate;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
@@ -17,6 +19,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.jetbrains.annotations.NotNull;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -51,6 +54,8 @@ public interface OptimizationDAO {
     Flux<DatasetLastOptimizationCreated> getMostRecentCreatedExperimentFromDatasets(Set<UUID> datasetIds);
 
     Mono<Long> update(UUID id, OptimizationUpdate update);
+
+    Mono<Optimization.OptimizationPage> find(int page, int size, @NonNull OptimizationSearchCriteria searchCriteria);
 }
 
 @Singleton
@@ -185,8 +190,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                                 name,
                                 value
                             FROM feedback_scores
-                            WHERE entity_type = :entity_type
-                            AND workspace_id = :workspace_id
+                            WHERE workspace_id = :workspace_id
+                            AND entity_type = :entity_type
                             AND entity_id IN (SELECT id FROM trace_final)
                             ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                             LIMIT 1 BY entity_id, name
@@ -200,12 +205,13 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 GROUP BY experiment_id
             ), experiments_fs AS (
                 SELECT
-                e.id as id,
-                e.optimization_id as optimization_id,
-                fs.feedback_scores as feedback_scores
+                    e.id as id,
+                    e.optimization_id as optimization_id,
+                    fs.feedback_scores as feedback_scores
                 FROM (
                     SELECT
-                        *
+                        id,
+                        optimization_id
                     FROM experiments
                     WHERE workspace_id = :workspace_id
                     ORDER BY id DESC, last_updated_at DESC
@@ -222,7 +228,10 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     *
                 FROM optimizations
                 WHERE workspace_id = :workspace_id
-                <if(id)> AND id = :id <endif>
+                <if(id)>AND id = :id <endif>
+                <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
+                <if(dataset_id)>AND dataset_id = :dataset_id <endif>
+                <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS o
@@ -230,6 +239,126 @@ class OptimizationDAOImpl implements OptimizationDAO {
             GROUP BY o.*
             ORDER BY o.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
+            ;
+            """;
+
+    private static final String COUNT = """
+            WITH trace_final AS (
+                SELECT
+                    id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+            ),
+            feedback_scores_agg AS (
+                SELECT
+                    experiment_id,
+                    if(
+                        notEmpty(arrayFilter(x -> length(x) > 0, groupArray(name))),
+                        mapFromArrays(
+                            arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(name))),
+                            arrayMap(
+                                vName -> if(
+                                    arrayReduce(
+                                        'SUM',
+                                        arrayMap(
+                                            vNameAndValue -> vNameAndValue.2,
+                                            arrayFilter(
+                                                pair -> pair.1 = vName,
+                                                groupArray(DISTINCT tuple(name, count_value, trace_id))
+                                            )
+                                        )
+                                    ) = 0,
+                                    0,
+                                    arrayReduce(
+                                        'SUM',
+                                        arrayMap(
+                                            vNameAndValue -> vNameAndValue.2,
+                                            arrayFilter(
+                                                pair -> pair.1 = vName,
+                                                groupArray(DISTINCT tuple(name, total_value, trace_id))
+                                            )
+                                        )
+                                    ) / arrayReduce(
+                                        'SUM',
+                                        arrayMap(
+                                            vNameAndValue -> vNameAndValue.2,
+                                            arrayFilter(
+                                                pair -> pair.1 = vName,
+                                                groupArray(DISTINCT tuple(name, count_value, trace_id))
+                                            )
+                                        )
+                                    )
+                                ),
+                                arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(name)))
+                            )
+                        ),
+                        map()
+                    ) as feedback_scores
+                FROM (
+                    SELECT
+                        ei.experiment_id,
+                        tfs.name,
+                        tfs.total_value,
+                        tfs.count_value,
+                        tfs.trace_id as trace_id
+                    FROM experiment_items ei
+                    JOIN (
+                        SELECT
+                            entity_id as trace_id,
+                            name,
+                            SUM(value) as total_value,
+                            COUNT(value) as count_value
+                        FROM (
+                            SELECT
+                                entity_id,
+                                name,
+                                value
+                            FROM feedback_scores
+                            WHERE workspace_id = :workspace_id
+                            AND entity_type = :entity_type
+                            AND entity_id IN (SELECT id FROM trace_final)
+                            ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                            LIMIT 1 BY entity_id, name
+                        )
+                        GROUP BY
+                            entity_id,
+                            name
+                    ) AS tfs ON ei.trace_id = tfs.trace_id
+                    WHERE ei.trace_id IN (SELECT id FROM trace_final)
+                )
+                GROUP BY experiment_id
+            ), experiments_fs AS (
+                SELECT
+                    e.id as id,
+                    e.optimization_id as optimization_id,
+                    fs.feedback_scores as feedback_scores
+                FROM (
+                    SELECT
+                        id,
+                        optimization_id
+                    FROM experiments
+                    WHERE workspace_id = :workspace_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS e
+                LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
+            )
+            SELECT
+                COUNT(o.id) as count
+            FROM (
+                SELECT
+                    id
+                FROM optimizations
+                WHERE workspace_id = :workspace_id
+                <if(id)>AND id = :id <endif>
+                <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
+                <if(dataset_id)>AND dataset_id = :dataset_id <endif>
+                <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS o
+            LEFT JOIN experiments_fs AS efs ON o.id = efs.optimization_id
+            GROUP BY o.*
             ;
             """;
 
@@ -288,7 +417,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
-            GROUP BY dataset_id;
+            GROUP BY dataset_id
             ;
             """;
 
@@ -374,6 +503,75 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         log.info("Updated optimization by id '{}'", id);
                     }
                 });
+    }
+
+    @WithSpan
+    public Mono<Optimization.OptimizationPage> find(int page, int size,
+            @NonNull OptimizationSearchCriteria searchCriteria) {
+        return getCount(searchCriteria)
+                .flatMap(totalCount -> find(page, size, totalCount, searchCriteria))
+                .defaultIfEmpty(Optimization.OptimizationPage.empty(page, List.of()));
+    }
+
+    private Mono<Long> getCount(@NotNull OptimizationSearchCriteria searchCriteria) {
+        var template = new ST(COUNT);
+
+        bindTemplateParams(template, searchCriteria);
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    Statement statement = connection.createStatement(template.render());
+
+                    bindQueryParams(searchCriteria, statement);
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map(row -> row.get("count", Long.class)))
+                .reduce(Long::sum);
+    }
+
+    private Mono<Optimization.OptimizationPage> find(int page, int size, long total,
+            OptimizationSearchCriteria searchCriteria) {
+        var template = new ST(FIND);
+
+        bindTemplateParams(template, searchCriteria);
+
+        var offset = (page - 1) * size;
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    Statement statement = connection.createStatement(template.render())
+                            .bind("limit", size)
+                            .bind("offset", offset);
+
+                    bindQueryParams(searchCriteria, statement);
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(this::mapToDto)
+                .collectList()
+                .map(optimizations -> new Optimization.OptimizationPage(page, optimizations.size(), total,
+                        optimizations, List.of()));
+    }
+
+    private void bindTemplateParams(ST template, OptimizationSearchCriteria searchCriteria) {
+        template.add("dataset_deleted", searchCriteria.datasetDeleted());
+
+        Optional.ofNullable(searchCriteria.datasetId())
+                .ifPresent(datasetId -> template.add("dataset_id", datasetId));
+
+        Optional.ofNullable(searchCriteria.name())
+                .ifPresent(name -> template.add("name", name));
+    }
+
+    private void bindQueryParams(OptimizationSearchCriteria searchCriteria, Statement statement) {
+        statement.bind("dataset_deleted", searchCriteria.datasetDeleted());
+
+        Optional.ofNullable(searchCriteria.datasetId())
+                .ifPresent(datasetId -> statement.bind("dataset_id", datasetId));
+
+        Optional.ofNullable(searchCriteria.name())
+                .ifPresent(name -> statement.bind("name", name));
     }
 
     private Publisher<? extends Result> insert(Optimization optimization, Connection connection) {
