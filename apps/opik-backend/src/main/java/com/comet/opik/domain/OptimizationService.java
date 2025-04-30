@@ -2,10 +2,14 @@ package com.comet.opik.domain;
 
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationSearchCriteria;
+import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.api.events.OptimizationCreated;
+import com.comet.opik.api.events.OptimizationsDeleted;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -15,18 +19,22 @@ import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
 @ImplementedBy(OptimizationServiceImpl.class)
 public interface OptimizationService {
@@ -36,6 +44,12 @@ public interface OptimizationService {
     Mono<Optimization> getById(UUID id);
 
     Mono<Optimization.OptimizationPage> find(int page, int size, OptimizationSearchCriteria searchCriteria);
+
+    Mono<Void> delete(@NonNull Set<UUID> ids);
+
+    Flux<DatasetLastOptimizationCreated> getMostRecentCreatedOptimizationFromDatasets(Set<UUID> datasetIds);
+
+    Mono<Long> update(UUID commentId, OptimizationUpdate update);
 }
 
 @Singleton
@@ -97,6 +111,41 @@ class OptimizationServiceImpl implements OptimizationService {
                 // If a conflict occurs, we just return the id of the existing experiment.
                 // If any other error occurs, we throw it. The event is not posted for both cases.
                 .onErrorResume(throwable -> handleCreateError(throwable, id));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> delete(@NonNull Set<UUID> ids) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
+
+        return optimizationDAO.getOptimizationDatasetIds(ids)
+                .flatMap(optimizationDatasetIds -> Mono.deferContextual(ctx -> optimizationDAO.delete(ids)
+                        .doOnSuccess(unused -> eventBus.post(new OptimizationsDeleted(
+                                optimizationDatasetIds.stream()
+                                        .map(DatasetEventInfoHolder::datasetId)
+                                        .collect(Collectors.toSet()),
+                                ctx.get(RequestContext.WORKSPACE_ID),
+                                ctx.get(RequestContext.USER_NAME))))))
+                .then();
+    }
+
+    @Override
+    @WithSpan
+    public Flux<DatasetLastOptimizationCreated> getMostRecentCreatedOptimizationFromDatasets(Set<UUID> datasetIds) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(datasetIds), "Argument 'datasetIds' must not be empty");
+
+        return optimizationDAO.getMostRecentCreatedExperimentFromDatasets(datasetIds);
+    }
+
+    @Override
+    public Mono<Long> update(@NonNull UUID id, @NonNull OptimizationUpdate update) {
+        if (update.name() == null && update.status() == null) {
+            return Mono.empty();
+        }
+
+        return optimizationDAO.getById(id)
+                .switchIfEmpty(Mono.error(failWithNotFound("Optimization", id)))
+                .then(Mono.defer(() -> optimizationDAO.update(id, update)));
     }
 
     private Mono<UUID> handleCreateError(Throwable throwable, UUID id) {
