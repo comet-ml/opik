@@ -74,11 +74,12 @@ const OptimizationProgressChartContent: React.FC<
   );
 
   const renderDot: LineDot = (props) => {
-    // TODO lala error with key
+    const { key, ...rest } = props;
     if (props.payload.entityId === bestEntityId) {
       return (
         <Dot
-          {...props}
+          key={key}
+          {...rest}
           fill={config[props.name as string].color}
           strokeWidth={8}
         />
@@ -87,7 +88,8 @@ const OptimizationProgressChartContent: React.FC<
 
     return (
       <Dot
-        {...props}
+        key={key}
+        {...rest}
         fill={config[props.name as string].color}
         strokeWidth={0}
       />

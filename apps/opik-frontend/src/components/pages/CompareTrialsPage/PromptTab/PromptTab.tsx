@@ -6,13 +6,13 @@ import isObject from "lodash/isObject";
 import uniq from "lodash/uniq";
 import toLower from "lodash/toLower";
 import find from "lodash/find";
+import get from "lodash/get";
 import { flattie } from "flattie";
 
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import CompareExperimentsHeader from "@/components/pages-shared/experiments/CompareExperimentsHeader/CompareExperimentsHeader";
-import CompareExperimentsActionsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
 import CompareExperimentsConfigCell, {
   CompareConfig,
   CompareFiledValue,
@@ -27,7 +27,8 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
-const COLUMNS_WIDTH_KEY = "compare-experiments-config-columns-width";
+const COLUMNS_WIDTH_KEY = "compare-trials-prompt-columns-width";
+export const OPTIMIZATION_EXCLUDED_KEY = "prompt_template";
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: ["name"],
@@ -42,13 +43,13 @@ export const DEFAULT_COLUMNS: ColumnData<CompareConfig>[] = [
   },
 ];
 
-export type ConfigurationTabProps = {
+export type PromptTabProps = {
   experimentsIds: string[];
   experiments: Experiment[];
   isPending: boolean;
 };
 
-const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
+const PromptTab: React.FunctionComponent<PromptTabProps> = ({
   experimentsIds,
   experiments,
   isPending,
@@ -98,8 +99,16 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     return experiments.reduce<
       Record<string, Record<string, CompareFiledValue>>
     >((acc, experiment) => {
+      const promptData = get(
+        experiment.metadata ?? {},
+        OPTIMIZATION_EXCLUDED_KEY,
+        {},
+      );
+
       acc[experiment.id] = isObject(experiment.metadata)
-        ? flattie(experiment.metadata, ".", true)
+        ? isObject(promptData)
+          ? flattie(promptData, ".", true)
+          : { orchestrator: promptData as CompareFiledValue }
         : {};
 
       return acc;
@@ -146,8 +155,8 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   const noDataText = search
     ? "No search results"
     : isCompare
-      ? "These experiments have no configuration"
-      : "This experiment has no configuration";
+      ? "These trials have no prompt"
+      : "This trial has no prompt";
 
   const resizeConfig = useMemo(
     () => ({
@@ -179,7 +188,6 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
           ></SearchInput>
         </div>
         <div className="flex items-center gap-2">
-          <CompareExperimentsActionsPanel />
           {isCompare && (
             <>
               <Separator orientation="vertical" className="mx-1 h-4" />
@@ -213,4 +221,4 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   );
 };
 
-export default ConfigurationTab;
+export default PromptTab;

@@ -33,6 +33,7 @@ import GetStartedPage from "@/components/pages/GetStartedPage/GetStartedPage";
 import AutomationLogsPage from "@/components/pages/AutomationLogsPage/AutomationLogsPage";
 import OnlineEvaluationPage from "@/components/pages/OnlineEvaluationPage/OnlineEvaluationPage";
 import OptimizationsPage from "@/components/pages/OptimizationsPage/OptimizationsPage";
+import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
 
@@ -205,18 +206,32 @@ const compareOptimizationsRoute = createRoute({
   getParentRoute: () => optimizationsRoute,
   component: CompareOptimizationsPage,
   staticData: {
-    param: "compare",
-    paramValue: "compare",
+    param: "optimizationsCompare",
+    paramValue: "optimizationsCompare",
   },
 });
 
-const compareTrialsRoute = createRoute({
-  path: "/$datasetId/trials/compare",
+const optimizationBaseRoute = createRoute({
+  path: "/$datasetId/$optimizationId",
   getParentRoute: () => optimizationsRoute,
+  staticData: {
+    param: "optimizationId",
+  },
+});
+
+const optimizationRoute = createRoute({
+  path: "/",
+  getParentRoute: () => optimizationBaseRoute,
+  component: OptimizationPage,
+});
+
+const compareTrialsRoute = createRoute({
+  path: "/compare",
+  getParentRoute: () => optimizationBaseRoute,
   component: CompareTrialsPage,
   staticData: {
-    param: "compare", // TODO lala verify this key. need to think about hierarchy
-    paramValue: "compare",
+    param: "trialsCompare",
+    paramValue: "trialsCompare",
   },
 });
 
@@ -364,7 +379,10 @@ const routeTree = rootRoute.addChildren([
       optimizationsRoute.addChildren([
         optimizationsListRoute,
         compareOptimizationsRoute,
-        compareTrialsRoute,
+        optimizationBaseRoute.addChildren([
+          optimizationRoute,
+          compareTrialsRoute,
+        ]),
       ]),
       datasetsRoute.addChildren([
         datasetsListRoute,

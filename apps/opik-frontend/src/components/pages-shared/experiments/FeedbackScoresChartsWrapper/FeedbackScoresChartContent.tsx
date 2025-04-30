@@ -112,9 +112,11 @@ const FeedbackScoresChartContent: React.FC<FeedbackScoresChartContentProps> = ({
 
   const renderDot: LineDot = (props) => {
     if (shouldShowDot(props.index, props.name)) {
+      const { key, ...rest } = props;
       return (
         <Dot
-          {...props}
+          key={key}
+          {...rest}
           fill={config[props.name as string].color}
           strokeWidth={0}
         />

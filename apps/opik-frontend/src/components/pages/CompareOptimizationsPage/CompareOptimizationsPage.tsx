@@ -148,7 +148,7 @@ const CompareOptimizationsPage: React.FC = () => {
     {
       workspaceName,
       datasetId: optimization?.dataset_id, // TODO lala delete
-      optimizationId: optimizationId,
+      // optimizationId: optimizationId,  // TODO lala add
       search: search!,
       sorting: sortedColumns.map((column) => {
         if (column.id === "objective_name") {
@@ -159,7 +159,7 @@ const CompareOptimizationsPage: React.FC = () => {
         }
         return column;
       }),
-      types: [EXPERIMENT_TYPE.TRIAL, EXPERIMENT_TYPE.MINI_BATCH],
+      // types: [EXPERIMENT_TYPE.TRIAL, EXPERIMENT_TYPE.MINI_BATCH],  // TODO lala add
       page: 1,
       size: MAX_EXPERIMENTS_LOADED,
     },
@@ -182,8 +182,10 @@ const CompareOptimizationsPage: React.FC = () => {
   const rows = useMemo(() => data?.content ?? [], [data?.content]);
 
   useEffect(() => {
-    title && setBreadcrumbParam("compare", "compare", title);
-    return () => setBreadcrumbParam("compare", "compare", "");
+    title &&
+      setBreadcrumbParam("optimizationsCompare", "optimizationsCompare", title);
+    return () =>
+      setBreadcrumbParam("optimizationsCompare", "optimizationsCompare", "");
   }, [title, setBreadcrumbParam]);
 
   const { scoreMap, bestExperiment } = useMemo(() => {
@@ -307,6 +309,9 @@ const CompareOptimizationsPage: React.FC = () => {
           nameKey: "name",
           idKey: "dataset_id",
           resource: RESOURCE_TYPE.trial,
+          getParams: () => ({
+            optimizationId,
+          }),
           getSearch: (data: Experiment) => ({
             trials: [data.id],
           }),
@@ -318,7 +323,7 @@ const CompareOptimizationsPage: React.FC = () => {
         sortableColumns: sortableBy,
       }),
     ];
-  }, [selectedColumns, columnsOrder, sortableBy, columnsDef]);
+  }, [columnsDef, columnsOrder, selectedColumns, sortableBy, optimizationId]);
 
   const sortConfig = useMemo(
     () => ({
@@ -341,9 +346,10 @@ const CompareOptimizationsPage: React.FC = () => {
   const handleRowClick = useCallback(
     (row: Experiment) => {
       navigate({
-        to: "/$workspaceName/optimizations/$datasetId/trials/compare",
+        to: "/$workspaceName/optimizations/$datasetId/$optimizationId/compare",
         params: {
           datasetId: row.dataset_id,
+          optimizationId,
           workspaceName,
         },
         search: {
@@ -351,7 +357,7 @@ const CompareOptimizationsPage: React.FC = () => {
         },
       });
     },
-    [navigate, workspaceName],
+    [navigate, workspaceName, optimizationId],
   );
 
   if (isOptimizationPending || isExperimentsPending) {

@@ -84,8 +84,12 @@ const BestPrompt: React.FC<BestPromptProps> = ({
         </TooltipWrapper>
         <div className="flex justify-end pt-1">
           <Link
-            to="/$workspaceName/optimizations/$datasetId/trials/compare"
-            params={{ workspaceName, datasetId: experiment.dataset_id }}
+            to="/$workspaceName/optimizations/$datasetId/$optimizationId/compare"
+            params={{
+              workspaceName,
+              datasetId: experiment.dataset_id,
+              optimizationId: optimization.id,
+            }}
             search={{ trials: [experiment.id] }}
           >
             <Button variant="ghost" className="flex items-center gap-1 pr-0">

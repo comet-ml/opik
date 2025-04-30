@@ -57,7 +57,7 @@ const RESOURCE_MAP = {
     deleted: "Optimization deleted",
   },
   [RESOURCE_TYPE.trial]: {
-    url: "/$workspaceName/optimizations/$datasetId/trials/compare",
+    url: "/$workspaceName/optimizations/$datasetId/$optimizationId/compare",
     icon: SparklesIcon,
     param: "datasetId",
     deleted: "Optimization deleted",
@@ -69,6 +69,7 @@ type ResourceLinkProps = {
   id: string;
   resource: RESOURCE_TYPE;
   search?: Record<string, string | number | string[]>;
+  params?: Record<string, string | number | string[]>;
   asTag?: boolean;
 };
 
@@ -77,14 +78,16 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
   name,
   id,
   search,
+  params,
   asTag = false,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const props = RESOURCE_MAP[resource];
-  const params: Record<string, string> = {
+  const linkParams: Record<string, string> = {
     workspaceName,
+    ...params,
   };
-  params[props.param] = id;
+  linkParams[props.param] = id;
 
   const deleted = isUndefined(name);
   const text = deleted ? props.deleted : name;
@@ -92,7 +95,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
   return (
     <Link
       to={props.url}
-      params={params}
+      params={linkParams}
       search={search}
       onClick={(event) => event.stopPropagation()}
       className="max-w-full"

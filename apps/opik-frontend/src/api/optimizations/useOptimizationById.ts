@@ -15,7 +15,7 @@ export const getOptimizationById = async (
   });
 
   return {
-    id: "opt-123456",
+    id: optimizationId,
     name: "Some optimization from BE",
     dataset_id: data?.dataset_id,
     dataset_name: data?.dataset_name,
