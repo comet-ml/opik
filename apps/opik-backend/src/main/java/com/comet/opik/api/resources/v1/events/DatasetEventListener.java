@@ -1,8 +1,10 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.DatasetLastExperimentCreated;
+import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
+import com.comet.opik.api.events.OptimizationCreated;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -44,6 +46,18 @@ public class DatasetEventListener {
                 .block();
 
         log.info("Recorded experiment for dataset '{}'", event.datasetId());
+    }
+
+    @Subscribe
+    public void onOptimizationCreated(OptimizationCreated event) {
+        log.info("Recording optimization with id '{}' for dataset '{}'", event.optimizationId(), event.datasetId());
+
+        datasetService
+                .recordOptimizations(Set.of(new DatasetLastOptimizationCreated(event.datasetId(), event.createdAt())))
+                .contextWrite(ctx -> setContext(event, ctx))
+                .block();
+
+        log.info("Recorded optimization with id '{}' for dataset '{}'", event.optimizationId(), event.datasetId());
     }
 
     private static Context setContext(BaseEvent event, Context ctx) {
