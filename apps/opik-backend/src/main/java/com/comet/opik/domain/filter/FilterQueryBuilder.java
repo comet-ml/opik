@@ -54,9 +54,7 @@ public class FilterQueryBuilder {
     private static final String FIRST_MESSAGE_ANALYTICS_DB = "first_message";
     private static final String LAST_MESSAGE_ANALYTICS_DB = "last_message";
     private static final String CREATED_AT_ANALYTICS_DB = "created_at";
-    // TODO - OPIK-1332: Temporary conversion to microseconds until the field is updated in ClickHouse.
-    //  It only affects trace, in particular for filtering trace threads.
-    private static final String LAST_UPDATED_AT_MICROS_ANALYTICS_DB = "toStartOfMicrosecond(last_updated_at)";
+    private static final String LAST_UPDATED_AT_ANALYTICS_DB = "last_updated_at";
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
     private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
     private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
@@ -151,7 +149,7 @@ public class FilterQueryBuilder {
                     .put(TraceThreadField.LAST_MESSAGE, LAST_MESSAGE_ANALYTICS_DB)
                     .put(TraceThreadField.DURATION, DURATION_ANALYTICS_DB)
                     .put(TraceThreadField.CREATED_AT, CREATED_AT_ANALYTICS_DB)
-                    .put(TraceThreadField.LAST_UPDATED_AT, LAST_UPDATED_AT_MICROS_ANALYTICS_DB)
+                    .put(TraceThreadField.LAST_UPDATED_AT, LAST_UPDATED_AT_ANALYTICS_DB)
                     .build());
 
     private static final Map<SpanField, String> SPAN_FIELDS_MAP = new EnumMap<>(

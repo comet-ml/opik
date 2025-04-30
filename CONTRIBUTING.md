@@ -61,9 +61,11 @@ The documentation is made up of two main parts:
 
 #### Contributing to the documentation website
 
-The documentation website is built using [Fern](https://www.buildwithfern.com/) and is located in `apps/opik-documentation/documentation`.
+The documentation website is built with [Fern](https://www.buildwithfern.com/) and is located in `apps/opik-documentation/documentation`.
 
-In order to run the documentation website locally, you need to have `npm` installed. Once installed, you can run the documentation locally using the following command:
+In order to run the documentation website locally, you need to have Node.js and npm installed. You can follow this guide to install Node.js and npm [here](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm/).
+
+Once installed, you can run the documentation locally using the following command:
 
 ```bash
 cd apps/opik-documentation/documentation
@@ -79,9 +81,8 @@ You can then access the documentation website at `http://localhost:3000`. Any ch
 
 When updating the documentation, you will need to update either:
 
-- `docs/cookbook`: This is where all our cookbooks are located.
 - `fern/docs`: This is where all the markdown code is stored and where the majority of the documentation is located.
-
+- `docs/cookbook`: This is where all our cookbooks are located.
 
 #### Contributing to the Python SDK reference documentation
 

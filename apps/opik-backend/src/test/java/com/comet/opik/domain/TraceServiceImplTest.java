@@ -91,8 +91,7 @@ class TraceServiceImplTest {
                 projectService,
                 () -> Generators.timeBasedEpochGenerator().generate(),
                 DUMMY_LOCK_SERVICE,
-                eventBus,
-                traceSortingFactory);
+                eventBus);
     }
 
     @Nested
@@ -183,15 +182,13 @@ class TraceServiceImplTest {
             when(projectService.resolveProjectIdAndVerifyVisibility(null, projectName))
                     .thenThrow(ErrorUtils.failWithNotFoundName("Project", projectName));
 
-            Exception exception = assertThrows(NotFoundException.class, () -> {
-                traceService
-                        .find(page, size, TraceSearchCriteria.builder()
-                                .projectName(projectName)
-                                .build())
-                        .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
-                                .put(RequestContext.WORKSPACE_ID, workspaceId))
-                        .block();
-            });
+            Exception exception = assertThrows(NotFoundException.class, () -> traceService
+                    .find(page, size, TraceSearchCriteria.builder()
+                            .projectName(projectName)
+                            .build())
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
 
             assertThat(exception.getMessage()).isEqualTo("Project name: %s not found".formatted(projectName));
         }

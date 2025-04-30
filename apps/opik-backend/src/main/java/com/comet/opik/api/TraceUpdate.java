@@ -20,6 +20,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 public record TraceUpdate(
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null and project_id not specified, Default Project is assumed") String projectName,
         @Schema(description = "If null and project_name not specified, Default Project is assumed") UUID projectId,
+        String name,
         Instant endTime,
         JsonNode input,
         JsonNode output,
