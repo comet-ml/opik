@@ -166,8 +166,12 @@ from .feedback_update import (
 from .function import Function
 from .function_call import FunctionCall
 from .guardrail import Guardrail
+from .guardrail_batch import GuardrailBatch
 from .guardrail_name import GuardrailName
 from .guardrail_result import GuardrailResult
+from .guardrail_write import GuardrailWrite
+from .guardrail_write_name import GuardrailWriteName
+from .guardrail_write_result import GuardrailWriteResult
 from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
 from .json_node import JsonNode
@@ -428,8 +432,12 @@ __all__ = [
     "Function",
     "FunctionCall",
     "Guardrail",
+    "GuardrailBatch",
     "GuardrailName",
     "GuardrailResult",
+    "GuardrailWrite",
+    "GuardrailWriteName",
+    "GuardrailWriteResult",
     "GuardrailsValidation",
     "GuardrailsValidationPublic",
     "JsonNode",

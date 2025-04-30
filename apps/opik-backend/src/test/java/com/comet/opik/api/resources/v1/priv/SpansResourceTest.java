@@ -113,7 +113,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.HashMap;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -137,6 +137,7 @@ import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertTra
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertUpdatedComment;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
+import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NAME_NOT_FOUND_MESSAGE;
@@ -147,7 +148,6 @@ import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryPara
 import static com.comet.opik.api.resources.utils.spans.SpanAssertions.IGNORED_FIELDS;
 import static com.comet.opik.api.resources.utils.spans.SpanAssertions.IGNORED_FIELDS_SCORES;
 import static com.comet.opik.api.resources.utils.spans.SpanAssertions.assertSpan;
-import static com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.SpanService.PARENT_SPAN_IS_MISMATCH;
 import static com.comet.opik.domain.SpanService.PROJECT_AND_WORKSPACE_NAME_MISMATCH;
@@ -184,6 +184,34 @@ class SpansResourceTest {
     public static final String INVVALID_SEARCH_RESPONSE_MESSAGE = """
             Unable to process JSON. Cannot deserialize value of type `java.util.UUID` from String "Ellipsis": UUID has to be represented by standard 36-char representation
              at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 160] (through reference chain: com.comet.opik.api.SpanSearchStreamRequest["project_id"])""";
+
+    public static final Map<Span.SpanField, Function<Span, Span>> EXCLUDE_FUNCTIONS = new EnumMap<>(
+            Span.SpanField.class);
+
+    static {
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.NAME, it -> it.toBuilder().name(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.TYPE, it -> it.toBuilder().type(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.START_TIME, it -> it.toBuilder().startTime(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.END_TIME, it -> it.toBuilder().endTime(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.INPUT, it -> it.toBuilder().input(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.OUTPUT, it -> it.toBuilder().output(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.METADATA, it -> it.toBuilder().metadata(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.MODEL, it -> it.toBuilder().model(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.PROVIDER, it -> it.toBuilder().provider(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.TAGS, it -> it.toBuilder().tags(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.USAGE, it -> it.toBuilder().usage(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.ERROR_INFO, it -> it.toBuilder().errorInfo(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.CREATED_AT, it -> it.toBuilder().createdAt(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.CREATED_BY, it -> it.toBuilder().createdBy(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.LAST_UPDATED_BY, it -> it.toBuilder().lastUpdatedBy(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.FEEDBACK_SCORES, it -> it.toBuilder().feedbackScores(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.COMMENTS, it -> it.toBuilder().comments(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.TOTAL_ESTIMATED_COST,
+                it -> it.toBuilder().totalEstimatedCost(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.TOTAL_ESTIMATED_COST_VERSION,
+                it -> it.toBuilder().totalEstimatedCostVersion(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.DURATION, it -> it.toBuilder().duration(null).build());
+    }
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MY_SQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
@@ -1675,7 +1703,7 @@ class SpansResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.api.resources.v1.priv.ImageTruncationArgProvider#provideTestArguments")
+        @MethodSource("com.comet.opik.api.resources.utils.ImageTruncationArgProvider#provideTestArguments")
         void findWithImageTruncation(JsonNode original, JsonNode expected, boolean truncate) {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
@@ -1732,7 +1760,7 @@ class SpansResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.api.resources.v1.priv.ImageTruncationArgProvider#provideTestArguments")
+        @MethodSource("com.comet.opik.api.resources.utils.ImageTruncationArgProvider#provideTestArguments")
         void searchWithImageTruncation(JsonNode original, JsonNode expected, boolean truncate) {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
@@ -4522,42 +4550,13 @@ class SpansResourceTest {
                     .toList();
 
             spans = spans.stream()
-                    .map(span -> excludeFields(span, field))
+                    .map(span -> EXCLUDE_FUNCTIONS.get(field).apply(span))
                     .toList();
 
             List<Span.SpanField> exclude = List.of(field);
 
             getAndAssertPage(workspaceName, projectName, List.of(), spans, spans.reversed(), List.of(), apiKey,
                     List.of(), exclude);
-        }
-
-        private static Span excludeFields(Span span, Span.SpanField field) {
-
-            Map<Span.SpanField, Function<Span, Span>> excludeFunctions = new HashMap<>();
-            excludeFunctions.put(Span.SpanField.NAME, it -> it.toBuilder().name(null).build());
-            excludeFunctions.put(Span.SpanField.TYPE, it -> it.toBuilder().type(null).build());
-            excludeFunctions.put(Span.SpanField.START_TIME, it -> it.toBuilder().startTime(null).build());
-            excludeFunctions.put(Span.SpanField.END_TIME, it -> it.toBuilder().endTime(null).build());
-            excludeFunctions.put(Span.SpanField.INPUT, it -> it.toBuilder().input(null).build());
-            excludeFunctions.put(Span.SpanField.OUTPUT, it -> it.toBuilder().output(null).build());
-            excludeFunctions.put(Span.SpanField.METADATA, it -> it.toBuilder().metadata(null).build());
-            excludeFunctions.put(Span.SpanField.MODEL, it -> it.toBuilder().model(null).build());
-            excludeFunctions.put(Span.SpanField.PROVIDER, it -> it.toBuilder().provider(null).build());
-            excludeFunctions.put(Span.SpanField.TAGS, it -> it.toBuilder().tags(null).build());
-            excludeFunctions.put(Span.SpanField.USAGE, it -> it.toBuilder().usage(null).build());
-            excludeFunctions.put(Span.SpanField.ERROR_INFO, it -> it.toBuilder().errorInfo(null).build());
-            excludeFunctions.put(Span.SpanField.CREATED_AT, it -> it.toBuilder().createdAt(null).build());
-            excludeFunctions.put(Span.SpanField.CREATED_BY, it -> it.toBuilder().createdBy(null).build());
-            excludeFunctions.put(Span.SpanField.LAST_UPDATED_BY, it -> it.toBuilder().lastUpdatedBy(null).build());
-            excludeFunctions.put(Span.SpanField.FEEDBACK_SCORES, it -> it.toBuilder().feedbackScores(null).build());
-            excludeFunctions.put(Span.SpanField.COMMENTS, it -> it.toBuilder().comments(null).build());
-            excludeFunctions.put(Span.SpanField.TOTAL_ESTIMATED_COST,
-                    it -> it.toBuilder().totalEstimatedCost(null).build());
-            excludeFunctions.put(Span.SpanField.TOTAL_ESTIMATED_COST_VERSION,
-                    it -> it.toBuilder().totalEstimatedCostVersion(null).build());
-            excludeFunctions.put(Span.SpanField.DURATION, it -> it.toBuilder().duration(null).build());
-
-            return excludeFunctions.get(field).apply(span);
         }
 
     }
@@ -4931,7 +4930,7 @@ class SpansResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils#quotaLimitsTestProvider")
+        @MethodSource("com.comet.opik.api.resources.utils.QuotaLimitTestUtils#quotaLimitsTestProvider")
         void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
                 List<Quota> quotas, boolean isLimitReached) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
@@ -5146,7 +5145,7 @@ class SpansResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.api.resources.v1.priv.QuotaLimitTestUtils#quotaLimitsTestProvider")
+        @MethodSource("com.comet.opik.api.resources.utils.QuotaLimitTestUtils#quotaLimitsTestProvider")
         void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
                 List<Quota> quotas, boolean isLimitReached) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);

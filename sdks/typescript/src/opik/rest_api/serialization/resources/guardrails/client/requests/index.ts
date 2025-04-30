@@ -1,1 +1,1 @@
-export { GuardrailBatch } from "./GuardrailBatch";
+export { GuardrailBatchWrite } from "./GuardrailBatchWrite";

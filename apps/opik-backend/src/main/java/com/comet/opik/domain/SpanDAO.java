@@ -1272,8 +1272,6 @@ class SpanDAO {
 
     private Publisher<Span> mapToDto(Result result, Set<SpanField> exclude) {
 
-        Set<SpanField> excludedFields = CollectionUtils.isEmpty(exclude) ? Set.of() : exclude;
-
         return result.map((row, rowMetadata) -> {
             return Span.builder()
                     .id(row.get("id", UUID.class))
@@ -1283,68 +1281,68 @@ class SpanDAO {
                             .filter(str -> !str.isBlank())
                             .map(UUID::fromString)
                             .orElse(null))
-                    .name(getValue(excludedFields, SpanField.NAME, row, "name", String.class))
+                    .name(getValue(exclude, SpanField.NAME, row, "name", String.class))
                     .type(Optional.ofNullable(
-                            getValue(excludedFields, SpanField.TYPE, row, "type", String.class))
+                            getValue(exclude, SpanField.TYPE, row, "type", String.class))
                             .map(SpanType::fromString)
                             .orElse(null))
-                    .startTime(getValue(excludedFields, SpanField.START_TIME, row, "start_time", Instant.class))
-                    .endTime(getValue(excludedFields, SpanField.END_TIME, row, "end_time", Instant.class))
-                    .input(Optional.ofNullable(getValue(excludedFields, SpanField.INPUT, row, "input", String.class))
+                    .startTime(getValue(exclude, SpanField.START_TIME, row, "start_time", Instant.class))
+                    .endTime(getValue(exclude, SpanField.END_TIME, row, "end_time", Instant.class))
+                    .input(Optional.ofNullable(getValue(exclude, SpanField.INPUT, row, "input", String.class))
                             .filter(str -> !str.isBlank())
                             .map(JsonUtils::getJsonNodeFromString)
                             .orElse(null))
-                    .output(Optional.ofNullable(getValue(excludedFields, SpanField.OUTPUT, row, "output", String.class))
+                    .output(Optional.ofNullable(getValue(exclude, SpanField.OUTPUT, row, "output", String.class))
                             .filter(str -> !str.isBlank())
                             .map(JsonUtils::getJsonNodeFromString)
                             .orElse(null))
                     .metadata(Optional
-                            .ofNullable(getValue(excludedFields, SpanField.METADATA, row, "metadata", String.class))
+                            .ofNullable(getValue(exclude, SpanField.METADATA, row, "metadata", String.class))
                             .filter(str -> !str.isBlank())
                             .map(JsonUtils::getJsonNodeFromString)
                             .orElse(null))
-                    .model(Optional.ofNullable(getValue(excludedFields, SpanField.MODEL, row, "model", String.class))
+                    .model(Optional.ofNullable(getValue(exclude, SpanField.MODEL, row, "model", String.class))
                             .filter(str -> !str.isBlank())
                             .orElse(null))
                     .provider(Optional
-                            .ofNullable(getValue(excludedFields, SpanField.PROVIDER, row, "provider", String.class))
+                            .ofNullable(getValue(exclude, SpanField.PROVIDER, row, "provider", String.class))
                             .filter(str -> !str.isBlank())
                             .orElse(null))
                     .totalEstimatedCost(
-                            Optional.ofNullable(getValue(excludedFields, SpanField.TOTAL_ESTIMATED_COST, row,
+                            Optional.ofNullable(getValue(exclude, SpanField.TOTAL_ESTIMATED_COST, row,
                                     "total_estimated_cost", BigDecimal.class))
                                     .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
                                     .orElse(null))
-                    .totalEstimatedCostVersion(getValue(excludedFields, SpanField.TOTAL_ESTIMATED_COST_VERSION, row,
+                    .totalEstimatedCostVersion(getValue(exclude, SpanField.TOTAL_ESTIMATED_COST_VERSION, row,
                             "total_estimated_cost_version", String.class))
                     .feedbackScores(Optional
-                            .ofNullable(getValue(excludedFields, SpanField.FEEDBACK_SCORES, row, "feedback_scores_list",
+                            .ofNullable(getValue(exclude, SpanField.FEEDBACK_SCORES, row, "feedback_scores_list",
                                     List.class))
                             .filter(not(List::isEmpty))
                             .map(this::mapFeedbackScores)
                             .filter(not(List::isEmpty))
                             .orElse(null))
-                    .tags(Optional.ofNullable(getValue(excludedFields, SpanField.TAGS, row, "tags", String[].class))
+                    .tags(Optional.ofNullable(getValue(exclude, SpanField.TAGS, row, "tags", String[].class))
                             .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
                             .filter(set -> !set.isEmpty())
                             .orElse(null))
-                    .usage(getValue(excludedFields, SpanField.USAGE, row, "usage", Map.class))
+                    .usage(getValue(exclude, SpanField.USAGE, row, "usage", Map.class))
                     .comments(Optional
-                            .ofNullable(getValue(excludedFields, SpanField.COMMENTS, row, "comments", List[].class))
+                            .ofNullable(getValue(exclude, SpanField.COMMENTS, row, "comments", List[].class))
                             .map(CommentResultMapper::getComments)
                             .filter(not(List::isEmpty))
                             .orElse(null))
                     .errorInfo(Optional
-                            .ofNullable(getValue(excludedFields, SpanField.ERROR_INFO, row, "error_info", String.class))
+                            .ofNullable(getValue(exclude, SpanField.ERROR_INFO, row, "error_info", String.class))
                             .filter(str -> !str.isBlank())
                             .map(errorInfo -> JsonUtils.readValue(errorInfo, ERROR_INFO_TYPE))
                             .orElse(null))
-                    .createdAt(getValue(excludedFields, SpanField.CREATED_AT, row, "created_at", Instant.class))
+                    .createdAt(getValue(exclude, SpanField.CREATED_AT, row, "created_at", Instant.class))
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                    .createdBy(getValue(excludedFields, SpanField.CREATED_BY, row, "created_by", String.class))
+                    .createdBy(getValue(exclude, SpanField.CREATED_BY, row, "created_by", String.class))
                     .lastUpdatedBy(
-                            getValue(excludedFields, SpanField.LAST_UPDATED_BY, row, "last_updated_by", String.class))
-                    .duration(getValue(excludedFields, SpanField.DURATION, row, "duration", Double.class))
+                            getValue(exclude, SpanField.LAST_UPDATED_BY, row, "last_updated_by", String.class))
+                    .duration(getValue(exclude, SpanField.DURATION, row, "duration", Double.class))
                     .build();
         });
     }

@@ -21,6 +21,7 @@ import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.http.HttpStatus;
@@ -264,7 +265,7 @@ public class SpanResourceClient extends BaseCommentResourceClient {
             webTarget = webTarget.queryParam("sorting", toURLEncodedQueryParam(sortingFields));
         }
 
-        if (exclude != null && !exclude.isEmpty()) {
+        if (!CollectionUtils.isEmpty(exclude)) {
             webTarget = webTarget.queryParam("exclude", toURLEncodedQueryParam(exclude));
         }
 

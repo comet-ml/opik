@@ -21,12 +21,11 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.util.Collection;
+import java.util.Optional;
 
 @UtilityClass
 @Slf4j
 public class JsonUtils {
-
-    public static final String ISO_INSTANT_MICROS_PATTERN = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX";
 
     public static final ObjectMapper MAPPER = new ObjectMapper()
             .setPropertyNamingStrategy(PropertyNamingStrategies.SnakeCaseStrategy.INSTANCE)
@@ -52,6 +51,17 @@ public class JsonUtils {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    public static String getStringOrDefault(JsonNode jsonNode) {
+        return Optional.ofNullable(jsonNode).map(JsonNode::toString).orElse("");
+    }
+
+    public static JsonNode getJsonNodeOrDefault(String str) {
+        return Optional.ofNullable(str)
+                .filter(s -> !s.isBlank())
+                .map(JsonUtils::getJsonNodeFromString)
+                .orElse(null);
     }
 
     public JsonNode readTree(@NonNull Object content) {

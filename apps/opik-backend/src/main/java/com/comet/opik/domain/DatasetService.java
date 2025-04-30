@@ -5,6 +5,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetCriteria;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetLastExperimentCreated;
+import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -55,6 +56,8 @@ public interface DatasetService {
 
     UUID getOrCreate(String workspaceId, String name, String userName);
 
+    Mono<UUID> getOrCreateDataset(String datasetName);
+
     Optional<Dataset> getById(UUID id, String workspaceId);
 
     void update(UUID id, DatasetUpdate dataset);
@@ -78,6 +81,8 @@ public interface DatasetService {
     DatasetPage find(int page, int size, DatasetCriteria criteria, List<SortingField> sortingFields);
 
     Mono<Void> recordExperiments(Set<DatasetLastExperimentCreated> datasetsLastExperimentCreated);
+
+    Mono<Void> recordOptimizations(Set<DatasetLastOptimizationCreated> datasetsLastOptimizationCreated);
 
     BiInformationResponse getDatasetBIInformation();
 
@@ -166,6 +171,19 @@ class DatasetServiceImpl implements DatasetService {
         UUID id = dataset.get().id();
         log.info("Got dataset with id '{}', name '{}', workspaceId '{}'", id, name, workspaceId);
         return id;
+    }
+
+    @Override
+    public Mono<UUID> getOrCreateDataset(String datasetName) {
+        return Mono.deferContextual(ctx -> {
+            String userName = ctx.get(RequestContext.USER_NAME);
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            return Mono.fromCallable(() -> getOrCreate(workspaceId, datasetName, userName))
+                    .subscribeOn(Schedulers.boundedElastic());
+        })
+                .onErrorResume(throwable -> handleDatasetCreationError(throwable, datasetName)
+                        .map(Dataset::id));
     }
 
     @Override
@@ -328,7 +346,7 @@ class DatasetServiceImpl implements DatasetService {
             Mono<Set<UUID>> datasetIds = experimentDAO.findAllDatasetIds(criteria)
                     .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
                     .map(dto -> dto.stream()
-                            .map(ExperimentDatasetId::datasetId)
+                            .map(DatasetEventInfoHolder::datasetId)
                             .collect(toSet()));
 
             DatasetPage datasetPage = datasetIds.flatMap(ids -> {
@@ -537,6 +555,29 @@ class DatasetServiceImpl implements DatasetService {
 
     @Override
     @WithSpan
+    public Mono<Void> recordOptimizations(Set<DatasetLastOptimizationCreated> datasetsLastOptimizationCreated) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(datasetsLastOptimizationCreated),
+                "Argument 'datasetsLastOptimizationCreated' must not be empty");
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            return Mono.fromRunnable(() -> template.inTransaction(WRITE, handle -> {
+
+                var dao = handle.attach(DatasetDAO.class);
+
+                int[] results = dao.recordOptimizations(workspaceId, datasetsLastOptimizationCreated);
+
+                log.info("Updated '{}' datasets with last optimization created time", results.length);
+
+                return Mono.empty();
+            }));
+        }).subscribeOn(Schedulers.boundedElastic())
+                .then();
+    }
+
+    @Override
+    @WithSpan
     public long getDailyCreatedCount() {
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
@@ -545,6 +586,18 @@ class DatasetServiceImpl implements DatasetService {
                     .mapToLong(BiInformationResponse.BiInformation::count)
                     .sum();
         });
+    }
+
+    private Mono<Dataset> handleDatasetCreationError(Throwable throwable, String datasetName) {
+        if (throwable instanceof EntityAlreadyExistsException) {
+            return Mono.deferContextual(ctx -> {
+                String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+                return Mono.fromCallable(() -> findByName(workspaceId, datasetName))
+                        .subscribeOn(Schedulers.boundedElastic());
+            });
+        }
+        return Mono.error(throwable);
     }
 
 }

@@ -59,6 +59,8 @@ public class ExperimentResourceClient {
                 .promptVersions(null)
                 .duration(null)
                 .totalEstimatedCost(null)
+                .type(null)
+                .optimizationId(null)
                 .usage(null);
     }
 
@@ -70,6 +72,8 @@ public class ExperimentResourceClient {
                         .duration(null)
                         .totalEstimatedCost(null)
                         .usage(null)
+                        .type(null)
+                        .optimizationId(null)
                         .build())
                 .toList();
     }
