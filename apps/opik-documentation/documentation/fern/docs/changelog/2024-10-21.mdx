@@ -16,14 +16,24 @@
 
 - Datasets now support more flexible data schema, we now support inserting items with any key value pairs:
 
-  ```python
+  ```python wordWrap {pytest_codeblocks_skip=true}
   import opik
 
   client = opik.Opik()
   dataset = client.get_or_create_dataset(name="Demo Dataset")
   dataset.insert([
-      {"user_question": "Hello, what can you do ?", "expected_output": {"assistant_answer": "I am a chatbot assistant that can answer questions and help you with your queries!"}},
-      {"user_question": "What is the capital of France?", "expected_output": {"assistant_answer": "Paris"}},
+      {
+          "user_question": "Hello, what can you do ?",
+          "expected_output": {
+              "assistant_answer": "I am a chatbot assistant that can answer questions and help you with your queries!"
+          }
+      },
+      {
+          "user_question": "What is the capital of France?",
+          "expected_output": {
+              "assistant_answer": "Paris"
+          }
+      },
   ])
   ```
 

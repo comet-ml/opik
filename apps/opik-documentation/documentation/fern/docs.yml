@@ -33,6 +33,9 @@ logo:
   height: 28
 navbar-links:
   - type: minimal
+    text: "Copy to LLM"
+    href: "https://www.comet.com/docs/opik/llms-full.txt"
+  - type: minimal
     text: "Github"
     href: "https://github.com/comet-ml/opik"
   - type: filled
@@ -93,7 +96,7 @@ navigation:
           - page: Log agents
             path: docs/tracing/log_agents.mdx
             slug: log_agents
-          - page: Log multimodal traces
+          - page: Log media & attachments
             path: docs/tracing/log_multimodal_traces.mdx
             slug: log_multimodal_traces
           - page: Log distributed traces
