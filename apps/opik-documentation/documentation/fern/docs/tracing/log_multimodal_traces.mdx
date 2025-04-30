@@ -1,20 +1,84 @@
-Opik supports multimodal traces allowing you to track not just the text input and output of your LLM, but also images.
+Opik supports multimodal traces allowing you to track not just the text input
+and output of your LLM, but also images, videos and audio and any other media.
 
 <Frame>
-  <img src="/img/tracing/image_trace.png" />
+  <img src="/img/tracing/attachments.png" />
 </Frame>
 
-## Log a trace with an image using OpenAI SDK
+## Logging Attachments
 
-Images logged to a trace in both base64 encoded images and as URLs are displayed in the trace sidebar.
+In the Python SDK, you can use the `Attachment` type to add files to your traces.
+Attachements can be images, videos, audio files or any other file that you might
+want to log to Opik.
 
-We recommend that you use the [`track_openai`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/openai/track_openai.html) wrapper to ensure the OpenAI API call is traced correctly:
+Each attachment is made up of the following fields:
 
-```python
+- `data`: The path to the file or the base64 encoded string of the file
+- `content_type`: The content type of the file formatted as a MIME type
+
+These attachements can then be logged to your traces and spans using The
+`opik_context.update_current_span` and `opik_context.update_current_trace`
+methods:
+
+```python wordWrap
+from opik import opik_context, track, Attachment
+
+@track
+def my_llm_agent(input):
+    # LLM chain code
+    # ...
+
+    # Update the trace
+    opik_context.update_current_trace(
+        attachments=[
+            Attachment(
+                data="<path to the image>",
+                content_type="image/png",
+            )
+        ]
+    )
+
+    return "World!"
+
+print(my_llm_agent("Hello!"))
+```
+
+The attachements will be uploaded to the Opik platform and can be both previewed
+and dowloaded from the UI.
+
+<Frame>
+  <img src="/img/tracing/attachments.png" />
+</Frame>
+
+<Note>
+In order to preview the attachements in the UI, you will need to supply a
+supported content type for the attachment. We support the following content types:
+
+- Image: `image/jpeg`, `image/png`, `image/gif` and `image/svg+xml`
+- Video: `video/mp4` and `video/webm`
+- Audio: `audio/wav`, `audio/vorbis` and `audio/x-wav`
+- Text: `text/plain` and `text/markdown`
+- PDF: `application/pdf`
+- Other: `application/json` and `application/octet-stream`
+
+</Note>
+
+## Previewing base64 encoded images and image URLs
+
+Opik automatically detects base64 encoded images and URLs logged to the platform,
+once an image is detected we will hide the string to make the content more readable
+and display the image in the UI. This is supported in the tracing view, datasets
+view and experiment view.
+
+For example if you are using the OpenAI SDK, if you pass an image to the model
+as a URL, Opik will automatically detect it and display
+the image in the UI:
+
+```python wordWrap
 from opik.integrations.openai import track_openai
 from openai import OpenAI
 
-# Create the OpenAI client and enable Opik tracing
+# Make sure to wrap the OpenAI client to enable Opik tracing
 client = track_openai(OpenAI())
 
 response = client.chat.completions.create(
@@ -23,7 +87,7 @@ response = client.chat.completions.create(
     {
       "role": "user",
       "content": [
-        {"type": "text", "text": "What’s in this image?"},
+        {"type": "text", "text": "What's in this image?"},
         {
           "type": "image_url",
           "image_url": {
@@ -39,17 +103,17 @@ response = client.chat.completions.create(
 print(response.choices[0])
 ```
 
-## Manually logging images
+<Frame>
+  <img src="/img/tracing/image_trace.png" />
+</Frame>
 
-If you are not using the OpenAI SDK, you can still log images to the platform. The UI will automatically detect images based on regex rules as long as the images are logged as base64 encoded images or urls ending with `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.webp`:
+## Downloading attachments
 
-```json
-{
-  "image": "<url or base64 encoded image>"
-}
-```
+You can download attachments from the UI by hovering over the attachments and
+clicking on the download icon. SDKs methods are not yet available but it's
+coming soon !
 
 <Tip>
   Let's us know on [Github](https://github.com/comet-ml/opik/issues/new/choose) if you would like to us to support
-  additional image formats or models.
+  additional image formats.
 </Tip>

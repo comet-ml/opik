@@ -75,7 +75,7 @@ The `search_traces` method allows you to fetch traces based on any of trace attr
 
 Once you have fetched the traces you want to annotate, you can update the feedback scores using the [`Opik.log_traces_feedback_scores`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.log_traces_feedback_scores) method.
 
-```python pytest_codeblocks_skip="true"
+```python {pytest_codeblocks_skip=true}
 for trace in traces:
     opik_client.log_traces_feedback_scores(
         project_name="Default Project",

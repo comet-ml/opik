@@ -119,6 +119,9 @@ import opik
 opik.configure()
 client = opik.Opik()
 
+# Get a dataset
+dataset = client.get_or_create_dataset("test_dataset")
+
 # Get the prompt
 prompt = client.get_prompt(name="prompt-summary")
 
@@ -137,19 +140,27 @@ be achieved by passing the `prompt` parameter when creating an Experiment:
 
 ```python
 import opik
+from opik.evaluation import evaluate
+from opik.evaluation.metrics import Hallucination
 
 opik.configure()
 client = opik.Opik()
 
+# Get a dataset
+dataset = client.get_or_create_dataset("test_dataset")
+
 # Create a prompt
 prompt = opik.Prompt(name="My prompt", prompt="...")
+
+# Create an evaluation task
+def evaluation_task(dataset_item):
+    return {"output": "llm_response"}
 
 # Run the evaluation
 evaluation = evaluate(
     experiment_name="My experiment",
     dataset=dataset,
     task=evaluation_task,
-    scoring_metrics=[hallucination_metric],
     prompt=prompt,
 )
 ```

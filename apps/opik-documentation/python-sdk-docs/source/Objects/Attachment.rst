@@ -1,0 +1,4 @@
+Attachment
+==========
+
+.. autoclass:: opik.Attachment
