@@ -71,7 +71,7 @@ public class ExperimentService {
                     .build())
                     .map(datasetIds -> datasetIds
                             .stream()
-                            .map(ExperimentDatasetId::datasetId)
+                            .map(DatasetEventInfoHolder::datasetId)
                             .collect(Collectors.toSet()))
                     .flatMap(datasetIds -> makeMonoContextAware((userName, workspaceId) -> {
 
@@ -352,27 +352,24 @@ public class ExperimentService {
     }
 
     private void postExperimentCreatedEvent(Experiment partialExperiment, String workspaceId, String userName) {
-        // This event should be posted only for Experiments with Regular type,
-        // not needed for Agent Optimizations related Experiments (Trials)
-        if (Optional.ofNullable(partialExperiment.type()).orElse(ExperimentType.REGULAR) == ExperimentType.REGULAR) {
-            log.info("Posting experiment created event for experiment id '{}', datasetId '{}', workspaceId '{}'",
-                    partialExperiment.id(), partialExperiment.datasetId(), workspaceId);
-            eventBus.post(new ExperimentCreated(
-                    partialExperiment.id(),
-                    partialExperiment.datasetId(),
-                    // The createdAt field is not exactly the one persisted in the DB, but it doesn't matter:
-                    // - The experiment.createdAt field in ClickHouse has precision 9,
-                    // whereas for dataset.lastCreatedExperimentAt in MySQL has precision 6.
-                    // - It's approximated enough for the event.
-                    // - At the moment of writing this comment, the dataset.lastCreatedExperimentAt field is only used
-                    // to optionally sort the datasets returned by the find datasets endpoint. There are no other usages
-                    // in the UI or elsewhere.
-                    partialExperiment.createdAt(),
-                    workspaceId,
-                    userName));
-            log.info("Posted experiment created event for experiment id '{}', datasetId '{}', workspaceId '{}'",
-                    partialExperiment.id(), partialExperiment.datasetId(), workspaceId);
-        }
+        log.info("Posting experiment created event for experiment id '{}', datasetId '{}', workspaceId '{}'",
+                partialExperiment.id(), partialExperiment.datasetId(), workspaceId);
+        eventBus.post(new ExperimentCreated(
+                partialExperiment.id(),
+                partialExperiment.datasetId(),
+                // The createdAt field is not exactly the one persisted in the DB, but it doesn't matter:
+                // - The experiment.createdAt field in ClickHouse has precision 9,
+                // whereas for dataset.lastCreatedExperimentAt in MySQL has precision 6.
+                // - It's approximated enough for the event.
+                // - At the moment of writing this comment, the dataset.lastCreatedExperimentAt field is only used
+                // to optionally sort the datasets returned by the find datasets endpoint. There are no other usages
+                // in the UI or elsewhere.
+                partialExperiment.createdAt(),
+                workspaceId,
+                userName,
+                Optional.ofNullable(partialExperiment.type()).orElse(ExperimentType.REGULAR)));
+        log.info("Posted experiment created event for experiment id '{}', datasetId '{}', workspaceId '{}'",
+                partialExperiment.id(), partialExperiment.datasetId(), workspaceId);
     }
 
     private Mono<UUID> handleCreateError(Throwable throwable, UUID id) {
@@ -404,13 +401,11 @@ public class ExperimentService {
     public Mono<Void> delete(@NonNull Set<UUID> ids) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
 
-        return experimentDAO.getExperimentsDatasetIds(ids)
-                .flatMap(experimentDatasetIds -> Mono.deferContextual(ctx -> experimentDAO.delete(ids)
+        return experimentDAO.getExperimentsDatasetInfo(ids)
+                .flatMap(experimentDatasetInfo -> Mono.deferContextual(ctx -> experimentDAO.delete(ids)
                         .then(Mono.defer(() -> experimentItemDAO.deleteByExperimentIds(ids)))
                         .doOnSuccess(unused -> eventBus.post(new ExperimentsDeleted(
-                                experimentDatasetIds.stream()
-                                        .map(ExperimentDatasetId::datasetId)
-                                        .collect(Collectors.toSet()),
+                                experimentDatasetInfo,
                                 ctx.get(RequestContext.WORKSPACE_ID),
                                 ctx.get(RequestContext.USER_NAME))))))
                 .then();

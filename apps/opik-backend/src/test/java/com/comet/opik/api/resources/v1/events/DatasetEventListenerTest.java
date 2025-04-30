@@ -1,8 +1,8 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
-import com.comet.opik.api.ExperimentsDelete;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -193,7 +193,7 @@ class DatasetEventListenerTest {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(new ExperimentsDelete(ids)))) {
+                .post(Entity.json(new DeleteIdsHolder(ids)))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
         }
@@ -346,4 +346,29 @@ class DatasetEventListenerTest {
         });
     }
 
+    @Test
+    @DisplayName("when an optimization is deleted, the last created optimization date should be updated")
+    void when__optimizationIsDeleted__lastCreatedOptimizationDateShouldBeUpdated_() {
+        var dataset = factory.manufacturePojo(Dataset.class);
+        var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
+
+        var expectedOptimization = generateOptimization(dataset);
+        var optimizationId = optimizationResourceClient.create(expectedOptimization, API_KEY, TEST_WORKSPACE);
+
+        // get optimization by id and compare
+        var actualOptimization = optimizationResourceClient.get(optimizationId, API_KEY, TEST_WORKSPACE, 200);
+
+        Awaitility.await().untilAsserted(() -> {
+            var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
+            assertThat(actualDataset.lastCreatedOptimizationAt())
+                    .isCloseTo(actualOptimization.createdAt(), within(2, ChronoUnit.SECONDS));
+        });
+
+        optimizationResourceClient.delete(Set.of(optimizationId), API_KEY, TEST_WORKSPACE);
+
+        Awaitility.await().untilAsserted(() -> {
+            var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
+            assertThat(actualDataset.lastCreatedOptimizationAt()).isNull();
+        });
+    }
 }
