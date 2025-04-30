@@ -8,9 +8,10 @@ export interface Dataset {
   description?: string;
   dataset_items_count: number;
   experiment_count: number;
-  most_recent_experiment_at: string;
+  most_recent_experiment_at: string; // This field is used because in data base we have old dataset without migrated structure and last_created_experiment_at field
+  last_created_experiment_at: string;
+  last_created_optimization_at: string;
   optimization_count: number;
-  most_recent_optimization_at: string;
   created_at: string;
   last_updated_at: string;
 }

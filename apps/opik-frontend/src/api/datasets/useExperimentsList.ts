@@ -5,13 +5,15 @@ import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import { Sorting } from "@/types/sorting";
 import { processSorting } from "@/lib/sorting";
 
+const DEFAULT_EXPERIMENTS_TYPES = [EXPERIMENT_TYPE.REGULAR];
+
 export type UseExperimentsListParams = {
   workspaceName: string;
   datasetId?: string;
   promptId?: string;
   optimizationId?: string;
   datasetDeleted?: boolean;
-  type?: EXPERIMENT_TYPE;
+  types?: EXPERIMENT_TYPE[];
   sorting?: Sorting;
   search?: string;
   page: number;
@@ -32,7 +34,7 @@ export const getExperimentsList = async (
     promptId,
     optimizationId,
     datasetDeleted,
-    type,
+    types = DEFAULT_EXPERIMENTS_TYPES,
     sorting,
     search,
     size,
@@ -49,7 +51,7 @@ export const getExperimentsList = async (
       ...(datasetId && { datasetId }),
       ...(optimizationId && { optimization_id: optimizationId }),
       ...(promptId && { prompt_id: promptId }),
-      ...(type && { type }),
+      ...(types && { types: JSON.stringify(types) }),
       size,
       page,
     },

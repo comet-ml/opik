@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { OnChangeFn } from "@/types/shared";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
-const FeedbackScoresChartLegendContent = React.forwardRef<
+const ChartVerticalLegendContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<typeof RechartsPrimitive.Legend> &
     React.ComponentProps<"div"> & {
@@ -62,7 +62,6 @@ const FeedbackScoresChartLegendContent = React.forwardRef<
     </div>
   );
 });
-FeedbackScoresChartLegendContent.displayName =
-  "FeedbackScoresChartLegendContent";
+ChartVerticalLegendContent.displayName = "ChartVerticalLegendContent";
 
-export default FeedbackScoresChartLegendContent;
+export default ChartVerticalLegendContent;

@@ -27,8 +27,10 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
   lastUpdatedAt,
   lastUpdatedBy,
 }) => {
-  const variant = useMemo(() => generateTagVariant(label), [label]);
-  const color = TAG_VARIANTS_COLOR_MAP[generateTagVariant(variant!)!];
+  const color = useMemo(
+    () => TAG_VARIANTS_COLOR_MAP[generateTagVariant(label)!],
+    [label],
+  );
 
   const isRemovable = isFunction(onDelete);
 

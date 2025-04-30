@@ -36,6 +36,7 @@ import Loader from "@/components/shared/Loader/Loader";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
@@ -45,9 +46,9 @@ import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import ObjectiveScoreCell from "@/components/pages/CompareOptimizationsPage/ObjectiveScoreCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import BestPrompt from "@/components/pages/CompareOptimizationsPage/BestPrompt";
+import OptimizationProgressChartContainer from "@/components/pages/CompareOptimizationsPage/OptimizationProgressChartContainer";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { STATUS_TO_VARIANT_MAP } from "@/constants/shared";
-import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 
 const REFETCH_INTERVAL = 30000;
 const MAX_EXPERIMENTS_LOADED = 1000;
@@ -158,7 +159,7 @@ const CompareOptimizationsPage: React.FC = () => {
         }
         return column;
       }),
-      type: EXPERIMENT_TYPE.TRIAL,
+      types: [EXPERIMENT_TYPE.TRIAL, EXPERIMENT_TYPE.MINI_BATCH],
       page: 1,
       size: MAX_EXPERIMENTS_LOADED,
     },
@@ -185,7 +186,7 @@ const CompareOptimizationsPage: React.FC = () => {
     return () => setBreadcrumbParam("compare", "compare", "");
   }, [title, setBreadcrumbParam]);
 
-  const { scoreMap, baseScore, bestExperiment } = useMemo(() => {
+  const { scoreMap, bestExperiment } = useMemo(() => {
     const retVal: {
       scoreMap: Record<string, { score: number; percentage?: number }>;
       baseScore: number;
@@ -237,8 +238,6 @@ const CompareOptimizationsPage: React.FC = () => {
 
     return retVal;
   }, [rows, optimization?.objective_name]);
-
-  console.log(123, baseScore, bestExperiment);
 
   const columnsDef: ColumnData<Experiment>[] = useMemo(() => {
     if (!optimization?.objective_name) return [];
@@ -425,13 +424,18 @@ const CompareOptimizationsPage: React.FC = () => {
         direction="horizontal"
         limitWidth
       >
-        <div className="flex h-[224px] min-w-[400px] flex-auto items-center justify-center rounded border bg-white">
-          CHART SECTION
-        </div>
-        <BestPrompt
-          experiment={bestExperiment}
-          optimization={optimization}
-        ></BestPrompt>
+        <OptimizationProgressChartContainer
+          experiments={rows}
+          bestEntityId={bestExperiment?.id}
+          objectiveName={optimization?.objective_name}
+        />
+        {bestExperiment && optimization ? (
+          <BestPrompt
+            experiment={bestExperiment}
+            optimization={optimization}
+            scoreMap={scoreMap}
+          ></BestPrompt>
+        ) : null}
       </PageBodyStickyContainer>
       <DataTable
         columns={columns}

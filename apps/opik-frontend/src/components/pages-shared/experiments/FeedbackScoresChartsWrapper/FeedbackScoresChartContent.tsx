@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/chart";
 import { DEFAULT_CHART_TICK } from "@/constants/chart";
 import { CartesianGrid, YAxis, Line } from "recharts";
-import FeedbackScoresChartLegendContent from "./FeedbackScoresChartLegendContent";
+import ChartVerticalLegendContent from "@/components/shared/ChartVerticalLegendContent/ChartHorizontalLegendContent";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import { LineDot } from "recharts/types/cartesian/Line";
 import { Dataset } from "@/types/datasets";
@@ -150,7 +150,7 @@ const FeedbackScoresChartContent: React.FC<FeedbackScoresChartContentProps> = ({
           layout="vertical"
           align="right"
           content={
-            <FeedbackScoresChartLegendContent
+            <ChartVerticalLegendContent
               setActiveLine={setActiveLine}
               chartId={chartId}
             />
