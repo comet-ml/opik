@@ -69,7 +69,7 @@ public class OptimizationsResource {
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("dataset_id") UUID datasetId,
             @QueryParam("name") String name,
-            @QueryParam("dataset_deleted") boolean datasetDeleted) {
+            @QueryParam("dataset_deleted") Boolean datasetDeleted) {
 
         var searchCriteria = OptimizationSearchCriteria.builder()
                 .datasetId(datasetId)

@@ -9,5 +9,5 @@ import java.util.UUID;
 
 @Builder(toBuilder = true)
 public record OptimizationSearchCriteria(String name, UUID datasetId, @NonNull EntityType entityType,
-        boolean datasetDeleted, Collection<UUID> datasetIds) {
+        Boolean datasetDeleted, Collection<UUID> datasetIds) {
 }
