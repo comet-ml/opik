@@ -538,6 +538,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
         var offset = (page - 1) * size;
 
+        template.add("limit", size);
+        template.add("offset", offset);
+
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     Statement statement = connection.createStatement(template.render())
@@ -555,23 +558,33 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     private void bindTemplateParams(ST template, OptimizationSearchCriteria searchCriteria) {
-        template.add("dataset_deleted", searchCriteria.datasetDeleted());
+
+        Optional.ofNullable(searchCriteria.datasetDeleted())
+                .ifPresent(datasetDeleted -> template.add("dataset_deleted", datasetDeleted.toString()));
 
         Optional.ofNullable(searchCriteria.datasetId())
                 .ifPresent(datasetId -> template.add("dataset_id", datasetId));
 
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> template.add("name", name));
+
+        Optional.ofNullable(searchCriteria.entityType())
+                .ifPresent(entityType -> template.add("entity_type", EntityType.TRACE.getType()));
     }
 
     private void bindQueryParams(OptimizationSearchCriteria searchCriteria, Statement statement) {
-        statement.bind("dataset_deleted", searchCriteria.datasetDeleted());
+
+        Optional.ofNullable(searchCriteria.datasetDeleted())
+                .ifPresent(datasetDeleted -> statement.bind("dataset_deleted", datasetDeleted));
 
         Optional.ofNullable(searchCriteria.datasetId())
                 .ifPresent(datasetId -> statement.bind("dataset_id", datasetId));
 
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> statement.bind("name", name));
+
+        Optional.ofNullable(searchCriteria.entityType())
+                .ifPresent(entityType -> statement.bind("entity_type", EntityType.TRACE.getType()));
     }
 
     private Publisher<? extends Result> insert(Optimization optimization, Connection connection) {
