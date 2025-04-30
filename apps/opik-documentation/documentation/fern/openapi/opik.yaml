@@ -1413,7 +1413,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/GuardrailBatch"
+              $ref: "#/components/schemas/GuardrailBatch_Write"
       responses:
         "204":
           description: No Content
@@ -5901,6 +5901,7 @@ components:
         id:
           type: string
           format: uuid
+          readOnly: true
         entity_id:
           type: string
           format: uuid
@@ -5936,6 +5937,51 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Guardrail"
+    GuardrailBatch_Write:
+      required:
+      - guardrails
+      type: object
+      properties:
+        guardrails:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/Guardrail_Write"
+    Guardrail_Write:
+      required:
+      - config
+      - details
+      - entity_id
+      - name
+      - result
+      - secondary_id
+      type: object
+      properties:
+        entity_id:
+          type: string
+          format: uuid
+        secondary_id:
+          type: string
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        name:
+          type: string
+          enum:
+          - TOPIC
+          - PII
+        result:
+          type: string
+          enum:
+          - passed
+          - failed
+        config:
+          $ref: "#/components/schemas/JsonNode"
+        details:
+          $ref: "#/components/schemas/JsonNode"
     ProviderApiKeyPage_Public:
       type: object
       properties:
