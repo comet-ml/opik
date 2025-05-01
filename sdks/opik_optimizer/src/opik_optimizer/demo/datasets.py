@@ -105,10 +105,13 @@ def _load_hotpot_500() -> List[Dict[str, Any]]:
     seed = 2024
     size = 500
 
-    trainset = [
-        x.with_inputs("question")
-        for x in HotPotQA(train_seed=seed, train_size=size).train
-    ]
+    try:
+        trainset = [
+            x.with_inputs("question")
+            for x in HotPotQA(train_seed=seed, train_size=size).train
+        ]
+    except Exception:
+        raise Exception("Unable to download HotPotQA; please try again") from None
 
     data = []
     for row in reversed(trainset):
@@ -126,10 +129,13 @@ def _load_hotpot_300() -> List[Dict[str, Any]]:
     seed = 42
     size = 300
 
-    trainset = [
-        x.with_inputs("question")
-        for x in HotPotQA(train_seed=seed, train_size=size).train
-    ]
+    try:
+        trainset = [
+            x.with_inputs("question")
+            for x in HotPotQA(train_seed=seed, train_size=size).train
+        ]
+    except Exception:
+        raise Exception("Unable to download HotPotQA; please try again") from None
 
     data = []
     for row in trainset:
@@ -144,9 +150,13 @@ def _load_hotpot_300() -> List[Dict[str, Any]]:
 def _load_halu_eval_300() -> List[Dict[str, Any]]:
     import pandas as pd
 
-    df = pd.read_parquet(
-        "hf://datasets/pminervini/HaluEval/general/data-00000-of-00001.parquet"
-    )
+    try:
+        df = pd.read_parquet(
+            "hf://datasets/pminervini/HaluEval/general/data-00000-of-00001.parquet"
+        )
+    except Exception:
+        raise Exception("Unable to download HaluEval; please try again") from None
+
     df = df.sample(n=300, random_state=42)
 
     dataset_records = [
@@ -199,7 +209,11 @@ def _load_tiny_test() -> List[Dict[str, Any]]:
 
 def _load_gsm8k() -> List[Dict[str, Any]]:
     """Load GSM8K dataset with 300 examples."""
-    dataset = load_dataset("gsm8k", "main")
+    try:
+        dataset = load_dataset("gsm8k", "main")
+    except Exception:
+        raise Exception("Unable to download gsm8k; please try again") from None
+
     train_data = dataset["train"].select(range(300))
 
     return [
@@ -213,7 +227,11 @@ def _load_gsm8k() -> List[Dict[str, Any]]:
 
 def _load_hotpot_qa() -> List[Dict[str, Any]]:
     """Load HotpotQA dataset with 300 examples."""
-    dataset = load_dataset("hotpot_qa", "distractor")
+    try:
+        dataset = load_dataset("hotpot_qa", "distractor")
+    except Exception:
+        raise Exception("Unable to download HotPotQA; please try again") from None
+
     train_data = dataset["train"].select(range(300))
 
     return [
@@ -228,7 +246,11 @@ def _load_hotpot_qa() -> List[Dict[str, Any]]:
 
 def _load_ai2_arc() -> List[Dict[str, Any]]:
     """Load AI2 ARC dataset with 300 examples."""
-    dataset = load_dataset("ai2_arc", "ARC-Challenge")
+    try:
+        dataset = load_dataset("ai2_arc", "ARC-Challenge")
+    except Exception:
+        raise Exception("Unable to download ai2_arc; please try again") from None
+
     train_data = dataset["train"].select(range(300))
 
     return [
@@ -245,8 +267,11 @@ def _load_truthful_qa() -> List[Dict]:
     """Load TruthfulQA dataset."""
     try:
         # Load both configurations
-        gen_dataset = load_dataset("truthful_qa", "generation")
-        mc_dataset = load_dataset("truthful_qa", "multiple_choice")
+        try:
+            gen_dataset = load_dataset("truthful_qa", "generation")
+            mc_dataset = load_dataset("truthful_qa", "multiple_choice")
+        except Exception:
+            raise Exception("Unable to download truthful_qa; please try again") from None
 
         # Combine data from both configurations
         data = []
@@ -332,7 +357,11 @@ def _load_truthful_qa() -> List[Dict]:
 
 def _load_cnn_dailymail() -> List[Dict]:
     """Load CNN Daily Mail dataset with 100 examples."""
-    dataset = load_dataset("cnn_dailymail", "3.0.0", streaming=True)
+    try:
+        dataset = load_dataset("cnn_dailymail", "3.0.0", streaming=True)
+    except Exception:
+        raise Exception("Unable to download cnn_dailymail; please try again") from None
+
     train_data = dataset["validation"].take(100)
 
     return [
