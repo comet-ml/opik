@@ -16,7 +16,7 @@ hot_pot_dataset = get_or_create_dataset("hotpot-300")
 prompt_instruction = """
 Answer the question.
 """
-
+project_name = "optimize-few-shot-bayesian-hotpot"
 initial_prompt_no_examples = [
     {"role": "system", "content": prompt_instruction},
     {"role": "user", "content": "{{question}}"},
@@ -24,7 +24,7 @@ initial_prompt_no_examples = [
 
 optimizer = FewShotBayesianOptimizer(
     model="gpt-4o-mini",
-    project_name="optimize-few-shot-bayesian-hotpot",
+    project_name=project_name,
     min_examples=3,
     max_examples=8,
     n_threads=16,
@@ -34,7 +34,7 @@ optimizer = FewShotBayesianOptimizer(
 optimization_config = OptimizationConfig(
     dataset=hot_pot_dataset,
     objective=MetricConfig(
-        metric=LevenshteinRatio(),
+        metric=LevenshteinRatio(project_name=project_name),
         inputs={
             "output": from_llm_response_text(),
             "reference": from_dataset_field(name="answer"),

@@ -13,8 +13,8 @@ from opik_optimizer import (
 
 
 class HaluEvalObjective(metrics.BaseMetric):
-    def __init__(self, name: str = "halu_eval_objective", track: bool = True):
-        super().__init__(name=name, track=track)
+    def __init__(self, name: str = "halu_eval_objective", track: bool = True, **kwargs):
+        super().__init__(name=name, track=track, **kwargs)
 
     def score(
         self, ground_truth: str, output: str, **ignored_kwargs
@@ -40,7 +40,8 @@ class HaluEvalObjective(metrics.BaseMetric):
         )
 
 
-halu_eval_accuracy = HaluEvalObjective()
+project_name = "optimize-few-shot-bayesian-halueval"
+halu_eval_accuracy = HaluEvalObjective(project_name=project_name)
 halu_eval_dataset = get_or_create_dataset("halu-eval-300")
 
 
@@ -54,7 +55,7 @@ Answer with just one word: 'yes' if there is a hallucination and 'no' if there i
 
 optimizer = FewShotBayesianOptimizer(
     model="gpt-4o-mini",
-    project_name="optimize-few-shot-bayesian-halueval",
+    project_name=project_name,
     min_examples=2,
     max_examples=8,
     n_threads=8,
@@ -81,7 +82,10 @@ optimization_config = OptimizationConfig(
 
 initial_prompt_no_examples = [
     {"role": "system", "content": prompt_instruction},
-    {"role": "user", "content": "The user input: {{input}} \n\n The llm output: {{llm_output}}"},
+    {
+        "role": "user",
+        "content": "The user input: {{input}} \n\n The llm output: {{llm_output}}",
+    },
 ]
 
 initial_score = optimizer.evaluate_prompt(
