@@ -6,17 +6,19 @@ from litellm.caching import Cache
 import logging
 import json
 import os
-from tqdm import tqdm
 
 from opik_optimizer.optimization_config import mappers
 from .base_optimizer import BaseOptimizer, OptimizationRound
 from .optimization_result import OptimizationResult
+from .utils import get_tqdm
 from opik_optimizer.optimization_dsl import (
     MetricConfig,
     OptimizationConfig,
     PromptTaskConfig,
 )
 from opik_optimizer import task_evaluator
+
+tqdm = get_tqdm()
 
 # Using disk cache for LLM calls
 disk_cache_dir = os.path.expanduser("~/.litellm_cache")

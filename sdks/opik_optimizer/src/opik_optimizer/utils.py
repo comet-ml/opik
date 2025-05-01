@@ -16,14 +16,14 @@ DEFAULT_MODEL = "o3-mini"
 def format_prompt(prompt: str, **kwargs: Any) -> str:
     """
     Format a prompt string with the given keyword arguments.
-    
+
     Args:
         prompt: The prompt string to format
         **kwargs: Keyword arguments to format into the prompt
-        
+
     Returns:
         str: The formatted prompt string
-        
+
     Raises:
         ValueError: If any required keys are missing from kwargs
     """
@@ -36,10 +36,10 @@ def format_prompt(prompt: str, **kwargs: Any) -> str:
 def validate_prompt(prompt: str) -> bool:
     """
     Validate a prompt string.
-    
+
     Args:
         prompt: The prompt string to validate
-        
+
     Returns:
         bool: True if the prompt is valid, False otherwise
     """
@@ -51,14 +51,14 @@ def validate_prompt(prompt: str) -> bool:
 def setup_logging(log_level: str = "INFO") -> None:
     """
     Setup logging configuration.
-    
+
     Args:
         log_level: The log level to use (default: INFO)
     """
     valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     if log_level not in valid_levels:
         raise ValueError(f"Invalid log level. Must be one of {valid_levels}")
-    
+
     numeric_level = getattr(logging, log_level.upper())
     logging.basicConfig(level=numeric_level)
 
@@ -66,11 +66,12 @@ def setup_logging(log_level: str = "INFO") -> None:
 def get_random_seed() -> int:
     """
     Get a random seed for reproducibility.
-    
+
     Returns:
         int: A random seed
     """
     import random
+
     return random.randint(0, 2**32 - 1)
 
 
@@ -78,7 +79,7 @@ def get_or_create_dataset(
     dataset_name: str,
     description: str,
     data_loader: Callable[[], List[Dict[str, Any]]],
-    project_name: Optional[str] = None
+    project_name: Optional[str] = None,
 ) -> opik.Dataset:
     """
     Get an existing dataset or create a new one if it doesn't exist.
@@ -110,11 +111,8 @@ def get_or_create_dataset(
     except Exception:
         # Create new dataset
         print("Creating new dataset...")
-        dataset = client.create_dataset(
-            name=dataset_name,
-            description=description
-        )
-        
+        dataset = client.create_dataset(name=dataset_name, description=description)
+
         dataset_items = data_loader()
         dataset.insert(dataset_items)
 
@@ -123,3 +121,59 @@ def get_or_create_dataset(
             raise Exception("Failed to add data to dataset")
 
     return dataset
+
+
+def _in_jupyter_environment() -> bool:
+    """
+    Check to see if code is running in a Jupyter environment,
+    including jupyter notebook, lab, or console.
+    """
+    try:
+        import IPython
+    except Exception:
+        return False
+
+    ipy = IPython.get_ipython()
+    if ipy is None or not hasattr(ipy, "kernel"):
+        return False
+    else:
+        return True
+
+
+def _in_ipython_environment() -> bool:
+    """
+    Check to see if code is running in an IPython environment.
+    """
+    try:
+        import IPython
+    except Exception:
+        return False
+
+    ipy = IPython.get_ipython()
+    if ipy is None:
+        return False
+    else:
+        return True
+
+
+def _in_colab_environment() -> bool:
+    """
+    Check to see if code is running in Google colab.
+    """
+    try:
+        import IPython
+    except Exception:
+        return False
+
+    ipy = IPython.get_ipython()
+    return "google.colab" in str(ipy)
+
+
+def get_tqdm():
+    """
+    Get a tqdm progress bar for your environment.
+    """
+    if _in_jupyter_environment() or _in_colab_environment():
+        return tqdm.tqdm_notebook
+    else:
+        return tqdm.tqdm

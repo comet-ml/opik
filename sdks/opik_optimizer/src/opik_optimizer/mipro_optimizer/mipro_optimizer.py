@@ -13,7 +13,6 @@ from opik_optimizer import optimization_dsl, base_optimizer
 import dspy
 from dspy.clients.base_lm import BaseLM
 
-from tqdm import tqdm
 import litellm
 from litellm.caching import Cache
 
