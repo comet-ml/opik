@@ -40,8 +40,7 @@ class TestConsoleUtils:
         del sys.modules["IPython"]
 
     def test_colab_environment(self):
-        import IPython
-
+        IPython = sys.modules["IPython"]
         assert _in_colab_environment() is False
 
         with patch.object(
@@ -50,7 +49,7 @@ class TestConsoleUtils:
             assert _in_colab_environment() is True
 
     def test_ipython_environment(self):
-        import IPython
+        IPython = sys.modules["IPython"]
 
         assert _in_jupyter_environment() is False
         assert _in_ipython_environment() is False
@@ -66,7 +65,7 @@ class TestConsoleUtils:
             assert _in_ipython_environment() is True
 
     def test_jupyter_environment(self):
-        import IPython
+        IPython = sys.modules["IPython"]
 
         assert _in_jupyter_environment() is False
         assert _in_ipython_environment() is False
@@ -77,14 +76,12 @@ class TestConsoleUtils:
             assert _in_ipython_environment() is True
 
     def test_get_tqdm(self):
-        import IPython
-
         _tqdm = get_tqdm()
 
         assert _tqdm is tqdm.tqdm
 
     def test_get_tqdm_jupyter(self):
-        import IPython
+        IPython = sys.modules["IPython"]
 
         with patch.object(IPython, "get_ipython", side_effect=lambda: IPythonObject()):
             _tqdm = get_tqdm()
@@ -92,10 +89,12 @@ class TestConsoleUtils:
         assert _tqdm is tqdm.tqdm_notebook
 
     def test_get_tqdm_colab(self):
-        import IPython
+        IPython = sys.modules["IPython"]
 
         with patch.object(
-            IPython, "get_ipython", side_effect=lambda: IPythonObject(colab=True)
+            IPython,
+            "get_ipython",
+            side_effect=lambda: IPythonObject(colab=True),
         ):
             _tqdm = get_tqdm()
 
