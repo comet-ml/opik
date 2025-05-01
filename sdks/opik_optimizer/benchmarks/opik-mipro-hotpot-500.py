@@ -25,10 +25,12 @@ from opik_optimizer import (
     from_llm_response_text,
 )
 
+project_name = "optimize-mipro-hotpot-benchmark-001"
+
 optimizer = MiproOptimizer(
     model="openai/gpt-4o-mini",  # LiteLLM or OpenAI name
     temperature=0.0,
-    project_name="optimize-mipro-hotpot-benchmark-001",
+    project_name=project_name,
     num_threads=16,
 )
 
@@ -37,7 +39,7 @@ opik_dataset = get_or_create_dataset("hotpot-500")
 optimization_config = OptimizationConfig(
     dataset=opik_dataset,
     objective=MetricConfig(
-        metric=Equals(),
+        metric=Equals(project_name=project_name),
         inputs={
             "output": from_llm_response_text(),
             "reference": from_dataset_field(name="answer"),
