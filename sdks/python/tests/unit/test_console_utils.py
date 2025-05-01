@@ -1,7 +1,5 @@
-import pytest
 import types
 import sys
-from typing import Dict, List
 import tqdm
 from unittest.mock import patch
 from opik.console_utils import (
