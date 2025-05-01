@@ -15,6 +15,7 @@ from .feedback_definitions.client import FeedbackDefinitionsClient
 from .guardrails.client import GuardrailsClient
 from .llm_provider_key.client import LlmProviderKeyClient
 from .open_telemetry_ingestion.client import OpenTelemetryIngestionClient
+from .optimizations.client import OptimizationsClient
 from .projects.client import ProjectsClient
 from .prompts.client import PromptsClient
 from .service_toggles.client import ServiceTogglesClient
@@ -37,6 +38,7 @@ from .feedback_definitions.client import AsyncFeedbackDefinitionsClient
 from .guardrails.client import AsyncGuardrailsClient
 from .llm_provider_key.client import AsyncLlmProviderKeyClient
 from .open_telemetry_ingestion.client import AsyncOpenTelemetryIngestionClient
+from .optimizations.client import AsyncOptimizationsClient
 from .projects.client import AsyncProjectsClient
 from .prompts.client import AsyncPromptsClient
 from .service_toggles.client import AsyncServiceTogglesClient
@@ -136,6 +138,7 @@ class OpikApi:
         self.open_telemetry_ingestion = OpenTelemetryIngestionClient(
             client_wrapper=self._client_wrapper
         )
+        self.optimizations = OptimizationsClient(client_wrapper=self._client_wrapper)
         self.projects = ProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = PromptsClient(client_wrapper=self._client_wrapper)
         self.service_toggles = ServiceTogglesClient(client_wrapper=self._client_wrapper)
@@ -319,6 +322,9 @@ class AsyncOpikApi:
             client_wrapper=self._client_wrapper
         )
         self.open_telemetry_ingestion = AsyncOpenTelemetryIngestionClient(
+            client_wrapper=self._client_wrapper
+        )
+        self.optimizations = AsyncOptimizationsClient(
             client_wrapper=self._client_wrapper
         )
         self.projects = AsyncProjectsClient(client_wrapper=self._client_wrapper)

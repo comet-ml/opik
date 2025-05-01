@@ -12,6 +12,7 @@ export const TraceUpdate: core.serialization.Schema<serializers.TraceUpdate.Raw,
     core.serialization.object({
         projectName: core.serialization.property("project_name", core.serialization.string().optional()),
         projectId: core.serialization.property("project_id", core.serialization.string().optional()),
+        name: core.serialization.string().optional(),
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
         input: JsonNode.optional(),
         output: JsonNode.optional(),
@@ -25,6 +26,7 @@ export declare namespace TraceUpdate {
     export interface Raw {
         project_name?: string | null;
         project_id?: string | null;
+        name?: string | null;
         end_time?: string | null;
         input?: JsonNode.Raw | null;
         output?: JsonNode.Raw | null;
