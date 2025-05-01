@@ -7,6 +7,7 @@ from .types import EvaluationTask
 
 tqdm = get_tqdm()
 
+
 def execute(
     evaluation_tasks: List[EvaluationTask], workers: int, verbose: int
 ) -> List[test_result.TestResult]:
