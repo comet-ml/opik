@@ -1,6 +1,6 @@
 import types
-import sys
 import tqdm
+import sys
 from unittest.mock import patch
 from opik.console_utils import (
     _in_colab_environment,
@@ -8,6 +8,12 @@ from opik.console_utils import (
     _in_jupyter_environment,
     get_tqdm,
 )
+
+
+def make_ipython_module() -> types.ModuleType:
+    module = types.ModuleType("IPython")
+    module.get_ipython = lambda: None
+    return module
 
 
 class IPythonObject(object):
@@ -29,16 +35,12 @@ class IPythonObject(object):
 
 class TestConsoleUtils:
     @classmethod
-    def setUpClass(cls):
-        sys.modules["IPython"] = types.ModuleType("IPython")
-        sys.modules["IPython"].get_ipython = lambda: None
-
-    @classmethod
     def tearDownClass(cls):
-        del sys.modules["IPython"]
+        if "IPython" in sys.modules:
+            del sys.modules["IPython"]
 
     def test_colab_environment(self):
-        IPython = sys.modules["IPython"]
+        sys.modules["IPython"] = IPython = make_ipython_module()
         assert _in_colab_environment() is False
 
         with patch.object(
@@ -47,7 +49,7 @@ class TestConsoleUtils:
             assert _in_colab_environment() is True
 
     def test_ipython_environment(self):
-        IPython = sys.modules["IPython"]
+        sys.modules["IPython"] = IPython = make_ipython_module()
 
         assert _in_jupyter_environment() is False
         assert _in_ipython_environment() is False
@@ -63,7 +65,7 @@ class TestConsoleUtils:
             assert _in_ipython_environment() is True
 
     def test_jupyter_environment(self):
-        IPython = sys.modules["IPython"]
+        sys.modules["IPython"] = IPython = make_ipython_module()
 
         assert _in_jupyter_environment() is False
         assert _in_ipython_environment() is False
@@ -79,7 +81,7 @@ class TestConsoleUtils:
         assert _tqdm is tqdm.tqdm
 
     def test_get_tqdm_jupyter(self):
-        IPython = sys.modules["IPython"]
+        sys.modules["IPython"] = IPython = make_ipython_module()
 
         with patch.object(IPython, "get_ipython", side_effect=lambda: IPythonObject()):
             _tqdm = get_tqdm()
@@ -87,7 +89,7 @@ class TestConsoleUtils:
         assert _tqdm is tqdm.tqdm_notebook
 
     def test_get_tqdm_colab(self):
-        IPython = sys.modules["IPython"]
+        sys.modules["IPython"] = IPython = make_ipython_module()
 
         with patch.object(
             IPython,
