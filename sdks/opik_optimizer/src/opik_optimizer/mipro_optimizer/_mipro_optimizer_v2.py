@@ -5,6 +5,7 @@ from collections import defaultdict
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
 import numpy as np
+import opik
 import optuna
 from optuna.distributions import CategoricalDistribution
 
@@ -22,18 +23,14 @@ from dspy.teleprompt.utils import (
     save_candidate_program,
     set_signature,
 )
-from .utils import State
 
-
-logging.basicConfig(
-    level=logging.WARNING,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(),  # Outputs to console
-        # Optional: logging.FileHandler('app.log')  # Outputs to file
-    ],
-)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+formatter = logging.Formatter("%(message)s")
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 # Constants
 BOOTSTRAPPED_FEWSHOT_EXAMPLES_IN_CONTEXT = 3
@@ -53,6 +50,11 @@ BLUE = "\033[94m"
 BOLD = "\033[1m"
 ENDC = "\033[0m"  # Resets the color to default
 
+import opik
+from opik_optimizer import task_evaluator
+from opik_optimizer.optimization_config.configs import MetricConfig, PromptTaskConfig
+from opik_optimizer.optimization_config import mappers
+
 
 class MIPROv2(Teleprompter):
     def __init__(
@@ -62,18 +64,21 @@ class MIPROv2(Teleprompter):
         task_model: Optional[Any] = None,
         teacher_settings: Dict = {},
         max_bootstrapped_demos: int = 4,
-        max_labeled_demos: int = 16,
-        auto: Optional[Literal["light", "medium", "heavy"]] = None,
+        max_labeled_demos: int = 4,
+        auto: Optional[Literal["light", "medium", "heavy"]] = "medium",
         num_candidates: int = 10,
-        num_threads: int = 6,
+        num_threads: Optional[int] = None,
         max_errors: int = 10,
         seed: int = 9,
         init_temperature: float = 0.5,
-        verbose: bool = True,
+        verbose: bool = False,
         track_stats: bool = True,
         log_dir: Optional[str] = None,
         metric_threshold: Optional[float] = None,
-        callback: Optional[callable] = None,
+        opik_dataset: Optional[opik.Dataset] = None,
+        opik_metric_config: Optional[MetricConfig] = None,
+        opik_prompt_task_config: Optional[PromptTaskConfig] = None,
+        opik_project_name: Optional[str] = None
     ):
         # Validate 'auto' parameter
         allowed_modes = {None, "light", "medium", "heavy"}
@@ -82,7 +87,6 @@ class MIPROv2(Teleprompter):
                 f"Invalid value for auto: {auto}. Must be one of {allowed_modes}."
             )
         self.auto = auto
-        self.callback = callback
 
         self.num_candidates = num_candidates
         self.metric = metric
@@ -103,6 +107,11 @@ class MIPROv2(Teleprompter):
         self.seed = seed
         self.rng = None
 
+        self.opik_dataset = opik_dataset
+        self.opik_metric_config = opik_metric_config
+        self.opik_prompt_task_config = opik_prompt_task_config
+        self.opik_project_name = opik_project_name
+
     def compile(
         self,
         student: Any,
@@ -115,15 +124,15 @@ class MIPROv2(Teleprompter):
         max_labeled_demos: Optional[int] = None,
         seed: Optional[int] = None,
         minibatch: bool = True,
-        minibatch_size: int = 25,
-        minibatch_full_eval_steps: int = 10,
+        minibatch_size: int = 35,
+        minibatch_full_eval_steps: int = 5,
         program_aware_proposer: bool = True,
         data_aware_proposer: bool = True,
         view_data_batch_size: int = 10,
         tip_aware_proposer: bool = True,
         fewshot_aware_proposer: bool = True,
         requires_permission_to_run: bool = True,
-        provide_traceback: bool = False,
+        provide_traceback: Optional[bool] = None,
     ) -> Any:
         # Set random seeds
         seed = seed or self.seed
@@ -186,16 +195,19 @@ class MIPROv2(Teleprompter):
         )
 
         # Step 2: Propose instruction candidates
-        instruction_candidates = self._propose_instructions(
-            program,
-            trainset,
-            demo_candidates,
-            view_data_batch_size,
-            program_aware_proposer,
-            data_aware_proposer,
-            tip_aware_proposer,
-            fewshot_aware_proposer,
-        )
+        try:
+            instruction_candidates = self._propose_instructions(
+                program,
+                trainset,
+                demo_candidates,
+                view_data_batch_size,
+                program_aware_proposer,
+                data_aware_proposer,
+                tip_aware_proposer,
+                fewshot_aware_proposer,
+            )
+        except RuntimeError:
+            raise Exception("Make sure you have provider API key set") from None
 
         # If zero-shot, discard demos
         if zeroshot_opt:
@@ -506,8 +518,16 @@ class MIPROv2(Teleprompter):
         )
 
         # Compute the adjusted total trials that we will run (including full evals)
+        run_additional_full_eval_at_end = (
+            1 if num_trials % minibatch_full_eval_steps != 0 else 0
+        )
         adjusted_num_trials = (
-            (num_trials + num_trials // minibatch_full_eval_steps + 1)
+            (
+                num_trials
+                + num_trials // minibatch_full_eval_steps
+                + 1
+                + run_additional_full_eval_at_end
+            )
             if minibatch
             else num_trials
         )
@@ -515,21 +535,33 @@ class MIPROv2(Teleprompter):
             f"== Trial {1} / {adjusted_num_trials} - Full Evaluation of Default Program =="
         )
 
-        default_score, baseline_results = eval_candidate_program(
-            len(valset), valset, program, evaluate, self.rng, return_all_scores=True
+        # default_score, _ = eval_candidate_program(
+        #     len(valset), valset, program, evaluate, self.rng, return_all_scores=True
+        # )
+
+        default_score = eval_candidate_program_with_opik(
+            opik_dataset=self.opik_dataset,
+            trainset=valset,
+            candidate_program=program,
+            metric_config=self.opik_metric_config,
+            prompt_task_config=self.opik_prompt_task_config,
+            project_name=self.opik_project_name,
+            num_threads=self.num_threads,
         )
+        
         logger.info(f"Default program score: {default_score}\n")
-        if self.callback:
-            self.callback("default", default_score, baseline_results)
 
         trial_logs = {}
-        trial_logs[-1] = {}
-        trial_logs[-1]["full_eval_program_path"] = save_candidate_program(
+        trial_logs[1] = {}
+        trial_logs[1]["full_eval_program_path"] = save_candidate_program(
             program, self.log_dir, -1
         )
-        trial_logs[-1]["full_eval_score"] = default_score
-        trial_logs[-1]["total_eval_calls_so_far"] = len(valset)
-        trial_logs[-1]["full_eval_program"] = program.deepcopy()
+        trial_logs[1]["full_eval_score"] = default_score
+        trial_logs[1]["total_eval_calls_so_far"] = len(valset)
+        trial_logs[1]["full_eval_program"] = program.deepcopy()
+
+        if default_score == 1.0:
+            return self.early_stop(default_score, program)
 
         # Initialize optimization variables
         best_score = default_score
@@ -572,7 +604,7 @@ class MIPROv2(Teleprompter):
 
             # Log assembled program
             if self.verbose:
-                print("Evaluating the following candidate program...")
+                logger.info("Evaluating the following candidate program...\n")
                 print_full_program(candidate_program)
 
             # Evaluate the candidate program (on minibatch if minibatch=True)
@@ -580,8 +612,14 @@ class MIPROv2(Teleprompter):
             score = eval_candidate_program(
                 batch_size, valset, candidate_program, evaluate, self.rng
             )
-            if self.callback:
-                self.callback("score", score)
+            # score = eval_candidate_program_with_opik(
+            #     opik_dataset=self.opik_dataset,
+            #     trainset=valset,
+            #     candidate_program=candidate_program,
+            #     metric_config=self.opik_metric_config,
+            #     prompt_task_config=self.opik_prompt_task_config,
+            #     project_name=self.opik_project_name,
+            # )
             total_eval_calls += batch_size
 
             # Update best score and program
@@ -634,7 +672,7 @@ class MIPROv2(Teleprompter):
 
             # If minibatch, perform full evaluation at intervals (and at the very end)
             if minibatch and (
-                (trial_num % minibatch_full_eval_steps == 0)
+                (trial_num % (minibatch_full_eval_steps + 1) == 0)
                 or (trial_num == (adjusted_num_trials - 1))
             ):
                 best_score, best_program, total_eval_calls = (
@@ -678,7 +716,7 @@ class MIPROv2(Teleprompter):
             value=default_score,
         )
         study.add_trial(trial)
-        study.optimize(objective, n_trials=num_trials - 1)
+        study.optimize(objective, n_trials=num_trials)
 
         # Attach logs to best program
         if best_program is not None and self.track_stats:
@@ -859,11 +897,18 @@ class MIPROv2(Teleprompter):
         logger.info(
             f"Doing full eval on next top averaging program (Avg Score: {mean_score}) from minibatch trials..."
         )
-        full_eval_score = eval_candidate_program(
-            len(valset), valset, highest_mean_program, evaluate, self.rng
+        # full_eval_score_orig = eval_candidate_program(
+        #     len(valset), valset, highest_mean_program, evaluate, self.rng
+        # )
+        full_eval_score = eval_candidate_program_with_opik(
+            opik_dataset=self.opik_dataset,
+            trainset=valset,
+            candidate_program=highest_mean_program,
+            metric_config=self.opik_metric_config,
+            prompt_task_config=self.opik_prompt_task_config,
+            project_name=self.opik_project_name,
+            num_threads=self.num_threads,
         )
-        if self.callback:
-            self.callback("full_eval_score", full_eval_score)
         score_data.append(
             {
                 "score": full_eval_score,
@@ -888,15 +933,19 @@ class MIPROv2(Teleprompter):
             "score": full_eval_score,
         }
         total_eval_calls += len(valset)
-        trial_logs[trial_num]["total_eval_calls_so_far"] = total_eval_calls
-        trial_logs[trial_num]["full_eval_program_path"] = save_candidate_program(
+        trial_logs[trial_num + 1] = {}
+        trial_logs[trial_num + 1]["total_eval_calls_so_far"] = total_eval_calls
+        trial_logs[trial_num + 1]["full_eval_program_path"] = save_candidate_program(
             program=highest_mean_program,
             log_dir=self.log_dir,
-            trial_num=trial_num,
+            trial_num=trial_num + 1,
             note="full_eval",
         )
-        trial_logs[trial_num]["full_eval_program"] = highest_mean_program
-        trial_logs[trial_num]["full_eval_score"] = full_eval_score
+        trial_logs[trial_num + 1]["full_eval_program"] = highest_mean_program
+        trial_logs[trial_num + 1]["full_eval_score"] = full_eval_score
+
+        if full_eval_score == 1.0:
+            return self.early_stop(default_score, program)
 
         # Update best score and program if necessary
         if full_eval_score > best_score:
@@ -918,123 +967,47 @@ class MIPROv2(Teleprompter):
 
         return best_score, best_program, total_eval_calls
 
-    def step_0(
-        self,
-        student: Any,
-        *,
-        trainset: List,
-        teacher: Any = None,
-        valset: Optional[List] = None,
-        num_trials: int = 30,
-        max_bootstrapped_demos: Optional[int] = None,
-        max_labeled_demos: Optional[int] = None,
-        seed: Optional[int] = None,
-        minibatch: bool = True,
-        minibatch_size: int = 25,
-        minibatch_full_eval_steps: int = 10,
-        program_aware_proposer: bool = True,
-        data_aware_proposer: bool = True,
-        view_data_batch_size: int = 10,
-        tip_aware_proposer: bool = True,
-        fewshot_aware_proposer: bool = True,
-        provide_traceback: bool = False,
-    ) -> Any:
-        # Set random seeds
-        state = State()
-        seed = seed or self.seed
-        self._set_random_seeds(seed)
+    def early_stop(self, score, program):
+        program.score = score
+        program.candidate_programs = [{"score": score, "program": program.deepcopy()}]
+        return program
 
-        # Update max demos if specified
-        if max_bootstrapped_demos is not None:
-            self.max_bootstrapped_demos = max_bootstrapped_demos
-        if max_labeled_demos is not None:
-            self.max_labeled_demos = max_labeled_demos
 
-        # Set training & validation sets
-        trainset, valset = self._set_and_validate_datasets(trainset, valset)
+def eval_candidate_program_with_opik(
+    opik_dataset: opik.Dataset,
+    trainset: List,
+    candidate_program: Any,
+    project_name: str,
+    metric_config: MetricConfig,
+    prompt_task_config: PromptTaskConfig,
+    num_threads: int,
+):
+    """Evaluate a candidate program on the trainset, using the specified batch size."""
+    dataset_item_ids = [example["id"] for example in trainset]
 
-        # Set hyperparameters based on run mode (if set)
-        state.zeroshot_opt = (self.max_bootstrapped_demos == 0) and (
-            self.max_labeled_demos == 0
-        )
-        num_trials, valset, minibatch = self._set_hyperparams_from_run_mode(
-            student, num_trials, minibatch, state.zeroshot_opt, valset
-        )
+    def program_task(dataset_item: Dict[str, Any]) -> Dict[str, Any]:
+        program_inputs = {
+            input_key: dataset_item[input_key]
+            for input_key in prompt_task_config.input_dataset_fields
+        }
+        prediction = candidate_program(**program_inputs)
 
-        if self.auto:
-            self._print_auto_run_settings(num_trials, minibatch, valset)
+        # Increment assert and suggest failures to program's attributes
+        if hasattr(candidate_program, "_assert_failures"):
+            candidate_program._assert_failures += dspy.settings.get("assert_failures")
+        if hasattr(candidate_program, "_suggest_failures"):
+            candidate_program._suggest_failures += dspy.settings.get("suggest_failures")
+        
+        return {mappers.from_llm_response_text(): prediction[prompt_task_config.output_dataset_field]}
 
-        if minibatch and minibatch_size > len(valset):
-            raise ValueError(
-                f"Minibatch size cannot exceed the size of the valset. Valset size: {len(valset)}."
-            )
 
-        # Initialize program and evaluator
-        program = student.deepcopy()
-        state.evaluate = Evaluate(
-            devset=valset,
-            metric=self.metric,
-            num_threads=self.num_threads,
-            max_errors=self.max_errors,
-            display_table=False,
-            display_progress=True,
-            provide_traceback=provide_traceback,
-        )
-
-        state.update(
-            {
-                "program": program,
-                "trainset": trainset,
-                "seed": seed,
-                "teacher": teacher,
-                "view_data_batch_size": view_data_batch_size,
-                "program_aware_proposer": program_aware_proposer,
-                "data_aware_proposer": data_aware_proposer,
-                "tip_aware_proposer": tip_aware_proposer,
-                "fewshot_aware_proposer": fewshot_aware_proposer,
-                "num_trials": num_trials,
-                "valset": valset,
-                "minibatch": minibatch,
-                "minibatch_size": minibatch_size,
-                "minibatch_full_eval_steps": minibatch_full_eval_steps,
-            }
-        )
-        return state
-
-    def step_1(self, state):
-        print("Step 1: Bootstrap few-shot examples...")
-        state.demo_candidates = self._bootstrap_fewshot_examples(
-            state.program, state.trainset, state.seed, state.teacher
-        )
-
-    def step_2(self, state):
-        print("Step 2: Propose instruction candidates...")
-        state.instruction_candidates = self._propose_instructions(
-            state.program,
-            state.trainset,
-            state.demo_candidates,
-            state.view_data_batch_size,
-            state.program_aware_proposer,
-            state.data_aware_proposer,
-            state.tip_aware_proposer,
-            state.fewshot_aware_proposer,
-        )
-        # If zero-shot, discard demos
-        if state.zeroshot_opt:
-            state.demo_candidates = None
-
-    def step_3(self, state):
-        print("Step 3: Find the optimimal prompt parameters...")
-        best_program = self._optimize_prompt_parameters(
-            state.program,
-            state.instruction_candidates,
-            state.demo_candidates,
-            state.evaluate,
-            state.valset,
-            state.num_trials,
-            state.minibatch,
-            state.minibatch_size,
-            state.minibatch_full_eval_steps,
-            state.seed,
-        )
-        return best_program
+    score = task_evaluator.evaluate(
+        dataset=opik_dataset,
+        evaluated_task=program_task,
+        metric_config=metric_config,
+        dataset_item_ids=dataset_item_ids,
+        project_name=project_name,
+        num_threads=num_threads,
+    )
+    
+    return score
