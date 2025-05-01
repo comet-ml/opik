@@ -18,6 +18,8 @@ setup(
         "datasets",
         "optuna",
         "pydantic",
+        "pandas",
+        "hf_xet",
     ],
     # dev requirements
     extras_require={
