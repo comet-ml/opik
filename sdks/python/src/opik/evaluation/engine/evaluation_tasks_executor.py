@@ -1,11 +1,11 @@
 from concurrent import futures
 from typing import List
 
-import tqdm
-
+from ...console_utils import get_tqdm
 from .. import test_result
 from .types import EvaluationTask
 
+tqdm = get_tqdm()
 
 def execute(
     evaluation_tasks: List[EvaluationTask], workers: int, verbose: int
@@ -13,7 +13,7 @@ def execute(
     if workers == 1:
         test_results = [
             evaluation_task()
-            for evaluation_task in tqdm.tqdm(
+            for evaluation_task in tqdm(
                 evaluation_tasks,
                 disable=(verbose < 1),
                 desc="Evaluation",
@@ -30,7 +30,7 @@ def execute(
 
         test_results = [
             test_result_future.result()
-            for test_result_future in tqdm.tqdm(
+            for test_result_future in tqdm(
                 futures.as_completed(
                     test_result_futures,
                 ),
