@@ -1,3 +1,4 @@
+from typing import Callable
 import logging
 import tqdm
 
@@ -51,7 +52,7 @@ def _in_colab_environment() -> bool:
     return "google.colab" in str(ipy)
 
 
-def get_tqdm():
+def get_tqdm() -> Callable:
     """
     Get a tqdm progress bar for your environment.
     """
