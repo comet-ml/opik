@@ -1,9 +1,9 @@
 # Opik Optimizer
 
-The Opik Optimizer can refine your prompts to get better performance
+The Opik Opitmizer can refine your prompts to get better performance
 from your LLMs. You can use a variety of algorithms, including:
 
-* FewShotOptimizer
+* FewShotBayesianOptimizer
 * MiproOptimizer
 * MetaPromptOptimizer
 
@@ -57,9 +57,9 @@ You can see how to use those below:
 from opik_optimizer.demo import get_or_create_dataset
 
 from opik.evaluation.metrics import LevenshteinRatio
-from opik_optimizer.few_shot_optimizer import FewShotOptimizer
+from opik_optimizer.few_shot_bayesian_optimizer import FewShotBayesianOptimizer
 
-optimizer = FewShotOptimizer(
+optimizer = FewShotBayesianOptimizer(
     model="openai/gpt-4o-mini",  # LiteLLM or OpenAI name
     project_name="optimize-few-shot-hotpot",
     temperature=0.1,
@@ -107,7 +107,7 @@ pip install git+https://github.com/comet-ml/opik#subdirectory=sdks/opik_optimize
 To use the Opik Optimizer from source:
 
 ```bash
-git clone git@github.com:comet-ml/opik
+git clone git clone git@github.com:comet-ml/opik
 cd sdks/opik_optimizer
 pip install -e .
 ```

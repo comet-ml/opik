@@ -4,3 +4,9 @@ dspy==2.6.17
 tqdm==4.67.1
 pydantic==2.11.3
 datasets==3.5.0
+hf_xet==1.0.3
+adalflow==1.0.4
+dspy==2.6.17
+pytest==8.1.1
+pytest-cov==4.1.0
+litellm>=1.67.2

@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="opik_optimizer",
-    version="0.6.0",
+    version="0.7.0",
     description="Agent optimization with Opik",
     author="Comet ML",
     author_email="info@comet.ml",
@@ -11,10 +11,22 @@ setup(
     package_dir={"": "src"},
     python_requires=">=3.9",
     install_requires=[
-        "opik",
-        "dspy",
+        "opik>=1.7.14", # FIXME: update version when new endpoints are complete
+        "dspy<=2.6.18",
+        "litellm",
         "tqdm",
+        "datasets",
+        "optuna",
+        "pydantic",
     ],
+    # dev requirements
+    extras_require={
+        "dev": [
+            "adalflow",
+            "pytest",
+            "pytest-conv"
+        ],
+    },
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
