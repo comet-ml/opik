@@ -271,7 +271,9 @@ def _load_truthful_qa() -> List[Dict]:
             gen_dataset = load_dataset("truthful_qa", "generation")
             mc_dataset = load_dataset("truthful_qa", "multiple_choice")
         except Exception:
-            raise Exception("Unable to download truthful_qa; please try again") from None
+            raise Exception(
+                "Unable to download truthful_qa; please try again"
+            ) from None
 
         # Combine data from both configurations
         data = []
@@ -373,208 +375,164 @@ def _load_cnn_dailymail() -> List[Dict]:
     ]
 
 
-
 def _load_math_50():
     return [
-        {
-            "question": "What is (5 + 3) * 2 - 4?",
-            "expected answer": "12"
-        },
+        {"question": "What is (5 + 3) * 2 - 4?", "expected answer": "12"},
         {
             "question": "If you divide 20 by 4 and then add 7, what do you get?",
-            "expected answer": "12"
+            "expected answer": "12",
         },
         {
             "question": "Start with 10, subtract 2, multiply the result by 3, then add 5.",
-            "expected answer": "29"
+            "expected answer": "29",
         },
         {
             "question": "Add 6 and 4, then divide by 2, and finally multiply by 5.",
-            "expected answer": "25"
+            "expected answer": "25",
         },
         {
             "question": "Take 15, subtract 3, add 2, then divide the result by 2.",
-            "expected answer": "7"
+            "expected answer": "7",
         },
-
-        {
-            "question": "What is 7 * (6 - 2) + 1?",
-            "expected answer": "29"
-        },
+        {"question": "What is 7 * (6 - 2) + 1?", "expected answer": "29"},
         {
             "question": "If you multiply 8 by 3 and subtract 5, what is the result?",
-            "expected answer": "19"
+            "expected answer": "19",
         },
         {
             "question": "Begin with 25, divide by 5, then multiply by 4.",
-            "expected answer": "20"
+            "expected answer": "20",
         },
         {
             "question": "Subtract 9 from 17, then multiply the difference by 3.",
-            "expected answer": "24"
+            "expected answer": "24",
         },
-        {
-            "question": "What is 10 + 5 * 3 - 8?",
-            "expected answer": "17"
-        },
-        {
-            "question": "Divide 36 by 6, then add 11.",
-            "expected answer": "17"
-        },
+        {"question": "What is 10 + 5 * 3 - 8?", "expected answer": "17"},
+        {"question": "Divide 36 by 6, then add 11.", "expected answer": "17"},
         {
             "question": "Start with 2, multiply by 9, subtract 7, and add 4.",
-            "expected answer": "15"
+            "expected answer": "15",
         },
         {
             "question": "Add 12 and 8, divide by 4, and then subtract 1.",
-            "expected answer": "4"
+            "expected answer": "4",
         },
         {
             "question": "Take 30, subtract 10, divide by 2, and add 7.",
-            "expected answer": "17"
+            "expected answer": "17",
         },
-        {
-            "question": "What is (15 - 5) / 2 * 3?",
-            "expected answer": "15"
-        },
+        {"question": "What is (15 - 5) / 2 * 3?", "expected answer": "15"},
         {
             "question": "If you add 14 and 6, and then divide by 5, what do you get?",
-            "expected answer": "4"
+            "expected answer": "4",
         },
         {
             "question": "Start with 50, divide by 10, multiply by 2, and subtract 3.",
-            "expected answer": "7"
+            "expected answer": "7",
         },
         {
             "question": "Subtract 4 from 11, multiply by 5, and then add 2.",
-            "expected answer": "37"
+            "expected answer": "37",
         },
-        {
-            "question": "What is 9 * 4 - 12 / 3?",
-            "expected answer": "32"
-        },
+        {"question": "What is 9 * 4 - 12 / 3?", "expected answer": "32"},
         {
             "question": "Divide 42 by 7, and then multiply by 3.",
-            "expected answer": "18"
+            "expected answer": "18",
         },
         {
             "question": "Begin with 1, add 19, divide by 4, and multiply by 6.",
-            "expected answer": "30"
+            "expected answer": "30",
         },
         {
             "question": "Subtract 6 from 21, then divide the result by 5.",
-            "expected answer": "3"
+            "expected answer": "3",
         },
-        {
-            "question": "What is (8 + 7) * 2 - 9?",
-            "expected answer": "21"
-        },
+        {"question": "What is (8 + 7) * 2 - 9?", "expected answer": "21"},
         {
             "question": "If you multiply 7 by 5 and then subtract 11, what is the answer?",
-            "expected answer": "24"
+            "expected answer": "24",
         },
         {
             "question": "Start with 3, multiply by 8, add 6, and then divide by 2.",
-            "expected answer": "15"
+            "expected answer": "15",
         },
-        {
-            "question": "What is 3 * (10 - 4) + 5?",
-            "expected answer": "23"
-        },
+        {"question": "What is 3 * (10 - 4) + 5?", "expected answer": "23"},
         {
             "question": "If you multiply 12 by 2 and subtract 7, what is the result?",
-            "expected answer": "17"
+            "expected answer": "17",
         },
         {
             "question": "Begin with 35, divide by 7, then multiply by 6.",
-            "expected answer": "30"
+            "expected answer": "30",
         },
         {
             "question": "Subtract 11 from 20, then multiply the difference by 4.",
-            "expected answer": "36"
+            "expected answer": "36",
         },
-        {
-            "question": "What is 15 + 3 * 7 - 9?",
-            "expected answer": "27"
-        },
-        {
-            "question": "Divide 63 by 9, then add 13.",
-            "expected answer": "20"
-        },
+        {"question": "What is 15 + 3 * 7 - 9?", "expected answer": "27"},
+        {"question": "Divide 63 by 9, then add 13.", "expected answer": "20"},
         {
             "question": "Start with 6, multiply by 5, subtract 8, and add 11.",
-            "expected answer": "33"
+            "expected answer": "33",
         },
         {
             "question": "Add 18 and 6, divide by 3, and then subtract 4.",
-            "expected answer": "4"
+            "expected answer": "4",
         },
         {
             "question": "Take 50, subtract 20, divide by 5, and add 9.",
-            "expected answer": "15"
+            "expected answer": "15",
         },
-        {
-            "question": "What is (25 - 10) / 3 * 4?",
-            "expected answer": "20"
-        },
+        {"question": "What is (25 - 10) / 3 * 4?", "expected answer": "20"},
         {
             "question": "If you add 9 and 15, and then divide by 8, what do you get?",
-            "expected answer": "3"
+            "expected answer": "3",
         },
         {
             "question": "Start with 40, divide by 5, multiply by 3, and subtract 7.",
-            "expected answer": "17"
+            "expected answer": "17",
         },
         {
             "question": "Subtract 5 from 22, multiply by 2, and then divide by 6.",
-            "expected answer": "5.666666666666667"
+            "expected answer": "5.666666666666667",
         },
-        {
-            "question": "What is 7 * 6 + 8 - 11?",
-            "expected answer": "39"
-        },
+        {"question": "What is 7 * 6 + 8 - 11?", "expected answer": "39"},
         {
             "question": "Divide 72 by 8, and then multiply by 5.",
-            "expected answer": "45"
+            "expected answer": "45",
         },
         {
             "question": "Begin with 3, add 17, divide by 5, and multiply by 7.",
-            "expected answer": "28"
+            "expected answer": "28",
         },
         {
             "question": "Subtract 9 from 31, then divide the result by 4.",
-            "expected answer": "5.5"
+            "expected answer": "5.5",
         },
-        {
-            "question": "What is (11 + 9) * 3 - 15?",
-            "expected answer": "45"
-        },
+        {"question": "What is (11 + 9) * 3 - 15?", "expected answer": "45"},
         {
             "question": "If you multiply 8 by 7 and then subtract 19, what is the answer?",
-            "expected answer": "37"
+            "expected answer": "37",
         },
         {
             "question": "Start with 2, multiply by 12, add 16, and then divide by 4.",
-            "expected answer": "10"
+            "expected answer": "10",
         },
         {
             "question": "Add 13 and 19, then subtract 6, and finally divide by 2.",
-            "expected answer": "13"
+            "expected answer": "13",
         },
         {
             "question": "Take 45, divide by 9, add 11, and then subtract 3.",
-            "expected answer": "13"
+            "expected answer": "13",
         },
-        {
-            "question": "What is 18 - 4 * 3 + 7?",
-            "expected answer": "13"
-        },
+        {"question": "What is 18 - 4 * 3 + 7?", "expected answer": "13"},
         {
             "question": "If you divide 56 by 7 and then add 9, what do you get?",
-            "expected answer": "17"
+            "expected answer": "17",
         },
         {
             "question": "Begin with 4, multiply by 9, subtract 12, and then divide by 6.",
-            "expected answer": "4"
+            "expected answer": "4",
         },
     ]

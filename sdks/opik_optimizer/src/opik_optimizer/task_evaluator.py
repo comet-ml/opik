@@ -5,6 +5,7 @@ from opik_optimizer.optimization_dsl import MetricConfig
 from opik.evaluation.metrics import score_result
 from opik_optimizer.optimization_config import mappers
 
+
 def evaluate(
     dataset: opik.Dataset,
     evaluated_task: Callable[[Dict[str, Any]], Dict[str, Any]],
@@ -13,6 +14,7 @@ def evaluate(
     dataset_item_ids: Optional[List[str]] = None,
     project_name: Optional[str] = None,
     num_test: Optional[int] = None,
+    experiment_config: Optional[Dict[str, Any]] = None,
 ) -> float:
     """
     Evaluate a task on a dataset.
@@ -25,6 +27,7 @@ def evaluate(
         project_name: Optional project name for evaluation.
         num_test: Optional number of test examples to perform the evaluation and then stop.
         num_threads: Number of threads to use for evaluation.
+        experiment_config: The dictionary with parameters that describe experiment
 
     Returns:
         float: The average score of the evaluated task.
@@ -48,7 +51,7 @@ def evaluate(
     # print(f"[DEBUG] Project name: {project_name}")
 
     scoring_key_mapping = {
-        key: value if isinstance(value, str) else value.__name__ 
+        key: value if isinstance(value, str) else value.__name__
         for key, value in metric_config.inputs.items()
     }
     scoring_key_mapping["output"] = "_llm_task_output"
@@ -62,6 +65,7 @@ def evaluate(
         scoring_metrics=[metric_config.metric],
         task_threads=num_threads,
         nb_samples=num_test,
+        experiment_config=experiment_config,
     )
 
     if not result.test_results:
@@ -79,4 +83,3 @@ def evaluate(
     )
 
     return avg_score
-
