@@ -60,6 +60,8 @@ public interface OptimizationDAO {
 
     Mono<Long> update(UUID id, OptimizationUpdate update);
 
+    Mono<Long> updateDatasetDeleted(Set<UUID> datasetIds);
+
     Mono<Optimization.OptimizationPage> find(int page, int size, @NonNull OptimizationSearchCriteria searchCriteria);
 
     Flux<OptimizationSummary> findOptimizationSummaryByDatasetIds(Set<UUID> datasetIds);
@@ -307,6 +309,30 @@ class OptimizationDAOImpl implements OptimizationDAO {
             ;
             """;
 
+    private static final String SET_DATASET_DELETED_TO_TRUE_BY_DATASET_ID = """
+            INSERT INTO optimizations (
+            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_at, last_updated_by, dataset_deleted
+            ) SELECT
+                id,
+                dataset_id,
+                name as name,
+                workspace_id,
+                objective_name,
+                status as status,
+                metadata,
+                created_at,
+                created_by,
+                last_updated_at,
+                last_updated_by,
+                true as dataset_deleted
+            FROM optimizations
+            WHERE workspace_id = :workspace_id
+            AND dataset_id IN :dataset_ids
+            ORDER BY id DESC, last_updated_at DESC
+            LIMIT 1
+            ;
+            """;
+
     private static final String FIND_MOST_RECENT_CREATED_OPTIMIZATION_BY_DATASET_IDS = """
             SELECT
             	dataset_id,
@@ -426,6 +452,21 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .doFinally(signalType -> {
                     if (signalType == SignalType.ON_COMPLETE) {
                         log.info("Updated optimization by id '{}'", id);
+                    }
+                });
+    }
+
+    @Override
+    public Mono<Long> updateDatasetDeleted(@NonNull Set<UUID> datasetIds) {
+        log.info("Set to true optimization dataset_deleted for datasetIds '{}'", datasetIds);
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> updateDatasetDeleted(datasetIds, connection))
+                .flatMap(Result::getRowsUpdated)
+                .reduce(Long::sum)
+                .doFinally(signalType -> {
+                    if (signalType == SignalType.ON_COMPLETE) {
+                        log.info("Set to true optimization dataset_deleted is done for datasetIds '{}'", datasetIds);
                     }
                 });
     }
@@ -595,6 +636,13 @@ class OptimizationDAOImpl implements OptimizationDAO {
         var statement = createUpdateStatement(id, update, connection, template.render());
 
         return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement));
+    }
+
+    private Flux<? extends Result> updateDatasetDeleted(Set<UUID> datasetIds, Connection connection) {
+        Statement statement = connection.createStatement(SET_DATASET_DELETED_TO_TRUE_BY_DATASET_ID);
+        statement.bind("dataset_ids", datasetIds);
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
     private ST buildUpdateTemplate(OptimizationUpdate update) {

@@ -11,6 +11,7 @@ import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.events.DatasetsDeleted;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.BatchOperationsConfig;
@@ -18,6 +19,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.AsyncUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
@@ -108,6 +110,7 @@ class DatasetServiceImpl implements DatasetService {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull @Config BatchOperationsConfig batchOperationsConfig;
     private final @NonNull OptimizationDAO optimizationDAO;
+    private final @NonNull EventBus eventBus;
 
     @Override
     public Dataset save(@NonNull Dataset dataset) {
@@ -291,11 +294,18 @@ class DatasetServiceImpl implements DatasetService {
     public void delete(@NonNull DatasetIdentifier identifier) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
+        Dataset dataset = findByName(workspaceId, identifier.datasetName());
+
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetDAO.class);
             dao.delete(workspaceId, identifier.datasetName());
             return null;
         });
+
+        eventBus.post(new DatasetsDeleted(
+                Set.of(dataset.id()),
+                workspaceId,
+                requestContext.get().getUserName()));
     }
 
     private NotFoundException newNotFoundException() {
@@ -319,6 +329,11 @@ class DatasetServiceImpl implements DatasetService {
             dao.delete(id, workspaceId);
             return null;
         });
+
+        eventBus.post(new DatasetsDeleted(
+                Set.of(id),
+                workspaceId,
+                requestContext.get().getUserName()));
     }
 
     @Override
@@ -334,6 +349,11 @@ class DatasetServiceImpl implements DatasetService {
             handle.attach(DatasetDAO.class).delete(ids, workspaceId);
             return null;
         });
+
+        eventBus.post(new DatasetsDeleted(
+                ids,
+                workspaceId,
+                requestContext.get().getUserName()));
     }
 
     @Override

@@ -127,6 +127,7 @@ import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -2215,19 +2216,24 @@ class DatasetsResourceTest {
                     .sorted(Comparator.comparing(Dataset::id))
                     .toList();
 
-            var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .queryParam("size", expectedMatchedDatasets.size())
-                    .queryParam("with_experiments_only", true)
-                    .queryParam("name", datasetNamePrefix)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get();
+            Awaitility.await()
+                    .atMost(Duration.ofSeconds(10))
+                    .untilAsserted(() -> {
+                        var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                                .queryParam("size", expectedMatchedDatasets.size())
+                                .queryParam("with_experiments_only", true)
+                                .queryParam("name", datasetNamePrefix)
+                                .request()
+                                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                                .header(WORKSPACE_HEADER, workspaceName)
+                                .get();
 
-            var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+                        var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-            findAndAssertPage(actualEntity, expectedMatchedDatasets.size(), expectedMatchedDatasets.size(), 1,
-                    expectedMatchedDatasets.reversed());
+                        findAndAssertPage(actualEntity, expectedMatchedDatasets.size(), expectedMatchedDatasets.size(),
+                                1,
+                                expectedMatchedDatasets.reversed());
+                    });
         }
 
         Stream<Arguments> getDatasets__whenSearchingByDatasetWithExperimentsOnlyAndNameXAndResultHavingXDatasets__thenReturnPage() {
@@ -2248,7 +2254,7 @@ class DatasetsResourceTest {
 
             Experiment experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
-                    .type(ExperimentType.REGULAR)
+                    .type(null)
                     .build();
 
             createAndAssert(
@@ -2710,7 +2716,7 @@ class DatasetsResourceTest {
 
         @Test
         @DisplayName("when deleting by dataset name and dataset does not exist, then return no content")
-        void deleteDataset__whenDeletingByDatasetNameAndDatasetDoesNotExist__thenReturnNoContent() {
+        void deleteDataset__whenDeletingByDatasetNameAndDatasetDoesNotExist__thenReturnNotFound() {
             var dataset = factory.manufacturePojo(Dataset.class);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
@@ -2721,12 +2727,52 @@ class DatasetsResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .post(Entity.json(new DatasetIdentifier(dataset.name())))) {
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
-                assertThat(actualResponse.hasEntity()).isFalse();
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
+                assertThat(actualResponse.hasEntity()).isTrue();
             }
 
         }
 
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when deleting by dataset name and dataset does not exist, then return no content")
+        void deletingDataset__shouldUpdateOptimizationDatasetDeleted__thenReturnNotFound(
+                Consumer<Dataset> datasetDeleteAction) {
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var id = createAndAssert(dataset);
+
+            var optimization = optimizationResourceClient.createPartialOptimization().datasetName(dataset.name())
+                    .build();
+            var optimizationId = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE);
+
+            // Check that we do not have optimizations with deleted datasets
+            var page = optimizationResourceClient.find(API_KEY, TEST_WORKSPACE, 1, 10, null, null, true, 200);
+            assertThat(page.size()).isEqualTo(0);
+
+            // Delete dataset
+            datasetDeleteAction.accept(dataset);
+
+            // Check that now we have one optimization with deleted datasets
+            Awaitility.await()
+                    .atMost(Duration.ofSeconds(10))
+                    .untilAsserted(() -> {
+                        var pageWithDeleted = optimizationResourceClient.find(API_KEY, TEST_WORKSPACE, 1, 10, null,
+                                null, true, 200);
+                        assertThat(pageWithDeleted.size()).isEqualTo(1);
+                        assertThat(pageWithDeleted.content().getFirst().id()).isEqualTo(optimizationId);
+                    });
+
+            // Clean up
+            optimizationResourceClient.delete(Set.of(optimizationId), API_KEY, TEST_WORKSPACE);
+        }
+
+        private Stream<Consumer<Dataset>> deletingDataset__shouldUpdateOptimizationDatasetDeleted__thenReturnNotFound() {
+            return Stream.of(
+                    dataset -> datasetResourceClient.deleteDataset(dataset.id(), API_KEY, TEST_WORKSPACE),
+                    dataset -> datasetResourceClient.deleteDatasetByName(dataset.name(), API_KEY, TEST_WORKSPACE),
+                    dataset -> datasetResourceClient.deleteDatasetsBatch(Set.of(dataset.id()), API_KEY,
+                            TEST_WORKSPACE));
+        }
     }
 
     @Nested
