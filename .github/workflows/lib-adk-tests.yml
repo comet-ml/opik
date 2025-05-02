@@ -54,6 +54,7 @@ jobs:
         run: |
           cd ./tests
           pip install --no-cache-dir --disable-pip-version-check -r library_integration/adk/requirements.txt
+          pip list
 
       - name: Run tests
         run: |
