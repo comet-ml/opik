@@ -20,7 +20,7 @@ class Trace(UniversalBaseModel):
     """
 
     project_id: typing.Optional[str] = None
-    name: str
+    name: typing.Optional[str] = None
     start_time: dt.datetime
     end_time: typing.Optional[dt.datetime] = None
     input: typing.Optional[JsonNode] = None

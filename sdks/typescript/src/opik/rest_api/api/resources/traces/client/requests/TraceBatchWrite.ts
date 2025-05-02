@@ -8,7 +8,6 @@ import * as OpikApi from "../../../../index";
  * @example
  *     {
  *         traces: [{
- *                 name: "name",
  *                 startTime: "2024-01-15T09:30:00Z"
  *             }]
  *     }

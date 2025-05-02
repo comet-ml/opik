@@ -9,6 +9,7 @@ from ..errors.bad_request_error import BadRequestError
 from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
 from ..types.json_node_write import JsonNodeWrite
+from .types.experiment_write_type import ExperimentWriteType
 from ..types.prompt_version_link_write import PromptVersionLinkWrite
 from ..core.serialization import convert_and_respect_annotation_metadata
 from ..types.experiment_item import ExperimentItem
@@ -120,6 +121,8 @@ class ExperimentsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        type: typing.Optional[ExperimentWriteType] = OMIT,
+        optimization_id: typing.Optional[str] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[
             typing.Sequence[PromptVersionLinkWrite]
@@ -138,6 +141,10 @@ class ExperimentsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonNodeWrite]
+
+        type : typing.Optional[ExperimentWriteType]
+
+        optimization_id : typing.Optional[str]
 
         prompt_version : typing.Optional[PromptVersionLinkWrite]
 
@@ -170,6 +177,8 @@ class ExperimentsClient:
                 "dataset_name": dataset_name,
                 "name": name,
                 "metadata": metadata,
+                "type": type,
+                "optimization_id": optimization_id,
                 "prompt_version": convert_and_respect_annotation_metadata(
                     object_=prompt_version,
                     annotation=PromptVersionLinkWrite,
@@ -346,9 +355,6 @@ class ExperimentsClient:
             method="POST",
             json={
                 "ids": ids,
-            },
-            headers={
-                "content-type": "application/json",
             },
             request_options=request_options,
             omit=OMIT,
@@ -758,6 +764,8 @@ class AsyncExperimentsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
+        type: typing.Optional[ExperimentWriteType] = OMIT,
+        optimization_id: typing.Optional[str] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
         prompt_versions: typing.Optional[
             typing.Sequence[PromptVersionLinkWrite]
@@ -776,6 +784,10 @@ class AsyncExperimentsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonNodeWrite]
+
+        type : typing.Optional[ExperimentWriteType]
+
+        optimization_id : typing.Optional[str]
 
         prompt_version : typing.Optional[PromptVersionLinkWrite]
 
@@ -816,6 +828,8 @@ class AsyncExperimentsClient:
                 "dataset_name": dataset_name,
                 "name": name,
                 "metadata": metadata,
+                "type": type,
+                "optimization_id": optimization_id,
                 "prompt_version": convert_and_respect_annotation_metadata(
                     object_=prompt_version,
                     annotation=PromptVersionLinkWrite,
@@ -1016,9 +1030,6 @@ class AsyncExperimentsClient:
             method="POST",
             json={
                 "ids": ids,
-            },
-            headers={
-                "content-type": "application/json",
             },
             request_options=request_options,
             omit=OMIT,

@@ -366,7 +366,7 @@ export class Experiments {
     /**
      * Delete experiments by id
      *
-     * @param {OpikApi.ExperimentsDelete} request
+     * @param {OpikApi.DeleteIdsHolder} request
      * @param {Experiments.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
@@ -375,7 +375,7 @@ export class Experiments {
      *     })
      */
     public async deleteExperimentsById(
-        request: OpikApi.ExperimentsDelete,
+        request: OpikApi.DeleteIdsHolder,
         requestOptions?: Experiments.RequestOptions,
     ): Promise<void> {
         const _response = await core.fetcher({
@@ -399,7 +399,7 @@ export class Experiments {
             },
             contentType: "application/json",
             requestType: "json",
-            body: serializers.ExperimentsDelete.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            body: serializers.DeleteIdsHolder.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
             withCredentials: true,

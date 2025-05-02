@@ -8,7 +8,7 @@ export interface TraceWrite {
     id?: string;
     /** If null, the default project is used */
     projectName?: string;
-    name: string;
+    name?: string;
     startTime: Date;
     endTime?: Date;
     input?: OpikApi.JsonNodeWrite;
@@ -16,5 +16,6 @@ export interface TraceWrite {
     metadata?: OpikApi.JsonNodeWrite;
     tags?: string[];
     errorInfo?: OpikApi.ErrorInfoWrite;
+    lastUpdatedAt?: Date;
     threadId?: string;
 }

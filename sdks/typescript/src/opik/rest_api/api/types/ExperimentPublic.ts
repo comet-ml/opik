@@ -10,6 +10,8 @@ export interface ExperimentPublic {
     datasetId?: string;
     name?: string;
     metadata?: OpikApi.JsonNodePublic;
+    type?: OpikApi.ExperimentPublicType;
+    optimizationId?: string;
     feedbackScores?: OpikApi.FeedbackScoreAveragePublic[];
     comments?: OpikApi.CommentPublic[];
     traceCount?: number;

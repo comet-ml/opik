@@ -15,7 +15,7 @@ from ..core.pydantic_utilities import IS_PYDANTIC_V2
 class TracePublic(UniversalBaseModel):
     id: typing.Optional[str] = None
     project_id: typing.Optional[str] = None
-    name: str
+    name: typing.Optional[str] = None
     start_time: dt.datetime
     end_time: typing.Optional[dt.datetime] = None
     input: typing.Optional[JsonNodePublic] = None

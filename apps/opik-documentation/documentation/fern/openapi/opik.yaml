@@ -56,6 +56,8 @@ tags:
   description: LLM Provider Key
 - name: OpenTelemetry Ingestion
   description: Resource to ingest Traces and Spans via OpenTelemetry
+- name: Optimizations
+  description: Optimization resources
 - name: Projects
   description: Project related resources
 - name: Prompts
@@ -1127,7 +1129,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ExperimentsDelete"
+              $ref: "#/components/schemas/DeleteIdsHolder"
       responses:
         "204":
           description: No content
@@ -1560,6 +1562,138 @@ paths:
           description: default response
           content:
             '*/*': {}
+  /v1/private/optimizations:
+    get:
+      tags:
+      - Optimizations
+      summary: Find optimizations
+      description: Find optimizations
+      operationId: findOptimizations
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: dataset_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: dataset_deleted
+        in: query
+        schema:
+          type: boolean
+      responses:
+        "200":
+          description: Optimizations resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OptimizationPage_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+    post:
+      tags:
+      - Optimizations
+      summary: Create optimization
+      description: Create optimization
+      operationId: createOptimization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Optimization_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/optimizations/{id}"
+  /v1/private/optimizations/delete:
+    post:
+      tags:
+      - Optimizations
+      summary: Delete optimizations by id
+      description: Delete optimizations by id
+      operationId: deleteOptimizationsById
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteIdsHolder"
+      responses:
+        "204":
+          description: No content
+  /v1/private/optimizations/{id}:
+    get:
+      tags:
+      - Optimizations
+      summary: Get optimization by id
+      description: Get optimization by id
+      operationId: getOptimizationById
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Optimization resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Optimization_Public"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+    put:
+      tags:
+      - Optimizations
+      summary: Update optimization by id
+      description: Update optimization by id
+      operationId: updateOptimizationsById
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OptimizationUpdate"
+      responses:
+        "204":
+          description: No content
   /v1/private/projects:
     get:
       tags:
@@ -2713,6 +2847,10 @@ paths:
           type: boolean
           description: "Truncate image included in either input, output or metadata"
       - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: exclude
         in: query
         schema:
           type: string
@@ -4372,6 +4510,10 @@ components:
           type: string
           format: date-time
           readOnly: true
+        last_created_optimization_at:
+          type: string
+          format: date-time
+          readOnly: true
     Dataset_Write:
       required:
       - name
@@ -4924,6 +5066,10 @@ components:
           type: string
           format: date-time
           readOnly: true
+        last_created_optimization_at:
+          type: string
+          format: date-time
+          readOnly: true
     DatasetIdentifier_Public:
       required:
       - dataset_name
@@ -5139,6 +5285,15 @@ components:
           type: string
         metadata:
           $ref: "#/components/schemas/JsonNode"
+        type:
+          type: string
+          enum:
+          - regular
+          - trial
+          - mini-batch
+        optimization_id:
+          type: string
+          format: uuid
         feedback_scores:
           type: array
           readOnly: true
@@ -5233,6 +5388,15 @@ components:
           type: string
         metadata:
           $ref: "#/components/schemas/JsonNode_Write"
+        type:
+          type: string
+          enum:
+          - regular
+          - trial
+          - mini-batch
+        optimization_id:
+          type: string
+          format: uuid
         prompt_version:
           $ref: "#/components/schemas/PromptVersionLink_Write"
         prompt_versions:
@@ -5274,7 +5438,7 @@ components:
           items:
             type: string
             format: uuid
-    ExperimentsDelete:
+    DeleteIdsHolder:
       required:
       - ids
       type: object
@@ -5351,6 +5515,15 @@ components:
           type: string
         metadata:
           $ref: "#/components/schemas/JsonNode_Public"
+        type:
+          type: string
+          enum:
+          - regular
+          - trial
+          - mini-batch
+        optimization_id:
+          type: string
+          format: uuid
         feedback_scores:
           type: array
           readOnly: true
@@ -6105,6 +6278,163 @@ components:
           type: string
     ExportTraceServiceRequest:
       $ref: "#/components/schemas/JsonNode"
+    Optimization:
+      required:
+      - dataset_name
+      - objective_name
+      - status
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        dataset_name:
+          type: string
+        objective_name:
+          type: string
+        status:
+          type: string
+          enum:
+          - running
+          - completed
+          - cancelled
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+        dataset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        num_trials:
+          type: integer
+          format: int64
+          readOnly: true
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScoreAverage"
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    Optimization_Write:
+      required:
+      - dataset_name
+      - objective_name
+      - status
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        dataset_name:
+          type: string
+        objective_name:
+          type: string
+        status:
+          type: string
+          enum:
+          - running
+          - completed
+          - cancelled
+        metadata:
+          $ref: "#/components/schemas/JsonNode_Write"
+    OptimizationPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Optimization_Public"
+        sortableBy:
+          type: array
+          items:
+            type: string
+    Optimization_Public:
+      required:
+      - dataset_name
+      - objective_name
+      - status
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        dataset_name:
+          type: string
+        objective_name:
+          type: string
+        status:
+          type: string
+          enum:
+          - running
+          - completed
+          - cancelled
+        metadata:
+          $ref: "#/components/schemas/JsonNode_Public"
+        dataset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        num_trials:
+          type: integer
+          format: int64
+          readOnly: true
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScoreAverage_Public"
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    OptimizationUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+          - running
+          - completed
+          - cancelled
     Project:
       required:
       - name
@@ -7411,7 +7741,6 @@ components:
       readOnly: true
     Trace:
       required:
-      - name
       - start_time
       type: object
       properties:
@@ -7461,7 +7790,6 @@ components:
         last_updated_at:
           type: string
           format: date-time
-          readOnly: true
         created_by:
           type: string
           readOnly: true
@@ -7500,7 +7828,6 @@ components:
           type: string
     Trace_Write:
       required:
-      - name
       - start_time
       type: object
       properties:
@@ -7532,6 +7859,9 @@ components:
             type: string
         error_info:
           $ref: "#/components/schemas/ErrorInfo_Write"
+        last_updated_at:
+          type: string
+          format: date-time
         thread_id:
           type: string
     TraceBatch:
@@ -7601,7 +7931,6 @@ components:
       readOnly: true
     Trace_Public:
       required:
-      - name
       - start_time
       type: object
       properties:
@@ -7647,7 +7976,6 @@ components:
         last_updated_at:
           type: string
           format: date-time
-          readOnly: true
         created_by:
           type: string
           readOnly: true
@@ -7825,6 +8153,8 @@ components:
           description: "If null and project_name not specified, Default Project is\
             \ assumed"
           format: uuid
+        name:
+          type: string
         end_time:
           type: string
           format: date-time

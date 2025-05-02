@@ -17,6 +17,7 @@ import { FeedbackDefinitions } from "./api/resources/feedbackDefinitions/client/
 import { Guardrails } from "./api/resources/guardrails/client/Client";
 import { LlmProviderKey } from "./api/resources/llmProviderKey/client/Client";
 import { OpenTelemetryIngestion } from "./api/resources/openTelemetryIngestion/client/Client";
+import { Optimizations } from "./api/resources/optimizations/client/Client";
 import { Projects } from "./api/resources/projects/client/Client";
 import { Prompts } from "./api/resources/prompts/client/Client";
 import { ServiceToggles } from "./api/resources/serviceToggles/client/Client";
@@ -63,6 +64,7 @@ export class OpikApiClient {
     protected _guardrails: Guardrails | undefined;
     protected _llmProviderKey: LlmProviderKey | undefined;
     protected _openTelemetryIngestion: OpenTelemetryIngestion | undefined;
+    protected _optimizations: Optimizations | undefined;
     protected _projects: Projects | undefined;
     protected _prompts: Prompts | undefined;
     protected _serviceToggles: ServiceToggles | undefined;
@@ -114,6 +116,10 @@ export class OpikApiClient {
 
     public get openTelemetryIngestion(): OpenTelemetryIngestion {
         return (this._openTelemetryIngestion ??= new OpenTelemetryIngestion(this._options));
+    }
+
+    public get optimizations(): Optimizations {
+        return (this._optimizations ??= new Optimizations(this._options));
     }
 
     public get projects(): Projects {

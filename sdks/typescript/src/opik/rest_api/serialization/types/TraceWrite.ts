@@ -12,7 +12,7 @@ export const TraceWrite: core.serialization.ObjectSchema<serializers.TraceWrite.
     core.serialization.object({
         id: core.serialization.string().optional(),
         projectName: core.serialization.property("project_name", core.serialization.string().optional()),
-        name: core.serialization.string(),
+        name: core.serialization.string().optional(),
         startTime: core.serialization.property("start_time", core.serialization.date()),
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
         input: JsonNodeWrite.optional(),
@@ -20,6 +20,7 @@ export const TraceWrite: core.serialization.ObjectSchema<serializers.TraceWrite.
         metadata: JsonNodeWrite.optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
         errorInfo: core.serialization.property("error_info", ErrorInfoWrite.optional()),
+        lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
     });
 
@@ -27,7 +28,7 @@ export declare namespace TraceWrite {
     export interface Raw {
         id?: string | null;
         project_name?: string | null;
-        name: string;
+        name?: string | null;
         start_time: string;
         end_time?: string | null;
         input?: JsonNodeWrite.Raw | null;
@@ -35,6 +36,7 @@ export declare namespace TraceWrite {
         metadata?: JsonNodeWrite.Raw | null;
         tags?: string[] | null;
         error_info?: ErrorInfoWrite.Raw | null;
+        last_updated_at?: string | null;
         thread_id?: string | null;
     }
 }

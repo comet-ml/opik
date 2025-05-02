@@ -112,6 +112,7 @@ from .dataset_visibility import DatasetVisibility
 from .delete_attachments_request import DeleteAttachmentsRequest
 from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEntityType
 from .delete_feedback_score import DeleteFeedbackScore
+from .delete_ids_holder import DeleteIdsHolder
 from .delta import Delta
 from .delta_role import DeltaRole
 from .error_info import ErrorInfo
@@ -127,6 +128,8 @@ from .experiment_item_compare import ExperimentItemCompare
 from .experiment_item_public import ExperimentItemPublic
 from .experiment_page_public import ExperimentPagePublic
 from .experiment_public import ExperimentPublic
+from .experiment_public_type import ExperimentPublicType
+from .experiment_type import ExperimentType
 from .export_trace_service_request import ExportTraceServiceRequest
 from .feedback import Feedback, Feedback_Categorical, Feedback_Numerical
 from .feedback_create import (
@@ -213,6 +216,11 @@ from .numerical_feedback_detail import NumericalFeedbackDetail
 from .numerical_feedback_detail_create import NumericalFeedbackDetailCreate
 from .numerical_feedback_detail_public import NumericalFeedbackDetailPublic
 from .numerical_feedback_detail_update import NumericalFeedbackDetailUpdate
+from .optimization import Optimization
+from .optimization_page_public import OptimizationPagePublic
+from .optimization_public import OptimizationPublic
+from .optimization_public_status import OptimizationPublicStatus
+from .optimization_status import OptimizationStatus
 from .page_columns import PageColumns
 from .percentage_value_stat_public import PercentageValueStatPublic
 from .percentage_values import PercentageValues
@@ -384,6 +392,7 @@ __all__ = [
     "DeleteAttachmentsRequest",
     "DeleteAttachmentsRequestEntityType",
     "DeleteFeedbackScore",
+    "DeleteIdsHolder",
     "Delta",
     "DeltaRole",
     "ErrorInfo",
@@ -399,6 +408,8 @@ __all__ = [
     "ExperimentItemPublic",
     "ExperimentPagePublic",
     "ExperimentPublic",
+    "ExperimentPublicType",
+    "ExperimentType",
     "ExportTraceServiceRequest",
     "Feedback",
     "FeedbackCreate",
@@ -479,6 +490,11 @@ __all__ = [
     "NumericalFeedbackDetailCreate",
     "NumericalFeedbackDetailPublic",
     "NumericalFeedbackDetailUpdate",
+    "Optimization",
+    "OptimizationPagePublic",
+    "OptimizationPublic",
+    "OptimizationPublicStatus",
+    "OptimizationStatus",
     "PageColumns",
     "PercentageValueStatPublic",
     "PercentageValues",

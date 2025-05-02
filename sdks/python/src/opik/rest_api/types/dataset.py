@@ -21,6 +21,7 @@ class Dataset(UniversalBaseModel):
     dataset_items_count: typing.Optional[int] = None
     most_recent_experiment_at: typing.Optional[dt.datetime] = None
     last_created_experiment_at: typing.Optional[dt.datetime] = None
+    last_created_optimization_at: typing.Optional[dt.datetime] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(

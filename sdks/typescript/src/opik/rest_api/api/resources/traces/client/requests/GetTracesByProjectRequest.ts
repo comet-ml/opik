@@ -14,4 +14,5 @@ export interface GetTracesByProjectRequest {
     filters?: string;
     truncate?: boolean;
     sorting?: string;
+    exclude?: string;
 }

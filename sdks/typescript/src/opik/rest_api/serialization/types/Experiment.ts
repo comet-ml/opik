@@ -6,6 +6,7 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { JsonNode } from "./JsonNode";
+import { ExperimentType } from "./ExperimentType";
 import { FeedbackScoreAverage } from "./FeedbackScoreAverage";
 import { Comment } from "./Comment";
 import { PercentageValues } from "./PercentageValues";
@@ -18,6 +19,8 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
         datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
         name: core.serialization.string().optional(),
         metadata: JsonNode.optional(),
+        type: ExperimentType.optional(),
+        optimizationId: core.serialization.property("optimization_id", core.serialization.string().optional()),
         feedbackScores: core.serialization.property(
             "feedback_scores",
             core.serialization.list(FeedbackScoreAverage).optional(),
@@ -45,6 +48,8 @@ export declare namespace Experiment {
         dataset_id?: string | null;
         name?: string | null;
         metadata?: JsonNode.Raw | null;
+        type?: ExperimentType.Raw | null;
+        optimization_id?: string | null;
         feedback_scores?: FeedbackScoreAverage.Raw[] | null;
         comments?: Comment.Raw[] | null;
         trace_count?: number | null;

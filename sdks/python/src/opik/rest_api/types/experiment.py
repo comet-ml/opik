@@ -3,6 +3,7 @@
 from ..core.pydantic_utilities import UniversalBaseModel
 import typing
 from .json_node import JsonNode
+from .experiment_type import ExperimentType
 from .feedback_score_average import FeedbackScoreAverage
 from .comment import Comment
 import datetime as dt
@@ -18,6 +19,8 @@ class Experiment(UniversalBaseModel):
     dataset_id: typing.Optional[str] = None
     name: typing.Optional[str] = None
     metadata: typing.Optional[JsonNode] = None
+    type: typing.Optional[ExperimentType] = None
+    optimization_id: typing.Optional[str] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None
     comments: typing.Optional[typing.List[Comment]] = None
     trace_count: typing.Optional[int] = None

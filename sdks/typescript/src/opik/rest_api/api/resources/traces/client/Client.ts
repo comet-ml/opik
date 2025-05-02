@@ -202,7 +202,7 @@ export class Traces {
         request: OpikApi.GetTracesByProjectRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<OpikApi.TracePagePublic> {
-        const { page, size, projectName, projectId, filters, truncate, sorting } = request;
+        const { page, size, projectName, projectId, filters, truncate, sorting, exclude } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -230,6 +230,10 @@ export class Traces {
 
         if (sorting != null) {
             _queryParams["sorting"] = sorting;
+        }
+
+        if (exclude != null) {
+            _queryParams["exclude"] = exclude;
         }
 
         const _response = await core.fetcher({
@@ -298,7 +302,6 @@ export class Traces {
      *
      * @example
      *     await client.traces.createTrace({
-     *         name: "name",
      *         startTime: "2024-01-15T09:30:00Z"
      *     })
      */
@@ -365,7 +368,6 @@ export class Traces {
      * @example
      *     await client.traces.createTraces({
      *         traces: [{
-     *                 name: "name",
      *                 startTime: "2024-01-15T09:30:00Z"
      *             }]
      *     })
