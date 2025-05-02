@@ -11,6 +11,7 @@ import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetLastExperimentCreated;
+import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
@@ -1772,7 +1773,39 @@ class DatasetsResourceTest {
                 return null;
             });
 
-            requestAndAssertDatasetsSorting(workspaceName, apiKey, expected, requestDirection, expectedDirection);
+            requestAndAssertDatasetsSorting(workspaceName, apiKey, expected, requestDirection, expectedDirection,
+                    SortableFields.LAST_CREATED_EXPERIMENT_AT);
+        }
+
+        @ParameterizedTest
+        @MethodSource("sortDirectionProvider")
+        @DisplayName("when fetching all datasets, then return datasets sorted by last_created_optimization_at")
+        void getDatasets__whenFetchingAllDatasets__thenReturnDatasetsSortedByLastCreatedOptimizationAt(
+                Direction requestDirection, Direction expectedDirection) {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Dataset> expected = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class);
+            Set<DatasetLastOptimizationCreated> datasetsLastOptimizationCreated = new HashSet<>();
+
+            expected.forEach(dataset -> {
+                var id = createAndAssert(dataset, apiKey, workspaceName);
+                datasetsLastOptimizationCreated.add(new DatasetLastOptimizationCreated(id, Instant.now()));
+            });
+
+            mySqlTemplate.inTransaction(WRITE, handle -> {
+
+                var dao = handle.attach(DatasetDAO.class);
+                dao.recordOptimizations(workspaceId, datasetsLastOptimizationCreated);
+
+                return null;
+            });
+
+            requestAndAssertDatasetsSorting(workspaceName, apiKey, expected, requestDirection, expectedDirection,
+                    SortableFields.LAST_CREATED_OPTIMIZATION_AT);
         }
 
         public static Stream<Arguments> sortDirectionProvider() {
@@ -1783,9 +1816,9 @@ class DatasetsResourceTest {
         }
 
         private void requestAndAssertDatasetsSorting(String workspaceName, String apiKey, List<Dataset> allDatasets,
-                Direction request, Direction expected) {
+                Direction request, Direction expected, String sortingField) {
             var sorting = List.of(SortingField.builder()
-                    .field(SortableFields.LAST_CREATED_EXPERIMENT_AT)
+                    .field(sortingField)
                     .direction(request)
                     .build());
 
