@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.events.DatasetsDeleted;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.api.events.OptimizationCreated;
@@ -100,6 +101,19 @@ public class DatasetEventListener {
         Set<UUID> updatedDatasets = updateAndGetDatasetsWithOptimizations(event);
 
         updateDatasetsWithoutOptimizations(event, updatedDatasets);
+    }
+
+    @Subscribe
+    public void onDatasetsDeleted(DatasetsDeleted event) {
+
+        if (event.datasetIds().isEmpty()) {
+            log.info("No datasets found for DatasetsDeleted event '{}'", event);
+            return;
+        }
+
+        optimizationService.updateDatasetDeleted(event.datasetIds())
+                .contextWrite(ctx -> setContext(event, ctx))
+                .block();
     }
 
     private Set<UUID> updateAndGetDatasetsWithExperiments(ExperimentsDeleted event) {

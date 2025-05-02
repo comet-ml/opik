@@ -67,11 +67,13 @@ public interface DatasetDAO {
     @SqlQuery("SELECT COUNT(id) FROM datasets " +
             " WHERE workspace_id = :workspace_id " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +
-            " <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif> ")
+            " <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif> " +
+            " <if(with_optimizations_only)> AND last_created_optimization_at IS NOT NULL <endif> ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long findCount(@Bind("workspace_id") String workspaceId, @Define("name") @Bind("name") String name,
-            @Define("with_experiments_only") boolean withExperimentsOnly);
+            @Define("with_experiments_only") boolean withExperimentsOnly,
+            @Define("with_optimizations_only") boolean withOptimizationOnly);
 
     @SqlQuery("SELECT COUNT(id) FROM datasets " +
             "WHERE workspace_id = :workspace_id " +
@@ -119,6 +121,7 @@ public interface DatasetDAO {
             " WHERE workspace_id = :workspace_id " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +
             " <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif> " +
+            " <if(with_optimizations_only)> AND last_created_optimization_at IS NOT NULL <endif> " +
             " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
             " LIMIT :limit OFFSET :offset ")
     @UseStringTemplateEngine
@@ -128,6 +131,7 @@ public interface DatasetDAO {
             @Bind("workspace_id") String workspaceId,
             @Define("name") @Bind("name") String name,
             @Define("with_experiments_only") boolean withExperimentsOnly,
+            @Define("with_optimizations_only") boolean withOptimizationOnly,
             @Define("sort_fields") @Bind("sort_fields") String sortingFields);
 
     @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name")

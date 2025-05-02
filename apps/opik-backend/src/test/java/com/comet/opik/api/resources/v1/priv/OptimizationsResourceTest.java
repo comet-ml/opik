@@ -76,7 +76,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class OptimizationsResourceTest {
 
     public static final String[] OPTIMIZATION_IGNORED_FIELDS = {"datasetId", "createdAt",
-            "lastUpdatedAt", "createdBy", "lastUpdatedBy", "datasetName"};
+            "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();

@@ -114,6 +114,7 @@ public class DatasetsResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("with_experiments_only") boolean withExperimentsOnly,
+            @QueryParam("with_optimizations_only") boolean withOptimizationsOnly,
             @QueryParam("prompt_id") UUID promptId,
             @QueryParam("name") String name,
             @QueryParam("sorting") String sorting) {
@@ -122,6 +123,7 @@ public class DatasetsResource {
                 .name(name)
                 .withExperimentsOnly(withExperimentsOnly)
                 .promptId(promptId)
+                .withOptimizationsOnly(withOptimizationsOnly)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
