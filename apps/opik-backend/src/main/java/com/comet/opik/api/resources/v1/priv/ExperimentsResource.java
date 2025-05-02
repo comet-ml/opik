@@ -10,6 +10,7 @@ import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
+import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
@@ -97,6 +98,8 @@ public class ExperimentsResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("datasetId") UUID datasetId,
+            @QueryParam("optimization_id") UUID optimizationId,
+            @QueryParam("types") String typesQueryParam,
             @QueryParam("name") String name,
             @QueryParam("dataset_deleted") boolean datasetDeleted,
             @QueryParam("prompt_id") UUID promptId,
@@ -113,6 +116,10 @@ public class ExperimentsResource {
             sortingFields = List.of();
         }
 
+        var types = Optional.ofNullable(typesQueryParam)
+                .map(queryParam -> ParamsValidator.get(queryParam, ExperimentType.class, "types"))
+                .orElse(null);
+
         var experimentSearchCriteria = ExperimentSearchCriteria.builder()
                 .datasetId(datasetId)
                 .name(name)
@@ -120,6 +127,8 @@ public class ExperimentsResource {
                 .datasetDeleted(datasetDeleted)
                 .promptId(promptId)
                 .sortingFields(sortingFields)
+                .optimizationId(optimizationId)
+                .types(types)
                 .build();
 
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
