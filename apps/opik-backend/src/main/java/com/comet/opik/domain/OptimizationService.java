@@ -82,7 +82,12 @@ class OptimizationServiceImpl implements OptimizationService {
     @WithSpan
     public Mono<Optimization.OptimizationPage> find(int page, int size,
             @NonNull OptimizationSearchCriteria searchCriteria) {
-        return optimizationDAO.find(page, size, searchCriteria);
+        return optimizationDAO.find(page, size, searchCriteria)
+                .flatMap(optimizationPage -> Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    return Mono.just(optimizationPage.toBuilder()
+                            .content(enrichOptimizations(optimizationPage.content(), workspaceId)).build());
+                }));
     }
 
     @Override
