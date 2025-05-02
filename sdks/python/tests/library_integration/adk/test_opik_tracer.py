@@ -1,4 +1,5 @@
 import subprocess
+from typing import Tuple
 
 import pytest
 import requests
@@ -20,7 +21,7 @@ def _check_server_running(base_url: str, user_id: str, session_id: str) -> bool:
 
 
 @pytest.fixture(scope="module")
-def api_server() -> str:
+def api_server() -> Tuple[str]:
     with subprocess.Popen(["adk", "api_server", str(ADK_SERVER_PORT)]) as proc:
         base_url = f"http://localhost:{ADK_SERVER_PORT}"
         user = "user_113"
