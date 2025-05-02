@@ -4,7 +4,9 @@ import pydantic
 
 
 class Attachment(pydantic.BaseModel):
-    """Represents an Attachment to be added to the Trace or Span.
+    """
+    Represents an Attachment to be added to the Trace or Span.
+
     Args:
         data: The data to be added to the Attachment as a path to the file.
         file_name: The custom filename to assign to the data in the attachment.

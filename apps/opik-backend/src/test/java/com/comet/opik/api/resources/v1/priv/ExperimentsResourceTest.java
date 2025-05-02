@@ -11,6 +11,7 @@ import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
 import com.comet.opik.api.ExperimentStreamRequest;
+import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatch;
@@ -894,6 +895,46 @@ class ExperimentsResourceTest {
                     unexpectedExperiments, apiKey, false, Map.of(), null);
         }
 
+        @ParameterizedTest
+        @MethodSource
+        void findByOptimizationIdAndType(ExperimentType type) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            UUID optimizationId = UUID.randomUUID();
+
+            var experiments = experimentResourceClient.generateExperimentList()
+                    .stream()
+                    .map(experiment -> experiment.toBuilder()
+                            .optimizationId(optimizationId)
+                            .type(type)
+                            .build())
+                    .toList();
+            experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment,
+                    apiKey, workspaceName));
+
+            var unexpectedExperiments = List.of(generateExperiment());
+
+            unexpectedExperiments
+                    .forEach(expectedExperiment -> createAndAssert(expectedExperiment, apiKey, workspaceName));
+
+            var pageSize = experiments.size() - 2;
+            var expectedExperiments1 = experiments.subList(pageSize - 1, experiments.size()).reversed();
+            var expectedExperiments2 = experiments.subList(0, pageSize - 1).reversed();
+            var expectedTotal = experiments.size();
+
+            findAndAssert(workspaceName, 1, pageSize, null, null, expectedExperiments1, expectedTotal,
+                    unexpectedExperiments, apiKey, false, Map.of(), null, optimizationId, Set.of(type));
+            findAndAssert(workspaceName, 2, pageSize, null, null, expectedExperiments2, expectedTotal,
+                    unexpectedExperiments, apiKey, false, Map.of(), null, optimizationId, Set.of(type));
+        }
+
+        private Stream<ExperimentType> findByOptimizationIdAndType() {
+            return Stream.of(ExperimentType.TRIAL, ExperimentType.MINI_BATCH);
+        }
+
         @Test
         void findAll() {
             var workspaceName = UUID.randomUUID().toString();
@@ -1664,7 +1705,8 @@ class ExperimentsResourceTest {
                             .collect(toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value))))
                     .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
             findAndAssert(workspaceName, 1, expectedExperiments.size(), null, null, expectedExperiments,
-                    expectedExperiments.size(), List.of(), apiKey, false, expectedScores, null, List.of(sortingField));
+                    expectedExperiments.size(), List.of(), apiKey, false, expectedScores, null, List.of(sortingField),
+                    null, null);
         }
 
         @ParameterizedTest
@@ -1714,7 +1756,8 @@ class ExperimentsResourceTest {
                     .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
 
             findAndAssert(workspaceName, 1, expectedExperiments.size(), null, null, expectedExperiments,
-                    expectedExperiments.size(), List.of(), apiKey, false, expectedScores, null, List.of(sortingField));
+                    expectedExperiments.size(), List.of(), apiKey, false, expectedScores, null, List.of(sortingField),
+                    null, null);
         }
 
         @ParameterizedTest
@@ -1736,7 +1779,9 @@ class ExperimentsResourceTest {
                     null,
                     false,
                     UUID.randomUUID(),
-                    List.of(new SortingField(field, Direction.ASC)))) {
+                    List.of(new SortingField(field, Direction.ASC)),
+                    null,
+                    null)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             }
         }
@@ -1893,7 +1938,26 @@ class ExperimentsResourceTest {
             Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment,
             UUID promptId) {
         findAndAssert(workspaceName, page, pageSize, datasetId, name, expectedExperiments, expectedTotal,
-                unexpectedExperiments, apiKey, datasetDeleted, expectedScoresPerExperiment, promptId, null);
+                unexpectedExperiments, apiKey, datasetDeleted, expectedScoresPerExperiment, promptId, null, null, null);
+    }
+
+    private void findAndAssert(
+            String workspaceName,
+            int page,
+            int pageSize,
+            UUID datasetId,
+            String name,
+            List<Experiment> expectedExperiments,
+            long expectedTotal,
+            List<Experiment> unexpectedExperiments, String apiKey,
+            boolean datasetDeleted,
+            Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment,
+            UUID promptId,
+            UUID optimizationId,
+            Set<ExperimentType> types) {
+        findAndAssert(workspaceName, page, pageSize, datasetId, name, expectedExperiments, expectedTotal,
+                unexpectedExperiments, apiKey, datasetDeleted, expectedScoresPerExperiment, promptId, null,
+                optimizationId, types);
     }
 
     public Response findExperiment(String workspaceName,
@@ -1904,7 +1968,9 @@ class ExperimentsResourceTest {
             String name,
             boolean datasetDeleted,
             UUID promptId,
-            List<SortingField> sortingFields) {
+            List<SortingField> sortingFields,
+            UUID optimizationId,
+            Set<ExperimentType> types) {
 
         WebTarget webTarget = client.target(getExperimentsPath())
                 .queryParam("page", page)
@@ -1917,6 +1983,14 @@ class ExperimentsResourceTest {
 
         if (datasetId != null) {
             webTarget = webTarget.queryParam("datasetId", datasetId);
+        }
+
+        if (optimizationId != null) {
+            webTarget = webTarget.queryParam("optimization_id", optimizationId);
+        }
+
+        if (CollectionUtils.isNotEmpty(types)) {
+            webTarget = webTarget.queryParam("types", JsonUtils.writeValueAsString(types));
         }
 
         if (promptId != null) {
@@ -1947,9 +2021,12 @@ class ExperimentsResourceTest {
             boolean datasetDeleted,
             Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment,
             UUID promptId,
-            List<SortingField> sortingFields) {
+            List<SortingField> sortingFields,
+            UUID optimizationId,
+            Set<ExperimentType> types) {
         try (var actualResponse = findExperiment(
-                workspaceName, apiKey, page, pageSize, datasetId, name, datasetDeleted, promptId, sortingFields)) {
+                workspaceName, apiKey, page, pageSize, datasetId, name, datasetDeleted, promptId, sortingFields,
+                optimizationId, types)) {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
             var actualPage = actualResponse.readEntity(ExperimentPage.class);
             assertThat(actualPage.page()).isEqualTo(page);
@@ -2104,7 +2181,7 @@ class ExperimentsResourceTest {
                                 .usage(null)
                                 .duration(null)
                                 .totalEstimatedCost(null)
-                                .type(null)
+                                .type(ExperimentType.REGULAR)
                                 .optimizationId(null)
                                 .build();
                         // Only 2 scores per experiment is enough for this test
@@ -2299,7 +2376,7 @@ class ExperimentsResourceTest {
 
             assertThat(actualScores)
                     .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
-                            .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                            .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                             .build())
                     .isEqualTo(expectedScores);
 
@@ -2407,7 +2484,7 @@ class ExperimentsResourceTest {
                     .duration(null)
                     .usage(null)
                     .totalEstimatedCost(null)
-                    .type(null)
+                    .type(ExperimentType.REGULAR)
                     .optimizationId(null)
                     .build();
 
@@ -2428,6 +2505,25 @@ class ExperimentsResourceTest {
             var expectedId = createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
 
             getAndAssert(expectedId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void createWithOptimizationIdTypeAndGet(ExperimentType type) {
+            var expectedExperiment = experimentResourceClient.createPartialExperiment()
+                    .type(type)
+                    .optimizationId(UUID.randomUUID())
+                    .build();
+            var expectedId = createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(expectedId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+
+        Stream<ExperimentType> createWithOptimizationIdTypeAndGet() {
+            return Stream.of(
+                    ExperimentType.REGULAR,
+                    ExperimentType.TRIAL,
+                    ExperimentType.MINI_BATCH);
         }
 
         @Test

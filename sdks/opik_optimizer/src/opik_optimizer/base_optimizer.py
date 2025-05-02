@@ -1,8 +1,18 @@
 from typing import Optional, Union, List, Dict, Any
 import opik
+import logging
+
+import litellm
 from opik.evaluation import metrics
+from opik.opik_context import get_current_span_data
 from pydantic import BaseModel
 
+# Don't use unsupported params:
+litellm.drop_params = True
+
+# Set up logging:
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class OptimizationRound(BaseModel):
     round_number: int
@@ -25,15 +35,20 @@ class BaseOptimizer:
            model_kwargs: additional args for model (eg, temperature)
         """
         self.model = model
+        self.reasoning_model = model
         self.model_kwargs = model_kwargs
         self.project_name = project_name
         self._history = []
+        self.experiment_config = None
 
     def optimize_prompt(
         self,
         dataset: Union[str, opik.Dataset],
         metric: metrics.BaseMetric,
         prompt: str,
+        input_key: str,
+        output_key: str,
+        experiment_config: Optional[Dict] = None,
         **kwargs
     ):
         """
@@ -43,10 +58,54 @@ class BaseOptimizer:
            dataset: Opik dataset name, or Opik dataset
            metric: instance of an Opik metric
            prompt: the prompt to optimize
+           input_key: input field of dataset
+           output_key: output field of dataset
+           experiment_config: Optional configuration for the experiment
+           **kwargs: Additional arguments for optimization
         """
         self.dataset = dataset
         self.metric = metric
         self.prompt = prompt
+        self.input_key = input_key
+        self.output_key = output_key
+        self.experiment_config = experiment_config
+
+    def evaluate_prompt(
+        self,
+        dataset: Union[str, opik.Dataset],
+        metric: metrics.BaseMetric,
+        prompt: str,
+        input_key: str,
+        output_key: str,
+        num_test: int = 10,
+        dataset_item_ids: Optional[List[str]] = None,
+        experiment_config: Optional[Dict] = None,
+        **kwargs
+    ) -> float:
+        """
+        Evaluate a prompt.
+
+        Args:
+           dataset: Opik dataset name, or Opik dataset
+           metric: instance of an Opik metric
+           prompt: the prompt to evaluate
+           input_key: input field of dataset
+           output_key: output field of dataset
+           num_test: number of items to test in the dataset
+           dataset_item_ids: Optional list of dataset item IDs to evaluate
+           experiment_config: Optional configuration for the experiment
+           **kwargs: Additional arguments for evaluation
+
+        Returns:
+            float: The evaluation score
+        """
+        self.dataset = dataset
+        self.metric = metric
+        self.prompt = prompt
+        self.input_key = input_key
+        self.output_key = output_key
+        self.experiment_config = experiment_config
+        return 0.0  # Base implementation returns 0
 
     def get_history(self) -> List[Dict[str, Any]]:
         """
@@ -65,3 +124,35 @@ class BaseOptimizer:
             round_data: Dictionary containing round details
         """
         self._history.append(round_data)
+
+    def _call_model(self, prompt: str, system_prompt: str = None, is_reasoning: bool = False) -> str:
+        """Call the model to get suggestions based on the meta-prompt."""
+        model = self.reasoning_model if is_reasoning else self.model
+        messages = []
+        
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+            logger.debug(f"Using custom system prompt: {system_prompt[:100]}...")
+        else:
+            messages.append({"role": "system", "content": "You are a helpful assistant."})
+            
+        messages.append({"role": "user", "content": prompt})
+        logger.debug(f"Calling model {model} with prompt: {prompt[:100]}...")
+
+        api_params = self.model_kwargs.copy()
+        api_params.update({
+            "model": model,
+            "messages": messages,
+            "metadata": {
+                "opik": {
+                    "current_span_data": get_current_span_data(),
+                    "tags": ["optimizer"],
+                },
+            },
+        })
+
+        response = litellm.completion(**api_params)
+        model_output = response.choices[0].message.content.strip()
+        logger.debug(f"Model response: {model_output[:100]}...")
+
+        return model_output

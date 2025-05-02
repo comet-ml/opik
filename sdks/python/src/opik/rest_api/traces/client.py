@@ -206,6 +206,7 @@ class TracesClient:
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
+        exclude: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TracePagePublic:
         """
@@ -226,6 +227,8 @@ class TracesClient:
         truncate : typing.Optional[bool]
 
         sorting : typing.Optional[str]
+
+        exclude : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -256,6 +259,7 @@ class TracesClient:
                 "filters": filters,
                 "truncate": truncate,
                 "sorting": sorting,
+                "exclude": exclude,
             },
             request_options=request_options,
         )
@@ -276,16 +280,17 @@ class TracesClient:
     def create_trace(
         self,
         *,
-        name: str,
         start_time: dt.datetime,
         id: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonNodeWrite] = OMIT,
         output: typing.Optional[JsonNodeWrite] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -294,14 +299,14 @@ class TracesClient:
 
         Parameters
         ----------
-        name : str
-
         start_time : dt.datetime
 
         id : typing.Optional[str]
 
         project_name : typing.Optional[str]
             If null, the default project is used
+
+        name : typing.Optional[str]
 
         end_time : typing.Optional[dt.datetime]
 
@@ -314,6 +319,8 @@ class TracesClient:
         tags : typing.Optional[typing.Sequence[str]]
 
         error_info : typing.Optional[ErrorInfoWrite]
+
+        last_updated_at : typing.Optional[dt.datetime]
 
         thread_id : typing.Optional[str]
 
@@ -335,7 +342,6 @@ class TracesClient:
             workspace_name="YOUR_WORKSPACE_NAME",
         )
         client.traces.create_trace(
-            name="name",
             start_time=datetime.datetime.fromisoformat(
                 "2024-01-15 09:30:00+00:00",
             ),
@@ -357,6 +363,7 @@ class TracesClient:
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfoWrite, direction="write"
                 ),
+                "last_updated_at": last_updated_at,
                 "thread_id": thread_id,
             },
             request_options=request_options,
@@ -403,7 +410,6 @@ class TracesClient:
         client.traces.create_traces(
             traces=[
                 TraceWrite(
-                    name="name",
                     start_time=datetime.datetime.fromisoformat(
                         "2024-01-15 09:30:00+00:00",
                     ),
@@ -532,6 +538,7 @@ class TracesClient:
         *,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonNode] = OMIT,
         output: typing.Optional[JsonNode] = OMIT,
@@ -553,6 +560,8 @@ class TracesClient:
 
         project_id : typing.Optional[str]
             If null and project_name not specified, Default Project is assumed
+
+        name : typing.Optional[str]
 
         end_time : typing.Optional[dt.datetime]
 
@@ -593,6 +602,7 @@ class TracesClient:
             json={
                 "project_name": project_name,
                 "project_id": project_id,
+                "name": name,
                 "end_time": end_time,
                 "input": input,
                 "output": output,
@@ -1586,6 +1596,7 @@ class AsyncTracesClient:
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
+        exclude: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TracePagePublic:
         """
@@ -1606,6 +1617,8 @@ class AsyncTracesClient:
         truncate : typing.Optional[bool]
 
         sorting : typing.Optional[str]
+
+        exclude : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1644,6 +1657,7 @@ class AsyncTracesClient:
                 "filters": filters,
                 "truncate": truncate,
                 "sorting": sorting,
+                "exclude": exclude,
             },
             request_options=request_options,
         )
@@ -1664,16 +1678,17 @@ class AsyncTracesClient:
     async def create_trace(
         self,
         *,
-        name: str,
         start_time: dt.datetime,
         id: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonNodeWrite] = OMIT,
         output: typing.Optional[JsonNodeWrite] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -1682,14 +1697,14 @@ class AsyncTracesClient:
 
         Parameters
         ----------
-        name : str
-
         start_time : dt.datetime
 
         id : typing.Optional[str]
 
         project_name : typing.Optional[str]
             If null, the default project is used
+
+        name : typing.Optional[str]
 
         end_time : typing.Optional[dt.datetime]
 
@@ -1702,6 +1717,8 @@ class AsyncTracesClient:
         tags : typing.Optional[typing.Sequence[str]]
 
         error_info : typing.Optional[ErrorInfoWrite]
+
+        last_updated_at : typing.Optional[dt.datetime]
 
         thread_id : typing.Optional[str]
 
@@ -1727,7 +1744,6 @@ class AsyncTracesClient:
 
         async def main() -> None:
             await client.traces.create_trace(
-                name="name",
                 start_time=datetime.datetime.fromisoformat(
                     "2024-01-15 09:30:00+00:00",
                 ),
@@ -1752,6 +1768,7 @@ class AsyncTracesClient:
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfoWrite, direction="write"
                 ),
+                "last_updated_at": last_updated_at,
                 "thread_id": thread_id,
             },
             request_options=request_options,
@@ -1802,7 +1819,6 @@ class AsyncTracesClient:
             await client.traces.create_traces(
                 traces=[
                     TraceWrite(
-                        name="name",
                         start_time=datetime.datetime.fromisoformat(
                             "2024-01-15 09:30:00+00:00",
                         ),
@@ -1950,6 +1966,7 @@ class AsyncTracesClient:
         *,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonNode] = OMIT,
         output: typing.Optional[JsonNode] = OMIT,
@@ -1971,6 +1988,8 @@ class AsyncTracesClient:
 
         project_id : typing.Optional[str]
             If null and project_name not specified, Default Project is assumed
+
+        name : typing.Optional[str]
 
         end_time : typing.Optional[dt.datetime]
 
@@ -2019,6 +2038,7 @@ class AsyncTracesClient:
             json={
                 "project_name": project_name,
                 "project_id": project_id,
+                "name": name,
                 "end_time": end_time,
                 "input": input,
                 "output": output,
