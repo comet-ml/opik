@@ -15,6 +15,7 @@ import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemsBatch;
+import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.PageColumns;
@@ -43,6 +44,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
+import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
@@ -97,6 +99,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.com.google.common.collect.ImmutableMap;
+import org.testcontainers.shaded.org.awaitility.Awaitility;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -107,6 +110,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -177,7 +181,7 @@ class DatasetsResourceTest {
             "createdBy", "lastUpdatedBy"};
     public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt", "lastCreatedExperimentAt",
-            "datasetItemsCount", "lastCreatedOptimizationAt"};
+            "datasetItemsCount", "lastCreatedOptimizationAt", "mostRecentOptimizationAt", "optimizationCount"};
 
     public static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -221,6 +225,7 @@ class DatasetsResourceTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private TransactionTemplate mySqlTemplate;
+    private OptimizationResourceClient optimizationResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplate mySqlTemplate) throws Exception {
@@ -245,6 +250,7 @@ class DatasetsResourceTest {
         datasetResourceClient = new DatasetResourceClient(client, baseURI);
         traceResourceClient = new TraceResourceClient(this.client, baseURI);
         spanResourceClient = new SpanResourceClient(this.client, baseURI);
+        optimizationResourceClient = new OptimizationResourceClient(client, baseURI, factory);
     }
 
     @AfterAll
@@ -1488,6 +1494,27 @@ class DatasetsResourceTest {
         }
 
         @Test
+        @DisplayName("when dataset has optimizations linked to it, then return dataset with optimizations summary")
+        void getDatasetById__whenDatasetHasOptimizationsLinkedToIt__thenReturnDatasetWithOptimizationSummary() {
+            var dataset = factory.manufacturePojo(Dataset.class);
+            createAndAssert(dataset);
+
+            Instant beforeCreateOptimizations = Instant.now();
+            int optimizationsCnt = 5;
+            for (int i = 0; i < optimizationsCnt; i++) {
+                var optimization = optimizationResourceClient.createPartialOptimization().datasetName(dataset.name())
+                        .build();
+                optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE);
+            }
+
+            var actualDataset = getAndAssertEquals(dataset.id(), dataset, TEST_WORKSPACE, API_KEY);
+
+            assertThat(actualDataset.optimizationCount()).isEqualTo(optimizationsCnt);
+            assertThat(actualDataset.mostRecentOptimizationAt()).isAfter(beforeCreateOptimizations);
+            assertThat(actualDataset.lastCreatedOptimizationAt()).isAfter(beforeCreateOptimizations);
+        }
+
+        @Test
         @DisplayName("when dataset has experiments linked to it, then return dataset with experiment summary")
         void getDatasetById__whenDatasetHasExperimentsLinkedToIt__thenReturnDatasetWithExperimentSummary() {
 
@@ -2127,6 +2154,41 @@ class DatasetsResourceTest {
                     arguments(110));
         }
 
+        @Test
+        @DisplayName("when searching by dataset with optimizations only and result having {} datasets, then return page")
+        void getDatasets__whenSearchingByDatasetWithOptimizationsOnlyAndResultHavingXDatasets__thenReturnPage() {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            List<Dataset> expectedDatasets = IntStream.range(0, 10)
+                    .parallel()
+                    .mapToObj(i -> createDatasetWithOptimization(apiKey, workspaceName))
+                    .sorted(Comparator.comparing(Dataset::id))
+                    .toList();
+
+            Awaitility.await()
+                    .atMost(Duration.ofSeconds(10))
+                    .untilAsserted(() -> {
+                        var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                                .queryParam("size", expectedDatasets.size())
+                                .queryParam("with_optimizations_only", true)
+                                .request()
+                                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                                .header(WORKSPACE_HEADER, workspaceName)
+                                .get();
+
+                        var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+
+                        findAndAssertPage(actualEntity, expectedDatasets.size(), expectedDatasets.size(), 1,
+                                expectedDatasets.reversed());
+                    });
+
+        }
+
         @ParameterizedTest
         @MethodSource
         @DisplayName("when searching by dataset with experiments only, name {}, and result having {} datasets, then return page")
@@ -2186,6 +2248,7 @@ class DatasetsResourceTest {
 
             Experiment experiment = experimentResourceClient.createPartialExperiment()
                     .datasetName(dataset.name())
+                    .type(ExperimentType.REGULAR)
                     .build();
 
             createAndAssert(
@@ -2199,6 +2262,19 @@ class DatasetsResourceTest {
                     .experimentCount(1L)
                     .lastCreatedExperimentAt(experiment.createdAt())
                     .mostRecentExperimentAt(experiment.createdAt())
+                    .build();
+        }
+
+        private Dataset createDatasetWithOptimization(String apiKey, String workspaceName) {
+            var dataset = factory.manufacturePojo(Dataset.class);
+            createAndAssert(dataset, apiKey, workspaceName);
+
+            var optimization = optimizationResourceClient.createPartialOptimization().datasetName(dataset.name())
+                    .build();
+            optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            return dataset.toBuilder()
+                    .optimizationCount(1L)
                     .build();
         }
 
@@ -2233,6 +2309,7 @@ class DatasetsResourceTest {
 
                         Experiment experiment = factory.manufacturePojo(Experiment.class).toBuilder()
                                 .datasetName(dataset.name())
+                                .type(null)
                                 .promptVersion(
                                         Experiment.PromptVersionLink.builder()
                                                 .promptId(promptVersion.promptId())
@@ -2248,6 +2325,19 @@ class DatasetsResourceTest {
                                 workspaceName);
 
                         experiment = getExperiment(apiKey, workspaceName, experiment);
+
+                        // Create trial experiment for the same dataset, should not be included in experiment count
+                        Experiment trial = factory.manufacturePojo(Experiment.class).toBuilder()
+                                .datasetName(dataset.name())
+                                .type(ExperimentType.TRIAL)
+                                .promptVersion(null)
+                                .promptVersions(null)
+                                .build();
+
+                        createAndAssert(
+                                trial,
+                                apiKey,
+                                workspaceName);
 
                         return dataset.toBuilder()
                                 .experimentCount(1L)
@@ -2296,6 +2386,7 @@ class DatasetsResourceTest {
 
                         Experiment experiment = factory.manufacturePojo(Experiment.class).toBuilder()
                                 .datasetName(dataset.name())
+                                .type(null)
                                 .promptVersion(null)
                                 .promptVersions(List.of(
                                         Experiment.PromptVersionLink.builder()

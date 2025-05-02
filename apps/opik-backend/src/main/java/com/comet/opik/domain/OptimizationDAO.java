@@ -8,7 +8,6 @@ import com.comet.opik.api.OptimizationUpdate;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
-import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
@@ -43,7 +42,13 @@ import static com.comet.opik.utils.JsonUtils.getStringOrDefault;
 @ImplementedBy(OptimizationDAOImpl.class)
 public interface OptimizationDAO {
 
-    Mono<Void> insert(Optimization experiment);
+    record OptimizationSummary(UUID datasetId, long optimizationCount, Instant mostRecentOptimizationAt) {
+        public static OptimizationSummary empty(UUID datasetId) {
+            return new OptimizationSummary(datasetId, 0, null);
+        }
+    }
+
+    Mono<Void> insert(Optimization optimization);
 
     Mono<Optimization> getById(UUID id);
 
@@ -56,6 +61,8 @@ public interface OptimizationDAO {
     Mono<Long> update(UUID id, OptimizationUpdate update);
 
     Mono<Optimization.OptimizationPage> find(int page, int size, @NonNull OptimizationSearchCriteria searchCriteria);
+
+    Flux<OptimizationSummary> findOptimizationSummaryByDatasetIds(Set<UUID> datasetIds);
 }
 
 @Singleton
@@ -319,6 +326,26 @@ class OptimizationDAOImpl implements OptimizationDAO {
             ;
             """;
 
+    private static final String FIND_OPTIMIZATION_SUMMARY_BY_DATASET_IDS = """
+            SELECT
+            	dataset_id,
+            	count(distinct id) as optimization_count,
+            	max(last_updated_at) as most_recent_optimization_at
+            FROM (
+                SELECT
+                    id,
+                    dataset_id,
+                    last_updated_at
+                FROM optimizations
+                WHERE dataset_id IN :dataset_ids
+            	AND workspace_id = :workspace_id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            GROUP BY dataset_id
+            ;
+            """;
+
     private final @NonNull ConnectionFactory connectionFactory;
 
     @Override
@@ -403,12 +430,32 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 });
     }
 
-    @WithSpan
+    @Override
     public Mono<Optimization.OptimizationPage> find(int page, int size,
             @NonNull OptimizationSearchCriteria searchCriteria) {
         return getCount(searchCriteria)
                 .flatMap(totalCount -> find(page, size, totalCount, searchCriteria))
                 .defaultIfEmpty(Optimization.OptimizationPage.empty(page, List.of()));
+    }
+
+    @Override
+    public Flux<OptimizationSummary> findOptimizationSummaryByDatasetIds(@NonNull Set<UUID> datasetIds) {
+        if (datasetIds.isEmpty()) {
+            return Flux.empty();
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    Statement statement = connection.createStatement(FIND_OPTIMIZATION_SUMMARY_BY_DATASET_IDS);
+
+                    statement.bind("dataset_ids", datasetIds);
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> new OptimizationSummary(
+                        row.get("dataset_id", UUID.class),
+                        row.get("optimization_count", Long.class),
+                        row.get("most_recent_optimization_at", Instant.class))));
     }
 
     private Mono<Long> getCount(@NotNull OptimizationSearchCriteria searchCriteria) {
