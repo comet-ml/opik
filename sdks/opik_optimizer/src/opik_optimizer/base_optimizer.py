@@ -6,6 +6,9 @@ import litellm
 from opik.evaluation import metrics
 from opik.opik_context import get_current_span_data
 from pydantic import BaseModel
+from ._throttle import RateLimiter, rate_limited
+
+limiter = RateLimiter(max_calls_per_second=15)
 
 # Don't use unsupported params:
 litellm.drop_params = True
@@ -13,6 +16,7 @@ litellm.drop_params = True
 # Set up logging:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 class OptimizationRound(BaseModel):
     round_number: int
@@ -49,7 +53,7 @@ class BaseOptimizer:
         input_key: str,
         output_key: str,
         experiment_config: Optional[Dict] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Optimize a prompt.
@@ -80,7 +84,7 @@ class BaseOptimizer:
         num_test: int = 10,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
-        **kwargs
+        **kwargs,
     ) -> float:
         """
         Evaluate a prompt.
@@ -125,31 +129,38 @@ class BaseOptimizer:
         """
         self._history.append(round_data)
 
-    def _call_model(self, prompt: str, system_prompt: str = None, is_reasoning: bool = False) -> str:
+    @rate_limited(limiter)
+    def _call_model(
+        self, prompt: str, system_prompt: str = None, is_reasoning: bool = False
+    ) -> str:
         """Call the model to get suggestions based on the meta-prompt."""
         model = self.reasoning_model if is_reasoning else self.model
         messages = []
-        
+
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
             logger.debug(f"Using custom system prompt: {system_prompt[:100]}...")
         else:
-            messages.append({"role": "system", "content": "You are a helpful assistant."})
-            
+            messages.append(
+                {"role": "system", "content": "You are a helpful assistant."}
+            )
+
         messages.append({"role": "user", "content": prompt})
         logger.debug(f"Calling model {model} with prompt: {prompt[:100]}...")
 
         api_params = self.model_kwargs.copy()
-        api_params.update({
-            "model": model,
-            "messages": messages,
-            "metadata": {
-                "opik": {
-                    "current_span_data": get_current_span_data(),
-                    "tags": ["optimizer"],
+        api_params.update(
+            {
+                "model": model,
+                "messages": messages,
+                "metadata": {
+                    "opik": {
+                        "current_span_data": get_current_span_data(),
+                        "tags": ["optimizer"],
+                    },
                 },
-            },
-        })
+            }
+        )
 
         response = litellm.completion(**api_params)
         model_output = response.choices[0].message.content.strip()
