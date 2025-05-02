@@ -7,10 +7,13 @@ pytest_codeblocks_skip: true
 
 # Get Started with OpenTelemetry
 
-Opik provides native support for OpenTelemetry (OTel), allowing you to instrument your ML/AI applications with distributed tracing. This guide will show you how to directly integrate OpenTelemetry SDKs with Opik.
+Opik provides native support for OpenTelemetry (OTel), allowing you to instrument
+your ML/AI applications with distributed tracing. This guide will show you how
+to directly integrate OpenTelemetry SDKs with Opik.
 
 <Note>
-OpenTelemetry integration in Opik currently supports HTTP transport. We're actively working on expanding the feature set - stay tuned for updates!
+  OpenTelemetry integration in Opik currently supports HTTP transport. We're actively working on expanding the feature
+  set - stay tuned for updates!
 </Note>
 
 ## OpenTelemetry Endpoint Configuration
@@ -19,35 +22,57 @@ OpenTelemetry integration in Opik currently supports HTTP transport. We're activ
 
 To start sending traces to Opik, configure your OpenTelemetry exporter with one of these endpoints:
 
-```bash
-# For Comet-hosted installations
-export OTEL_EXPORTER_OTLP_ENDPOINT="https://<COMET-SERVER>/api/v1/private/otel"
+<Tabs>
+<Tab title="Opik Cloud">
+
+```bash wordWrap
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://www.comet.com/opik/api/v1/private/otel"
 export OTEL_EXPORTER_OTLP_HEADERS="Authorization=<your-api-key>,projectName=<your-project-name>,Comet-Workspace=<your-workspace-name>"
+```
 
-# For standalone or self-hosted Opik
-export OTEL_EXPORTER_OTLP_ENDPOINT="http://<YOUR-OPIK-INSTANCE>/api/v1/private/otel"
+</Tab>
+<Tab title="Self-hosted deployment">
 
-# For localhost
+```bash wordWrap
 export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:5173/api/v1/private/otel"
 ```
 
+</Tab>
+<Tab title="Enterprise deployment">
+
+```bash wordWrap
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://<comet deployment url>/opik/api/v1/private/otel"
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=<your-api-key>,projectName=<your-project-name>,Comet-Workspace=<your-workspace-name>"
+```
+
+</Tab>
+</Tabs>
+
 ### Signal-Specific Endpoint
 
-If your OpenTelemetry setup requires signal-specific configuration, you can use the traces endpoint. This is particularly useful when different signals (traces, metrics, logs) need to be sent to different endpoints:
+If your OpenTelemetry setup requires signal-specific configuration, you can use
+the traces endpoint. This is particularly useful when different signals (traces,
+metrics, logs) need to be sent to different endpoints:
 
-```bash
+```bash wordWrap
 export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="http://<YOUR-OPIK-INSTANCE>/api/v1/private/otel/v1/traces"
 ```
 
 ## Custom via OpenTelemetry SDKs
 
-You can use any OpenTelemetry SDK to send traces directly to Opik. OpenTelemetry provides SDKs for many languages (C++, .NET, Erlang/Elixir, Go, Java, JavaScript, PHP, Python, Ruby, Rust, Swift). This extends Opik's language support beyond the official SDKs (Python and TypeScript). For more instructions, visit the [OpenTelemetry documentation](https://opentelemetry.io/docs/languages/).
+You can use any OpenTelemetry SDK to send traces directly to Opik. OpenTelemetry
+provides SDKs for many languages (C++, .NET, Erlang/Elixir, Go, Java, JavaScript,
+PHP, Python, Ruby, Rust, Swift). This extends Opik's language support beyond the
+official SDKs (Python and TypeScript). For more instructions, visit the
+[OpenTelemetry documentation](https://opentelemetry.io/docs/languages/).
 
 Here's a Python example showing how to set up OpenTelemetry with Opik:
 
-```python
+```python wordWrap
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+    OTLPSpanExporter
+)
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
@@ -71,3 +96,9 @@ processor = BatchSpanProcessor(
 )
 provider.add_span_processor(processor)
 trace.set_tracer_provider(provider)
+```
+
+<Warning>
+  Make sure to import the `http` trace exporter (`opentelemetry.exporter.otlp.proto.http.trace_exporter`), if you use
+  the GRPC exporter you will face errors.
+</Warning>
