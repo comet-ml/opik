@@ -2376,7 +2376,7 @@ class ExperimentsResourceTest {
 
             assertThat(actualScores)
                     .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
-                            .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                            .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                             .build())
                     .isEqualTo(expectedScores);
 
