@@ -24,13 +24,12 @@ from dspy.teleprompt.utils import (
     set_signature,
 )
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-formatter = logging.Formatter("%(message)s")
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+
+class Logger():
+    def info(self, *args, **kwargs):
+        print(*args)
+
+logger = Logger()
 
 # Constants
 BOOTSTRAPPED_FEWSHOT_EXAMPLES_IN_CONTEXT = 3
