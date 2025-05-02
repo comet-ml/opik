@@ -84,7 +84,7 @@ class OpikTracer:
 
         # remove the custom metadata with opik usage we added
         if output is not None:
-            adk_decorators.pop_opik_usage(**output)
+            llm_response_wrapper.pop_llm_usage_data(**output)
 
         self.trace_data.update(output=output).init_end_time()
 
