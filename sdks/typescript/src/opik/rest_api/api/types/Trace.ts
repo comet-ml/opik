@@ -9,7 +9,7 @@ export interface Trace {
     /** If null, the default project is used */
     projectName?: string;
     projectId?: string;
-    name: string;
+    name?: string;
     startTime: Date;
     endTime?: Date;
     input?: OpikApi.JsonNode;
