@@ -22,8 +22,9 @@ import {
   GROUPING_COLUMN,
 } from "@/constants/grouping";
 
-// export const GROUP_SORTING = [{ id: "last_created_optimization_at", desc: true }]; // TODO lala
-export const GROUP_SORTING = [{ id: "last_created_experiment_at", desc: true }];
+export const GROUP_SORTING = [
+  { id: "last_created_optimization_at", desc: true },
+];
 
 export type GroupedOptimization = {
   dataset: Dataset;

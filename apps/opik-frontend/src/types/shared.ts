@@ -23,8 +23,6 @@ export const COLUMN_CREATED_AT_ID = "created_at";
 
 export const COLUMN_GUARDRAIL_STATISTIC_ID = "guardrails_failed_count";
 
-export const EXPERIMENT_ITEM_OUTPUT_PREFIX = "output";
-
 export enum COLUMN_TYPE {
   string = "string",
   number = "number",

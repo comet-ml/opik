@@ -26,9 +26,9 @@ import { Experiment } from "@/types/datasets";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { OPTIMIZATION_METADATA_EXCLUDED_KEY } from "@/constants/experiments";
 
 const COLUMNS_WIDTH_KEY = "compare-trials-config-columns-width";
-export const OPTIMIZATION_EXCLUDED_KEY = "prompt_template";
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: ["name"],
@@ -101,7 +101,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     >((acc, experiment) => {
       acc[experiment.id] = isObject(experiment.metadata)
         ? flattie(
-            omit(experiment.metadata, [OPTIMIZATION_EXCLUDED_KEY]),
+            omit(experiment.metadata, [OPTIMIZATION_METADATA_EXCLUDED_KEY]),
             ".",
             true,
           )

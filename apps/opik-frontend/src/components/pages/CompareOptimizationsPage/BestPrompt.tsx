@@ -5,6 +5,7 @@ import isUndefined from "lodash/isUndefined";
 import isObject from "lodash/isObject";
 import get from "lodash/get";
 
+import { OPTIMIZATION_PROMPT_KEY } from "@/constants/experiments";
 import useAppStore from "@/store/AppStore";
 import { Experiment } from "@/types/datasets";
 import { Optimization } from "@/types/optimizations";
@@ -53,7 +54,7 @@ const BestPrompt: React.FC<BestPromptProps> = ({
   }, [experiment.id, scoreMap]);
 
   const prompt = useMemo(() => {
-    const val = get(experiment, "metadata.prompt_template", "-"); // TODO lala clarify with SDK
+    const val = get(experiment.metadata ?? {}, OPTIMIZATION_PROMPT_KEY, "-");
 
     return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
   }, [experiment]);

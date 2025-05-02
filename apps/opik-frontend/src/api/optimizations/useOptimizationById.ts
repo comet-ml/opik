@@ -14,21 +14,7 @@ export const getOptimizationById = async (
     signal,
   });
 
-  return {
-    id: optimizationId,
-    name: "Some optimization from BE",
-    dataset_id: data?.dataset_id,
-    dataset_name: data?.dataset_name,
-    metadata: {},
-    feedback_scores: [{ name: "levenshtein_ratio_metric", value: 0.92 }],
-    objective_name: "levenshtein_ratio_metric",
-    num_trials: 25,
-    status: "running",
-    created_at: data?.created_at,
-    created_by: data?.created_by,
-    last_updated_at: data?.last_updated_at,
-    last_updated_by: data?.last_updated_by,
-  } as Optimization;
+  return data;
 };
 
 type UseOptimizationByIdParams = {

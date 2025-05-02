@@ -22,8 +22,7 @@ export const PROMPTS_REST_ENDPOINT = "/v1/private/prompts/";
 export const PROVIDER_KEYS_REST_ENDPOINT = "/v1/private/llm-provider-key/";
 export const AUTOMATIONS_REST_ENDPOINT = "/v1/private/automations/";
 export const ATTACHMENTS_REST_ENDPOINT = "/v1/private/attachment/";
-// export const OPTIMIZATIONS_REST_ENDPOINT = "/v1/private/optimizations/"; // TODO lala
-export const OPTIMIZATIONS_REST_ENDPOINT = "/v1/private/experiments/";
+export const OPTIMIZATIONS_REST_ENDPOINT = "/v1/private/optimizations/";
 
 export const COMPARE_EXPERIMENTS_KEY = "compare-experiments";
 export const SPANS_KEY = "spans";

@@ -39,7 +39,7 @@ export const getOptimizationsList = async (
       workspace_name: workspaceName, // we just need it to reset the cash in case workspace is changed
       ...(isBoolean(datasetDeleted) && { dataset_deleted: datasetDeleted }),
       ...(search && { name: search }),
-      ...(datasetId && { datasetId }),
+      ...(datasetId && { dataset_id: datasetId }),
       size,
       page,
     },

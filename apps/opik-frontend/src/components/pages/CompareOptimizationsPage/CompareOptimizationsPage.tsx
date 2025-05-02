@@ -19,6 +19,11 @@ import {
   ColumnData,
   ROW_HEIGHT,
 } from "@/types/shared";
+import {
+  OPTIMIZATION_EXAMPLES_KEY,
+  OPTIMIZATION_PROMPT_KEY,
+  STATUS_TO_VARIANT_MAP,
+} from "@/constants/experiments";
 import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import { formatDate } from "@/lib/date";
 import { toString } from "@/lib/utils";
@@ -48,7 +53,6 @@ import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackSc
 import BestPrompt from "@/components/pages/CompareOptimizationsPage/BestPrompt";
 import OptimizationProgressChartContainer from "@/components/pages/CompareOptimizationsPage/OptimizationProgressChartContainer";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
-import { STATUS_TO_VARIANT_MAP } from "@/constants/shared";
 
 const REFETCH_INTERVAL = 30000;
 const MAX_EXPERIMENTS_LOADED = 1000;
@@ -147,8 +151,7 @@ const CompareOptimizationsPage: React.FC = () => {
   } = useExperimentsList(
     {
       workspaceName,
-      datasetId: optimization?.dataset_id, // TODO lala delete
-      // optimizationId: optimizationId,  // TODO lala add
+      optimizationId: optimizationId,
       search: search!,
       sorting: sortedColumns.map((column) => {
         if (column.id === "objective_name") {
@@ -159,13 +162,12 @@ const CompareOptimizationsPage: React.FC = () => {
         }
         return column;
       }),
-      // types: [EXPERIMENT_TYPE.TRIAL, EXPERIMENT_TYPE.MINI_BATCH],  // TODO lala add
+      types: [EXPERIMENT_TYPE.TRIAL, EXPERIMENT_TYPE.MINI_BATCH],
       page: 1,
       size: MAX_EXPERIMENTS_LOADED,
     },
     {
       placeholderData: keepPreviousData,
-      enabled: !!optimization?.dataset_id, // TODO lala delete
       refetchInterval: REFETCH_INTERVAL,
     },
   );
@@ -257,7 +259,7 @@ const CompareOptimizationsPage: React.FC = () => {
         type: COLUMN_TYPE.string,
         size: 400,
         accessorFn: (row) => {
-          const val = get(row, "metadata.prompt_template", "-"); // TODO lala clarify with SDK
+          const val = get(row.metadata ?? {}, OPTIMIZATION_PROMPT_KEY, "-");
 
           return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
         },
@@ -268,7 +270,7 @@ const CompareOptimizationsPage: React.FC = () => {
         type: COLUMN_TYPE.string,
         size: 400,
         accessorFn: (row) => {
-          const val = get(row, "metadata.training", "-"); // TODO lala clarify with SDK
+          const val = get(row.metadata ?? {}, OPTIMIZATION_EXAMPLES_KEY, "-");
 
           return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
         },

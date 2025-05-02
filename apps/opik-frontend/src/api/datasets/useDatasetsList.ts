@@ -41,8 +41,7 @@ const getDatasetsList = async (
         with_experiments_only: withExperimentsOnly,
       }),
       ...(withOptimizationsOnly && {
-        // with_optimizations_only: withOptimizationsOnly, TODO lala
-        with_experiments_only: withOptimizationsOnly,
+        with_optimizations_only: withOptimizationsOnly,
       }),
       ...processSorting(sorting),
       ...(search && { name: search }),

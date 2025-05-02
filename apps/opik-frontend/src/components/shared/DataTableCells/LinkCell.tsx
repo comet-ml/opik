@@ -13,7 +13,7 @@ type CustomMeta<TData> = {
   callback: (row: TData) => void;
   asId: boolean;
 };
-// TODO lala jump on trials compare page
+
 const LinkCell = <TData,>(context: CellContext<TData, unknown>) => {
   const { custom } = context.column.columnDef.meta ?? {};
   const { callback, asId } = (custom ?? {}) as CustomMeta<TData>;

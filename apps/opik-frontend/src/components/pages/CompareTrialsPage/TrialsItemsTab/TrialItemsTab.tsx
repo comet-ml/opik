@@ -20,9 +20,9 @@ import {
   COLUMN_TYPE,
   ColumnData,
   DynamicColumn,
-  EXPERIMENT_ITEM_OUTPUT_PREFIX,
   ROW_HEIGHT,
 } from "@/types/shared";
+import { EXPERIMENT_ITEM_OUTPUT_PREFIX } from "@/constants/experiments";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";

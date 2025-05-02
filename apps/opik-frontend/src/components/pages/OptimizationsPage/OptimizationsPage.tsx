@@ -92,22 +92,13 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
     label: "Best score",
     type: COLUMN_TYPE.numberDictionary,
     accessorFn: (row) =>
-      getFeedbackScore(
-        row.feedback_scores ?? [],
-        row.objective_name ?? "levenshtein_ratio_metric",
-      ), // TODO lala delete this
+      getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
     cell: FeedbackScoreTagCell as never,
   },
   {
     id: "status",
     label: "Status",
     type: COLUMN_TYPE.string,
-    accessorFn: () =>
-      Math.random() > 0.05
-        ? "running"
-        : Math.random() > 0.5
-          ? "completed"
-          : "cancelled", // TODO lala delete this
     cell: OptimizationStatusCell as never,
   },
 ];
