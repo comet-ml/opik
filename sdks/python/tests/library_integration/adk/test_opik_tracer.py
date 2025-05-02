@@ -12,8 +12,9 @@ ADK_SERVER_PORT = 21345
 def _check_server_running(base_url: str, user_id: str, session_id: str) -> bool:
     try:
         url = f"{base_url}/apps/sample_agent/users/{user_id}/session/{session_id}"
-        response = requests.get(url)
+        response = requests.post(url)
         if response.status_code == 200:
+            print(response.json())
             return True
     except requests.exceptions.ConnectionError:
         return False
@@ -40,7 +41,12 @@ def api_server() -> Tuple[str]:
 
         yield base_url, user, session
 
-        print(proc.stdout.read())
+        if proc.stdout is not None:
+            print(proc.stdout.read())
+        if proc.stderr is not None:
+            print(proc.stderr.read())
+
+        proc.kill()
 
 
 def test_opik_tracer_with_sample_agent(api_server, fake_backend) -> None:

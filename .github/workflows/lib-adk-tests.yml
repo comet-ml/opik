@@ -13,7 +13,6 @@ env:
   OPIK_SENTRY_ENABLE: False
 on:
   workflow_call:
-  pull_request:
 
 jobs:
   tests:
