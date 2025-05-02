@@ -31,6 +31,19 @@ from .utils import (
 disk_cache_dir = os.path.expanduser("~/.litellm_cache")
 litellm.cache = Cache(type="disk", disk_cache_dir=disk_cache_dir)
 
+# Set up logging
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Configure LiteLLM logging
+litellm_logger = logging.getLogger("LiteLLM")
+litellm_logger.setLevel(logging.WARNING)  # Only show warnings and errors from LiteLLM
+
+# Configure HTTPX logging
+httpx_logger = logging.getLogger("httpx")
+httpx_logger.setLevel(logging.WARNING)  # Only show warnings and errors from HTTPX
+
 
 class MiproOptimizer(BaseOptimizer):
     def __init__(self, model, project_name: Optional[str] = None, **model_kwargs):
@@ -279,15 +292,19 @@ class MiproOptimizer(BaseOptimizer):
             tool_prompts = get_tool_prompts(
                 tool_names, state["react"]["signature"]["instructions"]
             )
+            best_prompt = prompt=state["react"]["signature"]["instructions"],
+            demos = [x.toDict() for x in state["react"]["demos"]]
         else:
             tool_prompts = None
+            best_prompt = state["signature"]["instructions"]
+            demos = [x.toDict() for x in state["demos"]]
 
         return OptimizationResult(
             optimizer="MiproOptimizer",
-            prompt=state["react"]["signature"]["instructions"],
+            prompt=best_prompt,
             tool_prompts=tool_prompts,
             score=score,
             metric_name=self.opik_metric.name,
-            demonstrations=[x.toDict() for x in state["react"]["demos"]],
+            demonstrations=demos,
             details={"program": self.best_programs[position]["program"]},
         )
