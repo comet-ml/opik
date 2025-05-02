@@ -15,7 +15,7 @@ export const TracePublic: core.serialization.ObjectSchema<serializers.TracePubli
     core.serialization.object({
         id: core.serialization.string().optional(),
         projectId: core.serialization.property("project_id", core.serialization.string().optional()),
-        name: core.serialization.string(),
+        name: core.serialization.string().optional(),
         startTime: core.serialization.property("start_time", core.serialization.date()),
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
         input: JsonNodePublic.optional(),
@@ -47,7 +47,7 @@ export declare namespace TracePublic {
     export interface Raw {
         id?: string | null;
         project_id?: string | null;
-        name: string;
+        name?: string | null;
         start_time: string;
         end_time?: string | null;
         input?: JsonNodePublic.Raw | null;

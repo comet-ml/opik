@@ -15,7 +15,7 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     id: core.serialization.string().optional(),
     projectName: core.serialization.property("project_name", core.serialization.string().optional()),
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
-    name: core.serialization.string(),
+    name: core.serialization.string().optional(),
     startTime: core.serialization.property("start_time", core.serialization.date()),
     endTime: core.serialization.property("end_time", core.serialization.date().optional()),
     input: JsonNode.optional(),
@@ -45,7 +45,7 @@ export declare namespace Trace {
         id?: string | null;
         project_name?: string | null;
         project_id?: string | null;
-        name: string;
+        name?: string | null;
         start_time: string;
         end_time?: string | null;
         input?: JsonNode.Raw | null;

@@ -27,6 +27,10 @@ export const Dataset: core.serialization.ObjectSchema<serializers.Dataset.Raw, O
             "last_created_experiment_at",
             core.serialization.date().optional(),
         ),
+        lastCreatedOptimizationAt: core.serialization.property(
+            "last_created_optimization_at",
+            core.serialization.date().optional(),
+        ),
     });
 
 export declare namespace Dataset {
@@ -43,5 +47,6 @@ export declare namespace Dataset {
         dataset_items_count?: number | null;
         most_recent_experiment_at?: string | null;
         last_created_experiment_at?: string | null;
+        last_created_optimization_at?: string | null;
     }
 }

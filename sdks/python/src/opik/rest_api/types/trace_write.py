@@ -16,7 +16,7 @@ class TraceWrite(UniversalBaseModel):
     If null, the default project is used
     """
 
-    name: str
+    name: typing.Optional[str] = None
     start_time: dt.datetime
     end_time: typing.Optional[dt.datetime] = None
     input: typing.Optional[JsonNodeWrite] = None
@@ -24,6 +24,7 @@ class TraceWrite(UniversalBaseModel):
     metadata: typing.Optional[JsonNodeWrite] = None
     tags: typing.Optional[typing.List[str]] = None
     error_info: typing.Optional[ErrorInfoWrite] = None
+    last_updated_at: typing.Optional[dt.datetime] = None
     thread_id: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:
