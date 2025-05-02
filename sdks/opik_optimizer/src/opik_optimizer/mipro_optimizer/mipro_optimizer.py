@@ -156,6 +156,20 @@ class MiproOptimizer(BaseOptimizer):
             all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
             dataset_item_ids = random.sample(all_ids, num_test)
 
+        experiment_config = experiment_config or {}
+        experiment_config = {
+            **experiment_config,
+            **{
+                "optimizer": self.__class__.__name__,
+                "tools": (
+                    [f.__name__ for f in config.task.tools] if config.task.tools else []
+                ),
+                "metric": config.objective.metric.name,
+                "dataset": dataset.name,
+            },
+        }
+        # FIXME: add prompt, examples to experiment_config
+
         # Run evaluation with all metrics at once
         evaluation = evaluate(
             dataset=dataset,
@@ -243,13 +257,17 @@ class MiproOptimizer(BaseOptimizer):
         log_dir = os.path.expanduser("~/.opik-optimizer-checkpoints")
         os.makedirs(log_dir, exist_ok=True)
 
+        experiment_config = experiment_config or {}
         experiment_config = {
-            "optimizer": self.__class__.__name__,
-            "tools": [f.__name__ for f in self.tools],
-            "metric": metric.name,
-            "num_threads": self.num_threads,
-            "num_candidates": self.num_candidates,
-            "dataset": config.dataset.name,
+            **experiment_config,
+            **{
+                "optimizer": self.__class__.__name__,
+                "tools": [f.__name__ for f in self.tools],
+                "metric": metric.name,
+                "num_threads": self.num_threads,
+                "num_candidates": self.num_candidates,
+                "dataset": config.dataset.name,
+            },
         }
 
         # Initialize the optimizer:
