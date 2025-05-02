@@ -220,7 +220,10 @@ class MiproOptimizer(BaseOptimizer):
             self.input_key, self.output_key, self.prompt
         )
 
-        self.module = dspy.ReAct(self.data_signature, tools=self.tools)
+        if self.tools:
+            self.module = dspy.ReAct(self.data_signature, tools=self.tools)
+        else:
+            self.module = dspy.Predict(self.data_signature)
 
         # Convert the metric to a DSPy-compatible function
         self.metric_function = opik_metric_to_dspy(metric, self.output_key)
