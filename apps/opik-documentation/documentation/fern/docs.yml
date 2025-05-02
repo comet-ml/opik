@@ -138,6 +138,9 @@ navigation:
               - page: AIsuite
                 path: docs/tracing/integrations/aisuite.mdx
                 slug: aisuite
+              - page: Autogen
+                path: docs/tracing/integrations/autogen.mdx
+                slug: autogen
               - page: Anthropic
                 path: docs/tracing/integrations/anthropic.mdx
                 slug: anthropic
