@@ -19,8 +19,10 @@ class DatasetPublic(UniversalBaseModel):
     last_updated_by: typing.Optional[str] = None
     experiment_count: typing.Optional[int] = None
     dataset_items_count: typing.Optional[int] = None
+    optimization_count: typing.Optional[int] = None
     most_recent_experiment_at: typing.Optional[dt.datetime] = None
     last_created_experiment_at: typing.Optional[dt.datetime] = None
+    most_recent_optimization_at: typing.Optional[dt.datetime] = None
     last_created_optimization_at: typing.Optional[dt.datetime] = None
 
     if IS_PYDANTIC_V2:
