@@ -19,12 +19,17 @@ export const Dataset: core.serialization.ObjectSchema<serializers.Dataset.Raw, O
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
         experimentCount: core.serialization.property("experiment_count", core.serialization.number().optional()),
         datasetItemsCount: core.serialization.property("dataset_items_count", core.serialization.number().optional()),
+        optimizationCount: core.serialization.property("optimization_count", core.serialization.number().optional()),
         mostRecentExperimentAt: core.serialization.property(
             "most_recent_experiment_at",
             core.serialization.date().optional(),
         ),
         lastCreatedExperimentAt: core.serialization.property(
             "last_created_experiment_at",
+            core.serialization.date().optional(),
+        ),
+        mostRecentOptimizationAt: core.serialization.property(
+            "most_recent_optimization_at",
             core.serialization.date().optional(),
         ),
         lastCreatedOptimizationAt: core.serialization.property(
@@ -45,8 +50,10 @@ export declare namespace Dataset {
         last_updated_by?: string | null;
         experiment_count?: number | null;
         dataset_items_count?: number | null;
+        optimization_count?: number | null;
         most_recent_experiment_at?: string | null;
         last_created_experiment_at?: string | null;
+        most_recent_optimization_at?: string | null;
         last_created_optimization_at?: string | null;
     }
 }
