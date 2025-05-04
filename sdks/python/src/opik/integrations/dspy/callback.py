@@ -163,7 +163,9 @@ class OpikCallback(dspy_callback.BaseCallback):
             if self._context_storage.get_trace_data() == trace_data:
                 self._context_storage.set_trace_data(None)
 
-    def _update_with_graph(self, metadata, instance):
+    def _update_with_graph(
+        self, metadata: Dict[str, Any], instance: dspy.Module
+    ) -> None:
         if instance:
             graph = get_mermaid_graph(instance)
             if graph:
