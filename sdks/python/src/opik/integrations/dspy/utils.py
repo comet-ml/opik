@@ -30,7 +30,7 @@ def get_mermaid_graph(module: dspy.Module) -> str:
 
 
 def get_mermaid_arrows(
-    queue: List[dspy.Modules], current: Dict[str, Any], states: Dict[str, Any]
+    queue: List[dspy.Module], current: Dict[str, Any], states: Dict[str, Any]
 ) -> str:
     start = get_mermaid_state(current, states)
     arrows = []
