@@ -7,6 +7,8 @@ from opik import types, opik_context, context_storage
 from opik.api_objects import helpers, span, trace, opik_client
 from opik.decorator import error_info_collector
 
+from .utils import get_mermaid_graph
+
 SpanOrTraceData = Union[span.SpanData, trace.TraceData]
 
 
@@ -14,11 +16,16 @@ class OpikCallback(dspy_callback.BaseCallback):
     def __init__(
         self,
         project_name: Optional[str] = None,
+        module: Optional[dspy.Module] = None,
     ):
         self._map_call_id_to_span_data: Dict[str, span.SpanData] = {}
         self._map_call_id_to_trace_data: Dict[str, trace.TraceData] = {}
 
         self._origins_metadata = {"created_from": "dspy"}
+        try:
+            self._update_with_graph(self._origins_metadata, module)
+        except Exception:
+            pass
 
         self._context_storage = context_storage.OpikContextStorage()
 
@@ -129,7 +136,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         trace_data = trace.TraceData(
             name=instance.__class__.__name__,
             input=inputs,
-            metadata={"created_from": "dspy"},
+            metadata=self._origins_metadata,
             project_name=self._project_name,
         )
         self._map_call_id_to_trace_data[call_id] = trace_data
@@ -155,6 +162,19 @@ class OpikCallback(dspy_callback.BaseCallback):
 
             if self._context_storage.get_trace_data() == trace_data:
                 self._context_storage.set_trace_data(None)
+
+    def _update_with_graph(self, metadata, instance):
+        if instance:
+            graph = get_mermaid_graph(instance)
+            if graph:
+                metadata.update(
+                    {
+                        "_opik_graph_definition": {
+                            "format": "mermaid",
+                            "data": graph,
+                        }
+                    }
+                )
 
     def _end_span(
         self,
@@ -198,9 +218,11 @@ class OpikCallback(dspy_callback.BaseCallback):
         return span.SpanData(
             trace_id=trace_id,
             parent_span_id=parent_span_id,
-            name=instance.name
-            if hasattr(instance, "name")
-            else instance.__class__.__name__,
+            name=(
+                instance.name
+                if hasattr(instance, "name")
+                else instance.__class__.__name__
+            ),
             input=inputs,
             type=span_type,
             project_name=project_name,
