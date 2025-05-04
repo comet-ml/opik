@@ -129,6 +129,9 @@ class MiproOptimizer(BaseOptimizer):
                         **self.model_kwargs,
                     )
                     return response.choices[0].message.content
+            elif isinstance(prompt, dspy.Module):
+                result = prompt(**{input_key: input})
+                return getattr(result, output_key)
             else:
                 raise Exception("I don't know how to evaluate this prompt: %r" % prompt)
 
