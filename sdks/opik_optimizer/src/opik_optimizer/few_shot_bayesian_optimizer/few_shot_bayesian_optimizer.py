@@ -10,6 +10,21 @@ from opik_optimizer.optimization_config import mappers
 from opik_optimizer import optimization_dsl, base_optimizer
 from . import prompt_parameter
 from . import prompt_templates
+from .._throttle import RateLimiter, rate_limited
+
+limiter = RateLimiter(max_calls_per_second=15)
+
+
+@rate_limited(limiter)
+def _call_model(client, model, messages, seed, **model_kwargs):
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        seed=seed,
+        **model_kwargs,
+    )
+    return response
+
 
 class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     def __init__(
@@ -41,21 +56,21 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self, dataset: List[Dict[str, Any]], train_ratio: float
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Split the dataset into training and validation sets.
-        
+
         Args:
             dataset: List of dataset items
             train_ratio: Ratio of items to use for training
-            
+
         Returns:
             Tuple of (train_set, validation_set)
         """
         if not dataset:
             return [], []
-            
+
         random.seed(self.seed)
         dataset = dataset.copy()
         random.shuffle(dataset)
-        
+
         split_idx = int(len(dataset) * train_ratio)
         return dataset[:split_idx], dataset[split_idx:]
 
@@ -63,11 +78,14 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self,
         config: optimization_dsl.OptimizationConfig,
         n_trials: int = 10,
+        experiment_config: Optional[Dict] = None,
     ) -> optimization_result.OptimizationResult:
         random.seed(self.seed)
-        
+
         if not config.task.use_chat_prompt:
-            raise ValueError("Few-shot Bayesian optimization is only supported for chat prompts.")
+            raise ValueError(
+                "Few-shot Bayesian optimization is only supported for chat prompts."
+            )
 
         opik_dataset: opik.Dataset = config.dataset
 
@@ -83,6 +101,17 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         #     dataset, train_ratio=1.0
         # )  # TODO: make configurable
 
+        experiment_config = experiment_config or {}
+        experiment_config = {
+            **experiment_config,
+            **{
+                "optimizer": self.__class__.__name__,
+                "metric": config.objective.metric.name,
+                "dataset": opik_dataset.name,
+                "configuration": {},
+            },
+        }
+
         def optimization_objective(trial: optuna.Trial) -> float:
             n_examples = trial.suggest_int(
                 "n_examples", self.min_examples, self.max_examples
@@ -93,15 +122,21 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 for i in range(n_examples)
             ]
 
+            instruction = config.task.instruction_prompt
+            demo_examples = [dataset[idx] for idx in example_indices]
+
             param = prompt_parameter.ChatPromptParameter(
                 name="few_shot_examples_chat_prompt",
-                instruction=config.task.instruction_prompt,
+                instruction=instruction,
                 task_input_parameters=config.task.input_dataset_fields,
                 task_output_parameter=config.task.output_dataset_field,
-                demo_examples=[dataset[idx] for idx in example_indices],
+                demo_examples=demo_examples,
             )
 
             llm_task = self._build_task_from_prompt_template(param.as_template())
+
+            experiment_config["configuration"]["prompt"] = instruction
+            experiment_config["configuration"]["examples"] = demo_examples
 
             score = task_evaluator.evaluate(
                 dataset=opik_dataset,
@@ -110,6 +145,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 evaluated_task=llm_task,
                 num_threads=self.n_threads,
                 project_name=self.project_name,
+                experiment_config=experiment_config,
             )
 
             trial.set_user_attr("score", score)
@@ -122,8 +158,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         best_trial = study.best_trial
         best_n_examples = best_trial.params["n_examples"]
 
-        best_param: prompt_parameter.ChatPromptParameter = best_trial.user_attrs["param"]
-    
+        best_param: prompt_parameter.ChatPromptParameter = best_trial.user_attrs[
+            "param"
+        ]
+
         return optimization_result.OptimizationResult(
             prompt=best_param.as_template().format(),
             score=best_trial.user_attrs["score"],
@@ -141,7 +179,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             best_details=None,
             all_results=None,
             history=[],
-            metric=None
+            metric=None,
         )
 
     def evaluate_prompt(
@@ -150,14 +188,35 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         dataset: opik.Dataset,
         metric_config: optimization_dsl.MetricConfig,
         dataset_item_ids: Optional[List[str]] = None,
+        experiment_config: Optional[Dict] = None,
     ) -> float:
 
         # Ensure prompt is correctly formatted
-        if not all(isinstance(item, dict) and "role" in item and "content" in item for item in prompt):
-            raise ValueError("Prompt must be a list of dictionaries with 'role' and 'content' keys.")
+        if not all(
+            isinstance(item, dict) and "role" in item and "content" in item
+            for item in prompt
+        ):
+            raise ValueError(
+                "Prompt must be a list of dictionaries with 'role' and 'content' keys."
+            )
 
-        template = prompt_templates.ChatPromptTemplate(prompt, validate_placeholders=False)
+        template = prompt_templates.ChatPromptTemplate(
+            prompt, validate_placeholders=False
+        )
         llm_task = self._build_task_from_prompt_template(template)
+
+        experiment_config = experiment_config or {}
+        experiment_config = {
+            **experiment_config,
+            **{
+                "optimizer": self.__class__.__name__,
+                "metric": metric_config.metric.name,
+                "dataset": dataset.name,
+                "configuration": {
+                    "examples": prompt,
+                },
+            },
+        }
 
         score = task_evaluator.evaluate(
             dataset=dataset,
@@ -166,16 +225,19 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             evaluated_task=llm_task,
             num_threads=self.n_threads,
             project_name=self.project_name,
+            experiment_config=experiment_config,
         )
 
         return score
-    
 
-    def _build_task_from_prompt_template(self, template: prompt_templates.ChatPromptTemplate):
+    def _build_task_from_prompt_template(
+        self, template: prompt_templates.ChatPromptTemplate
+    ):
         def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, Any]:
             prompt_ = template.format(**dataset_item)
 
-            response = self._openai_client.chat.completions.create(
+            response = _call_model(
+                client=self._openai_client,
                 model=self.model,
                 messages=prompt_,
                 seed=self.seed,
@@ -185,7 +247,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             return {
                 mappers.EVALUATED_LLM_TASK_OUTPUT: response.choices[0].message.content
             }
-        
+
         return llm_task
 
 

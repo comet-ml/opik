@@ -641,6 +641,7 @@ class ExperimentDAO {
         Optional.ofNullable(criteria.optimizationId())
                 .ifPresent(optimizationId -> template.add("optimization_id", optimizationId));
         Optional.ofNullable(criteria.types())
+                .filter(CollectionUtils::isNotEmpty)
                 .ifPresent(types -> template.add("types", types));
         return template;
     }
@@ -657,6 +658,7 @@ class ExperimentDAO {
         Optional.ofNullable(criteria.optimizationId())
                 .ifPresent(optimizationId -> statement.bind("optimization_id", optimizationId));
         Optional.ofNullable(criteria.types())
+                .filter(CollectionUtils::isNotEmpty)
                 .ifPresent(types -> statement.bind("types", types));
         if (!isCount) {
             statement.bind("entity_type", criteria.entityType().getType());

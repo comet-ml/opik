@@ -33,6 +33,8 @@ class ExperimentsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         dataset_id: typing.Optional[str] = None,
+        optimization_id: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         dataset_deleted: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
@@ -49,6 +51,10 @@ class ExperimentsClient:
         size : typing.Optional[int]
 
         dataset_id : typing.Optional[str]
+
+        optimization_id : typing.Optional[str]
+
+        types : typing.Optional[str]
 
         name : typing.Optional[str]
 
@@ -83,6 +89,8 @@ class ExperimentsClient:
                 "page": page,
                 "size": size,
                 "datasetId": dataset_id,
+                "optimization_id": optimization_id,
+                "types": types,
                 "name": name,
                 "dataset_deleted": dataset_deleted,
                 "prompt_id": prompt_id,
@@ -668,6 +676,8 @@ class AsyncExperimentsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         dataset_id: typing.Optional[str] = None,
+        optimization_id: typing.Optional[str] = None,
+        types: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         dataset_deleted: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
@@ -684,6 +694,10 @@ class AsyncExperimentsClient:
         size : typing.Optional[int]
 
         dataset_id : typing.Optional[str]
+
+        optimization_id : typing.Optional[str]
+
+        types : typing.Optional[str]
 
         name : typing.Optional[str]
 
@@ -726,6 +740,8 @@ class AsyncExperimentsClient:
                 "page": page,
                 "size": size,
                 "datasetId": dataset_id,
+                "optimization_id": optimization_id,
+                "types": types,
                 "name": name,
                 "dataset_deleted": dataset_deleted,
                 "prompt_id": prompt_id,
