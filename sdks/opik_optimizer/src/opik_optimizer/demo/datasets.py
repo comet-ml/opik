@@ -354,7 +354,7 @@ def _load_truthful_qa(test_mode: bool = False) -> List[Dict]:
                 "correct_answer": gen_item["best_answer"],
                 "input": gen_item["question"],  # For AnswerRelevance metric
                 "output": gen_item["best_answer"],  # For output_key requirement
-                "context": gen_item.get("context", ""),  # For context requirement
+                "context": gen_item.get("source", ""),  # Use source as context
                 "type": "TEXT",  # Set type to TEXT as required by Opik
                 "category": gen_item["category"],
                 "source": "MANUAL",  # Set source to MANUAL as required by Opik
