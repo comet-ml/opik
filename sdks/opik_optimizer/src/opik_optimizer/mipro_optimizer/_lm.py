@@ -69,6 +69,12 @@ class LM(BaseLM):
             finetuning_model: The model to finetune. In some providers, the models available for finetuning is different
                 from the models available for inference.
         """
+        # Initialize DSPy settings if not already set
+        if not hasattr(dspy.settings, 'caller_predict'):
+            dspy.settings.caller_predict = None
+        if not hasattr(dspy.settings, 'send_stream'):
+            dspy.settings.send_stream = None
+
         # Remember to update LM.copy() if you modify the constructor!
         self.model = model
         self.model_type = model_type
