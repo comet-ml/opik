@@ -33,6 +33,7 @@ class DatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         with_experiments_only: typing.Optional[bool] = None,
+        with_optimizations_only: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
@@ -48,6 +49,8 @@ class DatasetsClient:
         size : typing.Optional[int]
 
         with_experiments_only : typing.Optional[bool]
+
+        with_optimizations_only : typing.Optional[bool]
 
         prompt_id : typing.Optional[str]
 
@@ -80,6 +83,7 @@ class DatasetsClient:
                 "page": page,
                 "size": size,
                 "with_experiments_only": with_experiments_only,
+                "with_optimizations_only": with_optimizations_only,
                 "prompt_id": prompt_id,
                 "name": name,
                 "sorting": sorting,
@@ -918,6 +922,7 @@ class AsyncDatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         with_experiments_only: typing.Optional[bool] = None,
+        with_optimizations_only: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
@@ -933,6 +938,8 @@ class AsyncDatasetsClient:
         size : typing.Optional[int]
 
         with_experiments_only : typing.Optional[bool]
+
+        with_optimizations_only : typing.Optional[bool]
 
         prompt_id : typing.Optional[str]
 
@@ -973,6 +980,7 @@ class AsyncDatasetsClient:
                 "page": page,
                 "size": size,
                 "with_experiments_only": with_experiments_only,
+                "with_optimizations_only": with_optimizations_only,
                 "prompt_id": prompt_id,
                 "name": name,
                 "sorting": sorting,
