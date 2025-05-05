@@ -537,6 +537,25 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     public static final String CLICKHOUSE = "Clickhouse";
 
     private static final String SELECT_DATASET_EXPERIMENT_ITEMS_COLUMNS_BY_DATASET_ID = """
+                WITH dataset_item_final AS (
+                    SELECT
+                        id
+                    FROM dataset_items
+                    WHERE workspace_id = :workspace_id
+                    AND dataset_id = :dataset_id
+                    ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ), experiment_items_final AS (
+                    SELECT DISTINCT
+                        ei.trace_id,
+                        ei.dataset_item_id
+                    FROM experiment_items ei
+                    WHERE workspace_id = :workspace_id
+                    AND ei.dataset_item_id IN (SELECT id FROM dataset_item_final)
+                    <if(experiment_ids)> AND ei.experiment_id IN :experiment_ids <endif>
+                    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
                 SELECT
                     arrayFold(
                         (acc, x) -> mapFromArrays(
@@ -558,36 +577,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         ),
                         CAST(map(), 'Map(String, Array(String))')
                     ) AS columns
-                FROM (
-                    SELECT
-                        id
-                    FROM dataset_items
-                    WHERE workspace_id = :workspace_id
-                    AND dataset_id = :dataset_id
-                    ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) as di
-                INNER JOIN (
-                    SELECT
-                        ei.id,
-                        ei.trace_id,
-                        ei.dataset_item_id
-                    FROM experiment_items ei
-                    WHERE workspace_id = :workspace_id
-                    <if(experiment_ids)>
-                    AND experiment_id in :experiment_ids
-                    <endif>
-                    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) as ei ON ei.dataset_item_id = di.id
+                FROM dataset_item_final as di
+                INNER JOIN experiment_items_final as ei ON ei.dataset_item_id = di.id
                 INNER JOIN (
                     SELECT
                         id,
                         output
-                    FROM traces
+                    FROM traces final
                     WHERE workspace_id = :workspace_id
-                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
+                    AND id IN (SELECT trace_id FROM experiment_items_final)
                 ) as t ON t.id = ei.trace_id
                 ;
             """;
