@@ -285,12 +285,14 @@ EOF
 DEBUG_MODE=false
 # Default: no guardrails
 GUARDRAILS_ENABLED=false
+export TOGGLE_GUARDRAILS_ENABLED=false
 export OPIK_FRONTEND_FLAVOR=default
 
 # Check for guardrails flag first
 if [[ "$*" == *"--guardrails"* ]]; then
   GUARDRAILS_ENABLED=true
   export OPIK_FRONTEND_FLAVOR=guardrails
+  export TOGGLE_GUARDRAILS_ENABLED=true
   # Remove --guardrails from arguments
   set -- ${@/--guardrails/}
 fi

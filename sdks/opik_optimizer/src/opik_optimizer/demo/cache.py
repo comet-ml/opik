@@ -64,7 +64,7 @@ def _copy_cache(source_path, dest_path):
 
     source_cursor.execute(f"PRAGMA table_info(Cache)")
     columns_info = source_cursor.fetchall()
-    column_names = [info[1] for info in columns_info]
+    column_names = [info[1] for info in columns_info[1:]]  # Skip rowid
     placeholders = ", ".join(["?"] * len(column_names))
     columns_str = ", ".join(column_names)
 
@@ -72,6 +72,8 @@ def _copy_cache(source_path, dest_path):
     source_cursor.execute("SELECT * FROM Cache")
     records = source_cursor.fetchall()
     for record in records:
+        record = dict(record)
+        del record["rowid"]
         key_value = record["key"]
 
         dest_cursor.execute("SELECT 1 FROM Cache WHERE key = ?", (key_value,))
@@ -79,7 +81,8 @@ def _copy_cache(source_path, dest_path):
 
         if not existing_record:
             dest_cursor.execute(
-                f"INSERT INTO Cache ({columns_str}) VALUES ({placeholders})", record
+                f"INSERT INTO Cache ({columns_str}) VALUES ({placeholders})",
+                list(record.values()),
             )
             inserted_count += 1
 

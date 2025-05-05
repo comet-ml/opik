@@ -15,7 +15,9 @@ export interface DatasetPublic {
     lastUpdatedBy?: string;
     experimentCount?: number;
     datasetItemsCount?: number;
+    optimizationCount?: number;
     mostRecentExperimentAt?: Date;
     lastCreatedExperimentAt?: Date;
+    mostRecentOptimizationAt?: Date;
     lastCreatedOptimizationAt?: Date;
 }

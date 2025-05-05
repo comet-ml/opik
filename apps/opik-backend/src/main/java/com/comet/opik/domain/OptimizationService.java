@@ -50,6 +50,8 @@ public interface OptimizationService {
     Flux<DatasetLastOptimizationCreated> getMostRecentCreatedOptimizationFromDatasets(Set<UUID> datasetIds);
 
     Mono<Long> update(UUID commentId, OptimizationUpdate update);
+
+    Mono<Long> updateDatasetDeleted(Set<UUID> datasetIds);
 }
 
 @Singleton
@@ -80,7 +82,12 @@ class OptimizationServiceImpl implements OptimizationService {
     @WithSpan
     public Mono<Optimization.OptimizationPage> find(int page, int size,
             @NonNull OptimizationSearchCriteria searchCriteria) {
-        return optimizationDAO.find(page, size, searchCriteria);
+        return optimizationDAO.find(page, size, searchCriteria)
+                .flatMap(optimizationPage -> Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    return Mono.just(optimizationPage.toBuilder()
+                            .content(enrichOptimizations(optimizationPage.content(), workspaceId)).build());
+                }));
     }
 
     @Override
@@ -146,6 +153,15 @@ class OptimizationServiceImpl implements OptimizationService {
         return optimizationDAO.getById(id)
                 .switchIfEmpty(Mono.error(failWithNotFound("Optimization", id)))
                 .then(Mono.defer(() -> optimizationDAO.update(id, update)));
+    }
+
+    @Override
+    public Mono<Long> updateDatasetDeleted(@NonNull Set<UUID> datasetIds) {
+        if (datasetIds.isEmpty()) {
+            return Mono.empty();
+        }
+
+        return optimizationDAO.updateDatasetDeleted(datasetIds);
     }
 
     private Mono<UUID> handleCreateError(Throwable throwable, UUID id) {

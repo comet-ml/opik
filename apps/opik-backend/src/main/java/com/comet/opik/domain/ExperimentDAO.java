@@ -203,12 +203,11 @@ class ExperimentDAO {
                         avg(fs.value) AS avg_value
                     FROM (
                         SELECT
-                            experiment_id,
-                            groupArray(trace_id) AS trace_ids
+                            DISTINCT
+                                experiment_id,
+                                trace_id
                         FROM experiment_items_final
-                        GROUP BY experiment_id
                     ) as et
-                    ARRAY JOIN et.trace_ids AS trace_id
                     LEFT JOIN (
                         SELECT
                             name,
@@ -218,7 +217,7 @@ class ExperimentDAO {
                         WHERE workspace_id = :workspace_id
                         AND entity_type = 'trace'
                         AND entity_id IN (SELECT trace_id FROM experiment_items_final)
-                    ) fs ON fs.trace_id = trace_id
+                    ) fs ON fs.trace_id = et.trace_id
                     GROUP BY et.experiment_id, fs.name
                     HAVING length(fs.name) > 0
                 ) as fs_avg
@@ -642,6 +641,7 @@ class ExperimentDAO {
         Optional.ofNullable(criteria.optimizationId())
                 .ifPresent(optimizationId -> template.add("optimization_id", optimizationId));
         Optional.ofNullable(criteria.types())
+                .filter(CollectionUtils::isNotEmpty)
                 .ifPresent(types -> template.add("types", types));
         return template;
     }
@@ -658,6 +658,7 @@ class ExperimentDAO {
         Optional.ofNullable(criteria.optimizationId())
                 .ifPresent(optimizationId -> statement.bind("optimization_id", optimizationId));
         Optional.ofNullable(criteria.types())
+                .filter(CollectionUtils::isNotEmpty)
                 .ifPresent(types -> statement.bind("types", types));
         if (!isCount) {
             statement.bind("entity_type", criteria.entityType().getType());
