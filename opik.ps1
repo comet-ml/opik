@@ -305,11 +305,13 @@ function Get-VerifyCommand {
 $DEBUG_MODE = $false
 $GUARDRAILS_ENABLED = $false
 $env:OPIK_FRONTEND_FLAVOR = "default"
+$env:TOGGLE_GUARDRAILS_ENABLED = "false"
 
 # Check for guardrails in options
 if ($options -contains '--guardrails') {
     $GUARDRAILS_ENABLED = $true
     $env:OPIK_FRONTEND_FLAVOR = "guardrails"
+    $env:TOGGLE_GUARDRAILS_ENABLED = "true"
     $options = $options | Where-Object { $_ -ne '--guardrails' }
 }
 
