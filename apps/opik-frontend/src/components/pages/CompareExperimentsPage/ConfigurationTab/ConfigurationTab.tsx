@@ -11,9 +11,12 @@ import { flattie } from "flattie";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
-import CompareExperimentsHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentsHeader";
+import CompareExperimentsHeader from "@/components/pages-shared/experiments/CompareExperimentsHeader/CompareExperimentsHeader";
 import CompareExperimentsActionsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
-import CompareConfigCell from "@/components/pages/CompareExperimentsPage/ConfigurationTab/CompareConfigCell";
+import CompareExperimentsConfigCell, {
+  CompareConfig,
+  CompareFiledValue,
+} from "@/components/pages-shared/experiments/CompareExperimentsConfigCell/CompareExperimentsConfigCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import Loader from "@/components/shared/Loader/Loader";
@@ -29,15 +32,6 @@ const COLUMNS_WIDTH_KEY = "compare-experiments-config-columns-width";
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: ["name"],
   right: [],
-};
-
-type FiledValue = string | number | undefined | null;
-
-export type CompareConfig = {
-  name: string;
-  data: Record<string, FiledValue>;
-  base: string;
-  different: boolean;
 };
 
 export const DEFAULT_COLUMNS: ColumnData<CompareConfig>[] = [
@@ -85,7 +79,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
       retVal.push({
         accessorKey: id,
         header: CompareExperimentsHeader as never,
-        cell: CompareConfigCell as never,
+        cell: CompareExperimentsConfigCell as never,
         meta: {
           custom: {
             onlyDiff,
@@ -101,16 +95,15 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   }, [experimentsIds, onlyDiff, experiments]);
 
   const flattenExperimentMetadataMap = useMemo(() => {
-    return experiments.reduce<Record<string, Record<string, FiledValue>>>(
-      (acc, experiment) => {
-        acc[experiment.id] = isObject(experiment.metadata)
-          ? flattie(experiment.metadata, ".", true)
-          : {};
+    return experiments.reduce<
+      Record<string, Record<string, CompareFiledValue>>
+    >((acc, experiment) => {
+      acc[experiment.id] = isObject(experiment.metadata)
+        ? flattie(experiment.metadata, ".", true)
+        : {};
 
-        return acc;
-      },
-      {},
-    );
+      return acc;
+    }, {});
   }, [experiments]);
 
   const rows = useMemo(() => {
@@ -122,7 +115,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     ).sort();
 
     return keys.map((key) => {
-      const data = experimentsIds.reduce<Record<string, FiledValue>>(
+      const data = experimentsIds.reduce<Record<string, CompareFiledValue>>(
         (acc, id: string) => {
           acc[id] = flattenExperimentMetadataMap[id]?.[key] ?? undefined;
           return acc;
