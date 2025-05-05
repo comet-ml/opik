@@ -43,6 +43,7 @@ def start_api_server() -> str:
             ),
             allow_errors=True,
             sleep=5,
+            max_try_seconds=60,
         ):
             proc.kill()
             raise Exception("Server did not start in time")
