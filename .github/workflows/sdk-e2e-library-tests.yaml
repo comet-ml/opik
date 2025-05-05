@@ -52,9 +52,6 @@ jobs:
         with:
           python-version: ${{matrix.python_version}}
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-
       - name: Make LIBS variable global (workaround for cron)
         id: init
         run: |
