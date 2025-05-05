@@ -17,7 +17,7 @@ import {
   Brain,
   ChevronLeft,
   ChevronRight,
-  SparklesIcon,
+  // SparklesIcon,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -102,14 +102,14 @@ const MENU_ITEMS: MenuItemGroup[] = [
         label: "Experiments",
         count: "experiments",
       },
-      {
-        id: "optimizations",
-        path: "/$workspaceName/optimizations",
-        type: MENU_ITEM_TYPE.router,
-        icon: SparklesIcon,
-        label: "Agent optimization",
-        count: "optimizations",
-      },
+      // {
+      //   id: "optimizations",
+      //   path: "/$workspaceName/optimizations",
+      //   type: MENU_ITEM_TYPE.router,
+      //   icon: SparklesIcon,
+      //   label: "Agent optimization",
+      //   count: "optimizations",
+      // },
       {
         id: "datasets",
         path: "/$workspaceName/datasets",
