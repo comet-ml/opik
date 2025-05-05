@@ -6,7 +6,7 @@ import platform
 import socket
 import sys
 from importlib import metadata
-from typing import Dict, Literal
+from typing import Dict, Literal, Callable
 import tqdm
 
 import opik.config
