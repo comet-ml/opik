@@ -30,7 +30,7 @@ env:
 
 jobs:
   run_e2e_lib_integration:
-    name: Build
+    name: E2E Library Integration Python ${{matrix.python_version}}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -91,7 +91,7 @@ jobs:
           credentials_json: '${{ secrets.GCP_CREDENTIALS_JSON }}'
 
       - name: ADK Tests
-        if: contains(fromJSON('["adk", "all"]'), needs.init_environment.outputs.LIBS)
+        if: contains(fromJSON('["adk", "all"]'), env.LIBS)
         env:
           GOOGLE_CLOUD_LOCATION: us-east1
           GOOGLE_CLOUD_PROJECT: opik-sdk-tests
