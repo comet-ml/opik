@@ -41,14 +41,15 @@ jobs:
         run: |
           echo "LIBS=${{ env.LIBS }}" >> $GITHUB_OUTPUT
 
+      - name: Checkout
+        uses: actions/checkout@v4.1.1
+
       - name: Run latest Opik server
         env:
           OPIK_USAGE_REPORT_ENABLED: false
         shell: bash
         run: |
-          ls -l .
-          
-          cd ./deployment/docker-compose
+          cd ${{ github.workspace }}/deployment/docker-compose
           export OPIK_FRONTEND_FLAVOR=guardrails
           docker compose --profile guardrails up -d --build
 
