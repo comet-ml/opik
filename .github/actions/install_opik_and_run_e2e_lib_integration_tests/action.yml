@@ -12,12 +12,12 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install OPIK, test requirements, and run tests for ${{inputs.library_name}}
+    - name: Install OPIK, test requirements, and run tests for ${{ inputs.library_name }}
       shell: bash
       run: |
         # create virtual environment
-        uv venv ${{inputs.library_name}}-env --python ${{inputs.python_version}}
-        source ${{inputs.library_name}}-env/bin/activate
+        uv venv ${{ inputs.library_name }}-env --python ${{ inputs.python_version }}
+        source ${{ inputs.library_name }}-env/bin/activate
         
         cd ${{ github.workspace }}/sdks/python
         
@@ -27,13 +27,13 @@ runs:
         # Install test dependencies
         cd ./tests
         uv pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
-        uv pip install --no-cache-dir --disable-pip-version-check -r e2e_library_integration/${{inputs.library_name}}/requirements.txt
+        uv pip install --no-cache-dir --disable-pip-version-check -r e2e_library_integration/${{ inputs.library_name }}/requirements.txt
         uv pip list
         
         # Run tests
         export OPIK_URL_OVERRIDE=http://localhost:5173/api
         export OPIK_CONSOLE_LOGGING_LEVEL=DEBUG
-        cd ./e2e_library_integration/${{inputs.library_name}}/
+        cd ./e2e_library_integration/${{ inputs.library_name }}/
         uv run pytest  -vv .
         
         # Deactivate virtual environment
