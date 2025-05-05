@@ -144,7 +144,6 @@ def get_installed_packages() -> Dict[str, str]:
     return installed_packages
 
 
-@functools.lru_cache
 def get_tqdm_for_current_environment() -> std_tqdm:
     """
     Get a tqdm progress bar for your environment.
