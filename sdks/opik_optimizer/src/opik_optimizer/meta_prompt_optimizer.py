@@ -36,6 +36,7 @@ litellm_logger.setLevel(logging.WARNING)  # Only show warnings and errors from L
 httpx_logger = logging.getLogger("httpx")
 httpx_logger.setLevel(logging.WARNING)  # Only show warnings and errors from HTTPX
 
+
 class MetaPromptOptimizer(BaseOptimizer):
     """Optimizer that uses meta-prompting to improve prompts based on examples and performance."""
 
@@ -71,7 +72,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.num_threads = num_threads
         self.dataset = None
         self.task_config = None
-        logger.info(f"Initialized MetaPromptOptimizer with model={model}, reasoning_model={reasoning_model}")
+        logger.info(
+            f"Initialized MetaPromptOptimizer with model={model}, reasoning_model={reasoning_model}"
+        )
 
     def evaluate_prompt(
         self,
@@ -80,6 +83,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         task_config: PromptTaskConfig,
         prompt: str,
         use_full_dataset: bool = False,
+        experiment_config: Optional[Dict] = None,
     ) -> float:
         """
         Evaluate a prompt using the given dataset and metric configuration.
@@ -90,6 +94,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             task_config: The task configuration containing input/output fields
             prompt: The prompt to evaluate
             use_full_dataset: Whether to use the full dataset or a subset for evaluation
+            experiment_config: A dictionary to log with the experiments
 
         Returns:
             float: The evaluation score
@@ -103,28 +108,52 @@ class MetaPromptOptimizer(BaseOptimizer):
         else:
             subset_size = None  # Use all items for final checks
 
+        experiment_config = experiment_config or {}
+        experiment_config = {
+            **experiment_config,
+            **{
+                "optimizer": self.__class__.__name__,
+                "metric": metric_config.metric.name,
+                "dataset": dataset.name,
+                "configuration": {
+                    "prompt": prompt,
+                },
+            },
+        }
+
         def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
             # Convert DatasetItem to dict if needed
-            if hasattr(dataset_item, 'to_dict'):
+            if hasattr(dataset_item, "to_dict"):
                 dataset_item = dataset_item.to_dict()
-            
+
             for input_key in task_config.input_dataset_fields:
                 if input_key not in dataset_item:
-                    raise ValueError(f"Input field '{input_key}' not found in dataset sample")
+                    raise ValueError(
+                        f"Input field '{input_key}' not found in dataset sample"
+                    )
             if task_config.output_dataset_field not in dataset_item:
-                raise ValueError(f"Output field '{task_config.output_dataset_field}' not found in dataset sample")
+                raise ValueError(
+                    f"Output field '{task_config.output_dataset_field}' not found in dataset sample"
+                )
 
             from string import Template
+
             template = Template(prompt)
-            field_mapping = {field: dataset_item[field] for field in task_config.input_dataset_fields}
+            field_mapping = {
+                field: dataset_item[field] for field in task_config.input_dataset_fields
+            }
             full_prompt = template.safe_substitute(field_mapping)
-            
+
             # If the prompt doesn't contain any of the input fields, format it properly
-            if not any(field in full_prompt for field in task_config.input_dataset_fields):
-                context = dataset_item.get('metadata', {}).get('context', '')
+            if not any(
+                field in full_prompt for field in task_config.input_dataset_fields
+            ):
+                context = dataset_item.get("metadata", {}).get("context", "")
                 question = dataset_item[task_config.input_dataset_fields[0]]
-                full_prompt = f"{full_prompt}\n\nContext: {context}\nQuestion: {question}"
-            
+                full_prompt = (
+                    f"{full_prompt}\n\nContext: {context}\nQuestion: {question}"
+                )
+
             logger.debug(f"Evaluating prompt with input: {field_mapping}")
             logger.debug(f"Full prompt: {full_prompt}")
 
@@ -141,13 +170,15 @@ class MetaPromptOptimizer(BaseOptimizer):
             evaluated_task=llm_task,
             num_threads=self.num_threads,
             project_name=self.project_name,
-            num_test=subset_size  # Use subset_size for trials, None for full dataset
+            num_test=subset_size,  # Use subset_size for trials, None for full dataset
+            experiment_config=experiment_config,
         )
 
     def optimize_prompt(
         self,
         config: OptimizationConfig,
-        **kwargs
+        experiment_config: Optional[Dict] = None,
+        **kwargs,
     ) -> OptimizationResult:
         """
         Optimize a prompt using meta-reasoning.
@@ -163,6 +194,18 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.task_config = config.task
 
         current_prompt = config.task.instruction_prompt
+        experiment_config = experiment_config or {}
+        experiment_config = {
+            **experiment_config,
+            **{
+                "optimizer": self.__class__.__name__,
+                "metric": config.objective.metric.name,
+                "dataset": self.dataset.name,
+                "configuration": {
+                    "prompt": current_prompt,
+                },
+            },
+        }
         best_score = self.evaluate_prompt(
             dataset=config.dataset,
             metric_config=config.objective,
@@ -179,9 +222,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         pbar = tqdm(
             total=self.max_rounds,
             desc="Optimizing Prompt",
-            bar_format='{l_bar}{bar:20}{r_bar}',
+            bar_format="{l_bar}{bar:20}{r_bar}",
             position=0,
-            leave=True
+            leave=True,
         )
 
         for round_num in range(self.max_rounds):
@@ -205,7 +248,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             for prompt in candidate_prompts:
                 trial_scores = []
                 should_continue = True
-                
+
                 # First round of trials (always complete)
                 for trial in range(3):
                     try:
@@ -215,18 +258,23 @@ class MetaPromptOptimizer(BaseOptimizer):
                             task_config=config.task,
                             prompt=prompt,
                             use_full_dataset=False,  # Use subset for trials
+                            experiment_config=experiment_config,
                         )
                         trial_scores.append(score)
-                        logger.debug(f"Candidate prompt trial {trial + 1} score: {score:.4f}")
+                        logger.debug(
+                            f"Candidate prompt trial {trial + 1} score: {score:.4f}"
+                        )
                     except Exception as e:
                         logger.error(f"Error in trial {trial + 1}: {e}")
                         trial_scores.append(0)  # Use 0 as fallback score
-                
+
                 # Check if we should continue with additional trials
                 avg_score = sum(trial_scores) / len(trial_scores)
-                if avg_score < best_score * 0.8:  # If significantly worse, skip additional trials
+                if (
+                    avg_score < best_score * 0.8
+                ):  # If significantly worse, skip additional trials
                     should_continue = False
-                
+
                 # Additional trials if needed
                 if should_continue:
                     for trial in range(3, 6):  # Up to 6 total trials
@@ -239,11 +287,13 @@ class MetaPromptOptimizer(BaseOptimizer):
                                 use_full_dataset=False,  # Use subset for trials
                             )
                             trial_scores.append(score)
-                            logger.debug(f"Candidate prompt trial {trial + 1} score: {score:.4f}")
+                            logger.debug(
+                                f"Candidate prompt trial {trial + 1} score: {score:.4f}"
+                            )
                         except Exception as e:
                             logger.error(f"Error in trial {trial + 1}: {e}")
                             trial_scores.append(0)  # Use 0 as fallback score
-                
+
                 # Calculate average score for this prompt
                 avg_score = sum(trial_scores) / len(trial_scores)
                 prompt_scores.append((prompt, avg_score, trial_scores))
@@ -262,58 +312,77 @@ class MetaPromptOptimizer(BaseOptimizer):
                         task_config=config.task,
                         prompt=best_candidate,
                         use_full_dataset=True,  # Use full dataset for final check
+                        experiment_config=experiment_config,
                     )
                     if final_score > best_score:
                         best_score = final_score
                         best_prompt = best_candidate
-                        logger.info(f"New best prompt found with score: {best_score:.4f}")
-                        logger.debug(f"Individual trial scores: {[f'{s:.4f}' for s in trial_scores]}")
+                        logger.info(
+                            f"New best prompt found with score: {best_score:.4f}"
+                        )
+                        logger.debug(
+                            f"Individual trial scores: {[f'{s:.4f}' for s in trial_scores]}"
+                        )
                         logger.debug(f"Best prompt: {best_prompt}")
-                
+
                 # Update current prompt for next round
                 current_prompt = best_candidate
 
             improvement = self._calculate_improvement(best_score, previous_best_score)
             if improvement < self.improvement_threshold:
-                logger.info(f"Improvement below threshold ({improvement:.2%} < {self.improvement_threshold:.2%}), stopping early")
+                logger.info(
+                    f"Improvement below threshold ({improvement:.2%} < {self.improvement_threshold:.2%}), stopping early"
+                )
                 stopped_early = True
                 break
 
             round_data = self._create_round_data(
-                round_num, current_prompt, best_score, best_prompt, 
-                prompt_scores, previous_best_score, improvement
+                round_num,
+                current_prompt,
+                best_score,
+                best_prompt,
+                prompt_scores,
+                previous_best_score,
+                improvement,
             )
             rounds.append(round_data)
             self._add_to_history(round_data.dict())
-            
+
             # Update progress bar
             pbar.update(1)
-            pbar.set_postfix({
-                'best_score': f'{best_score:.4f}',
-                'improvement': f'{improvement:.2%}'
-            })
+            pbar.set_postfix(
+                {"best_score": f"{best_score:.4f}", "improvement": f"{improvement:.2%}"}
+            )
 
         # Close progress bar
         pbar.close()
 
         # Final logging of the best prompt
-        logger.info("\n" + "="*80)
+        logger.info("\n" + "=" * 80)
         logger.info("OPTIMIZATION COMPLETE")
-        logger.info("="*80)
+        logger.info("=" * 80)
         logger.info(f"Initial score: {initial_score:.4f}")
         logger.info(f"Final best score: {best_score:.4f}")
         logger.info(f"Improvement: {(best_score - initial_score) / initial_score:.2%}")
         logger.info("\nFINAL OPTIMIZED PROMPT:")
-        logger.info("-"*80)
+        logger.info("-" * 80)
         logger.info(best_prompt)
-        logger.info("-"*80)
-        logger.info("="*80)
+        logger.info("-" * 80)
+        logger.info("=" * 80)
 
-        return self._create_result(config, best_prompt, best_score, initial_score, rounds, stopped_early)
+        return self._create_result(
+            config, best_prompt, best_score, initial_score, rounds, stopped_early
+        )
 
-    def _calculate_improvement(self, current_score: float, previous_score: float) -> float:
+    def _calculate_improvement(
+        self, current_score: float, previous_score: float
+    ) -> float:
         """Calculate the improvement percentage between scores."""
-        return (current_score - previous_score) / previous_score if previous_score > 0 else 0
+        return (
+            (current_score - previous_score) / previous_score
+            if previous_score > 0
+            else 0
+        )
 
     def _create_round_data(
         self,
@@ -335,7 +404,11 @@ class MetaPromptOptimizer(BaseOptimizer):
                     "prompt": prompt,
                     "score": avg_score,
                     "trial_scores": trial_scores,
-                    "improvement": (avg_score - previous_best_score) / previous_best_score if previous_best_score > 0 else 0,
+                    "improvement": (
+                        (avg_score - previous_best_score) / previous_best_score
+                        if previous_best_score > 0
+                        else 0
+                    ),
                 }
                 for prompt, avg_score, trial_scores in candidate_prompts
             ],
@@ -388,12 +461,14 @@ class MetaPromptOptimizer(BaseOptimizer):
                 sample = items[0]  # Get first sample
             else:
                 # Fallback to other methods if get_items() fails or returns empty
-                if hasattr(self.dataset, 'samples') and self.dataset.samples:
+                if hasattr(self.dataset, "samples") and self.dataset.samples:
                     sample = self.dataset.samples[0]  # Get first sample
-                elif hasattr(self.dataset, '__iter__'):
+                elif hasattr(self.dataset, "__iter__"):
                     sample = next(iter(self.dataset))
                 else:
-                    logger.warning("Dataset does not have a samples attribute or is not iterable")
+                    logger.warning(
+                        "Dataset does not have a samples attribute or is not iterable"
+                    )
                     return context
 
             if sample is not None:
@@ -413,7 +488,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         current_prompt: str,
         best_score: float,
         round_num: int,
-        previous_rounds: List[OptimizationRound]
+        previous_rounds: List[OptimizationRound],
     ) -> List[str]:
         """Generate candidate prompts using meta-prompting."""
         logger.debug(f"\nGenerating candidate prompts for round {round_num + 1}")
@@ -486,7 +561,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                 context += f"  Prompt: {p['prompt']}\n"
         return context
 
-    def _parse_candidate_prompts(self, response: str, fallback_prompt: str) -> List[str]:
+    def _parse_candidate_prompts(
+        self, response: str, fallback_prompt: str
+    ) -> List[str]:
         """Parse the model's response to extract candidate prompts."""
         try:
             result = json.loads(response)
@@ -505,9 +582,11 @@ class MetaPromptOptimizer(BaseOptimizer):
             logger.error(f"Raw response: {response}")
             return [fallback_prompt]
 
-    def _get_evaluation_subset(self, dataset: opik.Dataset, min_size: int = 20, max_size: int = 100) -> List[Dict[str, Any]]:
+    def _get_evaluation_subset(
+        self, dataset: opik.Dataset, min_size: int = 20, max_size: int = 100
+    ) -> List[Dict[str, Any]]:
         """Get a random subset of the dataset for evaluation.
-        
+
         Returns:
             List[Dict[str, Any]]: A list of dataset items to evaluate against
         """
@@ -520,11 +599,12 @@ class MetaPromptOptimizer(BaseOptimizer):
             # Calculate subset size
             total_size = len(all_items)
             subset_size = min(max(min_size, int(total_size * 0.2)), max_size)
-            
+
             # Get random subset of items
             import random
+
             return random.sample(all_items, subset_size)
-            
+
         except Exception as e:
             logger.warning(f"Could not create evaluation subset: {e}")
             return all_items
