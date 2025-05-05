@@ -16,10 +16,13 @@ runs:
         uv venv ${{inputs.library_name}}-env
         source ${{inputs.library_name}}-env/bin/activate
         
+        cd ${{ github.workspace }}/sdks/python
+        
         # Install OPIK
-        uv pip install ${{ github.workspace }}    
+        uv pip install .   
+        
         # Install test dependencies
-        cd ${{ github.workspace }}/tests
+        cd ./tests
         uv pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
         uv pip install --no-cache-dir --disable-pip-version-check -r e2e_library_integration/${{inputs.library_name}}/requirements.txt
         uv pip list
@@ -27,7 +30,7 @@ runs:
         # Run tests
         export OPIK_URL_OVERRIDE=http://localhost:5173/api
         export OPIK_CONSOLE_LOGGING_LEVEL=DEBUG
-        cd ${{ github.workspace }}/tests/e2e_library_integration/${{inputs.library_name}}/
+        cd ./e2e_library_integration/${{inputs.library_name}}/
         uv run pytest  -vv .
         
         # Deactivate virtual environment

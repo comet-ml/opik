@@ -32,9 +32,6 @@ jobs:
   run_e2e_lib_integration:
     name: E2E Lib Integration Python ${{matrix.python_version}}
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: sdks/python
 
     strategy:
       fail-fast: false
