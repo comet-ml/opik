@@ -152,7 +152,6 @@ const CompareOptimizationsPage: React.FC = () => {
     {
       workspaceName,
       optimizationId: optimizationId,
-      search: search!,
       sorting: sortedColumns.map((column) => {
         if (column.id === "objective_name") {
           return {
@@ -181,7 +180,7 @@ const CompareOptimizationsPage: React.FC = () => {
   const title = optimization?.name || optimizationId;
   const noData = !search;
   const noDataText = noData ? "There are no trials yet" : "No search results";
-  const rows = useMemo(() => data?.content ?? [], [data?.content]);
+  const experiments = useMemo(() => data?.content ?? [], [data?.content]);
 
   useEffect(() => {
     title &&
@@ -189,6 +188,14 @@ const CompareOptimizationsPage: React.FC = () => {
     return () =>
       setBreadcrumbParam("optimizationsCompare", "optimizationsCompare", "");
   }, [title, setBreadcrumbParam]);
+
+  const rows = useMemo(
+    () =>
+      experiments.filter(({ name }) =>
+        name.toLowerCase().includes(search!.toLowerCase()),
+      ),
+    [experiments, search],
+  );
 
   const { scoreMap, bestExperiment } = useMemo(() => {
     const retVal: {
@@ -201,13 +208,13 @@ const CompareOptimizationsPage: React.FC = () => {
     };
     let maxScoreValue: number;
 
-    const sortedRows = rows
+    const sortedRows = experiments
       .slice()
       .sort((e1, e2) => e1.created_at.localeCompare(e2.created_at));
 
     if (
       !optimization?.objective_name ||
-      !rows.length ||
+      !experiments.length ||
       !isArray(sortedRows?.[0]?.feedback_scores)
     )
       return retVal;
@@ -221,7 +228,7 @@ const CompareOptimizationsPage: React.FC = () => {
     // if baseScore is 0, then we cannot calculate the relative score
     if (retVal.baseScore === 0) return retVal;
 
-    rows.forEach((e) => {
+    experiments.forEach((e) => {
       const score = getFeedbackScoreValue(
         e.feedback_scores ?? [],
         optimization.objective_name,
@@ -241,7 +248,7 @@ const CompareOptimizationsPage: React.FC = () => {
     });
 
     return retVal;
-  }, [rows, optimization?.objective_name]);
+  }, [experiments, optimization?.objective_name]);
 
   const columnsDef: ColumnData<Experiment>[] = useMemo(() => {
     if (!optimization?.objective_name) return [];
@@ -433,7 +440,7 @@ const CompareOptimizationsPage: React.FC = () => {
         limitWidth
       >
         <OptimizationProgressChartContainer
-          experiments={rows}
+          experiments={experiments}
           bestEntityId={bestExperiment?.id}
           objectiveName={optimization?.objective_name}
         />
