@@ -18,7 +18,8 @@ $REQUIRED_CONTAINERS = @(
     "opik-redis-1",
     "opik-frontend-1",
     "opik-backend-1",
-    "opik-minio-1"
+    "opik-minio-1",
+    "opik-zookeeper-1"
 )
 
 $GUARDRAILS_CONTAINERS = @(
@@ -34,15 +35,17 @@ function Get-Containers {
 }
 
 function Show-Usage {
-    Write-Host 'Usage: opik.ps1 [OPTION]'
+    Write-Host 'Usage: opik.ps1 [OPTIONS]'
     Write-Host ''
     Write-Host 'Options:'
-    Write-Host '  --verify     Check if all containers are healthy'
-    Write-Host '  --info       Display welcome system status, only if all containers are running'
-    Write-Host '  --stop       Stop all containers and clean up'
-    Write-Host '  --debug      Enable debug mode (verbose output)'
-    Write-Host '  --guardrails Enable guardrails profile (can be combined with other flags)'
-    Write-Host '  --help       Show this help message'
+    Write-Host '  --verify          Check if all containers are healthy'
+    Write-Host '  --info            Display welcome system status, only if all containers are running'
+    Write-Host '  --stop            Stop all containers and clean up'
+    Write-Host '  --build           Build containers before starting (can be combined with other flags)'
+    Write-Host '  --debug           Enable debug mode (verbose output) (can be combined with other flags)'
+    Write-Host '  --port-mapping    Enable port mapping for all containers by using the override file (can be combined with other flags)'
+    Write-Host '  --guardrails      Enable guardrails profile (can be combined with other flags)'
+    Write-Host '  --help            Show this help message'
     Write-Host ''
     Write-Host 'If no option is passed, the script will start missing containers and then show the system status.'
 }
@@ -186,8 +189,12 @@ function Start-MissingContainers {
 
     Write-Host '[INFO] Starting missing containers...'
     Set-Location -Path "$scriptDir\deployment\docker-compose"
-    $dockerArgs = @("compose")
-    
+    $dockerArgs = @("compose", "-f", "docker-compose.yaml")
+
+    if ($PORT_MAPPING) {
+        $dockerArgs += "-f", "docker-compose.override.yaml"
+    }
+
     if ($GUARDRAILS_ENABLED) {
         $dockerArgs += "--profile", "guardrails"
     }
@@ -253,7 +260,11 @@ function Stop-Containers {
     Test-DockerStatus
     Write-Host '[INFO] Stopping all required containers...'
     Set-Location -Path "$scriptDir\deployment\docker-compose"
-    $dockerArgs = @("compose")
+    $dockerArgs = @("compose", "-f", "docker-compose.yaml")
+
+    if ($PORT_MAPPING) {
+        $dockerArgs += "-f", "docker-compose.override.yaml"
+    }
     
     if ($GUARDRAILS_ENABLED) {
         $dockerArgs += "--profile", "guardrails"
@@ -302,12 +313,29 @@ function Get-VerifyCommand {
     return ".\opik.ps1 --verify"
 }
 
+$BUILD_MODE = $false
 $DEBUG_MODE = $false
+$PORT_MAPPING = $false
 $GUARDRAILS_ENABLED = $false
 $env:OPIK_FRONTEND_FLAVOR = "default"
 $env:TOGGLE_GUARDRAILS_ENABLED = "false"
 
-# Check for guardrails in options
+if ($options -contains '--build') {
+    $BUILD_MODE = $true
+    $options = $options | Where-Object { $_ -ne '--build' }
+}
+
+if ($options -contains '--debug') {
+    $DEBUG_MODE = $true
+    Write-Host '[DEBUG] Debug mode enabled.'
+    $options = $options | Where-Object { $_ -ne '--debug' }
+}
+
+if ($options -contains '--port-mapping') {
+    $PORT_MAPPING = $true
+    $options = $options | Where-Object { $_ -ne '--port-mapping' }
+}
+
 if ($options -contains '--guardrails') {
     $GUARDRAILS_ENABLED = $true
     $env:OPIK_FRONTEND_FLAVOR = "guardrails"
@@ -342,38 +370,11 @@ switch ($option) {
         Show-Usage
         exit 0
     }
-    '--debug' {
-        $DEBUG_MODE = $true
-        Write-Host '[DEBUG] Debug mode enabled.'
+    '' {
         Write-Host '[DEBUG] Checking container status and starting missing ones...'
         Start-MissingContainers
         Start-Sleep -Seconds 2
         Write-Host '[DEBUG] Re-checking container status...'
-        if (Test-ContainersStatus -ShowOutput:$true) {
-            Show-Banner
-        } else {
-            Write-Host '[WARN] Some containers are still not healthy. Please check manually using "' + (Get-VerifyCommand) + '".'
-            exit 1
-        }
-    }
-    '--build' {
-        $BUILD_MODE = $true
-        Write-Host '[INFO] Checking container status and starting missing ones...'
-        Start-MissingContainers
-        Start-Sleep -Seconds 2
-        Write-Host '[INFO] Re-checking container status...'
-        if (Test-ContainersStatus -ShowOutput:$true) {
-            Show-Banner
-        } else {
-            Write-Host '[WARN] Some containers are still not healthy. Please check manually using "' + (Get-VerifyCommand) + '".'
-            exit 1
-        }
-    }
-    '' {
-        Write-Host '[INFO] Checking container status and starting missing ones...'
-        Start-MissingContainers
-        Start-Sleep -Seconds 2
-        Write-Host '[INFO] Re-checking container status...'
         if (Test-ContainersStatus -ShowOutput:$true) {
             Show-Banner
         } else {
