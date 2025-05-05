@@ -15,6 +15,7 @@ runs:
     - name: Install OPIK, test requirements, and run tests for ${{ inputs.library_name }}
       shell: bash
       run: |
+        echo ${{ inputs.python_version }}
         # create virtual environment
         uv venv ${{ inputs.library_name }}-env --python ${{ inputs.python_version }}
         source ${{ inputs.library_name }}-env/bin/activate

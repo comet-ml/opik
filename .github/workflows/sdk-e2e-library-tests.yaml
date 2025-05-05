@@ -47,7 +47,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.1.1
 
-      - name: Install uv and set the Python version ${{matrix.python_version}}
+      - name: Install uv and set the Python version ${{ matrix.python_version }}
         uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -81,7 +81,7 @@ jobs:
         with:
           credentials_json: '${{ secrets.GCP_CREDENTIALS_JSON }}'
 
-      - name: ADK Tests
+      - name: ADK Tests Python ${{ matrix.python-version }}
         if: contains(fromJSON('["adk", "all"]'), env.LIBS)
         env:
           GOOGLE_CLOUD_LOCATION: us-east1
