@@ -25,28 +25,6 @@ class OptimizationResult(pydantic.BaseModel):
 
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
-    @pydantic.field_validator('score')
-    @classmethod
-    def validate_score(cls, v: float) -> float:
-        """Validate that the score is between 0 and 1."""
-        if v < 0.0:
-            raise ValueError("Score cannot be negative")
-        if v > 1.0:
-            raise ValueError("Score cannot be greater than 1.0")
-        return v
-
-    @pydantic.field_validator('best_score')
-    @classmethod
-    def validate_best_score(cls, v: Optional[float], info: pydantic.ValidationInfo) -> Optional[float]:
-        """Validate that the best score is between 0 and 1."""
-        if v is None:
-            return info.data.get('score')
-        if v < 0.0:
-            raise ValueError("Best score cannot be negative")
-        if v > 1.0:
-            raise ValueError("Best score cannot be greater than 1.0")
-        return v
-
     def __str__(self) -> str:
         """Return a string representation of the optimization result."""
         prompt = self.best_prompt if self.best_prompt is not None else self.prompt
