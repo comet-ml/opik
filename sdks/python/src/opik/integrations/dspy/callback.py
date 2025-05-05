@@ -24,7 +24,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         self._map_call_id_to_span_data: Dict[str, span.SpanData] = {}
         self._map_call_id_to_trace_data: Dict[str, trace.TraceData] = {}
 
-        self._origins_metadata = {"created_from": "dspy"}
+        self._origins_metadata: Dict[str, Any] = {"created_from": "dspy"}
         if module is not None:
             self._try_add_module_graph_to_metadata(module)
 
