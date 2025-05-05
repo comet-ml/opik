@@ -2,6 +2,7 @@
 
 import opik
 import logging
+import tqdm
 from opik.api_objects.opik_client import Opik
 from opik.api_objects.dataset.dataset_item import DatasetItem
 from typing import List, Dict, Any, Optional, Callable

@@ -119,8 +119,11 @@ class MetaPromptOptimizer(BaseOptimizer):
             field_mapping = {field: dataset_item[field] for field in task_config.input_dataset_fields}
             full_prompt = template.safe_substitute(field_mapping)
             
+            # If the prompt doesn't contain any of the input fields, format it properly
             if not any(field in full_prompt for field in task_config.input_dataset_fields):
-                full_prompt = f"{full_prompt}\n\nQuestion: {dataset_item[task_config.input_dataset_fields[0]]}"
+                context = dataset_item.get('metadata', {}).get('context', '')
+                question = dataset_item[task_config.input_dataset_fields[0]]
+                full_prompt = f"{full_prompt}\n\nContext: {context}\nQuestion: {question}"
             
             logger.debug(f"Evaluating prompt with input: {field_mapping}")
             logger.debug(f"Full prompt: {full_prompt}")
