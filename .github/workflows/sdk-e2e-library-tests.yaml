@@ -30,7 +30,7 @@ env:
 
 jobs:
   run_e2e_lib_integration:
-    name: E2E Library Integration Python ${{matrix.python_version}}
+    name: E2E Lib Integration Python ${{matrix.python_version}}
     runs-on: ubuntu-latest
     defaults:
       run:
