@@ -281,3 +281,6 @@ serviceToggles:
   # Default: false for testing. It should be enabled for test scenarios when it's relevant.
   # Description: Whether or not Python evaluator is enabled
   pythonEvaluatorEnabled: "false"
+  # Default: false
+  # Description: Whether or not Guardrails feature is enabled
+  guardrailsEnabled: "false"
