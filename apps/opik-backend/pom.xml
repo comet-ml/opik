@@ -19,7 +19,7 @@
         <dropwizard.version>4.0.12</dropwizard.version>
         <swagger.version>2.2.28</swagger.version>
         <lombok.version>1.18.36</lombok.version>
-        <mysql.version>9.2.0</mysql.version>
+        <mysql.version>9.3.0</mysql.version>
         <dropwizard-guicey.version>7.1.4</dropwizard-guicey.version>
         <stringtemplate.version>3.49.0</stringtemplate.version>
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
@@ -30,7 +30,7 @@
         <testcontainers.version>1.21.0</testcontainers.version>
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
         <wiremock.version>3.13.0</wiremock.version>
-        <redisson.version>3.45.0</redisson.version>
+        <redisson.version>3.46.0</redisson.version>
         <opentelmetry.version>2.15.0</opentelmetry.version>
         <aws.java.sdk.version>2.31.1</aws.java.sdk.version>
         <json-path.version>2.9.0</json-path.version>

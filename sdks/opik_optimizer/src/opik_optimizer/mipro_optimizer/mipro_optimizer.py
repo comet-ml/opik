@@ -31,6 +31,20 @@ from .utils import (
 disk_cache_dir = os.path.expanduser("~/.litellm_cache")
 litellm.cache = Cache(type="disk", disk_cache_dir=disk_cache_dir)
 
+# Set up logging
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Configure LiteLLM logging
+litellm_logger = logging.getLogger("LiteLLM")
+litellm_logger.setLevel(logging.WARNING)  # Only show warnings and errors from LiteLLM
+
+# Configure HTTPX logging
+httpx_logger = logging.getLogger("httpx")
+httpx_logger.setLevel(logging.WARNING)  # Only show warnings and errors from HTTPX
+
 
 class MiproOptimizer(BaseOptimizer):
     def __init__(self, model, project_name: Optional[str] = None, **model_kwargs):
@@ -115,6 +129,9 @@ class MiproOptimizer(BaseOptimizer):
                         **self.model_kwargs,
                     )
                     return response.choices[0].message.content
+            elif isinstance(prompt, dspy.Module):
+                result = prompt(**{input_key: input})
+                return getattr(result, output_key)
             else:
                 raise Exception("I don't know how to evaluate this prompt: %r" % prompt)
 
@@ -139,10 +156,22 @@ class MiproOptimizer(BaseOptimizer):
             if dataset_item_ids is not None:
                 raise Exception("Can't use num_test and dataset_item_ids")
 
-            all_ids = [
-                dataset_item["id"] for dataset_item in dataset.get_items()
-            ]
+            all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
             dataset_item_ids = random.sample(all_ids, num_test)
+
+        experiment_config = experiment_config or {}
+        experiment_config = {
+            **experiment_config,
+            **{
+                "optimizer": self.__class__.__name__,
+                "tools": (
+                    [f.__name__ for f in config.task.tools] if config.task.tools else []
+                ),
+                "metric": config.objective.metric.name,
+                "dataset": dataset.name,
+            },
+        }
+        # FIXME: add prompt, examples to experiment_config
 
         # Run evaluation with all metrics at once
         evaluation = evaluate(
@@ -154,6 +183,7 @@ class MiproOptimizer(BaseOptimizer):
             task_threads=self.num_threads,
             dataset_item_ids=dataset_item_ids,
             project_name=self.project_name,
+            experiment_config=experiment_config,
         )
 
         # Calculate average score across all metrics
@@ -175,11 +205,10 @@ class MiproOptimizer(BaseOptimizer):
             config=config,
             num_candidates=num_candidates,
             experiment_config=experiment_config,
-            **kwargs
+            **kwargs,
         )
 
         return self.continue_optimize_prompt()
-
 
     def prepare_optimize_prompt(
         self,
@@ -220,13 +249,29 @@ class MiproOptimizer(BaseOptimizer):
             self.input_key, self.output_key, self.prompt
         )
 
-        self.module = dspy.ReAct(self.data_signature, tools=self.tools)
+        if self.tools:
+            self.module = dspy.ReAct(self.data_signature, tools=self.tools)
+        else:
+            self.module = dspy.Predict(self.data_signature)
 
         # Convert the metric to a DSPy-compatible function
         self.metric_function = opik_metric_to_dspy(metric, self.output_key)
         self.opik_metric = metric
         log_dir = os.path.expanduser("~/.opik-optimizer-checkpoints")
         os.makedirs(log_dir, exist_ok=True)
+
+        experiment_config = experiment_config or {}
+        experiment_config = {
+            **experiment_config,
+            **{
+                "optimizer": self.__class__.__name__,
+                "tools": [f.__name__ for f in self.tools],
+                "metric": metric.name,
+                "num_threads": self.num_threads,
+                "num_candidates": self.num_candidates,
+                "dataset": config.dataset.name,
+            },
+        }
 
         # Initialize the optimizer:
         self.optimizer = MIPROv2(
@@ -241,6 +286,7 @@ class MiproOptimizer(BaseOptimizer):
             opik_project_name=self.project_name,
             opik_metric_config=config.objective,
             log_dir=log_dir,
+            experiment_config=experiment_config,
         )
 
     def load_from_checkpoint(self, filename):
@@ -276,15 +322,19 @@ class MiproOptimizer(BaseOptimizer):
             tool_prompts = get_tool_prompts(
                 tool_names, state["react"]["signature"]["instructions"]
             )
+            best_prompt = state["react"]["signature"]["instructions"]
+            demos = [x.toDict() for x in state["react"]["demos"]]
         else:
             tool_prompts = None
+            best_prompt = state["signature"]["instructions"]
+            demos = [x.toDict() for x in state["demos"]]
 
         return OptimizationResult(
             optimizer="MiproOptimizer",
-            prompt=state["react"]["signature"]["instructions"],
+            prompt=best_prompt,
             tool_prompts=tool_prompts,
             score=score,
             metric_name=self.opik_metric.name,
-            demonstrations=[x.toDict() for x in state["react"]["demos"]],
+            demonstrations=demos,
             details={"program": self.best_programs[position]["program"]},
         )

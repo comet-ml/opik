@@ -8,7 +8,6 @@ import com.comet.opik.api.OptimizationUpdate;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
-import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
@@ -43,7 +42,13 @@ import static com.comet.opik.utils.JsonUtils.getStringOrDefault;
 @ImplementedBy(OptimizationDAOImpl.class)
 public interface OptimizationDAO {
 
-    Mono<Void> insert(Optimization experiment);
+    record OptimizationSummary(UUID datasetId, long optimizationCount, Instant mostRecentOptimizationAt) {
+        public static OptimizationSummary empty(UUID datasetId) {
+            return new OptimizationSummary(datasetId, 0, null);
+        }
+    }
+
+    Mono<Void> insert(Optimization optimization);
 
     Mono<Optimization> getById(UUID id);
 
@@ -55,7 +60,11 @@ public interface OptimizationDAO {
 
     Mono<Long> update(UUID id, OptimizationUpdate update);
 
+    Mono<Long> updateDatasetDeleted(Set<UUID> datasetIds);
+
     Mono<Optimization.OptimizationPage> find(int page, int size, @NonNull OptimizationSearchCriteria searchCriteria);
+
+    Flux<OptimizationSummary> findOptimizationSummaryByDatasetIds(Set<UUID> datasetIds);
 }
 
 @Singleton
@@ -119,111 +128,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             """;
 
     private static final String FIND = """
-            WITH trace_final AS (
-                SELECT
-                    id
-                FROM traces
-                WHERE workspace_id = :workspace_id
-            ),
-            feedback_scores_agg AS (
-                SELECT
-                    experiment_id,
-                    if(
-                        notEmpty(arrayFilter(x -> length(x) > 0, groupArray(name))),
-                        mapFromArrays(
-                            arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(name))),
-                            arrayMap(
-                                vName -> if(
-                                    arrayReduce(
-                                        'SUM',
-                                        arrayMap(
-                                            vNameAndValue -> vNameAndValue.2,
-                                            arrayFilter(
-                                                pair -> pair.1 = vName,
-                                                groupArray(DISTINCT tuple(name, count_value, trace_id))
-                                            )
-                                        )
-                                    ) = 0,
-                                    0,
-                                    arrayReduce(
-                                        'SUM',
-                                        arrayMap(
-                                            vNameAndValue -> vNameAndValue.2,
-                                            arrayFilter(
-                                                pair -> pair.1 = vName,
-                                                groupArray(DISTINCT tuple(name, total_value, trace_id))
-                                            )
-                                        )
-                                    ) / arrayReduce(
-                                        'SUM',
-                                        arrayMap(
-                                            vNameAndValue -> vNameAndValue.2,
-                                            arrayFilter(
-                                                pair -> pair.1 = vName,
-                                                groupArray(DISTINCT tuple(name, count_value, trace_id))
-                                            )
-                                        )
-                                    )
-                                ),
-                                arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(name)))
-                            )
-                        ),
-                        map()
-                    ) as feedback_scores
-                FROM (
-                    SELECT
-                        ei.experiment_id,
-                        tfs.name,
-                        tfs.total_value,
-                        tfs.count_value,
-                        tfs.trace_id as trace_id
-                    FROM experiment_items ei
-                    JOIN (
-                        SELECT
-                            entity_id as trace_id,
-                            name,
-                            SUM(value) as total_value,
-                            COUNT(value) as count_value
-                        FROM (
-                            SELECT
-                                entity_id,
-                                name,
-                                value
-                            FROM feedback_scores
-                            WHERE workspace_id = :workspace_id
-                            AND entity_type = :entity_type
-                            AND entity_id IN (SELECT id FROM trace_final)
-                            ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                            LIMIT 1 BY entity_id, name
-                        )
-                        GROUP BY
-                            entity_id,
-                            name
-                    ) AS tfs ON ei.trace_id = tfs.trace_id
-                    WHERE ei.trace_id IN (SELECT id FROM trace_final)
-                )
-                GROUP BY experiment_id
-            ), experiments_fs AS (
-                SELECT
-                    e.id as id,
-                    e.optimization_id as optimization_id,
-                    fs.feedback_scores as feedback_scores
-                FROM (
-                    SELECT
-                        id,
-                        optimization_id
-                    FROM experiments
-                    WHERE workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS e
-                LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
-            )
-            SELECT
-                o.*,
-                COUNT(DISTINCT efs.id) AS num_trials,
-                maxMap(efs.feedback_scores) AS feedback_scores
-            FROM (
+            WITH optimization_final AS (
                 SELECT
                     *
                 FROM optimizations
@@ -234,8 +139,61 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
-            ) AS o
-            LEFT JOIN experiments_fs AS efs ON o.id = efs.optimization_id
+            ), experiments_final AS (
+                SELECT
+                    id,
+                    optimization_id
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                AND optimization_id IN (SELECT id FROM optimization_final)
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), experiment_items_final AS (
+                SELECT
+                    DISTINCT
+                        experiment_id,
+                        trace_id
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                AND experiment_id IN (SELECT id FROM experiments_final)
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), feedback_scores_agg AS (
+                SELECT
+                    experiment_id,
+                    mapFromArrays(
+                        groupArray(fs_avg.name),
+                        groupArray(fs_avg.avg_value)
+                    ) AS feedback_scores
+                FROM (
+                    SELECT
+                        et.experiment_id,
+                        fs.name,
+                        avg(fs.value) AS avg_value
+                    FROM experiment_items_final as et
+                    LEFT JOIN (
+                        SELECT
+                            name,
+                            entity_id AS trace_id,
+                            value
+                        FROM feedback_scores final
+                        WHERE workspace_id = :workspace_id
+                        AND entity_type = :entity_type
+                        AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                    ) fs ON fs.trace_id = et.trace_id
+                    GROUP BY et.experiment_id, fs.name
+                    HAVING length(fs.name) > 0
+                ) as fs_avg
+                GROUP BY experiment_id
+            )
+            SELECT
+                o.*,
+                o.id as id,
+                COUNT(DISTINCT e.id) AS num_trials,
+                maxMap(fs.feedback_scores) AS feedback_scores
+            FROM optimization_final AS o
+            LEFT JOIN experiments_final AS e ON o.id = e.optimization_id
+            LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
             GROUP BY o.*
             ORDER BY o.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
@@ -300,6 +258,30 @@ class OptimizationDAOImpl implements OptimizationDAO {
             ;
             """;
 
+    private static final String SET_DATASET_DELETED_TO_TRUE_BY_DATASET_ID = """
+            INSERT INTO optimizations (
+            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_at, last_updated_by, dataset_deleted
+            ) SELECT
+                id,
+                dataset_id,
+                name as name,
+                workspace_id,
+                objective_name,
+                status as status,
+                metadata,
+                created_at,
+                created_by,
+                last_updated_at,
+                last_updated_by,
+                true as dataset_deleted
+            FROM optimizations
+            WHERE workspace_id = :workspace_id
+            AND dataset_id IN :dataset_ids
+            ORDER BY id DESC, last_updated_at DESC
+            LIMIT 1
+            ;
+            """;
+
     private static final String FIND_MOST_RECENT_CREATED_OPTIMIZATION_BY_DATASET_IDS = """
             SELECT
             	dataset_id,
@@ -309,6 +291,26 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     id,
                     dataset_id,
                     created_at
+                FROM optimizations
+                WHERE dataset_id IN :dataset_ids
+            	AND workspace_id = :workspace_id
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            GROUP BY dataset_id
+            ;
+            """;
+
+    private static final String FIND_OPTIMIZATION_SUMMARY_BY_DATASET_IDS = """
+            SELECT
+            	dataset_id,
+            	count(distinct id) as optimization_count,
+            	max(last_updated_at) as most_recent_optimization_at
+            FROM (
+                SELECT
+                    id,
+                    dataset_id,
+                    last_updated_at
                 FROM optimizations
                 WHERE dataset_id IN :dataset_ids
             	AND workspace_id = :workspace_id
@@ -403,12 +405,47 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 });
     }
 
-    @WithSpan
+    @Override
+    public Mono<Long> updateDatasetDeleted(@NonNull Set<UUID> datasetIds) {
+        log.info("Set to true optimization dataset_deleted for datasetIds '{}'", datasetIds);
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> updateDatasetDeleted(datasetIds, connection))
+                .flatMap(Result::getRowsUpdated)
+                .reduce(Long::sum)
+                .doFinally(signalType -> {
+                    if (signalType == SignalType.ON_COMPLETE) {
+                        log.info("Set to true optimization dataset_deleted is done for datasetIds '{}'", datasetIds);
+                    }
+                });
+    }
+
+    @Override
     public Mono<Optimization.OptimizationPage> find(int page, int size,
             @NonNull OptimizationSearchCriteria searchCriteria) {
         return getCount(searchCriteria)
                 .flatMap(totalCount -> find(page, size, totalCount, searchCriteria))
                 .defaultIfEmpty(Optimization.OptimizationPage.empty(page, List.of()));
+    }
+
+    @Override
+    public Flux<OptimizationSummary> findOptimizationSummaryByDatasetIds(@NonNull Set<UUID> datasetIds) {
+        if (datasetIds.isEmpty()) {
+            return Flux.empty();
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    Statement statement = connection.createStatement(FIND_OPTIMIZATION_SUMMARY_BY_DATASET_IDS);
+
+                    statement.bind("dataset_ids", datasetIds);
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> new OptimizationSummary(
+                        row.get("dataset_id", UUID.class),
+                        row.get("optimization_count", Long.class),
+                        row.get("most_recent_optimization_at", Instant.class))));
     }
 
     private Mono<Long> getCount(@NotNull OptimizationSearchCriteria searchCriteria) {
@@ -548,6 +585,13 @@ class OptimizationDAOImpl implements OptimizationDAO {
         var statement = createUpdateStatement(id, update, connection, template.render());
 
         return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement));
+    }
+
+    private Flux<? extends Result> updateDatasetDeleted(Set<UUID> datasetIds, Connection connection) {
+        Statement statement = connection.createStatement(SET_DATASET_DELETED_TO_TRUE_BY_DATASET_ID);
+        statement.bind("dataset_ids", datasetIds);
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
     private ST buildUpdateTemplate(OptimizationUpdate update) {
