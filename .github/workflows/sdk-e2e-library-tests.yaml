@@ -29,11 +29,22 @@ env:
   LIBS: ${{ github.event.inputs.libs != '' && github.event.inputs.libs  || 'all' }}
 
 jobs:
-  init_environment:
+  run_e2e_lib_integration:
     name: Build
     runs-on: ubuntu-latest
-    outputs:
-      LIBS: ${{ steps.init.outputs.LIBS }}
+    defaults:
+      run:
+        working-directory: sdks/python
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python_version: [
+#          "3.9",
+#          "3.10",
+          "3.11",
+#          "3.12"
+        ]
 
     steps:
       - name: Make LIBS variable global (workaround for cron)
@@ -43,6 +54,11 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4.1.1
+
+      - name: Setup Python ${{matrix.python_version}}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{matrix.python_version}}
 
       - name: Run latest Opik server
         env:
@@ -63,18 +79,36 @@ jobs:
           echo "Check backend health"
           ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
 
-  adk_tests:
-    needs: [ init_environment ]
-    if: contains(fromJSON('["adk", "all"]'), needs.init_environment.outputs.LIBS)
-    uses: ./.github/workflows/sdk-e2e-lib-adk-tests.yml
-    secrets: inherit
+      - name: Install opik and test tools
+        run: |
+          pip install .
+          cd ./tests
+          pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
 
-  stop_opik_server:
-    if: ${{ always() }}
-    needs: [ adk_tests ]
-    runs-on: cpu
-    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS_JSON }}'
+
+      - name: ADK Tests
+        if: contains(fromJSON('["adk", "all"]'), needs.init_environment.outputs.LIBS)
+        env:
+          GOOGLE_CLOUD_LOCATION: us-east1
+          GOOGLE_CLOUD_PROJECT: opik-sdk-tests
+          GOOGLE_GENAI_USE_VERTEXAI: TRUE
+        run: |
+          cd ./tests
+          pip install --no-cache-dir --disable-pip-version-check -r e2e_library_integration/adk/requirements.txt
+          pip list
+          # export variables and run ADK tests
+          export OPIK_URL_OVERRIDE=http://localhost:5173/api
+          export OPIK_CONSOLE_LOGGING_LEVEL=DEBUG
+          cd ./tests/e2e_library_integration/adk/
+          python -m pytest  -vv .
+
       - name: Stop opik server
+        if: always()
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
           docker compose down
+
