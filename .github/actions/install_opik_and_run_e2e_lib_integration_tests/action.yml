@@ -5,6 +5,9 @@ inputs:
   library_name:
     required: true
     description: "The library name"
+  python_version:
+    required: true
+    description: "Python version"
 
 runs:
   using: composite
@@ -13,7 +16,7 @@ runs:
       shell: bash
       run: |
         # create virtual environment
-        uv venv ${{inputs.library_name}}-env
+        uv venv ${{inputs.library_name}}-env --python ${{inputs.python_version}}
         source ${{inputs.library_name}}-env/bin/activate
         
         cd ${{ github.workspace }}/sdks/python
