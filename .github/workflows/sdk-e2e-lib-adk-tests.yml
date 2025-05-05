@@ -1,9 +1,9 @@
-# Workflow to run ADK tests
+# Workflow to run E2E ADK tests
 #
 # Please read inputs to provide correct values.
 #
-name: SDK Lib ADK (Google) Tests
-run-name: "SDK Lib ADK Tests ${{ github.ref_name }} by @${{ github.actor }}"
+name: SDK E2E Lib ADK (Google) Tests
+run-name: "SDK E2E Library ADK Tests ${{ github.ref_name }} by @${{ github.actor }}"
 env:
   GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
   GOOGLE_CLOUD_LOCATION: us-east1
@@ -16,7 +16,7 @@ on:
 
 jobs:
   tests:
-    name: ADK Python ${{matrix.python_version}}
+    name: E2E ADK Python ${{matrix.python_version}}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -52,10 +52,10 @@ jobs:
       - name: Install lib
         run: |
           cd ./tests
-          pip install --no-cache-dir --disable-pip-version-check -r library_integration/adk/requirements.txt
+          pip install --no-cache-dir --disable-pip-version-check -r e2e_library_integration/adk/requirements.txt
           pip list
 
       - name: Run tests
         run: |
-          cd ./tests/library_integration/adk/
+          cd ./tests/e2e_library_integration/adk/
           python -m pytest  -vv .

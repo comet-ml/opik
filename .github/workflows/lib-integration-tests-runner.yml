@@ -21,7 +21,6 @@ on:
           - dspy
           - crewai
           - genai
-          - adk
   schedule:
     - cron: "0 0 */1 * *"
   pull_request:
@@ -109,10 +108,4 @@ jobs:
     needs: [init_environment]
     if: contains(fromJSON('["genai", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-genai-tests.yml
-    secrets: inherit
-
-  adk_tests:
-    needs: [ init_environment ]
-    if: contains(fromJSON('["adk", "all"]'), needs.init_environment.outputs.LIBS)
-    uses: ./.github/workflows/lib-adk-tests.yml
     secrets: inherit
