@@ -8,7 +8,7 @@ import sys
 from importlib import metadata
 from typing import Dict, Literal
 import tqdm
-from tqdm.util import Comparable
+from tqdm.utils import Comparable
 
 import opik.config
 from opik import url_helpers
