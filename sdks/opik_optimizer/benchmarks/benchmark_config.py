@@ -18,11 +18,12 @@ from pathlib import Path
 # from external_optimizers import ExternalDspyMiproOptimizer, ExternalAdalFlowOptimizer
 
 # Project configuration
-PROJECT_CONFIG = {
-    "name": "agent-optimizer-benchmark",
-    "workspace": "default",
-    "test_mode": False,  # Set to True to run with 5 examples per dataset
-}
+def get_project_config(test_mode: bool = False) -> Dict:
+    return {
+        "name": "agent-optimizer-benchmark",
+        "workspace": "default",
+        "test_mode": test_mode,  # Set to True to run with 5 examples per dataset
+    }
 
 # Dataset configurations
 DATASET_CONFIGS = {
@@ -158,14 +159,14 @@ INITIAL_PROMPTS = {
 }
 
 
-def get_experiment_config(dataset_name: str, optimizer_name: str) -> Dict:
+def get_experiment_config(dataset_name: str, optimizer_name: str, test_mode: bool = False) -> Dict:
     """Get experiment configuration with metadata."""
     version_info = sys.version_info
     return {
         "dataset": dataset_name,
         "optimizer": optimizer_name,
         "timestamp": datetime.now().isoformat(),
-        "test_mode": PROJECT_CONFIG["test_mode"],  # Include test mode in experiment config
+        "test_mode": test_mode,  # Include test mode in experiment config
         "environment": {
             "python_version": "{}.{}.{}".format(
                 version_info.major, version_info.minor, version_info.micro

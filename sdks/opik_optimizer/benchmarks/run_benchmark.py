@@ -30,13 +30,13 @@ from benchmark_config import (
     DATASET_CONFIGS, 
     OPTIMIZER_CONFIGS, 
     INITIAL_PROMPTS,
-    PROJECT_CONFIG,
+    get_project_config,
     get_experiment_config,
     get_optimization_monitor
 )
 
 class BenchmarkRunner:
-    def __init__(self, output_dir: str = "benchmark_results", max_workers: int = 4, seed: int = 42):
+    def __init__(self, output_dir: str = "benchmark_results", max_workers: int = 4, seed: int = 42, test_mode: bool = False):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
         self.results = []
@@ -44,8 +44,10 @@ class BenchmarkRunner:
         self.max_workers = max_workers
         self.dataset_cache = {}
         self.seed = seed
-        self.project_name = PROJECT_CONFIG["name"]
-        self.workspace = PROJECT_CONFIG["workspace"]
+        self.test_mode = test_mode
+        self.project_config = get_project_config(test_mode=test_mode)
+        self.project_name = self.project_config["name"]
+        self.workspace = self.project_config["workspace"]
         
         # Set global random seed
         import random
@@ -56,11 +58,16 @@ class BenchmarkRunner:
         # Initialize shared cache
         initialize_cache()
         
-    @lru_cache(maxsize=32)
     def load_dataset(self, dataset_name: str, huggingface_path: str) -> Any:
         """Load dataset from HuggingFace or create if not exists."""
+        cache_key = f"{dataset_name}_{self.test_mode}"
+        if cache_key in self.dataset_cache:
+            return self.dataset_cache[cache_key]
+            
         try:
-            return get_or_create_dataset(huggingface_path)
+            dataset = get_or_create_dataset(huggingface_path, test_mode=self.test_mode)
+            self.dataset_cache[cache_key] = dataset
+            return dataset
         except Exception as e:
             print(f"Error loading dataset {dataset_name}: {e}")
             print(traceback.format_exc())
@@ -278,7 +285,7 @@ class BenchmarkRunner:
                     if optimizer is None:
                         continue
                     
-                    experiment_config = get_experiment_config(dataset_key, optimizer_key)
+                    experiment_config = get_experiment_config(dataset_key, optimizer_key, test_mode=self.test_mode)
                     
                     future = executor.submit(
                         self.run_optimization,
@@ -364,14 +371,20 @@ def run_benchmark(
     print(f"\nRunning benchmark for {dataset_name} with {optimizer_name}")
     print(f"Test mode: {test_mode}")
 
-    # Get dataset
-    dataset = get_or_create_dataset(dataset_name, test_mode=test_mode)
+    # Create benchmark runner
+    runner = BenchmarkRunner(test_mode=test_mode)
+    
+    # Get dataset using runner's load_dataset method
+    dataset_config = DATASET_CONFIGS[dataset_name]
+    dataset = runner.load_dataset(dataset_config["name"], dataset_config["huggingface_path"])
+    if dataset is None:
+        raise Exception(f"Failed to load dataset {dataset_name}")
+        
     items = dataset.get_items()
     print(f"Loaded dataset with {len(items)} examples")
 
-    # Create benchmark runner and optimizer
-    runner = BenchmarkRunner()
-    optimizer = runner.create_optimizer(OPTIMIZER_CONFIGS[optimizer_name], PROJECT_CONFIG["name"])
+    # Create optimizer
+    optimizer = runner.create_optimizer(OPTIMIZER_CONFIGS[optimizer_name], runner.project_name)
     if optimizer is None:
         raise Exception(f"Failed to create optimizer {optimizer_name}")
 
@@ -380,7 +393,7 @@ def run_benchmark(
     input_key = DATASET_CONFIGS[dataset_name]["input_key"]
     output_key = DATASET_CONFIGS[dataset_name]["output_key"]
     initial_prompt = INITIAL_PROMPTS[dataset_name]
-    experiment_config = get_experiment_config(dataset_name, optimizer_name)
+    experiment_config = get_experiment_config(dataset_name, optimizer_name, test_mode=test_mode)
 
     # Create optimization config
     config = OptimizationConfig(
