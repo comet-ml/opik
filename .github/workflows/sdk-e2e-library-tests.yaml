@@ -44,6 +44,7 @@ jobs:
       - name: Run latest Opik server
         env:
           OPIK_USAGE_REPORT_ENABLED: false
+        shell: bash
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
           export OPIK_FRONTEND_FLAVOR=guardrails
