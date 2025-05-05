@@ -34,7 +34,7 @@ runs:
         export OPIK_URL_OVERRIDE=http://localhost:5173/api
         export OPIK_CONSOLE_LOGGING_LEVEL=DEBUG
         cd ./e2e_library_integration/${{ inputs.library_name }}/
-        uv run pytest  -vv .
+        python -m pytest -vv .
         
         # Deactivate virtual environment
         deactivate
