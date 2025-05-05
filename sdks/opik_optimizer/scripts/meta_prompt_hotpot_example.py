@@ -21,7 +21,7 @@ project_name = "optimize-metaprompt-hotpot"
 optimizer = MetaPromptOptimizer(
     model="o3-mini",  # Using o3-mini for evaluation
     project_name=project_name,
-    max_rounds=3,  # Number of optimization rounds
+    max_rounds=1,  # Number of optimization rounds
     num_prompts_per_round=4,  # Number of prompts to generate per round
     improvement_threshold=0.01,  # Minimum improvement required to continue
     temperature=0.1,  # Lower temperature for more focused responses
@@ -52,13 +52,17 @@ initial_score = optimizer.evaluate_prompt(
     metric_config=optimization_config.objective,
     task_config=optimization_config.task,
     prompt=initial_prompt,
+    num_test=100,
 )
 
 print("Initial prompt:", initial_prompt)
 print("Initial score:", initial_score)
 
 # Optimize the prompt using the optimization config
-result = optimizer.optimize_prompt(config=optimization_config)
+result = optimizer.optimize_prompt(
+    config=optimization_config,
+    num_test=100,
+)
 
 print(result)
 
@@ -68,6 +72,7 @@ final_score = optimizer.evaluate_prompt(
     metric_config=optimization_config.objective,
     task_config=optimization_config.task,
     prompt=result.prompt,
+    num_test=100,
 )
 
 print("Final score:", final_score)

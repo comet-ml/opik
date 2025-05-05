@@ -84,6 +84,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         prompt: str,
         use_full_dataset: bool = False,
         experiment_config: Optional[Dict] = None,
+        num_test: int = None,
     ) -> float:
         """
         Evaluate a prompt using the given dataset and metric configuration.
@@ -95,16 +96,20 @@ class MetaPromptOptimizer(BaseOptimizer):
             prompt: The prompt to evaluate
             use_full_dataset: Whether to use the full dataset or a subset for evaluation
             experiment_config: A dictionary to log with the experiments
+            num_test: The number of dataset items to use for evaluation
 
         Returns:
             float: The evaluation score
         """
         # Calculate subset size for trials
         if not use_full_dataset:
-            # Get total size of dataset
-            total_items = len(dataset.get_items())
-            # Calculate 20% of total, but no more than 20 items
-            subset_size = min(20, max(10, int(total_items * 0.2)))
+            if num_test is None:
+                # Get total size of dataset
+                total_items = len(dataset.get_items())
+                # Calculate 20% of total, but no more than 20 items
+                subset_size = min(20, max(10, int(total_items * 0.2)))
+            else:
+                subset_size = num_test
         else:
             subset_size = None  # Use all items for final checks
 
@@ -178,6 +183,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         self,
         config: OptimizationConfig,
         experiment_config: Optional[Dict] = None,
+        num_test: int = None,
+        auto_continue: bool = False,
         **kwargs,
     ) -> OptimizationResult:
         """
@@ -185,11 +192,15 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         Args:
             config: Configuration for the optimization task
+            experiment_config: A dictionary to log with the experiments
+            num_test: The number of dataset items to use for evaluation
+            auto_continue: If True, the algorithm may continue if goal not met
             **kwargs: Additional arguments for evaluation
 
         Returns:
             OptimizationResult: Structured result containing optimization details
         """
+        self.auto_continue = auto_continue
         self.dataset = config.dataset
         self.task_config = config.task
 
@@ -211,7 +222,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             metric_config=config.objective,
             task_config=config.task,
             prompt=current_prompt,
-            use_full_dataset=True,  # Use full dataset for initial evaluation
+            num_test=num_test,
         )
         initial_score = best_score
         best_prompt = current_prompt
@@ -245,7 +256,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
             # Evaluate each candidate with multiple trials
             prompt_scores = []
-            for prompt in candidate_prompts:
+            for candidate_count, prompt in enumerate(candidate_prompts):
                 trial_scores = []
                 should_continue = True
 
@@ -261,8 +272,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                             experiment_config=experiment_config,
                         )
                         trial_scores.append(score)
-                        logger.debug(
-                            f"Candidate prompt trial {trial + 1} score: {score:.4f}"
+                        logger.info(
+                            f"Round {round_num + 1}/{self.max_rounds}, candidate prompt {candidate_count + 1}/{len(candidate_prompts)}, trial {trial + 1}/3 score: {score:.4f}"
                         )
                     except Exception as e:
                         logger.error(f"Error in trial {trial + 1}: {e}")
@@ -271,7 +282,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 # Check if we should continue with additional trials
                 avg_score = sum(trial_scores) / len(trial_scores)
                 if (
-                    avg_score < best_score * 0.8
+                    not self.auto_continue or avg_score < best_score * 0.8
                 ):  # If significantly worse, skip additional trials
                     should_continue = False
 
@@ -287,8 +298,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                                 use_full_dataset=False,  # Use subset for trials
                             )
                             trial_scores.append(score)
-                            logger.debug(
-                                f"Candidate prompt trial {trial + 1} score: {score:.4f}"
+                            logger.info(
+                                f"Round {round_num + 1}/{self.max_rounds}, candidate prompt {candidate_count + 1}/{len(candidate_prompts)} trial {trial + 1}/6 score: {score:.4f}"
                             )
                         except Exception as e:
                             logger.error(f"Error in trial {trial + 1}: {e}")
@@ -311,8 +322,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                         metric_config=config.objective,
                         task_config=config.task,
                         prompt=best_candidate,
-                        use_full_dataset=True,  # Use full dataset for final check
                         experiment_config=experiment_config,
+                        num_test=num_test,
                     )
                     if final_score > best_score:
                         best_score = final_score
@@ -320,10 +331,10 @@ class MetaPromptOptimizer(BaseOptimizer):
                         logger.info(
                             f"New best prompt found with score: {best_score:.4f}"
                         )
-                        logger.debug(
+                        logger.info(
                             f"Individual trial scores: {[f'{s:.4f}' for s in trial_scores]}"
                         )
-                        logger.debug(f"Best prompt: {best_prompt}")
+                        logger.info(f"Best prompt: {best_prompt}")
 
                 # Update current prompt for next round
                 current_prompt = best_candidate
@@ -491,9 +502,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         previous_rounds: List[OptimizationRound],
     ) -> List[str]:
         """Generate candidate prompts using meta-prompting."""
-        logger.debug(f"\nGenerating candidate prompts for round {round_num + 1}")
-        logger.debug(f"Current prompt: {current_prompt}")
-        logger.debug(f"Current score: {best_score}")
+        logger.info(f"\nGenerating candidate prompts for round {round_num + 1}")
+        logger.info(f"Current prompt: {current_prompt}")
+        logger.info(f"Current score: {best_score}")
 
         system_prompt = """You are an expert prompt engineer. Your task is to improve the given prompt for a question-answering task.
         The goal is to optimize the prompt to get concise, direct answers to questions.
@@ -570,9 +581,9 @@ class MetaPromptOptimizer(BaseOptimizer):
             if "prompts" in result:
                 prompts = [p["prompt"] for p in result["prompts"]]
                 for p in result["prompts"]:
-                    logger.debug(f"Generated prompt: {p['prompt']}")
-                    logger.debug(f"Improvement focus: {p['improvement_focus']}")
-                    logger.debug(f"Reasoning: {p['reasoning']}")
+                    logger.info(f"Generated prompt: {p['prompt']}")
+                    logger.info(f"Improvement focus: {p['improvement_focus']}")
+                    logger.info(f"Reasoning: {p['reasoning']}")
                 return prompts
             else:
                 logger.warning("Invalid response format")
