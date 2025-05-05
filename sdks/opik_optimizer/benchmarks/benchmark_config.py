@@ -67,29 +67,32 @@ OPTIMIZER_CONFIGS = {
     "few_shot": {
         "class": "FewShotBayesianOptimizer",
         "params": {
-            "model": "openai/gpt-4o-mini",
-            "temperature": 0.1,
-            "max_tokens": 5000,
-            "num_threads": 1,
+            "model": "gpt-4o-mini",
+            "min_examples": 3,
+            "max_examples": 8,
+            "n_threads": 4,
+            "seed": 42,
         },
     },
     "meta_prompt": {
         "class": "MetaPromptOptimizer",
         "params": {
-            "model": "openai/gpt-4o-mini",
+            "model": "gpt-4o-mini",
             "max_rounds": 3,
             "num_prompts_per_round": 4,
             "improvement_threshold": 0.01,
-            "num_threads": 1,
+            "temperature": 0.1,
+            "max_completion_tokens": 5000,
+            "num_threads": 4,
         },
     },
     "mipro": {
         "class": "MiproOptimizer",
         "params": {
-            "model": "openai/gpt-4o-mini",
+            "model": "gpt-4o-mini",
             "temperature": 0.1,
             "max_tokens": 5000,
-            "num_threads": 1,
+            "num_threads": 4,
         },
     },
     # "external_dspy_mipro": {

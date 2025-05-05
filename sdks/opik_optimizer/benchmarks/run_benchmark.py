@@ -12,10 +12,17 @@ import pandas as pd
 from datasets import load_dataset
 from tqdm import tqdm
 
-from opik_optimizer import FewShotBayesianOptimizer, MetaPromptOptimizer, MiproOptimizer
+from opik_optimizer import (
+    FewShotBayesianOptimizer,
+    MetaPromptOptimizer,
+    MiproOptimizer,
+    OptimizationConfig,
+    MetricConfig,
+    PromptTaskConfig,
+    from_dataset_field,
+    from_llm_response_text,
+)
 from opik_optimizer.demo import get_or_create_dataset
-from opik_optimizer.optimization_config.configs import OptimizationConfig, MetricConfig, PromptTaskConfig
-from opik_optimizer.optimization_config.mappers import from_dataset_field, from_llm_response_text
 
 from benchmark_config import (
     DATASET_CONFIGS, 
@@ -105,30 +112,56 @@ class BenchmarkRunner:
                 objective=MetricConfig(
                     metric=metrics[0],
                     inputs={
-                        "input": from_dataset_field(name=input_key),
                         "output": from_llm_response_text(),
+                        "reference": from_dataset_field(name=output_key),
                     }
                 ),
                 task=PromptTaskConfig(
                     instruction_prompt=initial_prompt,
                     input_dataset_fields=[input_key],
                     output_dataset_field=output_key,
+                    use_chat_prompt=isinstance(optimizer, FewShotBayesianOptimizer),
                 )
             )
 
-            # Evaluate initial prompt in parallel
+            # Evaluate initial prompt based on optimizer type
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 initial_scores = {}
-                future_to_metric = {
-                    executor.submit(
-                        optimizer.evaluate_prompt,
-                        dataset=dataset,
-                        config=config,
-                        prompt=initial_prompt,
-                        experiment_config=experiment_config,
-                        num_test=10,  # Limit test size for initial evaluation
-                    ): metric for metric in metrics
-                }
+                future_to_metric = {}
+                
+                for metric in metrics:
+                    if isinstance(optimizer, MetaPromptOptimizer):
+                        future = executor.submit(
+                            optimizer.evaluate_prompt,
+                            dataset=dataset,
+                            metric_config=config.objective,
+                            task_config=config.task,
+                            prompt=initial_prompt,
+                            experiment_config=experiment_config,
+                        )
+                    elif isinstance(optimizer, MiproOptimizer):
+                        future = executor.submit(
+                            optimizer.evaluate_prompt,
+                            dataset=dataset,
+                            config=config,
+                            prompt=initial_prompt,
+                            experiment_config=experiment_config,
+                        )
+                    elif isinstance(optimizer, FewShotBayesianOptimizer):
+                        chat_prompt = [
+                            {"role": "system", "content": initial_prompt},
+                            {"role": "user", "content": f"{{{input_key}}}"},
+                        ]
+                        future = executor.submit(
+                            optimizer.evaluate_prompt,
+                            dataset=dataset,
+                            metric_config=config.objective,
+                            prompt=chat_prompt,
+                            experiment_config=experiment_config,
+                        )
+                    else:
+                        raise ValueError(f"Unsupported optimizer type: {type(optimizer).__name__}")
+                    future_to_metric[future] = metric
                 
                 for future in as_completed(future_to_metric):
                     metric = future_to_metric[future]
@@ -139,26 +172,48 @@ class BenchmarkRunner:
                         print(f"Error evaluating initial prompt for {metric}: {e}")
                         initial_scores[str(metric)] = 0.0
 
-            # Run optimization with monitoring
-            results = optimizer.optimize_prompt(
-                config=config,
-                experiment_config=experiment_config,
-                progress_callback=self.monitor.callback,
-            )
+            # Run optimization based on optimizer type
+            if isinstance(optimizer, (MetaPromptOptimizer, MiproOptimizer)):
+                results = optimizer.optimize_prompt(config=config)
+            elif isinstance(optimizer, FewShotBayesianOptimizer):
+                results = optimizer.optimize_prompt(config=config, n_trials=10)
+            else:
+                raise ValueError(f"Unsupported optimizer type: {type(optimizer).__name__}")
 
-            # Evaluate final prompt in parallel
+            # Evaluate final prompt based on optimizer type
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 final_scores = {}
-                future_to_metric = {
-                    executor.submit(
-                        optimizer.evaluate_prompt,
-                        dataset=dataset,
-                        config=config,
-                        prompt=results.prompt,
-                        experiment_config=experiment_config,
-                        num_test=10,  # Limit test size for final evaluation
-                    ): metric for metric in metrics
-                }
+                future_to_metric = {}
+                
+                for metric in metrics:
+                    if isinstance(optimizer, MetaPromptOptimizer):
+                        future = executor.submit(
+                            optimizer.evaluate_prompt,
+                            dataset=dataset,
+                            metric_config=config.objective,
+                            task_config=config.task,
+                            prompt=results.prompt,
+                            experiment_config=experiment_config,
+                        )
+                    elif isinstance(optimizer, MiproOptimizer):
+                        future = executor.submit(
+                            optimizer.evaluate_prompt,
+                            dataset=dataset,
+                            config=config,
+                            prompt=results.prompt,
+                            experiment_config=experiment_config,
+                        )
+                    elif isinstance(optimizer, FewShotBayesianOptimizer):
+                        future = executor.submit(
+                            optimizer.evaluate_prompt,
+                            dataset=dataset,
+                            metric_config=config.objective,
+                            prompt=results.prompt,
+                            experiment_config=experiment_config,
+                        )
+                    else:
+                        raise ValueError(f"Unsupported optimizer type: {type(optimizer).__name__}")
+                    future_to_metric[future] = metric
                 
                 for future in as_completed(future_to_metric):
                     metric = future_to_metric[future]
