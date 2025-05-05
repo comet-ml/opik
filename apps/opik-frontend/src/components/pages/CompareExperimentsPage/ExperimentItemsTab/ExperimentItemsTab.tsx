@@ -33,6 +33,7 @@ import {
   OnChangeFn,
   ROW_HEIGHT,
 } from "@/types/shared";
+import { EXPERIMENT_ITEM_OUTPUT_PREFIX } from "@/constants/experiments";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -40,16 +41,13 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
-import CompareExperimentsOutputCell from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/CompareExperimentsOutputCell";
-import CompareExperimentsFeedbackScoreCell from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/CompareExperimentsFeedbackScoreCell";
+import CompareExperimentsOutputCell from "@/components/pages-shared/experiments/CompareExperimentsOutputCell/CompareExperimentsOutputCell";
+import CompareExperimentsFeedbackScoreCell from "@/components/pages-shared/experiments/CompareExperimentsFeedbackScoreCell/CompareExperimentsFeedbackScoreCell";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import CompareExperimentsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsPanel";
-import CompareExperimentsActionsPanel, {
-  EXPERIMENT_ITEM_OUTPUT_PREFIX,
-  EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX,
-} from "@/components/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
-import CompareExperimentsNameCell from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/CompareExperimentsNameCell";
-import CompareExperimentsNameHeader from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/CompareExperimentsNameHeader";
+import CompareExperimentsActionsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
+import CompareExperimentsNameCell from "@/components/pages-shared/experiments/CompareExperimentsNameCell/CompareExperimentsNameCell";
+import CompareExperimentsNameHeader from "@/components/pages-shared/experiments/CompareExperimentsNameHeader/CompareExperimentsNameHeader";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import Loader from "@/components/shared/Loader/Loader";
@@ -74,7 +72,7 @@ import {
   calculateHeightStyle,
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
-import { calculateLineHeight } from "@/components/pages/CompareExperimentsPage/helpers";
+import { calculateLineHeight } from "@/lib/experiments";
 import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
@@ -286,7 +284,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     return (feedbackScoresData?.scores ?? [])
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => ({
-        id: `${EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX}.${c.name}`,
+        id: `${COLUMN_FEEDBACK_SCORES_ID}.${c.name}`,
         label: c.name,
         columnType: COLUMN_TYPE.number,
       }));
