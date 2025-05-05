@@ -672,6 +672,10 @@ paths:
         in: query
         schema:
           type: boolean
+      - name: with_optimizations_only
+        in: query
+        schema:
+          type: boolean
       - name: prompt_id
         in: query
         schema:
@@ -1037,6 +1041,15 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: optimization_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: types
+        in: query
+        schema:
+          type: string
       - name: name
         in: query
         schema:
@@ -4502,11 +4515,19 @@ components:
           type: integer
           format: int64
           readOnly: true
+        optimization_count:
+          type: integer
+          format: int64
+          readOnly: true
         most_recent_experiment_at:
           type: string
           format: date-time
           readOnly: true
         last_created_experiment_at:
+          type: string
+          format: date-time
+          readOnly: true
+        most_recent_optimization_at:
           type: string
           format: date-time
           readOnly: true
@@ -5058,11 +5079,19 @@ components:
           type: integer
           format: int64
           readOnly: true
+        optimization_count:
+          type: integer
+          format: int64
+          readOnly: true
         most_recent_experiment_at:
           type: string
           format: date-time
           readOnly: true
         last_created_experiment_at:
+          type: string
+          format: date-time
+          readOnly: true
+        most_recent_optimization_at:
           type: string
           format: date-time
           readOnly: true

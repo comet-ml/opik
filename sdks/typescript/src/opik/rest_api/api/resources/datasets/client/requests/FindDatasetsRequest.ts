@@ -10,6 +10,7 @@ export interface FindDatasetsRequest {
     page?: number;
     size?: number;
     withExperimentsOnly?: boolean;
+    withOptimizationsOnly?: boolean;
     promptId?: string;
     name?: string;
     sorting?: string;

@@ -56,7 +56,7 @@ export class Datasets {
         request: OpikApi.FindDatasetsRequest = {},
         requestOptions?: Datasets.RequestOptions,
     ): Promise<OpikApi.DatasetPagePublic> {
-        const { page, size, withExperimentsOnly, promptId, name, sorting } = request;
+        const { page, size, withExperimentsOnly, withOptimizationsOnly, promptId, name, sorting } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -68,6 +68,10 @@ export class Datasets {
 
         if (withExperimentsOnly != null) {
             _queryParams["with_experiments_only"] = withExperimentsOnly.toString();
+        }
+
+        if (withOptimizationsOnly != null) {
+            _queryParams["with_optimizations_only"] = withOptimizationsOnly.toString();
         }
 
         if (promptId != null) {
