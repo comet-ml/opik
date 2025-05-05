@@ -6,13 +6,16 @@ import re
 from playwright.sync_api import Page
 from tests.config import EnvConfig
 
+
 def generate_suffix_no_consecutive(length=20):
     if length <= 0:
         return ""
 
     allowed_chars = string.ascii_lowercase + string.digits
     if len(allowed_chars) < 2 and length > 1:
-        raise ValueError("Cannot generate non-consecutive string of length > 1 with < 2 unique characters.")
+        raise ValueError(
+            "Cannot generate non-consecutive string of length > 1 with < 2 unique characters."
+        )
 
     password_chars = [random.choice(allowed_chars)]
 
@@ -24,6 +27,7 @@ def generate_suffix_no_consecutive(length=20):
         password_chars.append(next_char)
 
     return "".join(password_chars)
+
 
 @pytest.fixture
 def temp_user_with_api_key(page: Page, browser_context, env_config: EnvConfig):
