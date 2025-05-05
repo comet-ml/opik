@@ -47,11 +47,6 @@ jobs:
         ]
 
     steps:
-      - name: Make LIBS variable global (workaround for cron)
-        id: init
-        run: |
-          echo "LIBS=${{ env.LIBS }}" >> $GITHUB_OUTPUT
-
       - name: Checkout
         uses: actions/checkout@v4.1.1
 
@@ -59,6 +54,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{matrix.python_version}}
+
+      - name: Make LIBS variable global (workaround for cron)
+        id: init
+        run: |
+          echo "LIBS=${{ env.LIBS }}" >> $GITHUB_OUTPUT
 
       - name: Run latest Opik server
         env:
@@ -107,7 +107,6 @@ jobs:
           python -m pytest  -vv .
 
       - name: Stop opik server
-        if: always()
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
           docker compose down
