@@ -333,11 +333,16 @@ class BenchmarkRunner:
                         metric_config = MetricConfig(
                             metric=metric,
                             inputs={
-                                "input": from_dataset_field(name=input_key),
-                                "output": from_llm_response_text(),
-                                "reference": from_dataset_field(name=output_key),
-                                "expected_output": from_dataset_field(name=output_key),  # Add expected_output for ContextPrecision
-                                "context": from_dataset_field(name="context"),  # Add context field for ContextPrecision
+                                "input": from_dataset_field(name=input_key),  # question
+                                "output": from_llm_response_text(),  # LLM's response
+                                "expected_output": from_dataset_field(name=output_key),  # ground truth answer
+                                "context": from_dataset_field(name="context"),  # context as a list
+                            },
+                            scoring_key_mapping={
+                                "input": "input",
+                                "output": "output",
+                                "expected_output": "expected_output",
+                                "context": "context"
                             }
                         )
                     else:
