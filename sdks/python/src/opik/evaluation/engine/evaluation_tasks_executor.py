@@ -5,7 +5,7 @@ from ...environment import get_tqdm_for_current_environment
 from .. import test_result
 from .types import EvaluationTask
 
-_tqdm = get_tqdm_for_current_environment
+_tqdm = get_tqdm_for_current_environment()
 
 
 def execute(
