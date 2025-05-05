@@ -337,6 +337,7 @@ class BenchmarkRunner:
                                 "output": from_llm_response_text(),
                                 "reference": from_dataset_field(name=output_key),
                                 "expected_output": from_dataset_field(name=output_key),  # Add expected_output for ContextPrecision
+                                "context": from_dataset_field(name="context"),  # Add context field for ContextPrecision
                             }
                         )
                     else:
@@ -672,7 +673,7 @@ class BenchmarkRunner:
         
         # Group by dataset and optimizer
         progress = df.groupby(["dataset", "optimizer"]).agg({
-            "final_scores": lambda x: {str(k): f"{float(v):.4f}" for k, v in x.iloc[-1].items()},
+            "final_scores": lambda x: {str(k): f"{float(v):.4f}" if v is not None else "N/A" for k, v in x.iloc[-1].items()},
             "time_taken": "mean"
         }).round(3)
         
