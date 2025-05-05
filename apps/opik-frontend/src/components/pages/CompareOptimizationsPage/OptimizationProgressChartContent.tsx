@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
-import { Dot, LineChart, XAxis } from "recharts";
+import { Dot, XAxis, CartesianGrid, YAxis, AreaChart, Area } from "recharts";
+import { LineDot } from "recharts/types/cartesian/Line";
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
@@ -11,9 +12,7 @@ import {
   ChartLegend,
 } from "@/components/ui/chart";
 import { DEFAULT_CHART_TICK } from "@/constants/chart";
-import { CartesianGrid, YAxis, Line } from "recharts";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
-import { LineDot } from "recharts/types/cartesian/Line";
 
 export type DataRecord = {
   entityId: string;
@@ -75,30 +74,40 @@ const OptimizationProgressChartContent: React.FC<
 
   const renderDot: LineDot = (props) => {
     const { key, ...rest } = props;
+    const color = config[props.name as string].color;
+    const height = 80;
+    const radius = 8;
     if (props.payload.entityId === bestEntityId) {
       return (
-        <Dot
-          key={key}
-          {...rest}
-          fill={config[props.name as string].color}
-          strokeWidth={8}
-        />
+        <React.Fragment key={key}>
+          <Dot {...rest} fill={color} strokeWidth={0} r={radius} />
+          <Dot
+            r={5}
+            fill={color}
+            cx={props.cx}
+            cy={props.cy}
+            strokeWidth={1.5}
+            stroke="white"
+          />
+          <rect
+            x={props.cx - 0.75}
+            y={props.cy + radius}
+            width="1.5"
+            height={height - radius - props.cy}
+            fill={color}
+          />
+        </React.Fragment>
       );
     }
 
     return (
-      <Dot
-        key={key}
-        {...rest}
-        fill={config[props.name as string].color}
-        strokeWidth={0}
-      />
+      <Dot key={key} {...rest} fill={color} strokeWidth={1.5} stroke="white" />
     );
   };
 
   return (
     <ChartContainer config={config} className="h-40 w-full">
-      <LineChart
+      <AreaChart
         data={chartData.data}
         margin={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
@@ -132,20 +141,36 @@ const OptimizationProgressChartContent: React.FC<
             />
           }
         />
-        <Line
+        <defs>
+          <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+            <stop
+              offset="5%"
+              stopColor={config[line].color as string}
+              stopOpacity={0.2}
+            />
+            <stop
+              offset="75%"
+              stopColor={config[line].color as string}
+              stopOpacity={0}
+            />
+          </linearGradient>
+        </defs>
+        <Area
           type="linear"
           key={line}
           dataKey={(record) => record.value}
           name={config[line].label as string}
           stroke={config[line].color as string}
+          fillOpacity={1}
+          fill="url(#area)"
           dot={renderDot}
-          activeDot={{ strokeWidth: 1.5, r: 4, stroke: "white" }}
+          activeDot={{ strokeWidth: 2, stroke: "white" }}
           strokeWidth={1.5}
           strokeOpacity={1}
           animationDuration={800}
           connectNulls={false}
         />
-      </LineChart>
+      </AreaChart>
     </ChartContainer>
   );
 };
