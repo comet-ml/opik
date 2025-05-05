@@ -328,6 +328,7 @@ class BenchmarkRunner:
                 
                 for metric in metrics:
                     # Create metric-specific config
+                    # TODO: This is a hack to get the ContextPrecision metric to work, move this to the base class
                     if isinstance(metric, ContextPrecision):
                         metric_config = MetricConfig(
                             metric=metric,
@@ -348,6 +349,7 @@ class BenchmarkRunner:
                             }
                         )
                     
+                    # TODO: Update APIs to be consistent
                     if isinstance(optimizer, MetaPromptOptimizer):
                         future = executor.submit(
                             optimizer.evaluate_prompt,
@@ -485,6 +487,7 @@ class BenchmarkRunner:
                         else:
                             final_prompt = [{"role": "system", "content": final_prompt}]
                     
+                    # TODO: Update APIs to be consistent
                     if isinstance(optimizer, MetaPromptOptimizer):
                         future = executor.submit(
                             optimizer.evaluate_prompt,
