@@ -1,4 +1,5 @@
 import uuid
+import logging
 from typing import Any, Dict, List, Optional
 
 from google.adk.agents.callback_context import CallbackContext
@@ -15,6 +16,8 @@ from .decorators import (
     ADKToolTrackDecorator,
     convert_adk_base_models,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 class OpikTracer:
@@ -118,6 +121,14 @@ class OpikTracer:
         *args: Any,
         **kwargs: Any,
     ) -> None:
+        try:
+            # Ignore partial chunks, ADK will call this method with the full
+            # response at the end
+            if llm_response.partial is True:
+                return
+        except Exception:
+            LOGGER.debug("Error checking for partial chunks", exc_info=True)
+
         self._last_model_output = convert_adk_base_models(llm_response)
 
         self._llm_tracer._after_call(
