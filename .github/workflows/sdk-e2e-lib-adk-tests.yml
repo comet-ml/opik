@@ -6,7 +6,7 @@ name: SDK E2E Lib ADK (Google) Tests
 run-name: "SDK E2E Library ADK Tests ${{ github.ref_name }} by @${{ github.actor }}"
 env:
   GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
-  GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS_JSON }}
+  GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
   GOOGLE_CLOUD_LOCATION: us-east1
   GOOGLE_CLOUD_PROJECT: opik-sdk-tests
   GOOGLE_GENAI_USE_VERTEXAI: TRUE

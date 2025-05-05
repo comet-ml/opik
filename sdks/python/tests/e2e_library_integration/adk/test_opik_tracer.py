@@ -77,8 +77,9 @@ def test_opik_tracer_with_sample_agent(
         f"{base_url}/run",
         json=json_data,
     )
-    print("Response: ", result.json())
+    print("Response: ", result.text)
     assert result.status_code == 200
+    print("Response: ", result.json())
 
     traces = opik_client_unique_project_name.search_traces(
         filter_string='input contains "Hey, whats the weather in New York today?"'
