@@ -8,7 +8,7 @@ import sys
 from importlib import metadata
 from typing import Dict, Literal
 import tqdm
-from tqdm.std import tqdm as std_tqdm
+from tqdm.util import Comparable
 
 import opik.config
 from opik import url_helpers
@@ -144,7 +144,7 @@ def get_installed_packages() -> Dict[str, str]:
     return installed_packages
 
 
-def get_tqdm_for_current_environment() -> std_tqdm:
+def get_tqdm_for_current_environment() -> Comparable:
     """
     Get a tqdm progress bar for your environment.
     """
