@@ -47,15 +47,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.1.1
 
-      - name: Setup Python ${{matrix.python_version}}
-        uses: actions/setup-python@v5
+      - name: Install uv and set the Python version ${{ matrix.python_version }}
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: ${{matrix.python_version}}
+          python-version: ${{ matrix.python_version }}
 
-#      - name: Make LIBS variable global (workaround for cron)
-#        id: init
-#        run: |
-#          echo "LIBS=${{ env.LIBS }}" >> $GITHUB_OUTPUT
+      - name: Make LIBS variable global (workaround for cron)
+        id: init
+        run: |
+          echo "LIBS=${{ env.LIBS }}" >> $GITHUB_OUTPUT
 
 #      - name: Run latest Opik server
 #        env:
@@ -81,7 +81,7 @@ jobs:
         with:
           credentials_json: '${{ secrets.GCP_CREDENTIALS_JSON }}'
 
-      - name: ADK Tests Python ${{matrix.python-version}}
+      - name: ADK Tests Python ${{ matrix.python_version }}
         if: contains(fromJSON('["adk", "all"]'), env.LIBS)
         env:
           GOOGLE_CLOUD_LOCATION: us-east1
@@ -89,7 +89,7 @@ jobs:
           GOOGLE_GENAI_USE_VERTEXAI: TRUE
         uses: ./.github/actions/install_opik_and_run_e2e_lib_integration_tests
         with:
-          python_version: ${{matrix.python-version}}
+          python_version: ${{ matrix.python_version }}
           library_name: adk
 
       - name: Stop opik server
