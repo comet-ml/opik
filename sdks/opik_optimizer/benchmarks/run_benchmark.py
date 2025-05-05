@@ -7,6 +7,7 @@ from typing import Dict, List, Any
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
+import argparse
 
 import pandas as pd
 from datasets import load_dataset
@@ -353,9 +354,172 @@ class BenchmarkRunner:
             "final"
         )
 
+def run_benchmark(
+    dataset_name: str,
+    optimizer_name: str,
+    num_iterations: int = 3,
+    test_mode: bool = False,
+) -> Dict:
+    """Run benchmark for a single dataset and optimizer."""
+    print(f"\nRunning benchmark for {dataset_name} with {optimizer_name}")
+    print(f"Test mode: {test_mode}")
+
+    # Get dataset
+    dataset = get_or_create_dataset(dataset_name, test_mode=test_mode)
+    items = dataset.get_items()
+    print(f"Loaded dataset with {len(items)} examples")
+
+    # Create benchmark runner and optimizer
+    runner = BenchmarkRunner()
+    optimizer = runner.create_optimizer(OPTIMIZER_CONFIGS[optimizer_name], PROJECT_CONFIG["name"])
+    if optimizer is None:
+        raise Exception(f"Failed to create optimizer {optimizer_name}")
+
+    # Get metrics and config
+    metrics = DATASET_CONFIGS[dataset_name]["metrics"]
+    input_key = DATASET_CONFIGS[dataset_name]["input_key"]
+    output_key = DATASET_CONFIGS[dataset_name]["output_key"]
+    initial_prompt = INITIAL_PROMPTS[dataset_name]
+    experiment_config = get_experiment_config(dataset_name, optimizer_name)
+
+    # Create optimization config
+    config = OptimizationConfig(
+        dataset=dataset,
+        objective=MetricConfig(
+            metric=metrics[0],
+            inputs={
+                "output": from_llm_response_text(),
+                "reference": from_dataset_field(name=output_key),
+            }
+        ),
+        task=PromptTaskConfig(
+            instruction_prompt=initial_prompt,
+            input_dataset_fields=[input_key],
+            output_dataset_field=output_key,
+            use_chat_prompt=isinstance(optimizer, FewShotBayesianOptimizer),
+        )
+    )
+
+    # Run iterations
+    results = []
+    for i in range(num_iterations):
+        print(f"\nIteration {i+1}/{num_iterations}")
+        
+        # Run optimization
+        start_time = time.time()
+        try:
+            if isinstance(optimizer, (MetaPromptOptimizer, MiproOptimizer)):
+                optimization_result = optimizer.optimize_prompt(config=config)
+            elif isinstance(optimizer, FewShotBayesianOptimizer):
+                optimization_result = optimizer.optimize_prompt(config=config, n_trials=10)
+            else:
+                raise ValueError(f"Unsupported optimizer type: {type(optimizer).__name__}")
+            
+            optimized_prompt = optimization_result.prompt
+            optimization_time = time.time() - start_time
+
+            # Evaluate optimized prompt
+            start_time = time.time()
+            if isinstance(optimizer, MetaPromptOptimizer):
+                optimized_scores = optimizer.evaluate_prompt(
+                    dataset=dataset,
+                    metric_config=config.objective,
+                    task_config=config.task,
+                    prompt=optimized_prompt,
+                    experiment_config=experiment_config,
+                )
+            elif isinstance(optimizer, MiproOptimizer):
+                optimized_scores = optimizer.evaluate_prompt(
+                    dataset=dataset,
+                    config=config,
+                    prompt=optimized_prompt,
+                    experiment_config=experiment_config,
+                )
+            elif isinstance(optimizer, FewShotBayesianOptimizer):
+                optimized_scores = optimizer.evaluate_prompt(
+                    dataset=dataset,
+                    metric_config=config.objective,
+                    prompt=optimized_prompt,
+                    experiment_config=experiment_config,
+                )
+            else:
+                raise ValueError(f"Unsupported optimizer type: {type(optimizer).__name__}")
+            
+            evaluation_time = time.time() - start_time
+
+            results.append({
+                "iteration": i + 1,
+                "optimized_prompt": optimized_prompt,
+                "optimized_scores": optimized_scores,
+                "optimization_time": optimization_time,
+                "evaluation_time": evaluation_time,
+            })
+        except Exception as e:
+            print(f"Error in iteration {i+1}: {e}")
+            print(traceback.format_exc())
+            continue
+
+    return {
+        "dataset": dataset_name,
+        "optimizer": optimizer_name,
+        "test_mode": test_mode,
+        "num_iterations": num_iterations,
+        "results": results,
+    }
+
+def main():
+    """Run benchmarks for all datasets and optimizers."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Run benchmarks")
+    parser.add_argument(
+        "--datasets",
+        nargs="+",
+        default=list(DATASET_CONFIGS.keys()),
+        help="Datasets to run benchmarks for",
+    )
+    parser.add_argument(
+        "--optimizers",
+        nargs="+",
+        default=list(OPTIMIZER_CONFIGS.keys()),
+        help="Optimizers to run benchmarks for",
+    )
+    parser.add_argument(
+        "--iterations",
+        type=int,
+        default=3,
+        help="Number of iterations to run for each benchmark",
+    )
+    parser.add_argument(
+        "--test-mode",
+        action="store_true",
+        help="Run in test mode with 5 examples per dataset",
+    )
+    args = parser.parse_args()
+
+    # Run benchmarks
+    results = []
+    for dataset_name in args.datasets:
+        for optimizer_name in args.optimizers:
+            try:
+                result = run_benchmark(
+                    dataset_name=dataset_name,
+                    optimizer_name=optimizer_name,
+                    num_iterations=args.iterations,
+                    test_mode=args.test_mode,
+                )
+                results.append(result)
+            except Exception as e:
+                print(f"Error running benchmark for {dataset_name} with {optimizer_name}: {e}")
+                print(traceback.format_exc())
+                continue
+
+    # Save results
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    test_mode_str = "_test" if args.test_mode else ""
+    output_file = f"benchmark_results{test_mode_str}_{timestamp}.json"
+    with open(output_file, "w") as f:
+        json.dump(results, f, indent=2)
+    print(f"\nResults saved to {output_file}")
+
 if __name__ == "__main__":
-    # Set seed for reproducibility
-    seed = 42  # You can change this to any integer value
-    runner = BenchmarkRunner(max_workers=4, seed=seed)  # Adjust based on your CPU cores
-    runner.run_benchmark()
-    runner.print_summary() 
+    main() 

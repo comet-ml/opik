@@ -27,6 +27,7 @@ def get_or_create_dataset(
         "medhallu",
         "rag_hallucinations",
     ],
+    test_mode: bool = False,
 ) -> opik.Dataset:
     """Get or create a dataset from HuggingFace."""
     try:
@@ -34,44 +35,44 @@ def get_or_create_dataset(
         opik_client = opik.Opik()
         try:
             dataset = opik_client.get_dataset(name)
-            if (
-                dataset and len(dataset.get_items()) > 0
-            ):  # Check if dataset exists and has data
-                return dataset
-            # If dataset exists but is empty, delete it
-            print(f"Dataset {name} exists but is empty - deleting it...")
-            opik_client.delete_dataset(name)
+            if dataset:  # Check if dataset exists
+                items = dataset.get_items()
+                if items and len(items) > 0:  # Check if dataset has data
+                    return dataset
+                # If dataset exists but is empty, delete it
+                print(f"Dataset {name} exists but is empty - deleting it...")
+                opik_client.delete_dataset(name)
         except Exception:
             # If dataset doesn't exist, we'll create it
             pass
 
         # Load data based on dataset name
         if name == "hotpot-300":
-            data = _load_hotpot_300()
+            data = _load_hotpot_300(test_mode)
         elif name == "hotpot-500":
-            data = _load_hotpot_500()
+            data = _load_hotpot_500(test_mode)
         elif name == "halu-eval-300":
-            data = _load_halu_eval_300()
+            data = _load_halu_eval_300(test_mode)
         elif name == "tiny-test":
             data = _load_tiny_test()
         elif name == "gsm8k":
-            data = _load_gsm8k()
+            data = _load_gsm8k(test_mode)
         elif name == "hotpot_qa":
-            data = _load_hotpot_qa()
+            data = _load_hotpot_qa(test_mode)
         elif name == "ai2_arc":
-            data = _load_ai2_arc()
+            data = _load_ai2_arc(test_mode)
         elif name == "truthful_qa":
-            data = _load_truthful_qa()
+            data = _load_truthful_qa(test_mode)
         elif name == "cnn_dailymail":
-            data = _load_cnn_dailymail()
+            data = _load_cnn_dailymail(test_mode)
         elif name == "ragbench_sentence_relevance":
-            data = _load_ragbench_sentence_relevance()
+            data = _load_ragbench_sentence_relevance(test_mode)
         elif name == "election_questions":
-            data = _load_election_questions()
+            data = _load_election_questions(test_mode)
         elif name == "medhallu":
-            data = _load_medhallu()
+            data = _load_medhallu(test_mode)
         elif name == "rag_hallucinations":
-            data = _load_rag_hallucinations()
+            data = _load_rag_hallucinations(test_mode)
         elif name == "math-50":
             data = _load_math_50()
         else:
@@ -87,7 +88,7 @@ def get_or_create_dataset(
             if e.status_code == 409:  # Dataset already exists
                 # Try to get the dataset again
                 dataset = opik_client.get_dataset(name)
-                if not dataset or len(dataset.get_items()) == 0:
+                if not dataset:
                     raise HaltError(f"Dataset {name} exists but is empty")
                 return dataset
             raise HaltError(f"Failed to create dataset {name}: {e}")
@@ -99,7 +100,8 @@ def get_or_create_dataset(
             raise HaltError(f"Failed to insert data into dataset {name}: {e}")
 
         # Verify data was added
-        if not dataset.get_items():
+        items = dataset.get_items()
+        if not items or len(items) == 0:
             raise HaltError(f"Failed to add data to dataset {name}")
 
         return dataset
@@ -111,11 +113,11 @@ def get_or_create_dataset(
         raise HaltError(f"Critical error loading dataset {name}: {e}")
 
 
-def _load_hotpot_500() -> List[Dict[str, Any]]:
+def _load_hotpot_500(test_mode: bool = False) -> List[Dict[str, Any]]:
     from dspy.datasets import HotPotQA
 
     seed = 2024
-    size = 500
+    size = 500 if not test_mode else 5
 
     try:
         trainset = [
@@ -135,11 +137,11 @@ def _load_hotpot_500() -> List[Dict[str, Any]]:
     return data
 
 
-def _load_hotpot_300() -> List[Dict[str, Any]]:
+def _load_hotpot_300(test_mode: bool = False) -> List[Dict[str, Any]]:
     from dspy.datasets import HotPotQA
 
     seed = 42
-    size = 300
+    size = 300 if not test_mode else 3
 
     try:
         trainset = [
@@ -159,7 +161,7 @@ def _load_hotpot_300() -> List[Dict[str, Any]]:
     return data
 
 
-def _load_halu_eval_300() -> List[Dict[str, Any]]:
+def _load_halu_eval_300(test_mode: bool = False) -> List[Dict[str, Any]]:
     import pandas as pd
 
     try:
@@ -219,7 +221,7 @@ def _load_tiny_test() -> List[Dict[str, Any]]:
     ]
 
 
-def _load_gsm8k() -> List[Dict[str, Any]]:
+def _load_gsm8k(test_mode: bool = False) -> List[Dict[str, Any]]:
     """Load GSM8K dataset with 300 examples."""
     try:
         dataset = load_dataset("gsm8k", "main")
@@ -237,7 +239,7 @@ def _load_gsm8k() -> List[Dict[str, Any]]:
     ]
 
 
-def _load_hotpot_qa() -> List[Dict[str, Any]]:
+def _load_hotpot_qa(test_mode: bool = False) -> List[Dict[str, Any]]:
     """Load HotpotQA dataset with 300 examples."""
     try:
         dataset = load_dataset("hotpot_qa", "distractor")
@@ -256,7 +258,7 @@ def _load_hotpot_qa() -> List[Dict[str, Any]]:
     ]
 
 
-def _load_ai2_arc() -> List[Dict[str, Any]]:
+def _load_ai2_arc(test_mode: bool = False) -> List[Dict[str, Any]]:
     """Load AI2 ARC dataset with 300 examples."""
     try:
         dataset = load_dataset("ai2_arc", "ARC-Challenge")
@@ -275,7 +277,7 @@ def _load_ai2_arc() -> List[Dict[str, Any]]:
     ]
 
 
-def _load_truthful_qa() -> List[Dict]:
+def _load_truthful_qa(test_mode: bool = False) -> List[Dict]:
     """Load TruthfulQA dataset."""
     try:
         # Load both configurations
@@ -369,7 +371,7 @@ def _load_truthful_qa() -> List[Dict]:
         raise
 
 
-def _load_cnn_dailymail() -> List[Dict]:
+def _load_cnn_dailymail(test_mode: bool = False) -> List[Dict]:
     """Load CNN Daily Mail dataset with 100 examples."""
     try:
         dataset = load_dataset("cnn_dailymail", "3.0.0", streaming=True)
@@ -550,14 +552,15 @@ def _load_math_50():
     ]
 
 
-def _load_ragbench_sentence_relevance() -> List[Dict]:
+def _load_ragbench_sentence_relevance(test_mode: bool = False) -> List[Dict]:
     """Load RAGBench sentence relevance dataset."""
     try:
         dataset = load_dataset("wandb/ragbench-sentence-relevance-balanced")
     except Exception:
         raise Exception("Unable to download ragbench-sentence-relevance; please try again") from None
 
-    train_data = dataset["train"].select(range(300))  # Take first 300 examples
+    n_samples = 5 if test_mode else 300
+    train_data = dataset["train"].select(range(n_samples))
 
     return [
         {
@@ -569,14 +572,15 @@ def _load_ragbench_sentence_relevance() -> List[Dict]:
     ]
 
 
-def _load_election_questions() -> List[Dict]:
+def _load_election_questions(test_mode: bool = False) -> List[Dict]:
     """Load Anthropic election questions dataset."""
     try:
         dataset = load_dataset("Anthropic/election_questions")
     except Exception:
         raise Exception("Unable to download election_questions; please try again") from None
 
-    train_data = dataset["test"].select(range(300))  # Take first 300 examples from test split
+    n_samples = 5 if test_mode else 300
+    train_data = dataset["test"].select(range(n_samples))
 
     return [
         {
@@ -587,14 +591,15 @@ def _load_election_questions() -> List[Dict]:
     ]
 
 
-def _load_medhallu() -> List[Dict]:
+def _load_medhallu(test_mode: bool = False) -> List[Dict]:
     """Load MedHallu medical hallucinations dataset."""
     try:
         dataset = load_dataset("UTAustin-AIHealth/MedHallu", "pqa_labeled")
     except Exception:
         raise Exception("Unable to download medhallu; please try again") from None
 
-    train_data = dataset["train"].select(range(300))  # Take first 300 examples
+    n_samples = 5 if test_mode else 300
+    train_data = dataset["train"].select(range(n_samples))
 
     return [
         {
@@ -609,14 +614,15 @@ def _load_medhallu() -> List[Dict]:
     ]
 
 
-def _load_rag_hallucinations() -> List[Dict]:
+def _load_rag_hallucinations(test_mode: bool = False) -> List[Dict]:
     """Load Aporia RAG hallucinations dataset."""
     try:
         dataset = load_dataset("aporia-ai/rag_hallucinations")
     except Exception:
         raise Exception("Unable to download rag_hallucinations; please try again") from None
 
-    train_data = dataset["train"].select(range(300))  # Take first 300 examples
+    n_samples = 5 if test_mode else 300
+    train_data = dataset["train"].select(range(n_samples))
 
     return [
         {

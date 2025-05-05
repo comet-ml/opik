@@ -20,7 +20,8 @@ from pathlib import Path
 # Project configuration
 PROJECT_CONFIG = {
     "name": "agent-optimizer-benchmark",
-    "workspace": "default"
+    "workspace": "default",
+    "test_mode": False,  # Set to True to run with 5 examples per dataset
 }
 
 # Dataset configurations
@@ -164,6 +165,7 @@ def get_experiment_config(dataset_name: str, optimizer_name: str) -> Dict:
         "dataset": dataset_name,
         "optimizer": optimizer_name,
         "timestamp": datetime.now().isoformat(),
+        "test_mode": PROJECT_CONFIG["test_mode"],  # Include test mode in experiment config
         "environment": {
             "python_version": "{}.{}.{}".format(
                 version_info.major, version_info.minor, version_info.micro
