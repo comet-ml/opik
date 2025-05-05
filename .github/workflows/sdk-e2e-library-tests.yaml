@@ -50,10 +50,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.1.1
 
-      - name: Setup Python ${{matrix.python_version}}
-        uses: actions/setup-python@v5
+      - name: Install uv and set the Python version ${{matrix.python_version}}
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: ${{matrix.python_version}}
+          python-version: ${{ matrix.python-version }}
 
       - name: Make LIBS variable global (workaround for cron)
         id: init
@@ -79,12 +79,6 @@ jobs:
           echo "Check backend health"
           ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
 
-      - name: Install opik and test tools
-        run: |
-          pip install .
-          cd ./tests
-          pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
-
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -96,15 +90,9 @@ jobs:
           GOOGLE_CLOUD_LOCATION: us-east1
           GOOGLE_CLOUD_PROJECT: opik-sdk-tests
           GOOGLE_GENAI_USE_VERTEXAI: TRUE
-        run: |
-          cd ./tests
-          pip install --no-cache-dir --disable-pip-version-check -r e2e_library_integration/adk/requirements.txt
-          pip list
-          # export variables and run ADK tests
-          export OPIK_URL_OVERRIDE=http://localhost:5173/api
-          export OPIK_CONSOLE_LOGGING_LEVEL=DEBUG
-          cd ./tests/e2e_library_integration/adk/
-          python -m pytest  -vv .
+        uses: ./.github/actions/install_opik_and_run_e2e_lib_integration_tests
+        with:
+          library_name: adk
 
       - name: Stop opik server
         run: |
