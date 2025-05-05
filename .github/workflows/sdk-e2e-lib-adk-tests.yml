@@ -6,7 +6,6 @@ name: SDK E2E Lib ADK (Google) Tests
 run-name: "SDK E2E Library ADK Tests ${{ github.ref_name }} by @${{ github.actor }}"
 env:
   GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
-  GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
   GOOGLE_CLOUD_LOCATION: us-east1
   GOOGLE_CLOUD_PROJECT: opik-sdk-tests
   GOOGLE_GENAI_USE_VERTEXAI: TRUE
@@ -55,6 +54,11 @@ jobs:
           cd ./tests
           pip install --no-cache-dir --disable-pip-version-check -r e2e_library_integration/adk/requirements.txt
           pip list
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS_JSON }}'
 
       - name: Run tests
         run: |
