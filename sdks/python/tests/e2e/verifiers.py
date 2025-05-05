@@ -467,3 +467,36 @@ def _verify_experiment_prompts(
         assert (
             experiment_prompts[i] == prompt.prompt
         ), f"{experiment_prompts[i]} != {prompt.prompt}"
+
+
+def verify_optimization(
+    opik_client: opik.Opik,
+    optimization_id: str,
+    name: str = mock.ANY,  # type: ignore
+    dataset_name: Optional[str] = mock.ANY,  # type: ignore
+    status: Optional[str] = mock.ANY,  # type: ignore
+    objective_name: Optional[str] = mock.ANY,  # type: ignore
+) -> None:
+    if not synchronization.until(
+        lambda: (opik_client.get_optimization_by_id(optimization_id) is not None),
+        allow_errors=True,
+    ):
+        raise AssertionError(f"Failed to get optimization with id {optimization_id}.")
+
+    optimization = opik_client.get_optimization_by_id(optimization_id)
+
+    optimization_content = optimization.fetch_content()
+
+    assert optimization_content.name == name, f"{optimization_content.name} != {name}"
+
+    assert (
+        optimization_content.dataset_name == dataset_name
+    ), f"{optimization_content.dataset_name} != {dataset_name}"
+
+    assert (
+        optimization_content.status == status
+    ), f"{optimization_content.status} != {status}"
+
+    assert (
+        optimization_content.objective_name == objective_name
+    ), f"{optimization_content.objective_name} != {objective_name}"
