@@ -26,6 +26,7 @@ from opik_optimizer import (
 )
 from opik_optimizer.demo import get_or_create_dataset
 from opik_optimizer.cache_config import initialize_cache, clear_cache
+from opik.evaluation.metrics.llm_judges.context_precision.metric import ContextPrecision
 
 from benchmark_config import (
     DATASET_CONFIGS, 
@@ -312,7 +313,7 @@ class BenchmarkRunner:
                     }
                 ),
                 task=PromptTaskConfig(
-                    instruction_prompt=initial_prompt,  # Use original string for instruction
+                    instruction_prompt=initial_prompt,
                     input_dataset_fields=[input_key],
                     output_dataset_field=output_key,
                     use_chat_prompt=isinstance(optimizer, FewShotBayesianOptimizer),
@@ -326,14 +327,26 @@ class BenchmarkRunner:
                 future_to_metric = {}
                 
                 for metric in metrics:
-                    metric_config = MetricConfig(
-                        metric=metric,
-                        inputs={
-                            "input": from_dataset_field(name=input_key),
-                            "output": from_llm_response_text(),
-                            "reference": from_dataset_field(name=output_key),
-                        }
-                    )
+                    # Create metric-specific config
+                    if isinstance(metric, ContextPrecision):
+                        metric_config = MetricConfig(
+                            metric=metric,
+                            inputs={
+                                "input": from_dataset_field(name=input_key),
+                                "output": from_llm_response_text(),
+                                "reference": from_dataset_field(name=output_key),
+                                "expected_output": from_dataset_field(name=output_key),  # Add expected_output for ContextPrecision
+                            }
+                        )
+                    else:
+                        metric_config = MetricConfig(
+                            metric=metric,
+                            inputs={
+                                "input": from_dataset_field(name=input_key),
+                                "output": from_llm_response_text(),
+                                "reference": from_dataset_field(name=output_key),
+                            }
+                        )
                     
                     if isinstance(optimizer, MetaPromptOptimizer):
                         future = executor.submit(
