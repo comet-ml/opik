@@ -47,10 +47,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.1.1
 
-      - name: Install uv and set the Python version ${{ matrix.python_version }}
-        uses: astral-sh/setup-uv@v5
+      - name: Setup Python ${{matrix.python_version}}
+        uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{matrix.python_version}}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
       - name: Make LIBS variable global (workaround for cron)
         id: init
