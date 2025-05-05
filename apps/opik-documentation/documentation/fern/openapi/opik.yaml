@@ -6747,12 +6747,9 @@ components:
     ServiceTogglesConfig:
       required:
       - pythonEvaluatorEnabled
-      - guardrailsEnabled
       type: object
       properties:
         pythonEvaluatorEnabled:
-          type: boolean
-        guardrailsEnabled:
           type: boolean
     ErrorInfo:
       required:
