@@ -125,13 +125,21 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
             instruction = config.task.instruction_prompt
             demo_examples = [dataset[idx] for idx in example_indices]
+            
+            # Convert all values in demo examples to strings
+            processed_demo_examples = []
+            for example in demo_examples:
+                processed_example = {}
+                for key, value in example.items():
+                    processed_example[key] = str(value)
+                processed_demo_examples.append(processed_example)
 
             param = prompt_parameter.ChatPromptParameter(
                 name="few_shot_examples_chat_prompt",
                 instruction=instruction,
                 task_input_parameters=config.task.input_dataset_fields,
                 task_output_parameter=config.task.output_dataset_field,
-                demo_examples=demo_examples,
+                demo_examples=processed_demo_examples,
             )
 
             llm_task = self._build_task_from_prompt_template(param.as_template())
