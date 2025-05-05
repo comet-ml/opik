@@ -32,6 +32,34 @@ DATASET_CONFIGS = {
         "output_key": "answer",
         "huggingface_path": "gsm8k",
     },
+    "ragbench_sentence_relevance": {
+        "name": "RAGBench Sentence Relevance",
+        "metrics": [AnswerRelevance()],
+        "input_key": "question",
+        "output_key": "sentence",
+        "huggingface_path": "ragbench_sentence_relevance",
+    },
+    "election_questions": {
+        "name": "Election Questions",
+        "metrics": [Hallucination()],
+        "input_key": "question",
+        "output_key": "label",
+        "huggingface_path": "election_questions",
+    },
+    "medhallu": {
+        "name": "MedHallu",
+        "metrics": [Hallucination(), AnswerRelevance()],
+        "input_key": "question",
+        "output_key": "ground_truth",
+        "huggingface_path": "medhallu",
+    },
+    "rag_hallucinations": {
+        "name": "RAG Hallucinations",
+        "metrics": [Hallucination(), ContextPrecision()],
+        "input_key": "question",
+        "output_key": "answer",
+        "huggingface_path": "rag_hallucinations",
+    },
     # "hotpotqa": {
     #     "name": "HotpotQA",
     #     "metrics": [AnswerRelevance(), ContextPrecision()],
@@ -118,6 +146,10 @@ OPTIMIZER_CONFIGS = {
 # Initial prompts for each dataset
 INITIAL_PROMPTS = {
     "gsm8k": "Solve the following math problem step by step.",
+    "ragbench_sentence_relevance": "Evaluate whether the given sentence is relevant to answering the question.",
+    "election_questions": "Classify whether the following question about US elections is harmful or harmless.",
+    "medhallu": "Answer the medical question accurately based on the given knowledge, avoiding any hallucinations.",
+    "rag_hallucinations": "Answer the question based on the given context, ensuring all information is supported by the context.",
     "hotpotqa": "Answer the question based on the given context.",
     "arc": "Select the correct answer from the given options.",
     "truthfulqa": "Provide a truthful and accurate answer to the question.",

@@ -22,6 +22,10 @@ def get_or_create_dataset(
         "ai2_arc",
         "truthful_qa",
         "cnn_dailymail",
+        "ragbench_sentence_relevance",
+        "election_questions",
+        "medhallu",
+        "rag_hallucinations",
     ],
 ) -> opik.Dataset:
     """Get or create a dataset from HuggingFace."""
@@ -60,6 +64,14 @@ def get_or_create_dataset(
             data = _load_truthful_qa()
         elif name == "cnn_dailymail":
             data = _load_cnn_dailymail()
+        elif name == "ragbench_sentence_relevance":
+            data = _load_ragbench_sentence_relevance()
+        elif name == "election_questions":
+            data = _load_election_questions()
+        elif name == "medhallu":
+            data = _load_medhallu()
+        elif name == "rag_hallucinations":
+            data = _load_rag_hallucinations()
         elif name == "math-50":
             data = _load_math_50()
         else:
@@ -535,4 +547,83 @@ def _load_math_50():
             "question": "Begin with 4, multiply by 9, subtract 12, and then divide by 6.",
             "expected answer": "4",
         },
+    ]
+
+
+def _load_ragbench_sentence_relevance() -> List[Dict]:
+    """Load RAGBench sentence relevance dataset."""
+    try:
+        dataset = load_dataset("wandb/ragbench-sentence-relevance-balanced")
+    except Exception:
+        raise Exception("Unable to download ragbench-sentence-relevance; please try again") from None
+
+    train_data = dataset["train"].select(range(300))  # Take first 300 examples
+
+    return [
+        {
+            "question": item["question"],
+            "sentence": item["sentence"],
+            "label": item["label"],
+        }
+        for item in train_data
+    ]
+
+
+def _load_election_questions() -> List[Dict]:
+    """Load Anthropic election questions dataset."""
+    try:
+        dataset = load_dataset("Anthropic/election_questions")
+    except Exception:
+        raise Exception("Unable to download election_questions; please try again") from None
+
+    train_data = dataset["test"].select(range(300))  # Take first 300 examples from test split
+
+    return [
+        {
+            "question": item["question"],
+            "label": item["label"],  # "Harmless" or "Harmful"
+        }
+        for item in train_data
+    ]
+
+
+def _load_medhallu() -> List[Dict]:
+    """Load MedHallu medical hallucinations dataset."""
+    try:
+        dataset = load_dataset("UTAustin-AIHealth/MedHallu", "pqa_labeled")
+    except Exception:
+        raise Exception("Unable to download medhallu; please try again") from None
+
+    train_data = dataset["train"].select(range(300))  # Take first 300 examples
+
+    return [
+        {
+            "question": item["Question"],
+            "knowledge": item["Knowledge"],
+            "ground_truth": item["Ground Truth"],
+            "hallucinated_answer": item["Hallucinated Answer"],
+            "difficulty_level": item["Difficulty Level"],
+            "hallucination_category": item["Category of Hallucination"],
+        }
+        for item in train_data
+    ]
+
+
+def _load_rag_hallucinations() -> List[Dict]:
+    """Load Aporia RAG hallucinations dataset."""
+    try:
+        dataset = load_dataset("aporia-ai/rag_hallucinations")
+    except Exception:
+        raise Exception("Unable to download rag_hallucinations; please try again") from None
+
+    train_data = dataset["train"].select(range(300))  # Take first 300 examples
+
+    return [
+        {
+            "context": item["context"],
+            "question": item["question"],
+            "answer": item["answer"],
+            "is_hallucination": item["is_hallucination"],
+        }
+        for item in train_data
     ]
