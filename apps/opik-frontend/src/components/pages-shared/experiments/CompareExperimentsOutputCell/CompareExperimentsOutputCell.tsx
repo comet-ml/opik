@@ -11,7 +11,7 @@ import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import { ROW_HEIGHT } from "@/types/shared";
 import VerticallySplitCellWrapper, {
   CustomMeta,
-} from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/VerticallySplitCellWrapper";
+} from "@/components/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 import { Button } from "@/components/ui/button";

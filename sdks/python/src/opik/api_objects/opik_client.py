@@ -2,7 +2,7 @@ import atexit
 import datetime
 import functools
 import logging
-from typing import Any, Dict, List, Optional, TypeVar, Union
+from typing import Any, Dict, List, Optional, TypeVar, Union, Literal
 
 import httpx
 
@@ -26,6 +26,7 @@ from . import (
     constants,
     dataset,
     experiment,
+    optimization,
     helpers,
     opik_query_language,
     span,
@@ -719,6 +720,8 @@ class Opik:
         experiment_config: Optional[Dict[str, Any]] = None,
         prompt: Optional[Prompt] = None,
         prompts: Optional[List[Prompt]] = None,
+        type: Literal["regular", "trial", "mini-batch"] = "regular",
+        optimization_id: Optional[str] = None,
     ) -> experiment.Experiment:
         """
         Creates a new experiment using the given dataset name and optional parameters.
@@ -729,6 +732,9 @@ class Opik:
             experiment_config: Optional experiment configuration parameters. Must be a dictionary if provided.
             prompt: Prompt object to associate with the experiment. Deprecated, use `prompts` argument instead.
             prompts: List of Prompt objects to associate with the experiment.
+            type: The type of the experiment. Can be "regular", "trial", or "mini-batch".
+                Defaults to "regular". "trial" and "mini-batch" are only relevant for prompt optimization experiments.
+            optimization_id: Optional ID of the optimization associated with the experiment.
 
         Returns:
             experiment.Experiment: The newly created experiment object.
@@ -751,6 +757,8 @@ class Opik:
             id=id,
             metadata=metadata,
             prompt_versions=prompt_versions,
+            type=type,
+            optimization_id=optimization_id,
         )
 
         experiment_ = experiment.Experiment(
@@ -1077,6 +1085,34 @@ class Opik:
         """
         prompt_client = PromptClient(self._rest_client)
         return prompt_client.get_all_prompts(name=name)
+
+    def create_optimization(
+        self,
+        dataset_name: str,
+        objective_name: str,
+        name: Optional[str] = None,
+    ) -> optimization.Optimization:
+        id = id_helpers.generate_id()
+
+        self._rest_client.optimizations.create_optimization(
+            id=id,
+            name=name,
+            dataset_name=dataset_name,
+            objective_name=objective_name,
+            status="running",
+        )
+
+        optimization_client = optimization.Optimization(
+            id=id, rest_client=self._rest_client
+        )
+        return optimization_client
+
+    def delete_optimizations(self, ids: List[str]) -> None:
+        self._rest_client.optimizations.delete_optimizations_by_id(ids=ids)
+
+    def get_optimization_by_id(self, id: str) -> optimization.Optimization:
+        _ = self._rest_client.optimizations.get_optimization_by_id(id)
+        return optimization.Optimization(id=id, rest_client=self._rest_client)
 
 
 @functools.lru_cache()

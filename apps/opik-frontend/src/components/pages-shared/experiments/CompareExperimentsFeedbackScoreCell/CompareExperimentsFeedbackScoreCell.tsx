@@ -4,11 +4,11 @@ import { CellContext } from "@tanstack/react-table";
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import VerticallySplitCellWrapper, {
   CustomMeta,
-} from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/VerticallySplitCellWrapper";
+} from "@/components/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper";
 import { MessageSquareMore } from "lucide-react";
 import FeedbackScoreReasonTooltip from "@/components/shared/FeedbackScoreTag/FeedbackScoreReasonTooltip";
 
-const CompareExperimentsFeedbackScoreCell: React.FunctionComponent<
+const CompareExperimentsFeedbackScoreCell: React.FC<
   CellContext<ExperimentsCompare, unknown>
 > = (context) => {
   const experimentCompare = context.row.original;
