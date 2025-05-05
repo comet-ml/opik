@@ -16,6 +16,14 @@ SpanOrTraceData = Union[span.SpanData, trace.TraceData]
 
 
 class OpikCallback(dspy_callback.BaseCallback):
+    """
+    Callback for DSPy Opik logging.
+
+    Args:
+        project_name: The name of the Opik project to log data.
+        module: the DSPy module to generate graph from
+    """
+
     def __init__(
         self,
         project_name: Optional[str] = None,
