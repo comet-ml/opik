@@ -23,6 +23,7 @@ from opik_optimizer import (
     from_llm_response_text,
 )
 from opik_optimizer.demo import get_or_create_dataset
+from opik_optimizer.cache_config import initialize_cache, clear_cache
 
 from benchmark_config import (
     DATASET_CONFIGS, 
@@ -50,6 +51,9 @@ class BenchmarkRunner:
         import numpy as np
         random.seed(seed)
         np.random.seed(seed)
+        
+        # Initialize shared cache
+        initialize_cache()
         
     @lru_cache(maxsize=32)
     def load_dataset(self, dataset_name: str, huggingface_path: str) -> Any:
