@@ -26,6 +26,7 @@ from . import (
     constants,
     dataset,
     experiment,
+    optimization,
     helpers,
     opik_query_language,
     span,
@@ -1077,6 +1078,34 @@ class Opik:
         """
         prompt_client = PromptClient(self._rest_client)
         return prompt_client.get_all_prompts(name=name)
+
+    def create_optimization(
+        self,
+        dataset_name: str,
+        objective_name: str,
+        name: Optional[str] = None,
+    ) -> optimization.Optimization:
+        id = id_helpers.generate_id()
+
+        self._rest_client.optimizations.create_optimization(
+            id=id,
+            name=name,
+            dataset_name=dataset_name,
+            objective_name=objective_name,
+            status="running",
+        )
+
+        optimization_client = optimization.Optimization(
+            id=id, rest_client=self._rest_client
+        )
+        return optimization_client
+
+    def delete_optimizations(self, ids: List[str]) -> None:
+        self._rest_client.optimizations.delete_optimizations_by_id(ids=ids)
+
+    def get_optimization_by_id(self, id: str) -> optimization.Optimization:
+        _ = self._rest_client.optimizations.get_optimization_by_id(id)
+        return optimization.Optimization(id=id, rest_client=self._rest_client)
 
 
 @functools.lru_cache()
