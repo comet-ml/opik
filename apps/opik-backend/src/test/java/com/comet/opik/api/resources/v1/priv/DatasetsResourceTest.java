@@ -19,6 +19,7 @@ import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.Optimization;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Prompt;
@@ -146,6 +147,7 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZE
 import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
+import static com.comet.opik.api.resources.v1.priv.OptimizationsResourceTest.OPTIMIZATION_IGNORED_FIELDS;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -2768,18 +2770,26 @@ class DatasetsResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        @DisplayName("when deleting by dataset name and dataset does not exist, then return no content")
+        @DisplayName("when deleting dataset should update optimization dataset_deleted")
         void deletingDataset__shouldUpdateOptimizationDatasetDeleted__thenReturnNotFound(
                 Consumer<Dataset> datasetDeleteAction) {
             var dataset = factory.manufacturePojo(Dataset.class);
-            var id = createAndAssert(dataset);
+            createAndAssert(dataset);
 
-            var optimization = optimizationResourceClient.createPartialOptimization().datasetName(dataset.name())
-                    .build();
-            var optimizationId = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE);
+            var optimizations = IntStream.range(0, 10)
+                    .mapToObj(i -> {
+                        var optimization = optimizationResourceClient.createPartialOptimization()
+                                .datasetName(dataset.name())
+                                .build();
+                        var optimizationId = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE);
+
+                        return optimization.toBuilder().id(optimizationId).datasetName(null).build();
+                    })
+                    .toList();
 
             // Check that we do not have optimizations with deleted datasets
-            var page = optimizationResourceClient.find(API_KEY, TEST_WORKSPACE, 1, 10, null, null, true, 200);
+            var page = optimizationResourceClient.find(API_KEY, TEST_WORKSPACE, 1, optimizations.size(), null, null,
+                    true, 200);
             assertThat(page.size()).isEqualTo(0);
 
             // Delete dataset
@@ -2789,14 +2799,21 @@ class DatasetsResourceTest {
             Awaitility.await()
                     .atMost(Duration.ofSeconds(10))
                     .untilAsserted(() -> {
-                        var pageWithDeleted = optimizationResourceClient.find(API_KEY, TEST_WORKSPACE, 1, 10, null,
+                        var pageWithDeleted = optimizationResourceClient.find(API_KEY, TEST_WORKSPACE, 1,
+                                optimizations.size(), null,
                                 null, true, 200);
-                        assertThat(pageWithDeleted.size()).isEqualTo(1);
-                        assertThat(pageWithDeleted.content().getFirst().id()).isEqualTo(optimizationId);
+                        assertThat(pageWithDeleted.size()).isEqualTo(optimizations.size());
+
+                        assertThat(pageWithDeleted.content())
+                                .usingRecursiveComparison()
+                                .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                                .isEqualTo(optimizations.reversed());
                     });
 
             // Clean up
-            optimizationResourceClient.delete(Set.of(optimizationId), API_KEY, TEST_WORKSPACE);
+            optimizationResourceClient.delete(optimizations.stream().map(Optimization::id).collect(toSet()), API_KEY,
+                    TEST_WORKSPACE);
         }
 
         private Stream<Consumer<Dataset>> deletingDataset__shouldUpdateOptimizationDatasetDeleted__thenReturnNotFound() {
