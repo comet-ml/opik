@@ -80,6 +80,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         task_config: PromptTaskConfig,
         prompt: str,
         use_full_dataset: bool = False,
+        experiment_config: Optional[Dict] = None,
     ) -> float:
         """
         Evaluate a prompt using the given dataset and metric configuration.
@@ -90,6 +91,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             task_config: The task configuration containing input/output fields
             prompt: The prompt to evaluate
             use_full_dataset: Whether to use the full dataset or a subset for evaluation
+            experiment_config: Optional configuration for the experiment
 
         Returns:
             float: The evaluation score
@@ -141,7 +143,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             evaluated_task=llm_task,
             num_threads=self.num_threads,
             project_name=self.project_name,
-            num_test=subset_size  # Use subset_size for trials, None for full dataset
+            num_test=subset_size,  # Use subset_size for trials, None for full dataset
+            experiment_config=experiment_config,
         )
 
     def optimize_prompt(
