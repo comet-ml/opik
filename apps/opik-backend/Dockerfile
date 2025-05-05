@@ -34,8 +34,10 @@ COPY config.yml lombok.config entrypoint.sh run_db_migrations.sh ./
 COPY redoc/ redoc/
 
 RUN chmod +x ./*.sh
+
 COPY --from=build /opt/opik-backend/target/openapi.yaml redoc/
 COPY --from=build /opt/opik-backend/target/*.jar ./
+COPY --from=build /opt/opik-backend/target/classes/liquibaseClickhouse.conf ./
 
 EXPOSE 8080
 EXPOSE 3003

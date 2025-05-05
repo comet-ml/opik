@@ -18,4 +18,17 @@
     <distributed_ddl>
         <path>/clickhouse/task_queue/ddl</path>
     </distributed_ddl>
+
+    <remote_servers>
+        <cluster>
+        <shard>
+            <replica>
+            <host>clickhouse</host>
+            <port>9000</port>
+            </replica>
+        </shard>
+        </cluster>
+    </remote_servers>
+
+    <keeper_map_path_prefix>/liquibase</keeper_map_path_prefix>
 </clickhouse>
