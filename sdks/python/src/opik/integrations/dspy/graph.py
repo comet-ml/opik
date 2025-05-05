@@ -10,15 +10,15 @@ classDef Tools fill:##D3D3D3
 """
 
 
-def get_mermaid_graph(module: dspy.Module) -> str:
+def build_mermaid_graph_from_module(module: dspy.Module) -> str:
     modules: Dict[str, Any] = {}
-    get_dspy_module_heirarchy(module, modules)
+    _get_dspy_module_heirarchy(module, modules)
     graph = ""
     queue = [modules]
     states: Dict[str, Any] = {}
     while queue:
         current = queue.pop()
-        graph += get_mermaid_arrows(queue, current, states)
+        graph += _get_mermaid_arrows(queue, current, states)
 
     if graph:
         for key in states:
@@ -29,13 +29,13 @@ def get_mermaid_graph(module: dspy.Module) -> str:
     return ""
 
 
-def get_mermaid_arrows(
+def _get_mermaid_arrows(
     queue: List[dspy.Module], current: Dict[str, Any], states: Dict[str, Any]
 ) -> str:
-    start = get_mermaid_state(current, states)
+    start = _get_mermaid_state(current, states)
     arrows = []
     for module in current["sub_data"]:
-        end = get_mermaid_state(module, states)
+        end = _get_mermaid_state(module, states)
         arrows.append("%s --> %s\n" % (start["text"], end["text"]))
         queue.append(module)
     if "tools" in current["details"]:
@@ -47,7 +47,7 @@ def get_mermaid_arrows(
     return "".join(arrows)
 
 
-def get_mermaid_state(
+def _get_mermaid_state(
     current: Dict[str, Any], states: Dict[str, Any]
 ) -> Dict[str, Any]:
     if current["id"] not in states:
@@ -65,7 +65,7 @@ def get_mermaid_state(
     return states[current["id"]]
 
 
-def get_dspy_module_heirarchy(module: dspy.Module, data: Dict[str, Any]) -> None:
+def _get_dspy_module_heirarchy(module: dspy.Module, data: Dict[str, Any]) -> None:
     data["name"] = module.__class__.__name__
     data["id"] = id(module)
     data["details"] = {}
@@ -77,7 +77,7 @@ def get_dspy_module_heirarchy(module: dspy.Module, data: Dict[str, Any]) -> None
     for name, attribute in module.__dict__.items():
         if isinstance(attribute, dspy.Module):
             sub_data: Dict[str, Any] = {}
-            get_dspy_module_heirarchy(attribute, sub_data)
+            _get_dspy_module_heirarchy(attribute, sub_data)
             data["sub_data"].append(sub_data)
         elif name == "lm":
             lm_data: Dict[str, Any] = {}

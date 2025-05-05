@@ -1,4 +1,5 @@
 from typing import Any, Dict, Optional, Union
+import logging
 
 import dspy
 from dspy.utils import callback as dspy_callback
@@ -7,7 +8,9 @@ from opik import types, opik_context, context_storage
 from opik.api_objects import helpers, span, trace, opik_client
 from opik.decorator import error_info_collector
 
-from .utils import get_mermaid_graph
+from .graph import build_mermaid_graph_from_module
+
+LOGGER = logging.getLogger(__name__)
 
 SpanOrTraceData = Union[span.SpanData, trace.TraceData]
 
@@ -22,10 +25,8 @@ class OpikCallback(dspy_callback.BaseCallback):
         self._map_call_id_to_trace_data: Dict[str, trace.TraceData] = {}
 
         self._origins_metadata = {"created_from": "dspy"}
-        try:
-            self._update_with_graph(self._origins_metadata, module)
-        except Exception:
-            pass
+        if module is not None:
+            self._try_add_module_graph_to_metadata(module)
 
         self._context_storage = context_storage.OpikContextStorage()
 
@@ -163,20 +164,21 @@ class OpikCallback(dspy_callback.BaseCallback):
             if self._context_storage.get_trace_data() == trace_data:
                 self._context_storage.set_trace_data(None)
 
-    def _update_with_graph(
-        self, metadata: Dict[str, Any], instance: dspy.Module
-    ) -> None:
-        if instance:
-            graph = get_mermaid_graph(instance)
-            if graph:
-                metadata.update(
-                    {
-                        "_opik_graph_definition": {
-                            "format": "mermaid",
-                            "data": graph,
-                        }
+    def _try_add_module_graph_to_metadata(self, instance: dspy.Module) -> None:
+        try:
+            graph = build_mermaid_graph_from_module(instance)
+        except Exception:
+            LOGGER.warning("Unable to generate graph from DSPy module")
+
+        if graph:
+            self._origins_metadata.update(
+                {
+                    "_opik_graph_definition": {
+                        "format": "mermaid",
+                        "data": graph,
                     }
-                )
+                }
+            )
 
     def _end_span(
         self,
