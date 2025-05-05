@@ -46,6 +46,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.testcontainers.clickhouse.ClickHouseContainer;
@@ -63,6 +64,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -75,7 +77,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class OptimizationsResourceTest {
 
-    public static final String[] OPTIMIZATION_IGNORED_FIELDS = {"datasetId", "createdAt",
+    public static final String[] OPTIMIZATION_IGNORED_FIELDS = {"datasetId", "numTrials", "createdAt",
             "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
@@ -188,6 +190,36 @@ class OptimizationsResourceTest {
                     .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .isEqualTo(optimization);
+        }
+
+        @ParameterizedTest
+        @ValueSource(ints = {0, 1, 10})
+        @DisplayName("Get optimizer by id with the number of trials")
+        void getByIdWithNumTrials(int numTrials) {
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            IntStream.range(0, numTrials)
+                    .parallel()
+                    .forEach(i -> {
+                        var experiment = experimentResourceClient.createPartialExperiment()
+                                .optimizationId(id)
+                                .type(ExperimentType.TRIAL)
+                                .build();
+
+                        experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE_NAME);
+                    });
+
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            assertThat(actualOptimization)
+                    .usingRecursiveComparison()
+                    .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .isEqualTo(optimization);
+
+            assertThat(actualOptimization.numTrials()).isEqualTo(numTrials);
         }
 
         @Test

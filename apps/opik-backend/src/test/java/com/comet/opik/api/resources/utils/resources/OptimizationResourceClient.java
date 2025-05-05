@@ -31,8 +31,7 @@ public class OptimizationResourceClient {
     public Optimization.OptimizationBuilder createPartialOptimization() {
         return podamFactory.manufacturePojo(Optimization.class).toBuilder()
                 .status(OptimizationStatus.RUNNING)
-                .feedbackScores(null)
-                .numTrials(1L);
+                .feedbackScores(null);
     }
 
     public UUID create(Optimization optimization, String apiKey, String workspaceName) {
