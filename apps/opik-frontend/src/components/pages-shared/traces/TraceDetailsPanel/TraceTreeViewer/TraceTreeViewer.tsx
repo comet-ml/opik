@@ -59,6 +59,11 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
     return traceSpans.map((chain: Span) => chain.id).sort();
   }, [traceSpans]);
 
+  const fullTreeList = useMemo(
+    () => [trace.id, ...spanIds],
+    [trace.id, spanIds],
+  );
+
   const [collapsedTraceSpans, setCollapsedTraceSpans] = useState<
     TreeItemIndex[]
   >([]);
@@ -71,16 +76,14 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
     setCollapsedTraceSpans((prev) => [...prev, item.index]);
   }, []);
 
-  const isAllExpanded = !collapsedTraceSpans.length;
   const expandedTraceSpans = useMemo(() => {
-    return [trace.id, ...spanIds].filter(
-      (id) => !collapsedTraceSpans.includes(id),
-    );
-  }, [collapsedTraceSpans, spanIds, trace.id]);
+    return fullTreeList.filter((id) => !collapsedTraceSpans.includes(id));
+  }, [collapsedTraceSpans, fullTreeList]);
+  const isAllExpanded = expandedTraceSpans.length === fullTreeList.length;
 
   const toggleExpandAll = useCallback(() => {
-    setCollapsedTraceSpans(isAllExpanded ? [trace.id, ...spanIds] : []);
-  }, [isAllExpanded, spanIds, trace.id]);
+    setCollapsedTraceSpans(isAllExpanded ? fullTreeList : []);
+  }, [isAllExpanded, fullTreeList]);
 
   const noSearch = !search;
 
