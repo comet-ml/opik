@@ -7,6 +7,7 @@ import socket
 import sys
 from importlib import metadata
 from typing import Dict, Literal
+import tqdm
 
 import opik.config
 from opik import url_helpers
@@ -140,3 +141,13 @@ def get_installed_packages() -> Dict[str, str]:
         pkg.metadata["Name"]: pkg.version for pkg in metadata.distributions()
     }
     return installed_packages
+
+@functools.lru_cache
+def get_tqdm_for_current_environment() -> Callable:
+    """
+    Get a tqdm progress bar for your environment.
+    """
+    if in_jupyter() or in_colab():
+        return tqdm.tqdm_notebook
+    else:
+        return tqdm.tqdm
