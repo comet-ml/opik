@@ -1,5 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import { FEEDBACK_SCORE_TYPE, Trace, TraceFeedbackScore } from "@/types/traces";
+import { AggregatedFeedbackScore } from "@/types/shared";
 import {
   COMPARE_EXPERIMENTS_KEY,
   SPANS_KEY,
@@ -194,3 +195,13 @@ export const categoryOptionLabelRenderer = (
 
   return `${name} (${value})`;
 };
+
+export const getFeedbackScore = (
+  feedbackScores: Array<TraceFeedbackScore | AggregatedFeedbackScore>,
+  scoreName: string,
+) => feedbackScores.find(({ name }) => name === scoreName);
+
+export const getFeedbackScoreValue = (
+  scores: Array<TraceFeedbackScore | AggregatedFeedbackScore>,
+  scoreName: string,
+) => getFeedbackScore(scores, scoreName)?.value;

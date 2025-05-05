@@ -8,7 +8,7 @@ import {
 } from "@/types/datasets";
 import { OnChangeFn, ROW_HEIGHT } from "@/types/shared";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import { calculateLineHeight } from "@/components/pages/CompareExperimentsPage/helpers";
+import { calculateLineHeight } from "@/lib/experiments";
 import { traceExist } from "@/lib/traces";
 import { CELL_HORIZONTAL_ALIGNMENT_MAP } from "@/constants/shared";
 import { cn } from "@/lib/utils";

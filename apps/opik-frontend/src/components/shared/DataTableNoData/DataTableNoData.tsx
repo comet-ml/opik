@@ -11,7 +11,9 @@ const DataTableNoData: React.FunctionComponent<DataTableNoDataProps> = ({
 }) => {
   return (
     <div className="flex min-h-48 flex-col items-center justify-center gap-2 p-6">
-      <span className="text-muted-slate">{title}</span>
+      <span className="whitespace-pre-wrap break-words text-center text-muted-slate">
+        {title}
+      </span>
       <div className="flex flex-col">{children}</div>
     </div>
   );

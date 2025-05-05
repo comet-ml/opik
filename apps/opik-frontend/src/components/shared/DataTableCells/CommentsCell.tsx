@@ -10,7 +10,7 @@ import { isLocalCommentCheck } from "@/components/pages-shared/traces/UserCommen
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import VerticallySplitCellWrapper, {
   SplitCellRenderContent,
-} from "@/components/pages/CompareExperimentsPage/ExperimentItemsTab/VerticallySplitCellWrapper";
+} from "@/components/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper";
 import { ROW_HEIGHT } from "@/types/shared";
 import { cn } from "@/lib/utils";
 

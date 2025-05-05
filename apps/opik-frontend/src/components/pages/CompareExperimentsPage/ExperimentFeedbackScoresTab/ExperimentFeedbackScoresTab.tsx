@@ -2,24 +2,87 @@ import React, { useMemo } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import { ColumnPinningState } from "@tanstack/react-table";
 import find from "lodash/find";
+import uniq from "lodash/uniq";
 
-import { COLUMN_TYPE, ColumnData } from "@/types/shared";
+import {
+  AggregatedFeedbackScore,
+  COLUMN_TYPE,
+  ColumnData,
+} from "@/types/shared";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import FeedbackScoreNameCell from "@/components/shared/DataTableCells/FeedbackScoreNameCell";
-import CompareExperimentsHeader from "@/components/pages/CompareExperimentsPage/CompareExperimentsHeader";
+import CompareExperimentsHeader from "@/components/pages-shared/experiments/CompareExperimentsHeader/CompareExperimentsHeader";
 import CompareExperimentsActionsPanel from "@/components/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import Loader from "@/components/shared/Loader/Loader";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { Experiment } from "@/types/datasets";
-import {
-  FeedbackScoreData,
-  getFeedbackScoreMap,
-  getFeedbackScoresForExperimentsAsRows,
-} from "@/components/pages/CompareExperimentsPage/helpers";
+
+interface GetFeedbackScoreMapArguments {
+  experiments: {
+    id: string;
+    feedback_scores?: AggregatedFeedbackScore[];
+  }[];
+}
+
+export type FeedbackScoreData = {
+  name: string;
+} & Record<string, number>;
+
+type FiledValue = string | number | undefined | null;
+
+type FeedbackScoreMap = Record<string, Record<string, number>>;
+
+export const getFeedbackScoreMap = ({
+  experiments,
+}: GetFeedbackScoreMapArguments): FeedbackScoreMap => {
+  return experiments.reduce<FeedbackScoreMap>((acc, e) => {
+    acc[e.id] = (e.feedback_scores || [])?.reduce<Record<string, number>>(
+      (a, f) => {
+        a[f.name] = f.value;
+        return a;
+      },
+      {},
+    );
+
+    return acc;
+  }, {});
+};
+
+interface GetFeedbackScoresForExperimentsAsRowsArguments {
+  feedbackScoresMap: FeedbackScoreMap;
+  experimentsIds: string[];
+}
+
+export const getFeedbackScoresForExperimentsAsRows = ({
+  feedbackScoresMap,
+  experimentsIds,
+}: GetFeedbackScoresForExperimentsAsRowsArguments) => {
+  const keys = uniq(
+    Object.values(feedbackScoresMap).reduce<string[]>(
+      (acc, map) => acc.concat(Object.keys(map)),
+      [],
+    ),
+  ).sort();
+
+  return keys.map((key) => {
+    const data = experimentsIds.reduce<Record<string, FiledValue>>(
+      (acc, id: string) => {
+        acc[id] = feedbackScoresMap[id]?.[key] ?? "-";
+        return acc;
+      },
+      {},
+    );
+
+    return {
+      name: key,
+      ...data,
+    } as FeedbackScoreData;
+  });
+};
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-feedback-scores-columns-width";
 

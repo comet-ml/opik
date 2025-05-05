@@ -18,10 +18,9 @@ import {
   COLUMN_COMMENTS_ID,
   COLUMN_CREATED_AT_ID,
   COLUMN_ID_ID,
+  COLUMN_FEEDBACK_SCORES_ID,
 } from "@/types/shared";
-
-export const EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX = "feedback_scores";
-export const EXPERIMENT_ITEM_OUTPUT_PREFIX = "output";
+import { EXPERIMENT_ITEM_OUTPUT_PREFIX } from "@/constants/experiments";
 
 const EVALUATION_EXPORT_COLUMNS = [
   EXPERIMENT_ITEM_OUTPUT_PREFIX,
@@ -38,7 +37,7 @@ const processNestedExportColumn = (
   const keys = column.split(".");
   const prefixColumnKey = first(keys) as string;
 
-  if (prefixColumnKey === EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX) {
+  if (prefixColumnKey === COLUMN_FEEDBACK_SCORES_ID) {
     const scoreName = column.replace(`${prefixColumnKey}.`, "");
     const scoreObject = item.feedback_scores?.find((f) => f.name === scoreName);
     accumulator[`${prefix}${column}`] = get(scoreObject, "value", "-");
@@ -104,7 +103,7 @@ const CompareExperimentsActionsPanel: React.FC<
           const prefix = first(column.split(".")) as string;
           const isDatasetColumn = !(
             EVALUATION_EXPORT_COLUMNS.includes(prefix) ||
-            prefix === EXPERIMENT_ITEM_FEEDBACK_SCORES_PREFIX
+            prefix === COLUMN_FEEDBACK_SCORES_ID
           );
 
           if (isDatasetColumn) {

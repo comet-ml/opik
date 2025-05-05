@@ -1,5 +1,4 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
-import isBoolean from "lodash/isBoolean";
 import api, { DATASETS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Dataset } from "@/types/datasets";
 import { Sorting } from "@/types/sorting";
@@ -8,6 +7,7 @@ import { processSorting } from "@/lib/sorting";
 type UseDatasetsListParams = {
   workspaceName: string;
   withExperimentsOnly?: boolean;
+  withOptimizationsOnly?: boolean;
   promptId?: string;
   search?: string;
   sorting?: Sorting;
@@ -25,6 +25,7 @@ const getDatasetsList = async (
   {
     workspaceName,
     withExperimentsOnly,
+    withOptimizationsOnly,
     promptId,
     search,
     sorting,
@@ -36,8 +37,11 @@ const getDatasetsList = async (
     signal,
     params: {
       workspace_name: workspaceName,
-      ...(isBoolean(withExperimentsOnly) && {
+      ...(withExperimentsOnly && {
         with_experiments_only: withExperimentsOnly,
+      }),
+      ...(withOptimizationsOnly && {
+        with_optimizations_only: withOptimizationsOnly,
       }),
       ...processSorting(sorting),
       ...(search && { name: search }),

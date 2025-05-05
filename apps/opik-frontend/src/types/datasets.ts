@@ -1,5 +1,5 @@
 import { TraceFeedbackScore } from "@/types/traces";
-import { AverageFeedbackScore, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
+import { AggregatedFeedbackScore, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
 import { CommentItems } from "./comment";
 
 export interface Dataset {
@@ -9,6 +9,10 @@ export interface Dataset {
   dataset_items_count: number;
   experiment_count: number;
   most_recent_experiment_at: string;
+  last_created_experiment_at: string;
+  most_recent_optimization_at: string;
+  last_created_optimization_at: string;
+  optimization_count: number;
   created_at: string;
   last_updated_at: string;
 }
@@ -47,13 +51,22 @@ export interface ExperimentPromptVersion {
   prompt_id: string;
 }
 
+export enum EXPERIMENT_TYPE {
+  REGULAR = "regular",
+  TRIAL = "trial",
+  MINI_BATCH = "mini-batch",
+}
+
 export interface Experiment {
   id: string;
   dataset_id: string;
   dataset_name: string;
+  optimization_id?: string;
+  type: EXPERIMENT_TYPE;
+  status: string;
   metadata?: object;
   name: string;
-  feedback_scores?: AverageFeedbackScore[];
+  feedback_scores?: AggregatedFeedbackScore[];
   // @deprecated
   prompt_version?: ExperimentPromptVersion;
   prompt_versions?: ExperimentPromptVersion[];

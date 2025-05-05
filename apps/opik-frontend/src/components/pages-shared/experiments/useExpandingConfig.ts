@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ExpandedState } from "@tanstack/react-table";
-import { GROUPING_COLUMN } from "@/hooks/useGroupedExperimentsList";
+
+import { GROUPING_COLUMN } from "@/constants/grouping";
 
 export type UseExpandingConfigProps = {
   groupIds: string[];

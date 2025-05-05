@@ -22,13 +22,11 @@ import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackSc
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import useAppStore from "@/store/AppStore";
 import useGroupedExperimentsList, {
-  checkIsMoreRowId,
-  DEFAULT_GROUPS_PER_PAGE,
   GroupedExperiment,
-  GROUPING_COLUMN,
 } from "@/hooks/useGroupedExperimentsList";
 import {
-  generateExperimentNameColumDef,
+  checkIsMoreRowId,
+  generateGroupedNameColumDef,
   generateGroupedCellDef,
   getIsCustomRow,
   getRowId,
@@ -36,6 +34,7 @@ import {
   GROUPING_CONFIG,
   renderCustomRow,
 } from "@/components/pages-shared/experiments/table";
+import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/grouping";
 import {
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_NAME_ID,
@@ -226,7 +225,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
 
   const columns = useMemo(() => {
     return [
-      generateExperimentNameColumDef<GroupedExperiment>(
+      generateGroupedNameColumDef<GroupedExperiment>(
         checkboxClickHandler,
         isColumnSortable(COLUMN_NAME_ID, sortableBy),
       ),

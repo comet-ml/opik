@@ -64,6 +64,12 @@ export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
     accessorFn: (row) => formatDate(row.most_recent_experiment_at),
   },
   {
+    id: "most_recent_optimization_at",
+    label: "Most recent optimization",
+    type: COLUMN_TYPE.time,
+    accessorFn: (row) => formatDate(row.most_recent_optimization_at),
+  },
+  {
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,

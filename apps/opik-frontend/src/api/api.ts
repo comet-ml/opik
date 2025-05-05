@@ -22,6 +22,7 @@ export const PROMPTS_REST_ENDPOINT = "/v1/private/prompts/";
 export const PROVIDER_KEYS_REST_ENDPOINT = "/v1/private/llm-provider-key/";
 export const AUTOMATIONS_REST_ENDPOINT = "/v1/private/automations/";
 export const ATTACHMENTS_REST_ENDPOINT = "/v1/private/attachment/";
+export const OPTIMIZATIONS_REST_ENDPOINT = "/v1/private/optimizations/";
 
 export const COMPARE_EXPERIMENTS_KEY = "compare-experiments";
 export const SPANS_KEY = "spans";
@@ -32,6 +33,8 @@ export const PROVIDERS_KEYS_KEY = "provider-keys";
 export const AUTOMATIONS_KEY = "automations";
 export const PROJECTS_KEY = "projects";
 export const PROJECT_STATISTICS_KEY = "project-statistics";
+export const OPTIMIZATIONS_KEY = "optimizations";
+export const OPTIMIZATION_KEY = "optimization";
 
 // stats for feedback
 export const STATS_COMET_ENDPOINT = "https://stats.comet.com/notify/event/";

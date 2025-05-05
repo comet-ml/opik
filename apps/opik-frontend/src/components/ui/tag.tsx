@@ -24,6 +24,7 @@ const tagVariants = cva(
       size: {
         default: "h-5 px-2 leading-5",
         sm: "h-4 px-2 text-[11px] leading-4",
+        md: "comet-body-xs-accented h-6 rounded-md px-1.5 leading-6",
         lg: "h-7 rounded-md px-3 leading-7",
       },
     },

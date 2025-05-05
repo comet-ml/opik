@@ -1,9 +1,9 @@
+import React from "react";
 import {
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_TYPE,
   ROW_HEIGHT,
 } from "@/types/shared";
-import React from "react";
 
 export const DEMO_PROJECT_NAME = "Demo Project";
 export const USER_FEEDBACK_NAME = "User feedback";

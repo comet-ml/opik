@@ -3,16 +3,24 @@ import isUndefined from "lodash/isUndefined";
 import { CellContext } from "@tanstack/react-table";
 
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import { CompareConfig } from "@/components/pages/CompareExperimentsPage/ConfigurationTab/ConfigurationTab";
 import { ROW_HEIGHT } from "@/types/shared";
 import TextDiff from "@/components/shared/CodeDiff/TextDiff";
 import { toString } from "@/lib/utils";
+
+export type CompareFiledValue = string | number | undefined | null;
+
+export type CompareConfig = {
+  name: string;
+  data: Record<string, CompareFiledValue>;
+  base: string;
+  different: boolean;
+};
 
 type CustomMeta = {
   onlyDiff: boolean;
 };
 
-const CompareConfigCell: React.FunctionComponent<
+const CompareExperimentsConfigCell: React.FC<
   CellContext<CompareConfig, unknown>
 > = (context) => {
   const { custom } = context.column.columnDef.meta ?? {};
@@ -59,4 +67,4 @@ const CompareConfigCell: React.FunctionComponent<
   );
 };
 
-export default CompareConfigCell;
+export default CompareExperimentsConfigCell;

@@ -137,7 +137,7 @@ export interface UsageData {
   total_tokens: number;
 }
 
-export interface AverageFeedbackScore {
+export interface AggregatedFeedbackScore {
   name: string;
   value: number;
 }

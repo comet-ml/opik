@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { OnChangeFn } from "@/types/shared";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
-const ExperimentChartLegendContent = React.forwardRef<
+const ChartVerticalLegendContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<typeof RechartsPrimitive.Legend> &
     React.ComponentProps<"div"> & {
@@ -62,6 +62,6 @@ const ExperimentChartLegendContent = React.forwardRef<
     </div>
   );
 });
-ExperimentChartLegendContent.displayName = "ExperimentChartLegendContent";
+ChartVerticalLegendContent.displayName = "ChartVerticalLegendContent";
 
-export default ExperimentChartLegendContent;
+export default ChartVerticalLegendContent;

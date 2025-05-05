@@ -10,7 +10,7 @@ const FeedbackScoreHeader = <TData,>(
 ) => {
   const { column } = context;
   const { header } = column.columnDef.meta ?? {};
-  const color = TAG_VARIANTS_COLOR_MAP[generateTagVariant(header!)!];
+  const color = TAG_VARIANTS_COLOR_MAP[generateTagVariant(header ?? "")!];
 
   const { className, onClickHandler, renderSort } = useSortableHeader({
     column,
