@@ -34,6 +34,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
+import org.apache.commons.lang3.LongRange;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
@@ -65,6 +66,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
+import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -77,7 +79,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class OptimizationsResourceTest {
 
-    public static final String[] OPTIMIZATION_IGNORED_FIELDS = {"datasetId", "numTrials", "createdAt",
+    public static final String[] OPTIMIZATION_IGNORED_FIELDS = {"datasetId", "createdAt",
             "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
@@ -195,12 +197,14 @@ class OptimizationsResourceTest {
         @ParameterizedTest
         @ValueSource(ints = {0, 1, 10})
         @DisplayName("Get optimizer by id with the number of trials")
-        void getByIdWithNumTrials(int numTrials) {
-            var optimization = optimizationResourceClient.createPartialOptimization().build();
+        void getByIdWithNumTrials(long numTrials) {
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .numTrials(numTrials)
+                    .build();
 
             var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
 
-            IntStream.range(0, numTrials)
+            LongStream.range(0, numTrials)
                     .parallel()
                     .forEach(i -> {
                         var experiment = experimentResourceClient.createPartialExperiment()
@@ -218,8 +222,6 @@ class OptimizationsResourceTest {
                     .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .isEqualTo(optimization);
-
-            assertThat(actualOptimization.numTrials()).isEqualTo(numTrials);
         }
 
         @Test
@@ -309,6 +311,7 @@ class OptimizationsResourceTest {
                                             .value(BigDecimal.valueOf(entry.getValue()))
                                             .build())
                                     .toList())
+                    .numTrials(1L)
                     .build();
 
             // then
@@ -648,6 +651,7 @@ class OptimizationsResourceTest {
                                             .value(BigDecimal.valueOf(entry.getValue()))
                                             .build())
                                     .toList())
+                    .numTrials(1L)
                     .build();
 
             // Find optimization

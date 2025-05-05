@@ -2770,7 +2770,7 @@ class DatasetsResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        @DisplayName("when deleting by dataset name and dataset does not exist, then return no content")
+        @DisplayName("when deleting dataset should update optimization dataset_deleted")
         void deletingDataset__shouldUpdateOptimizationDatasetDeleted__thenReturnNotFound(
                 Consumer<Dataset> datasetDeleteAction) {
             var dataset = factory.manufacturePojo(Dataset.class);
