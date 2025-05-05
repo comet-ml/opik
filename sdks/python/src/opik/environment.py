@@ -6,8 +6,9 @@ import platform
 import socket
 import sys
 from importlib import metadata
-from typing import Dict, Literal, Callable
+from typing import Dict, Literal
 import tqdm
+from tqdm.std import tqdm as std_tqdm
 
 import opik.config
 from opik import url_helpers
@@ -144,7 +145,7 @@ def get_installed_packages() -> Dict[str, str]:
 
 
 @functools.lru_cache
-def get_tqdm_for_current_environment() -> Callable:
+def get_tqdm_for_current_environment() -> std_tqdm:
     """
     Get a tqdm progress bar for your environment.
     """
