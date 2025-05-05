@@ -46,9 +46,9 @@ jobs:
           OPIK_USAGE_REPORT_ENABLED: false
         shell: bash
         run: |
-          ls -l ${{ github.workspace }}
+          ls -l .
           
-          cd ${{ github.workspace }}/deployment/docker-compose
+          cd ./deployment/docker-compose
           export OPIK_FRONTEND_FLAVOR=guardrails
           docker compose --profile guardrails up -d --build
 
