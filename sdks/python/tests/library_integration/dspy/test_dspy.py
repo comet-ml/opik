@@ -102,7 +102,6 @@ def test_dspy__happyflow(
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-@pytest.mark.skip
 def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info_is_logged(
     fake_backend,
 ):
@@ -155,7 +154,26 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
                     SpanModel(
                         id=ANY_STRING(),
                         type="llm",
-                        name="LM",
+                        name=ANY_STRING(startswith="LM: "),
+                        provider="openai",
+                        model="gpt-3.5-turbo",
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        metadata={"created_from": "dspy"},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        project_name=project_name,
+                        spans=[],
+                        error_info={
+                            "exception_type": ANY_STRING(),
+                            "message": ANY_STRING(),
+                            "traceback": ANY_STRING(),
+                        },
+                    ),
+                    SpanModel(
+                        id=ANY_STRING(),
+                        type="llm",
+                        name=ANY_STRING(startswith="LM: "),
                         provider="openai",
                         model="gpt-3.5-turbo",
                         input=ANY_DICT,
