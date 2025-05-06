@@ -12,7 +12,7 @@ setup(
     python_requires=">=3.9",
     install_requires=[
         "opik>=1.7.13", # FIXME: update version when new endpoints are complete
-        "dspy<=2.6.18",
+        "dspy>=2.6.18,<3",
         "litellm",
         "tqdm",
         "datasets",
