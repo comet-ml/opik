@@ -11,8 +11,6 @@ Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
 CACHE_CONFIG = {
     "type": "disk",
     "disk_cache_dir": CACHE_DIR,
-    "max_size": 10000,  # Maximum number of items in cache
-    "ttl": 7 * 24 * 60 * 60,  # 7 days in seconds
 }
 
 def initialize_cache():
