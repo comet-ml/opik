@@ -8,6 +8,7 @@ from opik.opik_context import get_current_span_data
 from pydantic import BaseModel
 from ._throttle import RateLimiter, rate_limited
 from .cache_config import initialize_cache
+from .optimization_config.configs import PromptTaskConfig, MetricConfig
 
 limiter = RateLimiter(max_calls_per_second=15)
 
@@ -45,14 +46,15 @@ class BaseOptimizer:
         self.project_name = project_name
         self._history = []
         self.experiment_config = None
-        
+
         # Initialize shared cache
         initialize_cache()
 
     def optimize_prompt(
         self,
         dataset: Union[str, opik.Dataset],
-        metric: metrics.BaseMetric,
+        metric_config: MetricConfig,
+        task_config: PromptTaskConfig,
         prompt: str,
         input_key: str,
         output_key: str,
@@ -64,7 +66,8 @@ class BaseOptimizer:
 
         Args:
            dataset: Opik dataset name, or Opik dataset
-           metric: instance of an Opik metric
+           metric_config: instance of a MetricConfig
+           task_config: instance of a PromptTaskConfig
            prompt: the prompt to optimize
            input_key: input field of dataset
            output_key: output field of dataset
@@ -81,11 +84,12 @@ class BaseOptimizer:
     def evaluate_prompt(
         self,
         dataset: Union[str, opik.Dataset],
-        metric: metrics.BaseMetric,
+        metric_config: MetricConfig,
         prompt: str,
         input_key: str,
         output_key: str,
-        num_test: int = 10,
+        n_samples: int = 10,
+        task_config: Optional[PromptTaskConfig] = None,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
         **kwargs,
@@ -95,11 +99,12 @@ class BaseOptimizer:
 
         Args:
            dataset: Opik dataset name, or Opik dataset
-           metric: instance of an Opik metric
+           metric_config: instance of a MetricConfig
+           task_config: instance of a PromptTaskConfig
            prompt: the prompt to evaluate
            input_key: input field of dataset
            output_key: output field of dataset
-           num_test: number of items to test in the dataset
+           n_samples: number of items to test in the dataset
            dataset_item_ids: Optional list of dataset item IDs to evaluate
            experiment_config: Optional configuration for the experiment
            **kwargs: Additional arguments for evaluation
@@ -108,7 +113,8 @@ class BaseOptimizer:
             float: The evaluation score
         """
         self.dataset = dataset
-        self.metric = metric
+        self.metric_config = metric_config
+        self.task_config = task_config
         self.prompt = prompt
         self.input_key = input_key
         self.output_key = output_key

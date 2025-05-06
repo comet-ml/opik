@@ -6,6 +6,7 @@ from opik.evaluation.metrics import score_result
 
 from opik.evaluation import evaluator as opik_evaluator
 
+
 def evaluate(
     dataset: opik.Dataset,
     evaluated_task: Callable[[Dict[str, Any]], Dict[str, Any]],
@@ -14,7 +15,7 @@ def evaluate(
     optimization_id: Optional[str] = None,
     dataset_item_ids: Optional[List[str]] = None,
     project_name: Optional[str] = None,
-    num_test: Optional[int] = None,
+    n_samples: Optional[int] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
 ) -> float:
     """
@@ -26,7 +27,7 @@ def evaluate(
         evaluated_task: A function that takes a dataset item dict as input and returns a dictionary with output(s).
         dataset_item_ids: Optional list of dataset item IDs to evaluate.
         project_name: Optional project name for evaluation.
-        num_test: Optional number of test examples to perform the evaluation and then stop.
+        n_samples: Optional number of test examples to perform the evaluation and then stop.
         num_threads: Number of threads to use for evaluation.
         experiment_config: The dictionary with parameters that describe experiment
         optimization_id: Optional optimization ID for the experiment.
@@ -42,8 +43,8 @@ def evaluate(
     if dataset_item_ids:
         items = [item for item in items if item.get("id") in dataset_item_ids]
 
-    if num_test:
-        items = items[:num_test]
+    if n_samples:
+        items = items[:n_samples]
 
     # TODO: move to debug logger
     # print(f"[DEBUG] Starting evaluation with task: {evaluated_task}")
@@ -68,7 +69,7 @@ def evaluate(
             dataset_item_ids=dataset_item_ids,
             scoring_metrics=[metric_config.metric],
             task_threads=num_threads,
-            nb_samples=num_test,
+            nb_samples=n_samples,
             experiment_config=experiment_config,
         )
     else:
@@ -80,7 +81,7 @@ def evaluate(
             dataset_item_ids=dataset_item_ids,
             scoring_metrics=[metric_config.metric],
             task_threads=num_threads,
-            nb_samples=num_test,
+            nb_samples=n_samples,
             experiment_config=experiment_config,
         )
 

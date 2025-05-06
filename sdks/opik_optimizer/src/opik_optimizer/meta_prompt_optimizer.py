@@ -1,23 +1,21 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 import opik
 from opik.evaluation import metrics
+from opik import Dataset
 import litellm
 from litellm.caching import Cache
 import logging
 import json
 import os
 
-from opik_optimizer.optimization_config import mappers
+from .optimization_config import mappers
+from .optimization_config.configs import MetricConfig, PromptTaskConfig
 from .base_optimizer import BaseOptimizer, OptimizationRound
 from .optimization_result import OptimizationResult
 from .utils import get_tqdm
-from opik_optimizer.optimization_dsl import (
-    MetricConfig,
-    OptimizationConfig,
-    PromptTaskConfig,
-)
 from opik_optimizer import task_evaluator
 from opik.api_objects import opik_client
+
 tqdm = get_tqdm()
 
 # Using disk cache for LLM calls
@@ -85,7 +83,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         prompt: str,
         use_full_dataset: bool = False,
         experiment_config: Optional[Dict] = None,
-        num_test: Optional[int] = None,
+        n_samples: Optional[int] = None,
     ) -> float:
         """
         Evaluate a prompt using the given dataset and metric configuration.
@@ -97,7 +95,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             prompt: The prompt to evaluate
             use_full_dataset: Whether to use the full dataset or a subset for evaluation
             experiment_config: A dictionary to log with the experiments
-            num_test: The number of dataset items to use for evaluation
+            n_samples: The number of dataset items to use for evaluation
 
         Returns:
             float: The evaluation score
@@ -109,7 +107,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             prompt=prompt,
             use_full_dataset=use_full_dataset,
             experiment_config=experiment_config,
-            num_test=num_test,
+            n_samples=n_samples,
         )
 
     def _evaluate_prompt(
@@ -120,18 +118,18 @@ class MetaPromptOptimizer(BaseOptimizer):
         prompt: str,
         use_full_dataset: bool,
         experiment_config: Optional[Dict],
-        num_test: Optional[int],
+        n_samples: Optional[int],
         optimization_id: Optional[str] = None,
     ) -> float:
         # Calculate subset size for trials
         if not use_full_dataset:
-            if num_test is None:
+            if n_samples is None:
                 # Get total size of dataset
                 total_items = len(dataset.get_items())
                 # Calculate 20% of total, but no more than 20 items
                 subset_size = min(20, max(10, int(total_items * 0.2)))
             else:
-                subset_size = num_test
+                subset_size = n_samples
         else:
             subset_size = None  # Use all items for final checks
 
@@ -197,16 +195,18 @@ class MetaPromptOptimizer(BaseOptimizer):
             evaluated_task=llm_task,
             num_threads=self.num_threads,
             project_name=self.project_name,
-            num_test=subset_size,  # Use subset_size for trials, None for full dataset
+            n_samples=subset_size,  # Use subset_size for trials, None for full dataset
             experiment_config=experiment_config,
             optimization_id=optimization_id,
         )
 
     def optimize_prompt(
         self,
-        config: OptimizationConfig,
+        dataset: Union[str, Dataset],
+        metric_config: MetricConfig,
+        task_config: PromptTaskConfig,
         experiment_config: Optional[Dict] = None,
-        num_test: int = None,
+        n_samples: int = None,
         auto_continue: bool = False,
         **kwargs,
     ) -> OptimizationResult:
@@ -214,9 +214,11 @@ class MetaPromptOptimizer(BaseOptimizer):
         Optimize a prompt using meta-reasoning.
 
         Args:
-            config: Configuration for the optimization task
+            dataset: The dataset to evaluate against
+            metric_config: The metric configuration to use for evaluation
+            task_config: The task configuration containing input/output fields
             experiment_config: A dictionary to log with the experiments
-            num_test: The number of dataset items to use for evaluation
+            n_samples: The number of dataset items to use for evaluation
             auto_continue: If True, the algorithm may continue if goal not met
             **kwargs: Additional arguments for evaluation
 
@@ -225,14 +227,16 @@ class MetaPromptOptimizer(BaseOptimizer):
         """
         try:
             optimization = self._opik_client.create_optimization(
-                dataset_name=config.dataset.name,
-                objective_name=config.objective.metric.name,
+                dataset_name=dataset.name,
+                objective_name=metric_config.metric.name,
             )
             result = self._optimize_prompt(
                 optimization_id=optimization.id,
-                config=config,
+                dataset=dataset,
+                metric_config=metric_config,
+                task_config=task_config,
                 experiment_config=experiment_config,
-                num_test=num_test,
+                n_samples=n_samples,
                 auto_continue=auto_continue,
                 **kwargs,
             )
@@ -245,23 +249,25 @@ class MetaPromptOptimizer(BaseOptimizer):
     def _optimize_prompt(
         self,
         optimization_id: str,
-        config: OptimizationConfig,
+        dataset: Union[str, Dataset],
+        metric_config: MetricConfig,
+        task_config: PromptTaskConfig,
         experiment_config: Optional[Dict],
-        num_test: int,
+        n_samples: int,
         auto_continue: bool,
         **kwargs,
     ) -> OptimizationResult:
         self.auto_continue = auto_continue
-        self.dataset = config.dataset
-        self.task_config = config.task
+        self.dataset = dataset
+        self.task_config = task_config
 
-        current_prompt = config.task.instruction_prompt
+        current_prompt = task_config.instruction_prompt
         experiment_config = experiment_config or {}
         experiment_config = {
             **experiment_config,
             **{
                 "optimizer": self.__class__.__name__,
-                "metric": config.objective.metric.name,
+                "metric": metric_config.metric.name,
                 "dataset": self.dataset.name,
                 "configuration": {
                     "prompt": current_prompt,
@@ -270,11 +276,11 @@ class MetaPromptOptimizer(BaseOptimizer):
         }
         best_score = self._evaluate_prompt(
             optimization_id=optimization_id,
-            dataset=config.dataset,
-            metric_config=config.objective,
-            task_config=config.task,
+            dataset=dataset,
+            metric_config=metric_config,
+            task_config=task_config,
             prompt=current_prompt,
-            num_test=num_test,
+            n_samples=n_samples,
             experiment_config=experiment_config,
             use_full_dataset=True,
         )
@@ -318,9 +324,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                 for trial in range(3):
                     try:
                         score = self.evaluate_prompt(
-                            dataset=config.dataset,
-                            metric_config=config.objective,
-                            task_config=config.task,
+                            dataset=dataset,
+                            metric_config=metric_config,
+                            task_config=task_config,
                             prompt=prompt,
                             use_full_dataset=False,  # Use subset for trials
                             experiment_config=experiment_config,
@@ -345,9 +351,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                     for trial in range(3, 6):  # Up to 6 total trials
                         try:
                             score = self.evaluate_prompt(
-                                dataset=config.dataset,
-                                metric_config=config.objective,
-                                task_config=config.task,
+                                dataset=dataset,
+                                metric_config=metric_config,
+                                task_config=task_config,
                                 prompt=prompt,
                                 use_full_dataset=False,  # Use subset for trials
                             )
@@ -373,12 +379,12 @@ class MetaPromptOptimizer(BaseOptimizer):
                 if best_candidate_score > best_score:
                     final_score = self._evaluate_prompt(
                         optimization_id=optimization_id,
-                        dataset=config.dataset,
-                        metric_config=config.objective,
-                        task_config=config.task,
+                        dataset=dataset,
+                        metric_config=metric_config,
+                        task_config=task_config,
                         prompt=best_candidate,
                         experiment_config=experiment_config,
-                        num_test=num_test,
+                        n_samples=n_samples,
                         use_full_dataset=True,
                     )
                     if final_score > best_score:
@@ -430,7 +436,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         logger.info("=" * 80)
         logger.info(f"Initial score: {initial_score:.4f}")
         logger.info(f"Final best score: {best_score:.4f}")
-        logger.info(f"Improvement: {(best_score - initial_score) / initial_score:.2%}")
+        if initial_score != 0:
+            logger.info(f"Improvement: {(best_score - initial_score) / initial_score:.2%}")
+        logger.info("Improvement: infinite")
         logger.info("\nFINAL OPTIMIZED PROMPT:")
         logger.info("-" * 80)
         logger.info(best_prompt)
@@ -438,7 +446,13 @@ class MetaPromptOptimizer(BaseOptimizer):
         logger.info("=" * 80)
 
         return self._create_result(
-            config, best_prompt, best_score, initial_score, rounds, stopped_early
+            metric_config,
+            task_config,
+            best_prompt,
+            best_score,
+            initial_score,
+            rounds,
+            stopped_early,
         )
 
     def _calculate_improvement(
@@ -486,7 +500,8 @@ class MetaPromptOptimizer(BaseOptimizer):
 
     def _create_result(
         self,
-        config: OptimizationConfig,
+        metric_config: MetricConfig,
+        task_config: PromptTaskConfig,
         best_prompt: str,
         best_score: float,
         initial_score: float,
@@ -497,9 +512,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         return OptimizationResult(
             prompt=best_prompt,
             score=best_score,
-            metric_name=config.objective.metric.name,
+            metric_name=metric_config.metric.name,
             details={
-                "initial_prompt": config.task.instruction_prompt,
+                "initial_prompt": task_config.instruction_prompt,
                 "initial_score": initial_score,
                 "final_prompt": best_prompt,
                 "final_score": best_score,
