@@ -79,6 +79,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         config: optimization_dsl.OptimizationConfig,
         n_trials: int = 10,
         experiment_config: Optional[Dict] = None,
+        num_test: int = None,
     ) -> optimization_result.OptimizationResult:
         random.seed(self.seed)
 
@@ -138,9 +139,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             experiment_config["configuration"]["prompt"] = instruction
             experiment_config["configuration"]["examples"] = demo_examples
 
+            dataset_item_ids = [example["id"] for example in dataset]
+            if num_test is not None:
+                dataset_item_ids = random.sample(dataset_item_ids, num_test)
+
             score = task_evaluator.evaluate(
                 dataset=opik_dataset,
-                dataset_item_ids=[example["id"] for example in dataset],
+                dataset_item_ids=dataset_item_ids,
                 metric_config=config.objective,
                 evaluated_task=llm_task,
                 num_threads=self.n_threads,
@@ -189,6 +194,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         metric_config: optimization_dsl.MetricConfig,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
+        num_test: int = None,
     ) -> float:
 
         # Ensure prompt is correctly formatted
@@ -217,6 +223,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 },
             },
         }
+
+        if num_test is not None:
+            if dataset_item_ids is not None:
+                raise Exception("Can't use num_test and dataset_item_ids")
+
+            all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
+            dataset_item_ids = random.sample(all_ids, num_test)
 
         score = task_evaluator.evaluate(
             dataset=dataset,

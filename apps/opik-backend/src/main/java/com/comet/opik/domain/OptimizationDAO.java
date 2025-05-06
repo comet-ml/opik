@@ -189,7 +189,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             SELECT
                 o.*,
                 o.id as id,
-                COUNT(DISTINCT e.id) AS num_trials,
+                COUNT(DISTINCT e.id) FILTER (WHERE e.id != '') AS num_trials,
                 maxMap(fs.feedback_scores) AS feedback_scores
             FROM optimization_final AS o
             LEFT JOIN experiments_final AS e ON o.id = e.optimization_id
@@ -278,7 +278,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             WHERE workspace_id = :workspace_id
             AND dataset_id IN :dataset_ids
             ORDER BY id DESC, last_updated_at DESC
-            LIMIT 1
+            LIMIT 1 by id
             ;
             """;
 
