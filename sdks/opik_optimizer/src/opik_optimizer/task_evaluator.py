@@ -3,14 +3,15 @@ import opik
 from typing import Any, Callable, Dict, List, Optional
 from opik_optimizer.optimization_dsl import MetricConfig
 from opik.evaluation.metrics import score_result
-from opik_optimizer.optimization_config import mappers
 
+from opik.evaluation import evaluator as opik_evaluator
 
 def evaluate(
     dataset: opik.Dataset,
     evaluated_task: Callable[[Dict[str, Any]], Dict[str, Any]],
     metric_config: MetricConfig,
     num_threads: int,
+    optimization_id: Optional[str] = None,
     dataset_item_ids: Optional[List[str]] = None,
     project_name: Optional[str] = None,
     num_test: Optional[int] = None,
@@ -28,6 +29,7 @@ def evaluate(
         num_test: Optional number of test examples to perform the evaluation and then stop.
         num_threads: Number of threads to use for evaluation.
         experiment_config: The dictionary with parameters that describe experiment
+        optimization_id: Optional optimization ID for the experiment.
 
     Returns:
         float: The average score of the evaluated task.
@@ -56,17 +58,31 @@ def evaluate(
     }
     scoring_key_mapping["output"] = "_llm_task_output"
 
-    result = opik.evaluate(
-        dataset=dataset,
-        task=evaluated_task,
-        project_name=project_name,
-        scoring_key_mapping=scoring_key_mapping,
-        dataset_item_ids=dataset_item_ids,
-        scoring_metrics=[metric_config.metric],
-        task_threads=num_threads,
-        nb_samples=num_test,
-        experiment_config=experiment_config,
-    )
+    if optimization_id is not None:
+        result = opik_evaluator.evaluate_optimization_trial(
+            optimization_id=optimization_id,
+            dataset=dataset,
+            task=evaluated_task,
+            project_name=project_name,
+            scoring_key_mapping=scoring_key_mapping,
+            dataset_item_ids=dataset_item_ids,
+            scoring_metrics=[metric_config.metric],
+            task_threads=num_threads,
+            nb_samples=num_test,
+            experiment_config=experiment_config,
+        )
+    else:
+        result = opik_evaluator.evaluate(
+            dataset=dataset,
+            task=evaluated_task,
+            project_name=project_name,
+            scoring_key_mapping=scoring_key_mapping,
+            dataset_item_ids=dataset_item_ids,
+            scoring_metrics=[metric_config.metric],
+            task_threads=num_threads,
+            nb_samples=num_test,
+            experiment_config=experiment_config,
+        )
 
     if not result.test_results:
         return 0.0

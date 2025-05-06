@@ -3,12 +3,13 @@ import os
 import random
 
 import opik
+
 from opik.integrations.dspy.callback import OpikCallback
 from opik.opik_context import get_current_span_data
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation import evaluate
 from opik import Dataset
-from opik_optimizer import optimization_dsl, base_optimizer
+from opik_optimizer import optimization_dsl
 
 import dspy
 from dspy.clients.base_lm import BaseLM
@@ -200,14 +201,40 @@ class MiproOptimizer(BaseOptimizer):
         experiment_config: Optional[Dict] = None,
         **kwargs,
     ) -> OptimizationResult:
+        self._opik_client = opik.Opik()
+        optimization = self._opik_client.create_optimization(
+            dataset_name=config.dataset.name,
+            objective_name=config.objective.metric.name,
+        )
+        try:
+            result = self._optimize_prompt(
+                config=config,
+                num_candidates=num_candidates,
+                experiment_config=experiment_config,
+                optimization_id=optimization.id,
+                **kwargs,
+            )
+            optimization.update(status="completed")
+            return result
+        except Exception as e:
+            optimization.update(status="cancelled")
+            raise e
 
+    def _optimize_prompt(
+        self,
+        config: optimization_dsl.OptimizationConfig,
+        num_candidates: int = 10,
+        experiment_config: Optional[Dict] = None,
+        optimization_id: Optional[str] = None,
+        **kwargs,
+    ) -> OptimizationResult:
         self.prepare_optimize_prompt(
             config=config,
             num_candidates=num_candidates,
             experiment_config=experiment_config,
+            optimization_id=optimization_id,
             **kwargs,
         )
-
         return self.continue_optimize_prompt()
 
     def prepare_optimize_prompt(
@@ -215,6 +242,7 @@ class MiproOptimizer(BaseOptimizer):
         config: optimization_dsl.OptimizationConfig,
         num_candidates: int = 10,
         experiment_config: Optional[Dict] = None,
+        optimization_id: Optional[str] = None,
         **kwargs,
     ) -> None:
         # FIXME: Intermediate values:
@@ -285,6 +313,7 @@ class MiproOptimizer(BaseOptimizer):
             opik_dataset=config.dataset,
             opik_project_name=self.project_name,
             opik_metric_config=config.objective,
+            opik_optimization_id=optimization_id,
             log_dir=log_dir,
             experiment_config=experiment_config,
         )
