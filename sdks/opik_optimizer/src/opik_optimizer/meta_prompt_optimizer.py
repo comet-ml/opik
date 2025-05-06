@@ -17,7 +17,7 @@ from opik_optimizer.optimization_dsl import (
     PromptTaskConfig,
 )
 from opik_optimizer import task_evaluator
-
+from opik.api_objects import opik_client
 tqdm = get_tqdm()
 
 # Using disk cache for LLM calls
@@ -72,6 +72,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.num_threads = num_threads
         self.dataset = None
         self.task_config = None
+        self._opik_client = opik_client.get_client_cached()
         logger.info(
             f"Initialized MetaPromptOptimizer with model={model}, reasoning_model={reasoning_model}"
         )
@@ -84,7 +85,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         prompt: str,
         use_full_dataset: bool = False,
         experiment_config: Optional[Dict] = None,
-        num_test: int = None,
+        num_test: Optional[int] = None,
     ) -> float:
         """
         Evaluate a prompt using the given dataset and metric configuration.
@@ -101,6 +102,27 @@ class MetaPromptOptimizer(BaseOptimizer):
         Returns:
             float: The evaluation score
         """
+        return self._evaluate_prompt(
+            dataset=dataset,
+            metric_config=metric_config,
+            task_config=task_config,
+            prompt=prompt,
+            use_full_dataset=use_full_dataset,
+            experiment_config=experiment_config,
+            num_test=num_test,
+        )
+
+    def _evaluate_prompt(
+        self,
+        dataset: opik.Dataset,
+        metric_config: MetricConfig,
+        task_config: PromptTaskConfig,
+        prompt: str,
+        use_full_dataset: bool,
+        experiment_config: Optional[Dict],
+        num_test: Optional[int],
+        optimization_id: Optional[str] = None,
+    ) -> float:
         # Calculate subset size for trials
         if not use_full_dataset:
             if num_test is None:
@@ -177,6 +199,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             project_name=self.project_name,
             num_test=subset_size,  # Use subset_size for trials, None for full dataset
             experiment_config=experiment_config,
+            optimization_id=optimization_id,
         )
 
     def optimize_prompt(
@@ -200,6 +223,34 @@ class MetaPromptOptimizer(BaseOptimizer):
         Returns:
             OptimizationResult: Structured result containing optimization details
         """
+        try:
+            optimization = self._opik_client.create_optimization(
+                dataset_name=config.dataset.name,
+                objective_name=config.objective.metric.name,
+            )
+            result = self._optimize_prompt(
+                optimization_id=optimization.id,
+                config=config,
+                experiment_config=experiment_config,
+                num_test=num_test,
+                auto_continue=auto_continue,
+                **kwargs,
+            )
+            optimization.update(status="completed")
+            return result
+        except Exception as e:
+            optimization.update(status="cancelled")
+            raise e
+
+    def _optimize_prompt(
+        self,
+        optimization_id: str,
+        config: OptimizationConfig,
+        experiment_config: Optional[Dict],
+        num_test: int,
+        auto_continue: bool,
+        **kwargs,
+    ) -> OptimizationResult:
         self.auto_continue = auto_continue
         self.dataset = config.dataset
         self.task_config = config.task
@@ -217,12 +268,15 @@ class MetaPromptOptimizer(BaseOptimizer):
                 },
             },
         }
-        best_score = self.evaluate_prompt(
+        best_score = self._evaluate_prompt(
+            optimization_id=optimization_id,
             dataset=config.dataset,
             metric_config=config.objective,
             task_config=config.task,
             prompt=current_prompt,
             num_test=num_test,
+            experiment_config=experiment_config,
+            use_full_dataset=True,
         )
         initial_score = best_score
         best_prompt = current_prompt
@@ -317,13 +371,15 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 # Final evaluation with full dataset for the best candidate
                 if best_candidate_score > best_score:
-                    final_score = self.evaluate_prompt(
+                    final_score = self._evaluate_prompt(
+                        optimization_id=optimization_id,
                         dataset=config.dataset,
                         metric_config=config.objective,
                         task_config=config.task,
                         prompt=best_candidate,
                         experiment_config=experiment_config,
                         num_test=num_test,
+                        use_full_dataset=True,
                     )
                     if final_score > best_score:
                         best_score = final_score
