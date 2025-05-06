@@ -20,6 +20,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
@@ -189,6 +190,37 @@ class LlmProviderApiKeyResourceTest {
         }
     }
 
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("Create provider Api Key with invalid payload 422")
+    void createAndUpdateProviderApiKeyInvalidPayload422(String body, String errorMsg) {
+
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        try (var actualResponse = llmProviderApiKeyResourceClient.createProviderApiKey(body, apiKey, workspaceName,
+                422)) {
+            var actualError = actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class);
+
+            assertThat(actualError.errors()).contains(errorMsg);
+        }
+    }
+
+    Stream<Arguments> createAndUpdateProviderApiKeyInvalidPayload422() {
+        ProviderApiKey providerApiKey = factory.manufacturePojo(ProviderApiKey.class);
+        return Stream.of(
+                arguments(
+                        JsonUtils.writeValueAsString(providerApiKey.toBuilder().baseUrl("").build()),
+                        "baseUrl must not be blank"),
+                arguments(
+                        JsonUtils.writeValueAsString(providerApiKey.toBuilder()
+                                .name(RandomStringUtils.secure().nextAlphabetic(200)).build()),
+                        "name size must be between 0 and 150"));
+    }
+
     Stream<Arguments> createAndUpdateProviderApiKeyInvalidPayload() {
         String body = "qwerty12345";
         ProviderApiKey providerApiKey = factory.manufacturePojo(ProviderApiKey.class);
@@ -282,10 +314,37 @@ class LlmProviderApiKeyResourceTest {
         assertPage(actualProviderApiKeyPage, List.of(expectedProviderApiKey));
     }
 
+    @Test
+    @DisplayName("Create and get provider Api Keys List With Minimal Fields")
+    void createAndGetProviderApiKeyListWithMininalFields() {
+
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        ProviderApiKey providerApiKey = factory.manufacturePojo(ProviderApiKey.class).toBuilder()
+                .headers(null)
+                .baseUrl(null)
+                .build();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // No LLM Provider api keys, expect empty response
+        var actualProviderApiKeyPage = llmProviderApiKeyResourceClient.getAll(workspaceName, apiKey);
+        assertPage(actualProviderApiKeyPage, List.of());
+
+        // Create LLM Provider api key
+        var expectedProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey,
+                workspaceName, 201);
+        actualProviderApiKeyPage = llmProviderApiKeyResourceClient.getAll(workspaceName, apiKey);
+        assertPage(actualProviderApiKeyPage, List.of(expectedProviderApiKey));
+    }
+
     private void getAndAssertProviderApiKey(ProviderApiKey expected, String apiKey, String workspaceName) {
         var actualEntity = llmProviderApiKeyResourceClient.getById(expected.id(), workspaceName, apiKey, 200);
         assertThat(actualEntity.provider()).isEqualTo(expected.provider());
         assertThat(actualEntity.name()).isEqualTo(expected.name());
+        assertThat(actualEntity.baseUrl()).isEqualTo(expected.baseUrl());
+        assertThat(actualEntity.headers()).isEqualTo(expected.headers());
 
         // We should decrypt api key in order to compare, since it encrypts on deserialization
         assertThat(decrypt(actualEntity.apiKey())).isEqualTo(maskApiKey(expected.apiKey()));

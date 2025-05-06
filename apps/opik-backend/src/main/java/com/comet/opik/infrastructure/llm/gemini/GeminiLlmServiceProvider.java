@@ -4,6 +4,7 @@ import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 
@@ -17,13 +18,13 @@ public class GeminiLlmServiceProvider implements LlmServiceProvider {
     }
 
     @Override
-    public LlmProviderService getService(String apiKey) {
-        return new LlmProviderGemini(clientGenerator, apiKey);
+    public LlmProviderService getService(LlmProviderClientApiConfig config) {
+        return new LlmProviderGemini(clientGenerator, config);
     }
 
     @Override
-    public ChatLanguageModel getLanguageModel(String apiKey,
+    public ChatLanguageModel getLanguageModel(LlmProviderClientApiConfig config,
             AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters) {
-        return clientGenerator.generateChat(apiKey, modelParameters);
+        return clientGenerator.generateChat(config, modelParameters);
     }
 }
