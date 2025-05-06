@@ -10,7 +10,7 @@ LOGGER = logging.getLogger(__name__)
 def _get_expected_payload_size_MB(item: T) -> float:
     encoded_for_json = jsonable_encoder.encode(item)
     size = _get_json_size(encoded_for_json)
-    return size
+    return size / (1024 * 1024)
 
 
 def _get_json_size(obj: Any) -> Any:
