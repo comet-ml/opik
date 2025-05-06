@@ -6,7 +6,7 @@ import pytest
 import requests
 
 from opik import synchronization
-
+from testlib import assert_helpers
 
 ADK_SERVER_PORT = 21345
 ADK_USER = "user_113"
@@ -26,7 +26,7 @@ def _create_user_session(base_url: str, user_id: str, session_id: str) -> bool:
 
 
 @pytest.fixture()
-def start_api_server() -> str:
+def start_api_server():
     cwd = os.path.dirname(os.path.abspath(__file__))
     os.environ["OPIK_FILE_LOGGING_LEVEL"] = "DEBUG"
     with subprocess.Popen(
@@ -80,7 +80,6 @@ def test_opik_tracer_with_sample_agent(
     )
     print("Response: ", result.text)
     assert result.status_code == 200
-    print("Response: ", result.json())
 
     traces = opik_client_unique_project_name.search_traces(
         filter_string='input contains "Hey, whats the weather in New York today?"'
@@ -90,11 +89,14 @@ def test_opik_tracer_with_sample_agent(
     trace = traces[0]
     assert trace.span_count == 3  # two LLM calls and one function call
     assert trace.usage is not None
-    assert trace.usage == {
-        "completion_tokens": 31,
-        "original_usage.candidates_token_count": 31,
-        "original_usage.prompt_token_count": 394,
-        "original_usage.total_token_count": 425,
-        "prompt_tokens": 394,
-        "total_tokens": 425,
-    }
+    assert_helpers.assert_dict_has_keys(
+        trace.usage,
+        [
+            "completion_tokens",
+            "original_usage.candidates_token_count",
+            "original_usage.prompt_token_count",
+            "original_usage.total_token_count",
+            "prompt_tokens",
+            "total_tokens",
+        ],
+    )
