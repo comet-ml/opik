@@ -11,10 +11,12 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     OpikApi.ServiceTogglesConfig
 > = core.serialization.object({
     pythonEvaluatorEnabled: core.serialization.boolean(),
+    guardrailsEnabled: core.serialization.boolean(),
 });
 
 export declare namespace ServiceTogglesConfig {
     export interface Raw {
         pythonEvaluatorEnabled: boolean;
+        guardrailsEnabled: boolean;
     }
 }

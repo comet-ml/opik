@@ -12,6 +12,9 @@ class ServiceTogglesConfig(UniversalBaseModel):
     python_evaluator_enabled: typing_extensions.Annotated[
         bool, FieldMetadata(alias="pythonEvaluatorEnabled")
     ]
+    guardrails_enabled: typing_extensions.Annotated[
+        bool, FieldMetadata(alias="guardrailsEnabled")
+    ]
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
