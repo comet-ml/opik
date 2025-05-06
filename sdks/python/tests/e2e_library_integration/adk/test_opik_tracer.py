@@ -6,7 +6,7 @@ import pytest
 import requests
 
 from opik import synchronization
-from testlib import assert_helpers
+from ... import testlib
 
 ADK_SERVER_PORT = 21345
 ADK_USER = "user_113"
@@ -89,7 +89,7 @@ def test_opik_tracer_with_sample_agent(
     trace = traces[0]
     assert trace.span_count == 3  # two LLM calls and one function call
     assert trace.usage is not None
-    assert_helpers.assert_dict_has_keys(
+    testlib.assert_dict_has_keys(
         trace.usage,
         [
             "completion_tokens",
