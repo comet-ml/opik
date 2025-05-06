@@ -42,11 +42,6 @@ class OpikCallback(dspy_callback.BaseCallback):
 
         self._opik_client = opik_client.get_client_cached()
 
-        # Initialize DSPy settings if not already set
-        if not hasattr(dspy.settings, 'caller_predict'):
-            dspy.settings.caller_predict = None
-        if not hasattr(dspy.settings, 'send_stream'):
-            dspy.settings.send_stream = None
 
     def on_module_start(
         self,
