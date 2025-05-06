@@ -51,7 +51,7 @@ class AnyList:
         return "<ANY_LIST>"
 
 
-class AnyString:
+class AnyString(str):
     """A helper object that provides partial equality check to strings."""
 
     def __init__(self, startswith: Optional[str] = None):
