@@ -1,65 +1,63 @@
-from opik.evaluation.metrics import LevenshteinRatio
-from opik_optimizer import MiproOptimizer
-from opik_optimizer.demo import get_or_create_dataset
+import dspy
 
+from opik.evaluation.metrics import Equals
+from opik_optimizer import MiproOptimizer
+from opik_optimizer.demo import get_or_create_dataset, get_litellm_cache
 from opik_optimizer import (
-    OptimizationConfig,
     MetricConfig,
     PromptTaskConfig,
     from_dataset_field,
     from_llm_response_text,
 )
 
+project_name = "optimize-mipro-hotpot"
 opik_dataset = get_or_create_dataset("hotpot-300")
-project_name = "optimize-mipro-hotpot-0001"
-
-initial_prompt = "Answer the question"
+get_litellm_cache("test")
 
 optimizer = MiproOptimizer(
     model="openai/gpt-4o-mini",  # LiteLLM or OpenAI name
-    project_name=project_name,
     temperature=0.1,
-    max_tokens=5000,
-    num_threads=1,
+    project_name=project_name,
+    num_threads=16,
 )
 
-optimization_config = OptimizationConfig(
+
+# Tools:
+def search_wikipedia(query: str) -> list[str]:
+    """
+    This agent is used to search wikipedia. It can retrieve additional details
+    about a topic.
+    """
+    results = dspy.ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")(
+        query, k=3
+    )
+    return [x["text"] for x in results]
+
+
+metric_config = MetricConfig(
+    metric=Equals(project_name=project_name),
+    inputs={
+        "output": from_llm_response_text(),
+        "reference": from_dataset_field(name="answer"),
+    },
+)
+
+task_config = PromptTaskConfig(
+    instruction_prompt="Answer the question",
+    input_dataset_fields=["question"],
+    output_dataset_field="answer",
+    tools=[search_wikipedia],
+)
+
+result = optimizer.optimize_prompt(
     dataset=opik_dataset,
-    objective=MetricConfig(
-        metric=LevenshteinRatio(project_name=project_name),
-        inputs={
-            "output": from_llm_response_text(),
-            "reference": from_dataset_field(name="answer"),
-        },
-    ),
-    task=PromptTaskConfig(
-        instruction_prompt=initial_prompt,
-        input_dataset_fields=["question"],
-        output_dataset_field="answer",
-    ),
+    metric_config=metric_config,
+    task_config=task_config,
 )
 
-initial_score = optimizer.evaluate_prompt(
+result = optimizer.evaluate_prompt(
+    module=result.details["program"],
     dataset=opik_dataset,
-    config=optimization_config,
-    prompt=initial_prompt,
+    metric_config=metric_config,
+    task_config=task_config,
 )
-
-print("Initial prompt:", initial_prompt)
-print("Score:", initial_score)
-
-result = optimizer.optimize_prompt(optimization_config)
-
-print(result)
-
-final_score = optimizer.evaluate_prompt(
-    dataset=opik_dataset,
-    config=optimization_config,
-    prompt=result.prompt,
-)
-
-print("Initial prompt:", initial_prompt)
-print("Score:", initial_score)
-
-print("Final prompt:", result.prompt)
-print("Final score:", final_score)
