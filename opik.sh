@@ -1,21 +1,33 @@
 #!/bin/bash
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-REQUIRED_CONTAINERS=("opik-clickhouse-1" "opik-mysql-1" "opik-python-backend-1" "opik-redis-1" "opik-frontend-1" "opik-backend-1" "opik-minio-1")
+REQUIRED_CONTAINERS=("opik-clickhouse-1" "opik-mysql-1" "opik-python-backend-1" "opik-redis-1" "opik-frontend-1" "opik-backend-1" "opik-minio-1" "opik-zookeeper-1")
 GUARDRAILS_CONTAINERS=("opik-guardrails-backend-1")
 
+# Bash doesn't have straight forward support for returning arrays, so using a global var instead
+CONTAINERS=("${REQUIRED_CONTAINERS[@]}")
+
 get_verify_cmd() {
-  local cmd="./opik.sh --verify"
+  local cmd="./opik.sh"
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
-    cmd="./opik.sh --guardrails --verify"
+    cmd="$cmd --guardrails"
   fi
-  echo "$cmd"
+  echo "$cmd --verify"
 }
 
 get_start_cmd() {
   local cmd="./opik.sh"
+  if [[ "$BUILD_MODE" == "true" ]]; then
+    cmd="$cmd --build"
+  fi
+  if [[ "$DEBUG_MODE" == "true" ]]; then
+    cmd="$cmd --debug"
+  fi
+  if [[ "$PORT_MAPPING" == "true" ]]; then
+    cmd="$cmd --port-mapping"
+  fi
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
-    cmd="./opik.sh --guardrails"
+    cmd="$cmd --guardrails"
   fi
   echo "$cmd"
 }
@@ -28,16 +40,26 @@ generate_uuid() {
   fi
 }
 
+get_docker_compose_cmd() {
+  local cmd="docker compose -f $script_dir/deployment/docker-compose/docker-compose.yaml"
+  if [[ "$PORT_MAPPING" == "true" ]]; then
+    cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.override.yaml"
+  fi
+  echo "$cmd"
+}
+
 print_usage() {
-  echo "Usage: opik.sh [OPTION]"
+  echo "Usage: opik.sh [OPTIONS]"
   echo ""
   echo "Options:"
-  echo "  --verify     Check if all containers are healthy"
-  echo "  --info       Display welcome system status, only if all containers are running"
-  echo "  --stop       Stop all containers and clean up"
-  echo "  --debug      Enable debug mode (verbose output)"
-  echo "  --guardrails Enable guardrails profile (can be combined with other flags)"
-  echo "  --help       Show this help message"
+  echo "  --verify        Check if all containers are healthy"
+  echo "  --info          Display welcome system status, only if all containers are running"
+  echo "  --stop          Stop all containers and clean up"
+  echo "  --build         Build containers before starting (can be combined with other flags)"
+  echo "  --debug         Enable debug mode (verbose output) (can be combined with other flags)"
+  echo "  --port-mapping  Enable port mapping for all containers by using the override file (can be combined with other flags)"
+  echo "  --guardrails    Enable guardrails profile (can be combined with other flags)"
+  echo "  --help          Show this help message"
   echo ""
   echo "If no option is passed, the script will start missing containers and then show the system status."
 }
@@ -50,17 +72,13 @@ check_docker_status() {
   fi
 }
 
-
 check_containers_status() {
   local show_output="${1:-false}"
   local all_ok=true
 
   check_docker_status
 
-  local containers=("${REQUIRED_CONTAINERS[@]}")
-  if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
-    containers+=("${GUARDRAILS_CONTAINERS[@]}")
-  fi
+  local containers=("${CONTAINERS[@]}")
 
   for container in "${containers[@]}"; do
     status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
@@ -90,7 +108,8 @@ start_missing_containers() {
   [[ "$DEBUG_MODE" == true ]] && echo "🔍 Checking required containers..."
   all_running=true
 
-  for container in "${REQUIRED_CONTAINERS[@]}"; do
+  local containers=("${CONTAINERS[@]}")
+  for container in "${containers[@]}"; do
     status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
 
     if [[ "$status" != "running" ]]; then
@@ -107,7 +126,8 @@ start_missing_containers() {
     export COMPOSE_BAKE=true
   fi
 
-  local cmd="docker compose --project-directory $script_dir/deployment/docker-compose"
+  local cmd
+  cmd=$(get_docker_compose_cmd)
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --profile guardrails"
   fi
@@ -117,11 +137,6 @@ start_missing_containers() {
   max_retries=60
   interval=1
   all_running=true
-
-  local containers=("${REQUIRED_CONTAINERS[@]}")
-  if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
-    containers+=("${GUARDRAILS_CONTAINERS[@]}")
-  fi
 
   for container in "${containers[@]}"; do
     retries=0
@@ -164,7 +179,8 @@ start_missing_containers() {
 stop_containers() {
   check_docker_status
   echo "🛑 Stopping all required containers..."
-  local cmd="docker compose --project-directory $script_dir/deployment/docker-compose"
+  local cmd
+  cmd=$(get_docker_compose_cmd)
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --profile guardrails"
   fi
@@ -281,19 +297,43 @@ EOF
   fi
 }
 
+# Default: no build
+BUILD_MODE=
 # Default: no debug
 DEBUG_MODE=false
+# Default: no port mapping
+PORT_MAPPING=false
 # Default: no guardrails
 GUARDRAILS_ENABLED=false
 export TOGGLE_GUARDRAILS_ENABLED=false
 export OPIK_FRONTEND_FLAVOR=default
 
+if [[ "$*" == *"--build"* ]]; then
+  BUILD_MODE=true
+  # Remove the flag from arguments
+  set -- ${@/--build/}
+fi
+
+if [[ "$*" == *"--debug"* ]]; then
+  DEBUG_MODE=true
+  echo "🐞 Debug mode enabled."
+  # Remove the flag from arguments
+  set -- ${@/--debug/}
+fi
+
+if [[ "$*" == *"--port-mapping"* ]]; then
+  PORT_MAPPING=true
+  # Remove the flag from arguments
+  set -- ${@/--port-mapping/}
+fi
+
 # Check for guardrails flag first
 if [[ "$*" == *"--guardrails"* ]]; then
   GUARDRAILS_ENABLED=true
+  CONTAINERS+=("${GUARDRAILS_CONTAINERS[@]}")
   export OPIK_FRONTEND_FLAVOR=guardrails
   export TOGGLE_GUARDRAILS_ENABLED=true
-  # Remove --guardrails from arguments
+  # Remove the flag from arguments
   set -- ${@/--guardrails/}
 fi
 
@@ -322,39 +362,12 @@ case "$1" in
     print_usage
     exit 0
     ;;
-  --debug)
-    DEBUG_MODE=true
-    echo "🐞 Debug mode enabled."
-    echo "🔍 Checking container status and starting missing ones..."
-    start_missing_containers
-    sleep 2
-    echo "🔄 Re-checking container status..."
-    if check_containers_status; then
-      print_banner
-    else
-      echo "⚠️  Some containers are still not healthy. Please check manually using '$(get_verify_cmd)'"
-      exit 1
-    fi
-    ;;
-  --build)
-    BUILD_MODE=true
-    echo "🔍 Checking container status and starting missing ones..."
-    start_missing_containers
-    sleep 2
-    echo "🔄 Re-checking container status..."
-    if check_containers_status; then
-      print_banner
-    else
-      echo "⚠️  Some containers are still not healthy. Please check manually using '$(get_verify_cmd)'"
-      exit 1
-    fi
-    ;;
   "")
     echo "🔍 Checking container status and starting missing ones..."
     start_missing_containers
     sleep 2
     echo "🔄 Re-checking container status..."
-    if check_containers_status "true"; then
+    if check_containers_status; then
       print_banner
     else
       echo "⚠️  Some containers are still not healthy. Please check manually using '$(get_verify_cmd)'"
