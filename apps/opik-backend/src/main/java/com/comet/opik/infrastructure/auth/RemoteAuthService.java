@@ -264,7 +264,7 @@ class RemoteAuthService implements AuthService {
             throw new ClientErrorException(errorResponse.msg(), Response.Status.BAD_REQUEST);
         }
 
-        log.error("Unexpected error while getting workspace name: {}", response.getStatus());
+        log.warn("Unexpected error while getting workspace id: {}", response.getStatus());
         throw new InternalServerErrorException();
     }
 }

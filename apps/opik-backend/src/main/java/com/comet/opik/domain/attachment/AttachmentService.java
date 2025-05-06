@@ -1,6 +1,5 @@
 package com.comet.opik.domain.attachment;
 
-import com.comet.opik.api.Project;
 import com.comet.opik.api.attachment.Attachment;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.AttachmentInfoHolder;
@@ -10,7 +9,6 @@ import com.comet.opik.api.attachment.DeleteAttachmentsRequest;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
-import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -28,7 +26,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.tika.Tika;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
 
 import java.io.InputStream;
@@ -41,7 +38,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.attachment.AttachmentUtils.KEY_TEMPLATE;
-import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
 @ImplementedBy(AttachmentServiceImpl.class)
@@ -243,7 +239,7 @@ class AttachmentServiceImpl implements AttachmentService {
     private UUID getProjectIdByName(String inputProjectName, String workspaceId, String userName) {
         String projectName = WorkspaceUtils.getProjectName(inputProjectName);
 
-        var project = getOrCreateProject(projectName)
+        var project = projectService.getOrCreate(projectName)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -298,26 +294,5 @@ class AttachmentServiceImpl implements AttachmentService {
 
     private String decodeBaseUrl(String baseUrlEncoded) {
         return new String(Base64.getUrlDecoder().decode(baseUrlEncoded), StandardCharsets.UTF_8);
-    }
-
-    // Below 3 methods should be refactored later, as we have similar for Spans and Traces
-    private Mono<Project> getOrCreateProject(String projectName) {
-        return makeMonoContextAware((userName, workspaceId) -> Mono
-                .fromCallable(() -> projectService.getOrCreate(workspaceId, projectName, userName))
-                .onErrorResume(e -> handleProjectCreationError(e, projectName, workspaceId))
-                .subscribeOn(Schedulers.boundedElastic()));
-    }
-
-    private Mono<Project> handleProjectCreationError(Throwable exception, String projectName, String workspaceId) {
-        return switch (exception) {
-            case EntityAlreadyExistsException __ -> findProjectByName(projectName, workspaceId);
-            default -> Mono.error(exception);
-        };
-    }
-
-    private Mono<Project> findProjectByName(String projectName, String workspaceId) {
-        return Mono.fromCallable(() -> projectService.findByNames(workspaceId, List.of(projectName))
-                .stream().findFirst().orElseThrow())
-                .subscribeOn(Schedulers.boundedElastic());
     }
 }

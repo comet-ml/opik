@@ -8,7 +8,6 @@ import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanSearchCriteria;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.SpansCountResponse;
-import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.domain.attachment.AttachmentService;
@@ -103,17 +102,10 @@ public class SpanService {
         var projectName = WorkspaceUtils.getProjectName(span.projectName());
         return IdGenerator
                 .validateVersionAsync(id, SPAN_KEY)
-                .then(getOrCreateProject(projectName))
+                .then(projectService.getOrCreate(projectName))
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, SPAN_KEY),
                         Mono.defer(() -> insertSpan(span, project, id))));
-    }
-
-    private Mono<Project> getOrCreateProject(String projectName) {
-        return makeMonoContextAware((userName, workspaceId) -> Mono
-                .fromCallable(() -> projectService.getOrCreate(workspaceId, projectName, userName))
-                .onErrorResume(e -> handleProjectCreationError(e, projectName, workspaceId))
-                .subscribeOn(Schedulers.boundedElastic()));
     }
 
     private Mono<UUID> insertSpan(Span span, Project project, UUID id) {
@@ -143,19 +135,6 @@ public class SpanService {
         return spanDAO.insert(span).thenReturn(span.id());
     }
 
-    private Mono<Project> handleProjectCreationError(Throwable exception, String projectName, String workspaceId) {
-        return switch (exception) {
-            case EntityAlreadyExistsException __ -> findProjectByName(projectName, workspaceId);
-            default -> Mono.error(exception);
-        };
-    }
-
-    private Mono<Project> findProjectByName(String projectName, String workspaceId) {
-        return Mono.fromCallable(() -> projectService.findByNames(workspaceId, List.of(projectName))
-                .stream().findFirst().orElseThrow())
-                .subscribeOn(Schedulers.boundedElastic());
-    }
-
     @WithSpan
     public Mono<Void> update(@NonNull UUID id, @NonNull SpanUpdate spanUpdate) {
         log.info("Updating span with id '{}'", id);
@@ -165,7 +144,7 @@ public class SpanService {
         return IdGenerator
                 .validateVersionAsync(id, SPAN_KEY)
                 .then(Mono.defer(() -> getProjectById(spanUpdate)
-                        .switchIfEmpty(Mono.defer(() -> getOrCreateProject(projectName)))
+                        .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
                         .subscribeOn(Schedulers.boundedElastic()))
                         //TODO: refactor to implement proper conflict resolution
                         .flatMap(project -> lockService.executeWithLock(
@@ -257,7 +236,7 @@ public class SpanService {
         log.info("Creating batch of spans for projects '{}'", projectNames);
 
         Mono<List<Span>> resolveProjects = Flux.fromIterable(projectNames)
-                .flatMap(this::getOrCreateProject)
+                .flatMap(projectService::getOrCreate)
                 .collectList()
                 .map(projects -> bindSpanToProjectAndId(batch, projects));
 
