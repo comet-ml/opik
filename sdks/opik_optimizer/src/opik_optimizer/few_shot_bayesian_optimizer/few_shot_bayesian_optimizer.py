@@ -208,7 +208,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             optimization = self._opik_client.create_optimization(
                 dataset_name=config.dataset.name,
                 objective_name=config.objective.metric.name,
-                name=f"{config.dataset.name}_{config.objective.metric.name}_{utils.random_chars(4)}",
             )
             result = self._optimize_prompt(
                 optimization_id=optimization.id,
