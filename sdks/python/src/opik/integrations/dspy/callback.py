@@ -21,24 +21,24 @@ class OpikCallback(dspy_callback.BaseCallback):
 
     Args:
         project_name: The name of the Opik project to log data.
-        module: the DSPy module to generate graph from
+        log_graph: If True, will log a mermaid diagram for each
+            module
     """
 
     def __init__(
         self,
         project_name: Optional[str] = None,
-        module: Optional[dspy.Module] = None,
+        log_graph: bool = False,
     ):
         self._map_call_id_to_span_data: Dict[str, span.SpanData] = {}
         self._map_call_id_to_trace_data: Dict[str, trace.TraceData] = {}
 
         self._origins_metadata: Dict[str, Any] = {"created_from": "dspy"}
-        if module is not None:
-            self._try_add_module_graph_to_metadata(module)
 
         self._context_storage = context_storage.OpikContextStorage()
 
         self._project_name = project_name
+        self.log_graph = log_graph
 
         self._opik_client = opik_client.get_client_cached()
 
@@ -106,7 +106,7 @@ class OpikCallback(dspy_callback.BaseCallback):
             input=inputs,
             type=span_type,
             project_name=project_name,
-            metadata=self._origins_metadata,
+            metadata=self._get_opik_metadata(instance),
         )
         self._map_call_id_to_span_data[call_id] = span_data
         self._set_current_context_data(span_data)
@@ -131,7 +131,7 @@ class OpikCallback(dspy_callback.BaseCallback):
             input=inputs,
             type=span_type,
             project_name=project_name,
-            metadata=self._origins_metadata,
+            metadata=self._get_opik_metadata(instance),
         )
         self._map_call_id_to_span_data[call_id] = span_data
         self._set_current_context_data(span_data)
@@ -145,7 +145,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         trace_data = trace.TraceData(
             name=instance.__class__.__name__,
             input=inputs,
-            metadata=self._origins_metadata,
+            metadata=self._get_opik_metadata(instance),
             project_name=self._project_name,
         )
         self._map_call_id_to_trace_data[call_id] = trace_data
@@ -171,22 +171,6 @@ class OpikCallback(dspy_callback.BaseCallback):
 
             if self._context_storage.get_trace_data() == trace_data:
                 self._context_storage.set_trace_data(None)
-
-    def _try_add_module_graph_to_metadata(self, instance: dspy.Module) -> None:
-        try:
-            graph = build_mermaid_graph_from_module(instance)
-        except Exception:
-            LOGGER.warning("Unable to generate graph from DSPy module")
-
-        if graph:
-            self._origins_metadata.update(
-                {
-                    "_opik_graph_definition": {
-                        "format": "mermaid",
-                        "data": graph,
-                    }
-                }
-            )
 
     def _end_span(
         self,
@@ -238,7 +222,7 @@ class OpikCallback(dspy_callback.BaseCallback):
             input=inputs,
             type=span_type,
             project_name=project_name,
-            metadata=self._origins_metadata,
+            metadata=self._get_opik_metadata(instance),
         )
 
     def on_lm_start(
@@ -318,3 +302,24 @@ class OpikCallback(dspy_callback.BaseCallback):
         elif isinstance(instance, dspy.Tool):
             return "tool"
         return "general"
+
+    def _get_opik_metadata(self, instance: Any) -> Dict[str, Any]:
+        graph = None
+        if self.log_graph and isinstance(instance, dspy.Module):
+            try:
+                graph = build_mermaid_graph_from_module(instance)
+            except Exception:
+                LOGGER.warning("Unable to generate graph from DSPy module")
+
+        if graph:
+            return {
+                **self._origins_metadata,
+                **{
+                    "_opik_graph_definition": {
+                        "format": "mermaid",
+                        "data": graph,
+                    }
+                },
+            }
+        else:
+            return self._origins_metadata
