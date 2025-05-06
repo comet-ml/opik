@@ -466,14 +466,14 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public Mono<Project> getOrCreate(String projectName) {
+    public Mono<Project> getOrCreate(@NonNull String projectName) {
         return makeMonoContextAware((userName, workspaceId) -> Mono
                 .fromCallable(() -> getOrCreate(workspaceId, projectName, userName))
                 .onErrorResume(e -> handleProjectCreationError(e, projectName, workspaceId))
                 .subscribeOn(Schedulers.boundedElastic()));
     }
 
-    private Project getOrCreate(@NonNull String workspaceId, @NonNull String projectName, @NonNull String userName) {
+    private Project getOrCreate(String workspaceId, String projectName, String userName) {
 
         return findByNames(workspaceId, List.of(projectName))
                 .stream()
