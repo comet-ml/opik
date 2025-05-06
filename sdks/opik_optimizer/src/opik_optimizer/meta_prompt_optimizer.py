@@ -436,7 +436,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         logger.info("=" * 80)
         logger.info(f"Initial score: {initial_score:.4f}")
         logger.info(f"Final best score: {best_score:.4f}")
-        logger.info(f"Improvement: {(best_score - initial_score) / initial_score:.2%}")
+        if initial_score != 0:
+            logger.info(f"Improvement: {(best_score - initial_score) / initial_score:.2%}")
+        logger.info("Improvement: infinite")
         logger.info("\nFINAL OPTIMIZED PROMPT:")
         logger.info("-" * 80)
         logger.info(best_prompt)
