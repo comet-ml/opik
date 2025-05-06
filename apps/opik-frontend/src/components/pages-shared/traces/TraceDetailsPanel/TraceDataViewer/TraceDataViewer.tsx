@@ -49,11 +49,9 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const type = get(data, "type", TRACE_TYPE_FOR_TREE);
   const tokens = data.usage?.total_tokens;
 
-  const agentGraphData = get(
-    trace,
-    ["metadata", METADATA_AGENT_GRAPH_KEY],
-    null,
-  );
+  const agentGraphData =
+    get(data, ["metadata", METADATA_AGENT_GRAPH_KEY], null) ||
+    get(trace, ["metadata", METADATA_AGENT_GRAPH_KEY], null);
   const hasAgentGraph = Boolean(agentGraphData);
   const hasError = Boolean(data.error_info);
 
