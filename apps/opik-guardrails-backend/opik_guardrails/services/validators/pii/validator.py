@@ -46,10 +46,15 @@ class PIIValidator(base_validator.BaseValidator):
         )
 
         grouped_results: Dict[str, List[PIIEntity]] = collections.defaultdict(list)
+
+        validation_passed = True
+
         for result in results:
             entity_type = result.entity_type
             if result.score < config.threshold:
                 continue
+
+            validation_passed = False
             grouped_results[entity_type].append(
                 PIIEntity(
                     start=result.start,
@@ -60,7 +65,7 @@ class PIIValidator(base_validator.BaseValidator):
             )
 
         return schemas.ValidationResult(
-            validation_passed=len(results) == 0,
+            validation_passed=validation_passed,
             validation_details=PIIValidationDetails(detected_entities=grouped_results),
             type=schemas.ValidationType.PII,
             validation_config=config,
