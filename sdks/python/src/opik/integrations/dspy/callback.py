@@ -42,7 +42,6 @@ class OpikCallback(dspy_callback.BaseCallback):
 
         self._opik_client = opik_client.get_client_cached()
 
-
     def on_module_start(
         self,
         call_id: str,
