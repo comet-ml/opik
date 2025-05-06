@@ -11,7 +11,7 @@ from opik_optimizer import optimization_dsl, base_optimizer
 from . import prompt_parameter
 from . import prompt_templates
 from .._throttle import RateLimiter, rate_limited
-
+from .. import utils
 limiter = RateLimiter(max_calls_per_second=15)
 
 
@@ -74,8 +74,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         split_idx = int(len(dataset) * train_ratio)
         return dataset[:split_idx], dataset[split_idx:]
 
-    def optimize_prompt(
+    def _optimize_prompt(
         self,
+        optimization_id: str,
         config: optimization_dsl.OptimizationConfig,
         n_trials: int = 10,
         experiment_config: Optional[Dict] = None,
@@ -159,6 +160,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 num_threads=self.n_threads,
                 project_name=self.project_name,
                 experiment_config=experiment_config,
+                optimization_id=optimization_id,
             )
 
             trial.set_user_attr("score", score)
@@ -194,6 +196,32 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             history=[],
             metric=None,
         )
+
+    def optimize_prompt(
+        self,
+        config: optimization_dsl.OptimizationConfig,
+        n_trials: int = 10,
+        experiment_config: Optional[Dict] = None,
+        num_test: int = None,
+    ) -> optimization_result.OptimizationResult:
+        try:
+            optimization = self._opik_client.create_optimization(
+                dataset_name=config.dataset.name,
+                objective_name=config.objective.metric.name,
+                name=f"{config.dataset.name}_{config.objective.metric.name}_{utils.random_chars(4)}",
+            )
+            result = self._optimize_prompt(
+                optimization_id=optimization.id,
+                config=config,
+                n_trials=n_trials,
+                experiment_config=experiment_config,
+                num_test=num_test,
+            )
+            optimization.update(status="completed")
+            return result
+        except Exception as e:
+            optimization.update(status="cancelled")
+            raise e
 
     def evaluate_prompt(
         self,

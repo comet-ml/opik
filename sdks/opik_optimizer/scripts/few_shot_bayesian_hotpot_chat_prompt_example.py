@@ -27,7 +27,7 @@ optimizer = FewShotBayesianOptimizer(
     project_name=project_name,
     min_examples=3,
     max_examples=8,
-    n_threads=6,
+    n_threads=16,
     seed=42,
 )
 
@@ -52,17 +52,12 @@ initial_score = optimizer.evaluate_prompt(
     dataset=hot_pot_dataset,
     metric_config=optimization_config.objective,
     prompt=initial_prompt_no_examples,
-    num_test=100,
 )
 
 print("Initial prompt:", initial_prompt_no_examples)
 print("Initial score:", initial_score)
 
-result = optimizer.optimize_prompt(
-    optimization_config,
-    n_trials=5,
-    num_test=100,
-)
+result = optimizer.optimize_prompt(optimization_config, n_trials=10)
 
 print("Final prompt:", result.prompt)
 
@@ -70,7 +65,6 @@ final_score = optimizer.evaluate_prompt(
     dataset=hot_pot_dataset,
     metric_config=optimization_config.objective,
     prompt=result.prompt,
-    num_test=100,
 )
 
 print("Final score:", final_score)
