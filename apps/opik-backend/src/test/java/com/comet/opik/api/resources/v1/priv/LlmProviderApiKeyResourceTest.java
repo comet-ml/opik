@@ -316,7 +316,7 @@ class LlmProviderApiKeyResourceTest {
 
     @Test
     @DisplayName("Create and get provider Api Keys List With Minimal Fields")
-    void createAndGetProviderApiKeyListWithMininalFields() {
+    void createAndGetProviderApiKeyListWithMinimalFields() {
 
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
