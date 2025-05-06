@@ -4,4 +4,5 @@
 
 export interface ServiceTogglesConfig {
     pythonEvaluatorEnabled: boolean;
+    guardrailsEnabled: boolean;
 }

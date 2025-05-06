@@ -54,7 +54,7 @@ class MiproOptimizer(BaseOptimizer):
         self.num_threads = self.model_kwargs.pop("num_threads", 6)
         self.model_kwargs["model"] = self.model
         lm = LM(**self.model_kwargs)
-        opik_callback = OpikCallback(project_name=self.project_name)
+        opik_callback = OpikCallback(project_name=self.project_name, log_graph=True)
         dspy.configure(lm=lm, callbacks=[opik_callback])
 
     def evaluate_prompt(
