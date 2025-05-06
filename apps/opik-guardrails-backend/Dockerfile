@@ -3,8 +3,7 @@ FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
-    TZ=UTC \
-    OPIK_GUARDRAILS_DEVICE=cuda:0
+    TZ=UTC
 
 # Install Python and other dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \

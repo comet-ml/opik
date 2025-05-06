@@ -8,9 +8,16 @@ def load_pipeline() -> transformers.Pipeline:
 
     model_path = "facebook/bart-large-mnli"
 
-    if torch.cuda.is_available():
+    if "OPIK_GUARDRAILS_DEVICE" in os.environ:
+        device = os.getenv("OPIK_GUARDRAILS_DEVICE")
+
+        if "cuda" in device:
+            torch.cuda.empty_cache()
+    elif torch.cuda.is_available():
         torch.cuda.empty_cache()
-        device = os.getenv("OPIK_GUARDRAILS_DEVICE", "cuda:0")
+        device = "cuda:0" # Default to the first GPU by default
+    elif torch.backends.mps.is_available():
+        device = "mps"
     else:
         device = "cpu"
 
