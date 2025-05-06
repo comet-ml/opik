@@ -63,7 +63,7 @@ class MiproOptimizer(BaseOptimizer):
         dataset: Union[str, Dataset],
         metric_config: MetricConfig,
         task_config: PromptTaskConfig,
-        prompt: str = None,
+        prompt: Union[str, dspy.Module, OptimizationResult] = None,
         n_samples: int = 10,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
@@ -74,7 +74,8 @@ class MiproOptimizer(BaseOptimizer):
 
         Args:
             dataset: Opik dataset name or dataset
-
+            metric_config: A MetricConfig instance
+            task_config: A PromptTaskConfig instance
             prompt: The prompt to evaluate
             n_samples: number of items to test in the dataset
             dataset_item_ids: Optional list of dataset item IDs to evaluate
@@ -204,12 +205,14 @@ class MiproOptimizer(BaseOptimizer):
     ) -> OptimizationResult:
         self._opik_client = opik.Opik()
         optimization = self._opik_client.create_optimization(
-            dataset_name=config.dataset.name,
-            objective_name=config.objective.metric.name,
+            dataset_name=dataset.name,
+            objective_name=metric_config.metric.name,
         )
         try:
             result = self._optimize_prompt(
-                config=config,
+                dataset=dataset,
+                metric_config=metric_config,
+                task_config=task_config,
                 num_candidates=num_candidates,
                 experiment_config=experiment_config,
                 optimization_id=optimization.id,
@@ -223,16 +226,18 @@ class MiproOptimizer(BaseOptimizer):
 
     def _optimize_prompt(
         self,
-        config: optimization_dsl.OptimizationConfig,
+        dataset: Union[str, Dataset],
+        metric_config: MetricConfig,
+        task_config: PromptTaskConfig,
         num_candidates: int = 10,
         experiment_config: Optional[Dict] = None,
         optimization_id: Optional[str] = None,
         **kwargs,
     ) -> OptimizationResult:
         self.prepare_optimize_prompt(
-            dataset,
-            metric_config,
-            task_config,
+            dataset=dataset,
+            metric_config=metric_config,
+            task_config=task_config,
             num_candidates=num_candidates,
             experiment_config=experiment_config,
             optimization_id=optimization_id,
