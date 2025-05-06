@@ -21,7 +21,6 @@ optimizer = MiproOptimizer(
     num_threads=16,
 )
 
-
 # Tools:
 def search_wikipedia(query: str) -> list[str]:
     """
@@ -50,13 +49,6 @@ task_config = PromptTaskConfig(
 )
 
 result = optimizer.optimize_prompt(
-    dataset=opik_dataset,
-    metric_config=metric_config,
-    task_config=task_config,
-)
-
-result = optimizer.evaluate_prompt(
-    module=result.details["program"],
     dataset=opik_dataset,
     metric_config=metric_config,
     task_config=task_config,

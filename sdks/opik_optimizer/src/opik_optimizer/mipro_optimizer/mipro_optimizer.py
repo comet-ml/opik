@@ -66,7 +66,6 @@ class MiproOptimizer(BaseOptimizer):
         n_samples: int = 10,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
-        module=None,
         **kwargs,
     ) -> float:
         """
