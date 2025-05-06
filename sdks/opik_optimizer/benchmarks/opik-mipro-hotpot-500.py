@@ -1,7 +1,6 @@
 # Tools:
 import dspy
 
-
 def search_wikipedia(query: str) -> list[str]:
     """
     This agent is used to search wikipedia. It can retrieve additional details
@@ -31,7 +30,7 @@ optimizer = MiproOptimizer(
     model="openai/gpt-4o-mini",  # LiteLLM or OpenAI name
     temperature=0.0,
     project_name=project_name,
-    num_threads=16,
+    num_threads=12,
 )
 
 opik_dataset = get_or_create_dataset("hotpot-500")

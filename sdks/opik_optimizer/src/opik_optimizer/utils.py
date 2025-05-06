@@ -3,8 +3,10 @@
 import opik
 import logging
 import tqdm
+import random
+import string
 from opik.api_objects.opik_client import Opik
-from opik.api_objects.dataset.dataset_item import DatasetItem
+
 from typing import List, Dict, Any, Optional, Callable
 
 # Test dataset name for optimizer examples
@@ -178,3 +180,7 @@ def get_tqdm():
         return tqdm.tqdm_notebook
     else:
         return tqdm.tqdm
+
+
+def random_chars(n: int) -> str:
+    return "".join(random.choice(string.ascii_letters) for _ in range(n))
