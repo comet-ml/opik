@@ -4,7 +4,6 @@ from opik_optimizer.few_shot_bayesian_optimizer import FewShotBayesianOptimizer
 from opik_optimizer.demo import get_or_create_dataset
 
 from opik_optimizer import (
-    OptimizationConfig,
     MetricConfig,
     PromptTaskConfig,
     from_dataset_field,
@@ -52,7 +51,6 @@ Detect hallucinations in the given user inputs and llm_output pairs.
 Answer with just one word: 'yes' if there is a hallucination and 'no' if there is not.
 """
 
-
 optimizer = FewShotBayesianOptimizer(
     model="gpt-4o-mini",
     project_name=project_name,
@@ -62,54 +60,27 @@ optimizer = FewShotBayesianOptimizer(
     seed=42,
 )
 
-
-optimization_config = OptimizationConfig(
-    dataset=halu_eval_dataset,
-    objective=MetricConfig(
-        metric=halu_eval_accuracy,
-        inputs={
-            "output": from_llm_response_text(),
-            "ground_truth": from_dataset_field(name="expected_hallucination_label"),
-        },
-    ),
-    task=PromptTaskConfig(
-        instruction_prompt=prompt_instruction,
-        input_dataset_fields=["input", "llm_output"],
-        output_dataset_field="expected_hallucination_label",
-        use_chat_prompt=True,
-    ),
-)
-
-initial_prompt_no_examples = [
-    {"role": "system", "content": prompt_instruction},
-    {
-        "role": "user",
-        "content": "The user input: {{input}} \n\n The llm output: {{llm_output}}",
+metric_config = MetricConfig(
+    metric=halu_eval_accuracy,
+    inputs={
+        "output": from_llm_response_text(),
+        "ground_truth": from_dataset_field(name="expected_hallucination_label"),
     },
-]
-
-initial_score = optimizer.evaluate_prompt(
-    dataset=halu_eval_dataset,
-    metric_config=optimization_config.objective,
-    prompt=initial_prompt_no_examples,
-    num_test=100,
 )
 
-print("Initial score:", initial_score)
+task_config = PromptTaskConfig(
+    instruction_prompt=prompt_instruction,
+    input_dataset_fields=["input", "llm_output"],
+    output_dataset_field="expected_hallucination_label",
+    use_chat_prompt=True,
+)
 
 result = optimizer.optimize_prompt(
-    optimization_config,
-    n_trials=5,
-    num_test=100,
-)
-
-print("Final prompt:", result.prompt)
-
-final_score = optimizer.evaluate_prompt(
     dataset=halu_eval_dataset,
-    metric_config=optimization_config.objective,
-    prompt=result.prompt,
-    num_test=100,
+    metric_config=metric_config,
+    task_config=task_config,
+    n_trials=5,
+    n_samples=10,
 )
 
-print("Final score:", final_score)
+print("Result:", result)
