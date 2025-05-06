@@ -26,8 +26,8 @@ def _get_json_size(obj: Any) -> Any:
         elif isinstance(obj, (int, float)):
             return len(str(obj))
         elif isinstance(obj, type(None)):
-            # "null"
-            return 6
+            # null
+            return 4
         elif isinstance(obj, dict):
             size = 2  # {obj}
             allowed_keys = set(obj.keys())
@@ -35,8 +35,8 @@ def _get_json_size(obj: Any) -> Any:
                 if key in allowed_keys:
                     encoded_key = _get_json_size(key)
                     encoded_value = _get_json_size(value)
-                    size += encoded_key + encoded_value + 1  # key:value
-            return size
+                    size += encoded_key + encoded_value + 1 + 1  # key:value and ,
+            return size - 1  # Remove the last trailing comma
         elif isinstance(obj, list):
             size = 2  # [obj]
             for item in obj:
