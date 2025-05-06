@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.Project;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
 import com.comet.opik.infrastructure.OpenTelemetryConfig;
@@ -60,36 +61,34 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
     public Mono<Long> parseAndStoreSpans(@NonNull ExportTraceServiceRequest traceRequest, @NonNull String projectName) {
 
         // make sure project exists before starting processing
-        return Mono.deferContextual(ctx -> Mono.fromCallable(() -> {
-            String userName = ctx.get(RequestContext.USER_NAME);
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            return projectService.getOrCreate(workspaceId, projectName, userName).id();
-        })).flatMap(projectId -> Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+        return projectService.getOrCreate(projectName)
+                .map(Project::id)
+                .flatMap(projectId -> Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            // extracts all otel spans in the batch, sorted by start time
-            var otelSpans = traceRequest.getResourceSpansList().stream()
-                    .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
-                    .flatMap(scopeSpans -> scopeSpans.getSpansList().stream())
-                    .toList();
+                    // extracts all otel spans in the batch, sorted by start time
+                    var otelSpans = traceRequest.getResourceSpansList().stream()
+                            .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
+                            .flatMap(scopeSpans -> scopeSpans.getSpansList().stream())
+                            .toList();
 
-            // find out whats the name of the integration library
-            var integrationName = traceRequest.getResourceSpansList().stream()
-                    .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
-                    .map(scopeSpans -> scopeSpans.getScope().getName())
-                    .distinct()
-                    .filter(OpenTelemetryMappingRule::isValidInstrumentation)
-                    .findFirst()
-                    .orElse(null);
+                    // find out whats the name of the integration library
+                    var integrationName = traceRequest.getResourceSpansList().stream()
+                            .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
+                            .map(scopeSpans -> scopeSpans.getScope().getName())
+                            .distinct()
+                            .filter(OpenTelemetryMappingRule::isValidInstrumentation)
+                            .findFirst()
+                            .orElse(null);
 
-            // otelTraceId -> minimum timestamp seen with that traceId
-            var otelTracesAndMinTimestamp = otelSpans.stream()
-                    .collect(Collectors.toMap(Span::getTraceId, Span::getStartTimeUnixNano, Math::min));
+                    // otelTraceId -> minimum timestamp seen with that traceId
+                    var otelTracesAndMinTimestamp = otelSpans.stream()
+                            .collect(Collectors.toMap(Span::getTraceId, Span::getStartTimeUnixNano, Math::min));
 
-            // get or create a mapping of otel trace id -> opik trace id
-            return otelToOpikTraceIdMapper(otelTracesAndMinTimestamp, projectId, workspaceId)
-                    .flatMap(traceMapper -> doStoreSpans(otelSpans, traceMapper, projectName, integrationName));
-        })).subscribeOn(Schedulers.boundedElastic());
+                    // get or create a mapping of otel trace id -> opik trace id
+                    return otelToOpikTraceIdMapper(otelTracesAndMinTimestamp, projectId, workspaceId)
+                            .flatMap(traceMapper -> doStoreSpans(otelSpans, traceMapper, projectName, integrationName));
+                })).subscribeOn(Schedulers.boundedElastic());
     }
 
     private String base64OtelId(ByteString idBytes) {

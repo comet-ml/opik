@@ -54,6 +54,7 @@ import static com.comet.opik.api.ProjectStats.ProjectStatItem;
 import static com.comet.opik.api.ProjectStatsSummary.ProjectStatsSummaryItem;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static java.util.Collections.reverseOrder;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
@@ -85,7 +86,7 @@ public interface ProjectService {
 
     List<Project> findByNames(String workspaceId, List<String> names);
 
-    Project getOrCreate(String workspaceId, String projectName, String userName);
+    Mono<Project> getOrCreate(String projectName);
 
     Project retrieveByName(String projectName);
 
@@ -465,7 +466,14 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public Project getOrCreate(@NonNull String workspaceId, @NonNull String projectName, @NonNull String userName) {
+    public Mono<Project> getOrCreate(String projectName) {
+        return makeMonoContextAware((userName, workspaceId) -> Mono
+                .fromCallable(() -> getOrCreate(workspaceId, projectName, userName))
+                .onErrorResume(e -> handleProjectCreationError(e, projectName, workspaceId))
+                .subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    private Project getOrCreate(@NonNull String workspaceId, @NonNull String projectName, @NonNull String userName) {
 
         return findByNames(workspaceId, List.of(projectName))
                 .stream()
@@ -619,5 +627,15 @@ class ProjectServiceImpl implements ProjectService {
 
             return null;
         });
+    }
+
+    private Mono<Project> handleProjectCreationError(Throwable exception, String projectName, String workspaceId) {
+        return switch (exception) {
+            case EntityAlreadyExistsException __ -> Mono.fromCallable(
+                    () -> findByNames(workspaceId, List.of(projectName)).stream().findFirst()
+                            .orElseThrow())
+                    .subscribeOn(Schedulers.boundedElastic());
+            default -> Mono.error(exception);
+        };
     }
 }
