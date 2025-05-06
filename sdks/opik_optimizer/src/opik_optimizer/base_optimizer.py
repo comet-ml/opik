@@ -7,6 +7,7 @@ from opik.evaluation import metrics
 from opik.opik_context import get_current_span_data
 from pydantic import BaseModel
 from ._throttle import RateLimiter, rate_limited
+from .cache_config import initialize_cache
 
 limiter = RateLimiter(max_calls_per_second=15)
 
@@ -44,6 +45,9 @@ class BaseOptimizer:
         self.project_name = project_name
         self._history = []
         self.experiment_config = None
+        
+        # Initialize shared cache
+        initialize_cache()
 
     def optimize_prompt(
         self,
