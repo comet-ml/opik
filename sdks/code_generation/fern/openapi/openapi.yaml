@@ -7151,10 +7151,13 @@ components:
           type: string
     ServiceTogglesConfig:
       required:
+      - guardrailsEnabled
       - pythonEvaluatorEnabled
       type: object
       properties:
         pythonEvaluatorEnabled:
+          type: boolean
+        guardrailsEnabled:
           type: boolean
     ErrorInfo:
       required:
