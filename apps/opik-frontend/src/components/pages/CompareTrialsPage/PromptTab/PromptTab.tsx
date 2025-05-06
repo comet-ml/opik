@@ -3,11 +3,9 @@ import { BooleanParam, StringParam, useQueryParam } from "use-query-params";
 import { ColumnPinningState } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 import isObject from "lodash/isObject";
-import uniq from "lodash/uniq";
 import toLower from "lodash/toLower";
 import find from "lodash/find";
 import get from "lodash/get";
-import { flattie } from "flattie";
 
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import DataTable from "@/components/shared/DataTable/DataTable";
@@ -26,9 +24,16 @@ import { Experiment } from "@/types/datasets";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { OPTIMIZATION_METADATA_EXCLUDED_KEY } from "@/constants/experiments";
+import {
+  OPTIMIZATION_EXAMPLES_KEY,
+  OPTIMIZATION_PROMPT_KEY,
+} from "@/constants/experiments";
+import { toString } from "@/lib/utils";
 
 const COLUMNS_WIDTH_KEY = "compare-trials-prompt-columns-width";
+
+const PROMPT_KEY = "Prompt";
+const EXAMPLES_KEY = "Examples";
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: ["name"],
@@ -101,27 +106,33 @@ const PromptTab: React.FunctionComponent<PromptTabProps> = ({
     >((acc, experiment) => {
       const promptData = get(
         experiment.metadata ?? {},
-        OPTIMIZATION_METADATA_EXCLUDED_KEY,
-        {},
+        OPTIMIZATION_PROMPT_KEY,
+        "-",
       );
+      const prompt = isObject(promptData)
+        ? JSON.stringify(promptData, null, 2)
+        : toString(promptData);
 
-      acc[experiment.id] = isObject(experiment.metadata)
-        ? isObject(promptData)
-          ? flattie(promptData, ".", true)
-          : { orchestrator: promptData as CompareFiledValue }
-        : {};
+      const examplesData = get(
+        experiment.metadata ?? {},
+        OPTIMIZATION_EXAMPLES_KEY,
+        "-",
+      );
+      const examples = isObject(examplesData)
+        ? JSON.stringify(examplesData, null, 2)
+        : toString(examplesData);
+
+      acc[experiment.id] = {
+        [PROMPT_KEY]: prompt,
+        [EXAMPLES_KEY]: examples,
+      };
 
       return acc;
     }, {});
   }, [experiments]);
 
   const rows = useMemo(() => {
-    const keys = uniq(
-      Object.values(flattenExperimentMetadataMap).reduce<string[]>(
-        (acc, map) => acc.concat(Object.keys(map)),
-        [],
-      ),
-    ).sort();
+    const keys = [PROMPT_KEY, EXAMPLES_KEY];
 
     return keys.map((key) => {
       const data = experimentsIds.reduce<Record<string, CompareFiledValue>>(
