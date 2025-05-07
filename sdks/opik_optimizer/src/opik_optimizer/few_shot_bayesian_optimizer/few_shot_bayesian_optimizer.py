@@ -4,30 +4,39 @@ import openai
 import opik
 import optuna
 import logging
+import json
 
-from opik.integrations.openai import track_openai
 from opik import Dataset
 from opik_optimizer.optimization_config import mappers
+
 from opik_optimizer.optimization_config.configs import TaskConfig, MetricConfig
 from opik_optimizer import optimization_dsl, base_optimizer
+
 from . import prompt_parameter
 from . import prompt_templates
 from .._throttle import RateLimiter, rate_limited
-from .. import utils
 from .. import optimization_result, task_evaluator
+
+import litellm
+
+from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
 limiter = RateLimiter(max_calls_per_second=15)
 
 logger = logging.getLogger(__name__)
 
+
 @rate_limited(limiter)
-def _call_model(client, model, messages, seed, **model_kwargs):
-    response = client.chat.completions.create(
+def _call_model(model, messages, seed, model_kwargs):
+    model_kwargs = opik_litellm_monitor.try_add_opik_monitoring_to_params(model_kwargs)
+    
+    response = litellm.completion(
         model=model,
         messages=messages,
         seed=seed,
         **model_kwargs,
     )
+
     return response
 
 
@@ -52,9 +61,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self.n_initial_prompts = n_initial_prompts
         self.n_iterations = n_iterations
 
-        self._openai_client = track_openai(
-            openai.OpenAI(), project_name=self.project_name
-        )
         self._opik_client = opik.Opik()
 
     def _split_dataset(
@@ -249,10 +255,25 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         prompt: List[Dict[Literal["role", "content"], str]],
         dataset: opik.Dataset,
         metric_config: MetricConfig,
+        task_config: Optional[TaskConfig] = None,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
         n_samples: int = None,
     ) -> float:
+
+        if isinstance(prompt, str):
+            if task_config is None:
+                raise ValueError(
+                    "To use a string prompt, please pass in task_config to evaluate_prompt()"
+                )
+
+            questions = {
+                field: ("{{%s}}" % field) for field in task_config.input_dataset_fields
+            }
+            prompt = [
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": json.dumps(questions)},
+            ]
 
         # Ensure prompt is correctly formatted
         if not all(
@@ -260,7 +281,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             for item in prompt
         ):
             raise ValueError(
-                "Prompt must be a list of dictionaries with 'role' and 'content' keys."
+                "A ChatPrompt must be a list of dictionaries with 'role' and 'content' keys."
             )
 
         template = prompt_templates.ChatPromptTemplate(
@@ -307,11 +328,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             prompt_ = template.format(**dataset_item)
 
             response = _call_model(
-                client=self._openai_client,
                 model=self.model,
                 messages=prompt_,
                 seed=self.seed,
-                **self.model_kwargs,
+                model_kwargs=self.model_kwargs,
             )
 
             return {

@@ -1,3 +1,4 @@
+import os
 from typing import (
     Any,
     AsyncGenerator,
@@ -10,6 +11,7 @@ from typing import (
     Union,
 )
 
+import opik.types as opik_types
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 
@@ -19,6 +21,18 @@ from . import llm_response_wrapper
 def convert_adk_base_models(arg: Any) -> Dict[str, Any]:
     """Most ADK objects are Pydantic Base Models"""
     return arg.model_dump(mode="json", exclude_unset=True)
+
+
+def get_adk_provider() -> opik_types.LLMProvider:
+    use_vertexai = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "0").lower() in [
+        "true",
+        "1",
+    ]
+    return (
+        opik_types.LLMProvider.GOOGLE_VERTEXAI
+        if use_vertexai
+        else opik_types.LLMProvider.GOOGLE_AI
+    )
 
 
 class ADKLLMTrackDecorator(base_track_decorator.BaseTrackDecorator):
@@ -58,6 +72,7 @@ class ADKLLMTrackDecorator(base_track_decorator.BaseTrackDecorator):
                 output=result_dict,
                 usage=usage_data.opik_usage,
                 model=usage_data.model,
+                provider=get_adk_provider(),
             )
         else:
             result = arguments_helpers.EndSpanParameters(
