@@ -7,6 +7,7 @@ from litellm.caching import Cache
 import logging
 import json
 import os
+from string import Template
 
 from .optimization_config import mappers
 from .optimization_config.configs import MetricConfig, TaskConfig
@@ -200,6 +201,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             if hasattr(dataset_item, "to_dict"):
                 dataset_item = dataset_item.to_dict()
 
+            # Validate that input and output fields are in the dataset_item
             for input_key in task_config.input_dataset_fields:
                 if input_key not in dataset_item:
                     logger.error(f"Input field '{input_key}' not found in dataset sample: {dataset_item}")
@@ -212,45 +214,66 @@ class MetaPromptOptimizer(BaseOptimizer):
                     f"Output field '{task_config.output_dataset_field}' not found in dataset sample"
                 )
 
-            # Handle chat prompts
-            if getattr(task_config, 'use_chat_prompt', False):
-                full_prompt = prompt
-            else:
-                # `prompt` is the instruction (initial or candidate prompt text).
-                # `dataset_item` contains the actual data for the current item.
-                
-                input_clauses = []
-                # Construct "Key: Value" string for each input field from the dataset_item
-                for field_name in task_config.input_dataset_fields:
-                    # This check is technically redundant due to earlier checks, but safe
-                    if field_name in dataset_item:
-                        input_clauses.append(f"{field_name.capitalize()}: {dataset_item[field_name]}")
-                
-                item_specific_inputs_str = "\n".join(input_clauses)
-
-                # Combine the base/candidate prompt (instruction) with the actual inputs for the current item.
-                full_prompt = f"{prompt}\n\n{item_specific_inputs_str}"
-
+            # --- Step 1: Prepare the prompt for the LLM ---
+            prompt_for_llm: str
             # For logging purposes, show the raw input values that were combined.
             field_mapping = {
                 field: dataset_item[field] for field in task_config.input_dataset_fields if field in dataset_item
             }
-            logger.debug(f"Evaluating prompt with input: {field_mapping}")
-            logger.debug(f"Full prompt: {full_prompt}")
 
+            if getattr(task_config, 'use_chat_prompt', False):
+                # For chat prompts, the candidate prompt `prompt` is expected to be a template for the user message.
+                # We assume it contains placeholders like {question} or {text}.
+                candidate_template = Template(prompt) # `prompt` is the candidate prompt text from optimizer/initial
+                prompt_for_llm = candidate_template.safe_substitute(field_mapping)
+            else:
+                # For non-chat prompts, `prompt` (the candidate/initial prompt) is the base instruction.
+                # Append the actual data fields to it.
+                input_clauses = []
+                for field_name in task_config.input_dataset_fields: # e.g., ["question"] or ["text"]
+                    if field_name in dataset_item: # This should always be true due to earlier validation
+                        # Capitalizes field name, e.g., "Question: ..." or "Text: ..."
+                        input_clauses.append(f"{field_name.capitalize()}: {dataset_item[field_name]}")
+                item_specific_inputs_str = "\n".join(input_clauses)
+                
+                # `prompt` here is the candidate prompt text from the optimizer, or the initial_prompt.
+                prompt_for_llm = f"{prompt}\n\n{item_specific_inputs_str}"
+
+            logger.debug(f"Evaluating with inputs: {field_mapping}")
+            logger.debug(f"Prompt for LLM: {prompt_for_llm}")
+
+            # --- Step 2: Call the model ---
             try:
-                logger.info(f"Calling LLM with prompt length: {len(full_prompt)}")
-                model_output = self._call_model(full_prompt)
-                logger.info(f"LLM response length: {len(model_output)}")
-                logger.debug(f"Model output: {model_output}")
+                logger.info(f"Calling LLM with prompt length: {len(prompt_for_llm)}")
+                # _call_model handles system prompt and chat/non-chat based on task_config.use_chat_prompt
+                # `is_reasoning` is False here as this is for evaluation, not prompt generation.
+                raw_model_output = self._call_model(prompt=prompt_for_llm, system_prompt=None, is_reasoning=False)
+                logger.info(f"LLM raw response length: {len(raw_model_output)}")
+                logger.debug(f"LLM raw output: {raw_model_output}")
             except Exception as e:
                 logger.error(f"Error calling model with prompt: {e}")
-                logger.error(f"Failed prompt: {full_prompt}")
-                logger.error(f"Prompt length: {len(full_prompt)}")
+                logger.error(f"Failed prompt: {prompt_for_llm}")
+                logger.error(f"Prompt length: {len(prompt_for_llm)}")
                 raise
 
+            # --- Step 3: Clean the model's output before metric evaluation ---
+            cleaned_model_output = raw_model_output.strip()
+            # List of common prefixes to strip. Case-insensitive check might be more robust,
+            # but for now, we'll do exact match on these common forms.
+            prefixes_to_strip = ["Answer:", "Answer :", "A:"] 
+            original_cleaned_output = cleaned_model_output # For logging if changed
+            for prefix_to_check in prefixes_to_strip:
+                if cleaned_model_output.startswith(prefix_to_check):
+                    cleaned_model_output = cleaned_model_output[len(prefix_to_check):].strip()
+                    logger.debug(f"Stripped prefix '{prefix_to_check}', new output for metric: {cleaned_model_output}")
+                    break # Stop after stripping the first found prefix
+            
+            if original_cleaned_output != cleaned_model_output:
+                 logger.info(f"Raw model output: '{original_cleaned_output}' -> Cleaned for metric: '{cleaned_model_output}'")
+
+
             result = {
-                mappers.EVALUATED_LLM_TASK_OUTPUT: model_output,
+                mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
             }
             return result
 
