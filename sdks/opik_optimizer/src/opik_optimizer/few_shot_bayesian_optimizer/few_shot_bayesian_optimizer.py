@@ -108,17 +108,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         # Load the dataset
         if isinstance(dataset, str):
             opik_dataset = self._opik_client.get_dataset(dataset)
-            dataset = opik_dataset.get_items()
+            dataset_items = opik_dataset.get_items()
         else:
             opik_dataset = dataset
-            dataset = opik_dataset.get_items()
-
-        # train_set, validation_set = _split_dataset(
-        #     dataset, train_ratio=1.0
-        # )  # TODO: make configurable
+            dataset_items = opik_dataset.get_items()
 
         experiment_config = experiment_config or {}
-        experiment_config = {
+        base_experiment_config = { # Base config for reuse
             **experiment_config,
             **{
                 "optimizer": self.__class__.__name__,
@@ -128,22 +124,59 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             },
         }
 
+        # Evaluate Initial (Zero-Shot) Prompt
+        logger.info("Evaluating initial (zero-shot) prompt...")
+        initial_instruction = task_config.instruction_prompt
+        zero_shot_param = prompt_parameter.ChatPromptParameter(
+            name="zero_shot_prompt",
+            instruction=initial_instruction,
+            task_input_parameters=task_config.input_dataset_fields,
+            task_output_parameter=task_config.output_dataset_field,
+            demo_examples=[], # No examples
+        )
+        zero_shot_llm_task = self._build_task_from_prompt_template(zero_shot_param.as_template())
+
+        initial_eval_config = base_experiment_config.copy()
+        initial_eval_config["configuration"]["prompt"] = initial_instruction
+        initial_eval_config["configuration"]["n_examples"] = 0
+
+        # Determine dataset item IDs for evaluation (initial and trials)
+        all_dataset_item_ids = [item["id"] for item in dataset_items]
+        eval_dataset_item_ids = all_dataset_item_ids
+        if n_samples is not None and n_samples < len(all_dataset_item_ids):
+             eval_dataset_item_ids = random.sample(all_dataset_item_ids, n_samples)
+             logger.info(f"Using {n_samples} samples for evaluations.")
+        else:
+             logger.info(f"Using all {len(all_dataset_item_ids)} samples for evaluations.")
+
+
+        initial_score = task_evaluator.evaluate(
+            dataset=opik_dataset,
+            dataset_item_ids=eval_dataset_item_ids,
+            metric_config=metric_config,
+            evaluated_task=zero_shot_llm_task,
+            num_threads=self.n_threads,
+            project_name=self.project_name,
+            experiment_config=initial_eval_config,
+            optimization_id=optimization_id,
+        )
+        logger.info(f"Initial (zero-shot) score: {initial_score:.4f}")
+
+
+        # Start Optuna Study
         logger.info("Starting Optuna study for Few-Shot Bayesian Optimization...")
 
         def optimization_objective(trial: optuna.Trial) -> float:
             n_examples = trial.suggest_int(
                 "n_examples", self.min_examples, self.max_examples
             )
-
-            example_indices = [
-                trial.suggest_categorical(f"example_{i}", list(range(len(dataset))))
-                for i in range(n_examples)
-            ]
+            available_indices = list(range(len(dataset_items)))
+            example_indices = random.sample(available_indices, n_examples)
+            trial.set_user_attr("example_indices", example_indices)
 
             instruction = task_config.instruction_prompt
-            demo_examples = [dataset[idx] for idx in example_indices]
+            demo_examples = [dataset_items[idx] for idx in example_indices]
 
-            # Convert all values in demo examples to strings
             processed_demo_examples = []
             for example in demo_examples:
                 processed_example = {}
@@ -152,7 +185,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 processed_demo_examples.append(processed_example)
 
             param = prompt_parameter.ChatPromptParameter(
-                name="few_shot_examples_chat_prompt",
+                name=f"trial_{trial.number}_prompt",
                 instruction=instruction,
                 task_input_parameters=task_config.input_dataset_fields,
                 task_output_parameter=task_config.output_dataset_field,
@@ -161,24 +194,24 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
             llm_task = self._build_task_from_prompt_template(param.as_template())
 
-            experiment_config["configuration"]["prompt"] = instruction
-            experiment_config["configuration"]["examples"] = demo_examples
-
-            dataset_item_ids = [example["id"] for example in dataset]
-            if n_samples is not None:
-                dataset_item_ids = random.sample(dataset_item_ids, n_samples)
+            # Log trial config
+            trial_config = base_experiment_config.copy()
+            trial_config["configuration"]["prompt"] = instruction # Base instruction
+            trial_config["configuration"]["examples"] = processed_demo_examples # Log stringified examples
+            trial_config["configuration"]["n_examples"] = n_examples
+            trial_config["configuration"]["example_indices"] = example_indices
 
             logger.debug(f"Trial {trial.number}: n_examples={n_examples}, indices={example_indices}")
-            
             logger.debug(f"Evaluating trial {trial.number}...")
+
             score = task_evaluator.evaluate(
                 dataset=opik_dataset,
-                dataset_item_ids=dataset_item_ids,
+                dataset_item_ids=eval_dataset_item_ids,
                 metric_config=metric_config,
                 evaluated_task=llm_task,
                 num_threads=self.n_threads,
                 project_name=self.project_name,
-                experiment_config=experiment_config,
+                experiment_config=trial_config,
                 optimization_id=optimization_id,
             )
             logger.debug(f"Trial {trial.number} score: {score:.4f}")
@@ -187,18 +220,14 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             trial.set_user_attr("param", param)
             return score
 
-        # FIXME: pass in direction parameter?
-
         # Configure Optuna Logging
         try:
             optuna.logging.disable_default_handler()
-
             optuna_logger = logging.getLogger("optuna")
             package_level = logging.getLogger('opik_optimizer').getEffectiveLevel()
             optuna_logger.setLevel(package_level)
-            optuna_logger.propagate = False 
+            optuna_logger.propagate = False
             logger.debug(f"Optuna logger configured to level {logging.getLevelName(package_level)} and set to not propagate.")
-
         except Exception as e:
             logger.warning(f"Could not configure Optuna logging within optimizer: {e}")
 
@@ -207,25 +236,31 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         logger.info("Optuna study finished.")
 
         best_trial = study.best_trial
+        best_score = best_trial.value
         best_n_examples = best_trial.params["n_examples"]
-        best_param: prompt_parameter.ChatPromptParameter = best_trial.user_attrs[
-            "param"
-        ]
+        best_example_indices = best_trial.user_attrs.get("example_indices", [])
+        best_param: prompt_parameter.ChatPromptParameter = best_trial.user_attrs["param"]
 
         chat_messages_list = best_param.as_template().format()
-        main_prompt_string = best_param.instruction 
+        main_prompt_string = best_param.instruction
 
         return optimization_result.OptimizationResult(
             prompt=main_prompt_string,
-            score=best_trial.user_attrs["score"],
+            score=best_score,
             metric_name=metric_config.metric.name,
             details={
                 "prompt_type": "chat",
                 "chat_messages": chat_messages_list,
                 "prompt_parameter": best_param,
                 "n_examples": best_n_examples,
-                "example_indices": best_trial.params.get("example_indices", []),
+                "example_indices": best_example_indices,
                 "trial_number": best_trial.number,
+                "initial_score": initial_score,
+                "total_trials": n_trials,
+                "rounds": [],
+                "stopped_early": False,
+                "metric_config": metric_config.dict(),
+                "task_config": task_config.dict(),
             },
         )
 
@@ -362,11 +397,3 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         return llm_task
 
 
-# def _split_dataset(
-#     dataset: List[Dict[str, Any]], train_ratio: float
-# ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-#     shuffled = random.sample(dataset, len(dataset))
-#     train_set = shuffled[: int(train_ratio * len(dataset))]
-#     validation_set = shuffled[int(train_ratio * len(dataset)) :]
-
-#     return train_set, validation_set
