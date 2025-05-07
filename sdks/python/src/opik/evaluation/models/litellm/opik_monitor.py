@@ -71,18 +71,20 @@ def _ensure_params_have_callback(params: Dict[str, Any]) -> Dict[str, Any]:
     has_global_opik_logger = False
     has_local_opik_logger = False
 
-    if opik_logger := _callback_instance():
+    if OpikLoggerClass := lazy_import_OpikLogger():
         has_global_opik_logger = any(
-            isinstance(callback, opik_logger) for callback in litellm.callbacks
+            isinstance(callback, OpikLoggerClass) for callback in litellm.callbacks
         )
 
         has_local_opik_logger = any(
-            isinstance(callback, opik_logger)
+            isinstance(callback, OpikLoggerClass)
             for callback in params.get("success_callback", [])
         )
 
     if has_global_opik_logger or has_local_opik_logger:
         return params
+
+    opik_logger = _callback_instance()
 
     return {
         **params,
