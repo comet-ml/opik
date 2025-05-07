@@ -16,8 +16,8 @@ def __getattr__(name):
     elif name == "FewShotBayesianOptimizer":
         from .few_shot_bayesian_optimizer import FewShotBayesianOptimizer
         return FewShotBayesianOptimizer
-    elif name in ["MetricConfig", "OptimizationConfig", "PromptTaskConfig"]:
-        from .optimization_config.configs import MetricConfig, OptimizationConfig, PromptTaskConfig
+    elif name in ["MetricConfig", "OptimizationConfig", "TaskConfig"]:
+        from .optimization_config.configs import MetricConfig, OptimizationConfig, TaskConfig
         return locals()[name]
     elif name in ["from_dataset_field", "from_llm_response_text"]:
         from .optimization_config.mappers import from_dataset_field, from_llm_response_text
@@ -31,7 +31,7 @@ __all__ = [
     "MiproOptimizer",
     "MetricConfig",
     "OptimizationConfig",
-    "PromptTaskConfig",
+    "TaskConfig",
     "from_dataset_field",
     "from_llm_response_text",
 ]

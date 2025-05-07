@@ -21,7 +21,7 @@ from ..optimization_result import OptimizationResult
 from ..base_optimizer import BaseOptimizer
 from ._mipro_optimizer_v2 import MIPROv2
 from ._lm import LM
-from ..optimization_config.configs import MetricConfig, PromptTaskConfig
+from ..optimization_config.configs import MetricConfig, TaskConfig
 from .utils import (
     create_dspy_signature,
     opik_metric_to_dspy,
@@ -62,7 +62,7 @@ class MiproOptimizer(BaseOptimizer):
         self,
         dataset: Union[str, Dataset],
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         prompt: Union[str, dspy.Module, OptimizationResult] = None,
         n_samples: int = 10,
         dataset_item_ids: Optional[List[str]] = None,
@@ -75,7 +75,7 @@ class MiproOptimizer(BaseOptimizer):
         Args:
             dataset: Opik dataset name or dataset
             metric_config: A MetricConfig instance
-            task_config: A PromptTaskConfig instance
+            task_config: A TaskConfig instance
             prompt: The prompt to evaluate
             n_samples: number of items to test in the dataset
             dataset_item_ids: Optional list of dataset item IDs to evaluate
@@ -198,7 +198,7 @@ class MiproOptimizer(BaseOptimizer):
         self,
         dataset: Union[str, Dataset],
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         num_candidates: int = 10,
         experiment_config: Optional[Dict] = None,
         **kwargs,
@@ -228,7 +228,7 @@ class MiproOptimizer(BaseOptimizer):
         self,
         dataset: Union[str, Dataset],
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         num_candidates: int = 10,
         experiment_config: Optional[Dict] = None,
         optimization_id: Optional[str] = None,

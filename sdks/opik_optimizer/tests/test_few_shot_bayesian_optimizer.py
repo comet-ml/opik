@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from opik_optimizer.few_shot_bayesian_optimizer import FewShotBayesianOptimizer
-from opik_optimizer.optimization_config.configs import MetricConfig, PromptTaskConfig, OptimizationConfig
+from opik_optimizer.optimization_config.configs import MetricConfig, TaskConfig, OptimizationConfig
 from opik_optimizer.optimization_config.mappers import Mapper
 from opik.evaluation.metrics import BaseMetric
 import opik
