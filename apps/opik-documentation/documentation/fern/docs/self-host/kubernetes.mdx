@@ -40,6 +40,7 @@ You can port-forward any service you need to your local machine:
 kubectl port-forward -n opik svc/opik-frontend 5173
 ```
 
+
 Opik will be available at `http://localhost:5173`.
 
 ## Configuration
@@ -47,6 +48,88 @@ Opik will be available at `http://localhost:5173`.
 You can find a full list the configuration options in the [helm chart documentation](https://github.com/comet-ml/opik/tree/main/deployment/helm_chart/opik).
 
 ## Advanced deployment options
+
+### Configure external access
+
+#### Configure ingress for opik-frontend
+
+```bash
+component:
+    frontend:
+      ingress:
+        enabled: true
+        ingressClassName: <your ingress class>
+        annotations:
+            <your annotations>
+        hosts:
+            - host: opik.example.com
+            paths:
+                - path: /opik
+                port: 5173
+                pathType: Prefix
+                - path: /opik/api
+                port: 5173
+                pathType: Prefix
+```
+
+#### Configure LoadBalancer service for clickhouse
+
+```bash
+clickhouse:
+  service:
+    serviceTemplate: clickhouse-cluster-svc-lb-template
+    annotations:
+      <your clickhouse LB service annotations>
+```
+
+### Configure Clickhouse backup on S3 (or minio)
+
+```bash
+
+```
+
+### Use S3 bucket for Opik
+
+#### Using AWS key and secret keys
+
+```bash
+component:
+  backend:
+    env:
+      IS_MINIO: "false"
+      S3_BUCKET <your_bucket_name>
+      S3_REGION <aws_region> 
+      AWS_ACCESS_KEY_ID: <your AWS Key>
+      AWS_SECRET_ACCESS_KEY: <your AWS Secret>
+```
+
+### Using IAM Role
+
+If your IAM role is configured for the k8s nodes, the only things you will need is to set for opik-backend:
+
+```bash
+component:
+  backend:
+    env:
+        IS_MINIO: "false"
+        S3_BUCKET <your_bucket_name>
+        S3_REGION <aws_region> 
+        AWS_ACCESS_KEY_ID: ""
+        AWS_SECRET_ACCESS_KEY: ""
+```
+
+If your role should be used by opik-backend serviceAccount, in addition you need to set:
+
+```bash
+component:
+  backend:
+
+    serviceAccount:
+        enabled: true
+        annotations:
+            eks.amazonaws.com/role-arn: <your IAM Role arn>
+```
+
 ### Using external Clickhouse installation
 Supported from Opik chart version 1.4.2
 
