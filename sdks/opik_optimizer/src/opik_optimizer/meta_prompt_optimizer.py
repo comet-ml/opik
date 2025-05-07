@@ -126,13 +126,18 @@ class MetaPromptOptimizer(BaseOptimizer):
     ) -> float:
         # Calculate subset size for trials
         if not use_full_dataset:
-            if n_samples is None:
-                # Get total size of dataset
-                total_items = len(dataset.get_items())
-                # Calculate 20% of total, but no more than 20 items
-                subset_size = min(20, max(10, int(total_items * 0.2)))
+            total_items = len(dataset.get_items())
+            if n_samples is not None:
+                if n_samples > total_items:
+                    logger.warning(f"Requested n_samples ({n_samples}) is larger than dataset size ({total_items}). Using full dataset.")
+                    subset_size = None
+                else:
+                    subset_size = n_samples
+                    logger.info(f"Using specified n_samples: {subset_size} items")
             else:
-                subset_size = n_samples
+                # Calculate 20% of total, but no more than 20 items and no more than total items
+                subset_size = min(total_items, min(20, max(10, int(total_items * 0.2))))
+                logger.info(f"Using automatic subset size calculation: {subset_size} items (20% of {total_items} total items)")
         else:
             subset_size = None  # Use all items for final checks
 
@@ -145,6 +150,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "dataset": dataset.name,
                 "configuration": {
                     "prompt": prompt,
+                    "n_samples": subset_size,
+                    "use_full_dataset": use_full_dataset,
                 },
             },
         }
@@ -293,9 +300,9 @@ class MetaPromptOptimizer(BaseOptimizer):
             metric_config=metric_config,
             task_config=task_config,
             prompt=current_prompt,
-            n_samples=n_samples,
+            n_samples=n_samples,  # Use n_samples if provided
             experiment_config=experiment_config,
-            use_full_dataset=True,
+            use_full_dataset=n_samples is None,  # Only use full dataset if n_samples is None
         )
         initial_score = best_score
         best_prompt = current_prompt
@@ -341,7 +348,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                             metric_config=metric_config,
                             task_config=task_config,
                             prompt=prompt,
-                            use_full_dataset=False,  # Use subset for trials
+                            n_samples=n_samples,
+                            use_full_dataset=False,
                             experiment_config=experiment_config,
                         )
                         trial_scores.append(score)
@@ -397,8 +405,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                         task_config=task_config,
                         prompt=best_candidate,
                         experiment_config=experiment_config,
-                        n_samples=n_samples,
-                        use_full_dataset=True,
+                        n_samples=n_samples,  # Use n_samples if provided
+                        use_full_dataset=n_samples is None,  # Only use full dataset if n_samples is None
                     )
                     if final_score > best_score:
                         best_score = final_score

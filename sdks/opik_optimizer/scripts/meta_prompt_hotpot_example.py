@@ -26,6 +26,7 @@ optimizer = MetaPromptOptimizer(
     temperature=0.1,  # Lower temperature for more focused responses
     max_completion_tokens=5000,  # Maximum tokens for model completion
     num_threads=12,  # Number of threads for parallel evaluation
+    subsample_size=10,  # Fixed subsample size of 10 items
 )
 
 # Create the optimization configuration
@@ -50,7 +51,8 @@ result = optimizer.optimize_prompt(
     metric_config=metric_config,
     task_config=task_config,
     auto_continue=False,
-    n_samples=10,
+    n_samples=10,  # Explicitly set to 10 samples
+    use_subsample=True,  # Force using subsample
 )
 
 print(result)
