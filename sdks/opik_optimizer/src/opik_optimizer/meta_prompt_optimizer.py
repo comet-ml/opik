@@ -84,6 +84,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         use_full_dataset: bool = False,
         experiment_config: Optional[Dict] = None,
         n_samples: Optional[int] = None,
+        optimization_id: Optional[str] = None,
     ) -> float:
         """
         Evaluate a prompt using the given dataset and metric configuration.
@@ -96,6 +97,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             use_full_dataset: Whether to use the full dataset or a subset for evaluation
             experiment_config: A dictionary to log with the experiments
             n_samples: The number of dataset items to use for evaluation
+            optimization_id: Optional ID for tracking the optimization run
 
         Returns:
             float: The evaluation score
@@ -108,6 +110,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             use_full_dataset=use_full_dataset,
             experiment_config=experiment_config,
             n_samples=n_samples,
+            optimization_id=optimization_id,
         )
 
     def _evaluate_prompt(
