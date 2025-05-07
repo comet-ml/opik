@@ -7,7 +7,7 @@ import optuna
 from opik.integrations.openai import track_openai
 from opik import Dataset
 from opik_optimizer.optimization_config import mappers
-from opik_optimizer.optimization_config.configs import PromptTaskConfig, MetricConfig
+from opik_optimizer.optimization_config.configs import TaskConfig, MetricConfig
 from opik_optimizer import optimization_dsl, base_optimizer
 from . import prompt_parameter
 from . import prompt_templates
@@ -82,7 +82,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         optimization_id: str,
         dataset: Union[str, Dataset],
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         n_trials: int = 10,
         experiment_config: Optional[Dict] = None,
         n_samples: int = None,
@@ -207,7 +207,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self,
         dataset: Union[str, Dataset],
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         n_trials: int = 10,
         experiment_config: Optional[Dict] = None,
         n_samples: int = None,

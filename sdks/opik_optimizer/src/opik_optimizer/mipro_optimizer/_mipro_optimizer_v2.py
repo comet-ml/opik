@@ -51,7 +51,7 @@ ENDC = "\033[0m"  # Resets the color to default
 
 import opik
 from opik_optimizer import task_evaluator
-from opik_optimizer.optimization_config.configs import MetricConfig, PromptTaskConfig
+from opik_optimizer.optimization_config.configs import MetricConfig, TaskConfig
 from opik_optimizer.optimization_config import mappers
 
 
@@ -76,7 +76,7 @@ class MIPROv2(Teleprompter):
         metric_threshold: Optional[float] = None,
         opik_dataset: Optional[opik.Dataset] = None,
         opik_metric_config: Optional[MetricConfig] = None,
-        opik_prompt_task_config: Optional[PromptTaskConfig] = None,
+        opik_prompt_task_config: Optional[TaskConfig] = None,
         opik_project_name: Optional[str] = None,
         opik_optimization_id: Optional[str] = None,
         experiment_config: Optional[Dict[str, Any]] = None,
@@ -1020,7 +1020,7 @@ def eval_candidate_program_with_opik(
     candidate_program: Any,
     project_name: str,
     metric_config: MetricConfig,
-    prompt_task_config: PromptTaskConfig,
+    prompt_task_config: TaskConfig,
     num_threads: int,
     experiment_config: Optional[Dict[str, Any]] = None,
     optimization_id: Optional[str] = None,

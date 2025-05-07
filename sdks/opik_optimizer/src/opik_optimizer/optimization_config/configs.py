@@ -14,7 +14,7 @@ class MetricConfig(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
 
-class PromptTaskConfig(pydantic.BaseModel):
+class TaskConfig(pydantic.BaseModel):
     """Configuration for a prompt task."""
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
     
@@ -32,4 +32,4 @@ class OptimizationConfig(pydantic.BaseModel):
     dataset: opik.Dataset
     objective: MetricConfig
     optimization_direction: Literal["maximize", "minimize"] = "maximize"
-    task: PromptTaskConfig
+    task: TaskConfig

@@ -9,7 +9,7 @@ import json
 import os
 
 from .optimization_config import mappers
-from .optimization_config.configs import MetricConfig, PromptTaskConfig
+from .optimization_config.configs import MetricConfig, TaskConfig
 from .base_optimizer import BaseOptimizer, OptimizationRound
 from .optimization_result import OptimizationResult
 from .utils import get_tqdm
@@ -79,7 +79,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self,
         dataset: opik.Dataset,
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         prompt: str,
         use_full_dataset: bool = False,
         experiment_config: Optional[Dict] = None,
@@ -114,7 +114,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self,
         dataset: opik.Dataset,
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         prompt: str,
         use_full_dataset: bool,
         experiment_config: Optional[Dict],
@@ -204,7 +204,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self,
         dataset: Union[str, Dataset],
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         experiment_config: Optional[Dict] = None,
         n_samples: int = None,
         auto_continue: bool = False,
@@ -251,7 +251,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         optimization_id: str,
         dataset: Union[str, Dataset],
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         experiment_config: Optional[Dict],
         n_samples: int,
         auto_continue: bool,
@@ -501,7 +501,7 @@ class MetaPromptOptimizer(BaseOptimizer):
     def _create_result(
         self,
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         best_prompt: str,
         best_score: float,
         initial_score: float,
