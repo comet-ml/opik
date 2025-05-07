@@ -124,6 +124,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.AWS_ACCESS_KEY_ID | string | `"THAAIOSFODNN7EXAMPLE"` |  |
 | component.backend.env.AWS_SECRET_ACCESS_KEY | string | `"LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"` |  |
 | component.backend.env.JAVA_OPTS | string | `"-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0 -XX:MinRAMPercentage=75"` |  |
+| component.backend.env.LIQUIDBASE_CONTEXT | string | `"cluster"` |  |
 | component.backend.env.OPIK_OTEL_SDK_ENABLED | bool | `false` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED | bool | `true` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS | string | `"process.command_args"` |  |
