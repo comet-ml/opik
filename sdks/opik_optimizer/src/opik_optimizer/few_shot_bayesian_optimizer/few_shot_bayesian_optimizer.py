@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Tuple, Union, Optional, Callable, Literal
 import openai
 import opik
 import optuna
+import logging
 
 from opik.integrations.openai import track_openai
 from opik import Dataset
@@ -17,6 +18,7 @@ from .. import optimization_result, task_evaluator
 
 limiter = RateLimiter(max_calls_per_second=15)
 
+logger = logging.getLogger(__name__)
 
 @rate_limited(limiter)
 def _call_model(client, model, messages, seed, **model_kwargs):
