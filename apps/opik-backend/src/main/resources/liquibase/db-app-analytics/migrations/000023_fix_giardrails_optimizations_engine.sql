@@ -1,7 +1,7 @@
 --liquibase formatted sql
 
 --changeset liyaka:fix-guardrails-engine-01 id:drop-guardrails-table
-DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.guardrails ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
+DROP TABLE IF EXISTS IF EMPTY ${ANALYTICS_DB_DATABASE_NAME}.guardrails ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
 --rollback -- Cannot rollback drop table operation
 
 --changeset liyaka:fix-guardrails-engine-02 id:create-guardrails-table
@@ -28,7 +28,7 @@ SETTINGS index_granularity = 8192;
 --rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.guardrails ON CLUSTER '{cluster}';
 
 --changeset liyaka:fix-optimizations-engine-01 id:drop-optimizations-table
-DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.optimizations ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
+DROP TABLE IF EXISTS IF EMPTY ${ANALYTICS_DB_DATABASE_NAME}.optimizations ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
 --rollback -- Cannot rollback drop table operation
 
 --changeset liyaka:fix-optimizations-engine-02 id:create-optimizations-table
