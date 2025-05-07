@@ -24,35 +24,38 @@ export interface ModelData {
   scoreParameters?: string[];
 }
 
-const OPTIMIZATION_ALGORITHMS_MAP: Record<OPTIMIZATION_ALGORITHMS, ModelData> = {
-  [OPTIMIZATION_ALGORITHMS.metaPromptOptimizer]: {
-    class: "MetaPromptOptimizer",
-  },
-  [OPTIMIZATION_ALGORITHMS.fewShotOptimizer]: {
-    class: "FewShotBayesianOptimizer",
-  },
-  [OPTIMIZATION_ALGORITHMS.miproOptimizer]: {
-    class: "MiproOptimizer",
-  }
-};
+const OPTIMIZATION_ALGORITHMS_MAP: Record<OPTIMIZATION_ALGORITHMS, ModelData> =
+  {
+    [OPTIMIZATION_ALGORITHMS.metaPromptOptimizer]: {
+      class: "MetaPromptOptimizer",
+    },
+    [OPTIMIZATION_ALGORITHMS.fewShotOptimizer]: {
+      class: "FewShotBayesianOptimizer",
+    },
+    [OPTIMIZATION_ALGORITHMS.miproOptimizer]: {
+      class: "MiproOptimizer",
+    },
+  };
 
-const OPTIMIZATION_ALGORITHMS_OPTIONS: DropdownOption<OPTIMIZATION_ALGORITHMS>[] = [
-  {
-    value: OPTIMIZATION_ALGORITHMS.metaPromptOptimizer,
-    label: "Meta optimizer",
-    description: "Optimizes prompts using meta learning.",
-  },
-  {
-    value: OPTIMIZATION_ALGORITHMS.fewShotOptimizer,
-    label: "Few-shot Bayesian optimizer",
-    description: "Optimizes prompts using few-shot learning and Bayesian optimization.",
-  },
-  {
-    value: OPTIMIZATION_ALGORITHMS.miproOptimizer,
-    label: "Mipro optimizer",
-    description: "Optimizes prompts using Mipro.",
-  }
-];
+const OPTIMIZATION_ALGORITHMS_OPTIONS: DropdownOption<OPTIMIZATION_ALGORITHMS>[] =
+  [
+    {
+      value: OPTIMIZATION_ALGORITHMS.metaPromptOptimizer,
+      label: "Meta optimizer",
+      description: "Optimizes prompts using meta learning.",
+    },
+    {
+      value: OPTIMIZATION_ALGORITHMS.fewShotOptimizer,
+      label: "Few-shot Bayesian optimizer",
+      description:
+        "Optimizes prompts using few-shot learning and Bayesian optimization.",
+    },
+    {
+      value: OPTIMIZATION_ALGORITHMS.miproOptimizer,
+      label: "Mipro optimizer",
+      description: "Optimizes prompts using Mipro.",
+    },
+  ];
 
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
 
@@ -68,12 +71,17 @@ const AddOptimizationDialog: React.FunctionComponent<
 
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [datasetName, setDatasetName] = useState("");
-  const [selectedModel, setSelectedModel] = useState<OPTIMIZATION_ALGORITHMS>(OPTIMIZATION_ALGORITHMS.metaPromptOptimizer);
+  const [selectedModel, setSelectedModel] = useState<OPTIMIZATION_ALGORITHMS>(
+    OPTIMIZATION_ALGORITHMS.metaPromptOptimizer,
+  );
   const section1 = "pip install opik-optimizer";
 
-  let optional_parameters = ''
-  if (selectedModel === OPTIMIZATION_ALGORITHMS.fewShotOptimizer || selectedModel === OPTIMIZATION_ALGORITHMS.miproOptimizer) {
-    optional_parameters = '\n        use_chat_prompt=True,'
+  let optional_parameters = "";
+  if (
+    selectedModel === OPTIMIZATION_ALGORITHMS.fewShotOptimizer ||
+    selectedModel === OPTIMIZATION_ALGORITHMS.miproOptimizer
+  ) {
+    optional_parameters = "\n        use_chat_prompt=True,";
   }
   const importString = `from opik_optimizer import ${OPTIMIZATION_ALGORITHMS_MAP[selectedModel].class}
 
@@ -166,9 +174,7 @@ print(result)
     setSelectedModel(id);
   };
 
-  const generateList = (
-    list: DropdownOption<OPTIMIZATION_ALGORITHMS>[],
-  ) => {
+  const generateList = (list: DropdownOption<OPTIMIZATION_ALGORITHMS>[]) => {
     return (
       <div>
         {list.map((m) => {
@@ -199,8 +205,8 @@ print(result)
         <div className="pb-8">
           <SheetTitle>Start an optimization run</SheetTitle>
           <div className="comet-body-s m-auto mt-4 w-[468px] self-center text-center text-muted-slate">
-            Select a dataset, choose the optimizer you would like to use, and
-            we will improve your prompt for you
+            Select a dataset, choose the optimizer you would like to use, and we
+            will improve your prompt for you
           </div>
         </div>
         <div className="m-auto flex w-full max-w-[1250px] items-start gap-6">
