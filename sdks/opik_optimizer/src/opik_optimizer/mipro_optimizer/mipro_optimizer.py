@@ -204,10 +204,18 @@ class MiproOptimizer(BaseOptimizer):
         **kwargs,
     ) -> OptimizationResult:
         self._opik_client = opik.Opik()
-        optimization = self._opik_client.create_optimization(
-            dataset_name=dataset.name,
-            objective_name=metric_config.metric.name,
-        )
+        optimization = None
+        try:
+            optimization = self._opik_client.create_optimization(
+                dataset_name=dataset.name,
+                objective_name=metric_config.metric.name,
+            )
+        except Exception:
+            logger.warning(
+                "Opik server does not support optimizations. Please upgrade opik."
+            )
+            optimization = None
+
         try:
             result = self._optimize_prompt(
                 dataset=dataset,
@@ -215,13 +223,15 @@ class MiproOptimizer(BaseOptimizer):
                 task_config=task_config,
                 num_candidates=num_candidates,
                 experiment_config=experiment_config,
-                optimization_id=optimization.id,
+                optimization_id=optimization.id if optimization is not None else None,
                 **kwargs,
             )
-            optimization.update(status="completed")
+            if optimization:
+                optimization.update(status="completed")
             return result
         except Exception as e:
-            optimization.update(status="cancelled")
+            if optimization:
+                optimization.update(status="cancelled")
             raise e
 
     def _optimize_prompt(
