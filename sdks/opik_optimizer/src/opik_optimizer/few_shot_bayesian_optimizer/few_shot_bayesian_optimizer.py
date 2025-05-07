@@ -219,7 +219,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 objective_name=metric_config.metric.name,
             )
         except Exception:
-            # Backend does not support it
+            logger.warning(
+                "Opik server does not support optimizations. Please upgrade opik."
+            )
             optimization = None
 
         try:
