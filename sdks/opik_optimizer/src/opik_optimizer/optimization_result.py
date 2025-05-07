@@ -60,16 +60,16 @@ class OptimizationResult(pydantic.BaseModel):
         """Provides a clean, well-formatted plain-text summary."""
         separator = "=" * 80
         rounds_ran = len(self.details.get('rounds', []))
-        
-        # Safely get and format initial score
         initial_score = self.details.get('initial_score')
         initial_score_str = f"{initial_score:.4f}" if isinstance(initial_score, (int, float)) else "N/A"
-        
         final_score_str = f"{self.score:.4f}"
-        improvement_str = self._calculate_improvement_str().replace("[bold green]","").replace("[/bold green]","").replace("[bold red]","").replace("[/bold red]","").replace("[dim]","").replace("[/dim]","") # Strip rich tags for plain text
+        improvement_str = self._calculate_improvement_str().replace("[bold green]","").replace("[/bold green]","").replace("[bold red]","").replace("[/bold red]","").replace("[dim]","").replace("[/dim]","")
         stopped_early = self.details.get('stopped_early', 'N/A')
+        
+        model_name = self.details.get('model', 'N/A')
+        temp = self.details.get('temperature')
+        temp_str = f"{temp:.1f}" if isinstance(temp, (int, float)) else "N/A"
 
-        # Display Chat Structure if available
         final_prompt_display = self.prompt
         if self.details.get("prompt_type") == "chat" and self.details.get("chat_messages"):
             try:
@@ -82,6 +82,8 @@ class OptimizationResult(pydantic.BaseModel):
             f"\n{separator}",
             f"OPTIMIZATION COMPLETE",
             f"{separator}",
+            f"Optimizer:        {self.details.get('optimizer', type(self).__name__)}",
+            f"Model Used:       {model_name} (Temp: {temp_str})",
             f"Metric Evaluated: {self.metric_name}",
             f"Initial Score:    {initial_score_str}",
             f"Final Best Score: {final_score_str}",
@@ -99,18 +101,22 @@ class OptimizationResult(pydantic.BaseModel):
     def __rich__(self) -> Panel:
         """Provides a rich, formatted output for terminals supporting Rich."""
         improvement_str = self._calculate_improvement_str()
-
         rounds_ran = len(self.details.get('rounds', []))
         initial_score = self.details.get('initial_score')
-        # Format safely for rich display
         initial_score_str = f"{initial_score:.4f}" if isinstance(initial_score, (int, float)) else "[dim]N/A[/dim]"
         final_score_str = f"{self.score:.4f}"
         stopped_early = self.details.get('stopped_early', 'N/A')
+        
+        model_name = self.details.get('model', '[dim]N/A[/dim]')
+        temp = self.details.get('temperature')
+        temp_str = f"{temp:.1f}" if isinstance(temp, (int, float)) else "[dim]N/A[/dim]"
 
         table = Table.grid(padding=(0, 1))
         table.add_column(style="dim")
         table.add_column()
 
+        table.add_row("Optimizer:", f"[bold]{self.details.get('optimizer', type(self).__name__)}[/bold]")
+        table.add_row("Model Used:", f"{model_name} ([dim]Temp:[/dim] {temp_str})")
         table.add_row("Metric Evaluated:", f"[bold]{self.metric_name}[/bold]")
         table.add_row("Initial Score:", initial_score_str)
         table.add_row("Final Best Score:", f"[bold cyan]{final_score_str}[/bold cyan]")
