@@ -79,11 +79,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
     def _optimize_prompt(
         self,
-        optimization_id: str,
         dataset: Union[str, Dataset],
         metric_config: MetricConfig,
         task_config: TaskConfig,
         n_trials: int = 10,
+        optimization_id: Optional[str] = None,
         experiment_config: Optional[Dict] = None,
         n_samples: int = None,
     ) -> optimization_result.OptimizationResult:
@@ -212,13 +212,19 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         experiment_config: Optional[Dict] = None,
         n_samples: int = None,
     ) -> optimization_result.OptimizationResult:
+        optimization = None
         try:
             optimization = self._opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric_config.metric.name,
             )
+        except Exception:
+            # Backend does not support it
+            optimization = None
+
+        try:
             result = self._optimize_prompt(
-                optimization_id=optimization.id,
+                optimization_id=optimization.id if optimization is not None else None,
                 dataset=dataset,
                 metric_config=metric_config,
                 task_config=task_config,
@@ -226,10 +232,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 experiment_config=experiment_config,
                 n_samples=n_samples,
             )
-            optimization.update(status="completed")
+            if optimization:
+                optimization.update(status="completed")
             return result
         except Exception as e:
-            optimization.update(status="cancelled")
+            if optimization:
+                optimization.update(status="cancelled")
             raise e
 
     def evaluate_prompt(
