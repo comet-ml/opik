@@ -1,6 +1,11 @@
 import importlib.metadata
+import logging
+from .logging_config import setup_logging
 
 __version__ = importlib.metadata.version("opik_optimizer")
+
+# Using WARNING as a sensible default to avoid flooding users with INFO/DEBUG
+setup_logging(level=logging.WARNING)
 
 # Lazy imports to avoid circular dependencies
 def __getattr__(name):

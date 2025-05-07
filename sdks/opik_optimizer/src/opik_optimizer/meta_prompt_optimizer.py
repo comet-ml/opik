@@ -24,17 +24,7 @@ disk_cache_dir = os.path.expanduser("~/.litellm_cache")
 litellm.cache = Cache(type="disk", disk_cache_dir=disk_cache_dir)
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Configure LiteLLM logging
-litellm_logger = logging.getLogger("LiteLLM")
-litellm_logger.setLevel(logging.WARNING)  # Only show warnings and errors from LiteLLM
-
-# Configure HTTPX logging
-httpx_logger = logging.getLogger("httpx")
-httpx_logger.setLevel(logging.WARNING)  # Only show warnings and errors from HTTPX
-
+logger = logging.getLogger(__name__) # Gets logger configured by setup_logging
 
 class MetaPromptOptimizer(BaseOptimizer):
     """Optimizer that uses meta-prompting to improve prompts based on examples and performance."""
