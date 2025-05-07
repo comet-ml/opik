@@ -13,6 +13,8 @@ from typing import (
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 
+from . import llm_response_wrapper
+
 
 def convert_adk_base_models(arg: Any) -> Dict[str, Any]:
     """Most ADK objects are Pydantic Base Models"""
@@ -48,9 +50,19 @@ class ADKLLMTrackDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
-        result = arguments_helpers.EndSpanParameters(
-            output=convert_adk_base_models(output),
-        )
+        result_dict = convert_adk_base_models(output)
+        usage_data = llm_response_wrapper.pop_llm_usage_data(**result_dict)
+
+        if usage_data is not None:
+            result = arguments_helpers.EndSpanParameters(
+                output=result_dict,
+                usage=usage_data.opik_usage,
+                model=usage_data.model,
+            )
+        else:
+            result = arguments_helpers.EndSpanParameters(
+                output=result_dict,
+            )
 
         return result
 

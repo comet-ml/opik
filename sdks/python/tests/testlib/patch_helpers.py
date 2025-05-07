@@ -10,7 +10,7 @@ def patch_environ(
 ):
     """
     Temporarily set environment variables inside the context manager and
-    fully restore previous environment afterwards
+    fully restore the previous environment afterward
     """
     original_env = {key: os.getenv(key) for key in add_keys}
 
