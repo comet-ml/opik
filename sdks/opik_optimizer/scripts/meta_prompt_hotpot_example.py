@@ -1,11 +1,10 @@
 from opik_optimizer import MetaPromptOptimizer
-from opik.evaluation.metrics import LevenshteinRatio
+from opik.evaluation.metrics import Equals
 from opik_optimizer.demo import get_or_create_dataset
 
 from opik_optimizer import (
-    OptimizationConfig,
     MetricConfig,
-    PromptTaskConfig,
+    TaskConfig,
     from_dataset_field,
     from_llm_response_text,
 )
@@ -26,53 +25,32 @@ optimizer = MetaPromptOptimizer(
     improvement_threshold=0.01,  # Minimum improvement required to continue
     temperature=0.1,  # Lower temperature for more focused responses
     max_completion_tokens=5000,  # Maximum tokens for model completion
-    num_threads=1,  # Number of threads for parallel evaluation
+    num_threads=12,  # Number of threads for parallel evaluation
 )
 
 # Create the optimization configuration
-optimization_config = OptimizationConfig(
-    dataset=hotpot_dataset,
-    objective=MetricConfig(
-        metric=LevenshteinRatio(project_name=project_name),
-        inputs={
-            "output": from_llm_response_text(),
-            "reference": from_dataset_field(name="answer"),
-        },
-    ),
-    task=PromptTaskConfig(
-        instruction_prompt=initial_prompt,
-        input_dataset_fields=["question"],
-        output_dataset_field="answer",
-    ),
+
+metric_config = MetricConfig(
+    metric=Equals(project_name=project_name),
+    inputs={
+        "output": from_llm_response_text(),
+        "reference": from_dataset_field(name="answer"),
+    },
 )
 
-# Evaluate the initial prompt
-initial_score = optimizer.evaluate_prompt(
-    dataset=hotpot_dataset,
-    metric_config=optimization_config.objective,
-    task_config=optimization_config.task,
-    prompt=initial_prompt,
-    num_test=100,
+task_config = TaskConfig(
+    instruction_prompt=initial_prompt,
+    input_dataset_fields=["question"],
+    output_dataset_field="answer",
 )
-
-print("Initial prompt:", initial_prompt)
-print("Initial score:", initial_score)
 
 # Optimize the prompt using the optimization config
 result = optimizer.optimize_prompt(
-    config=optimization_config,
-    num_test=100,
+    dataset=hotpot_dataset,
+    metric_config=metric_config,
+    task_config=task_config,
+    auto_continue=False,
+    n_samples=10,
 )
 
 print(result)
-
-# Evaluate the final optimized prompt
-final_score = optimizer.evaluate_prompt(
-    dataset=hotpot_dataset,
-    metric_config=optimization_config.objective,
-    task_config=optimization_config.task,
-    prompt=result.prompt,
-    num_test=100,
-)
-
-print("Final score:", final_score)

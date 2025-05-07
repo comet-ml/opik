@@ -51,7 +51,7 @@ ENDC = "\033[0m"  # Resets the color to default
 
 import opik
 from opik_optimizer import task_evaluator
-from opik_optimizer.optimization_config.configs import MetricConfig, PromptTaskConfig
+from opik_optimizer.optimization_config.configs import MetricConfig, TaskConfig
 from opik_optimizer.optimization_config import mappers
 
 
@@ -76,8 +76,9 @@ class MIPROv2(Teleprompter):
         metric_threshold: Optional[float] = None,
         opik_dataset: Optional[opik.Dataset] = None,
         opik_metric_config: Optional[MetricConfig] = None,
-        opik_prompt_task_config: Optional[PromptTaskConfig] = None,
+        opik_prompt_task_config: Optional[TaskConfig] = None,
         opik_project_name: Optional[str] = None,
+        opik_optimization_id: Optional[str] = None,
         experiment_config: Optional[Dict[str, Any]] = None,
     ):
         # Validate 'auto' parameter
@@ -111,6 +112,7 @@ class MIPROv2(Teleprompter):
         self.opik_metric_config = opik_metric_config
         self.opik_prompt_task_config = opik_prompt_task_config
         self.opik_project_name = opik_project_name
+        self.opik_optimization_id = opik_optimization_id
         self.experiment_config = experiment_config or {}
 
     def compile(
@@ -564,7 +566,8 @@ class MIPROv2(Teleprompter):
             prompt_task_config=self.opik_prompt_task_config,
             project_name=self.opik_project_name,
             num_threads=self.num_threads,
-            experiment_config=experiment_config
+            experiment_config=experiment_config,
+            optimization_id=self.opik_optimization_id,
         )
         
         logger.info(f"Default program score: {default_score}\n")
@@ -945,6 +948,7 @@ class MIPROv2(Teleprompter):
             project_name=self.opik_project_name,
             num_threads=self.num_threads,
             experiment_config=experiment_config,
+            optimization_id=self.opik_optimization_id,
         )
         score_data.append(
             {
@@ -1016,9 +1020,10 @@ def eval_candidate_program_with_opik(
     candidate_program: Any,
     project_name: str,
     metric_config: MetricConfig,
-    prompt_task_config: PromptTaskConfig,
+    prompt_task_config: TaskConfig,
     num_threads: int,
     experiment_config: Optional[Dict[str, Any]] = None,
+    optimization_id: Optional[str] = None,
 ):
     """Evaluate a candidate program on the trainset, using the specified batch size."""
     dataset_item_ids = [example["id"] for example in trainset]
@@ -1047,6 +1052,7 @@ def eval_candidate_program_with_opik(
         project_name=project_name,
         num_threads=num_threads,
         experiment_config=experiment_config,
+        optimization_id=optimization_id,
     )
     
     return score
