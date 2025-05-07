@@ -100,11 +100,11 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.dataset = None
         self.task_config = None
         self._opik_client = opik_client.get_client_cached()
-        logger.info(
+        logger.debug(
             f"Initialized MetaPromptOptimizer with model={model}, reasoning_model={self.reasoning_model}"
         )
-        logger.info(f"Optimization rounds: {max_rounds}, Prompts/round: {num_prompts_per_round}")
-        logger.info(f"Trials config: Initial={self.initial_trials}, Max={self.max_trials}, Adaptive Threshold={self.adaptive_threshold}")
+        logger.debug(f"Optimization rounds: {max_rounds}, Prompts/round: {num_prompts_per_round}")
+        logger.debug(f"Trials config: Initial={self.initial_trials}, Max={self.max_trials}, Adaptive Threshold={self.adaptive_threshold}")
 
     def evaluate_prompt(
         self,
@@ -213,14 +213,14 @@ class MetaPromptOptimizer(BaseOptimizer):
                     subset_size = None
                 else:
                     subset_size = n_samples
-                    logger.info(f"Using specified n_samples: {subset_size} items")
+                    logger.debug(f"Using specified n_samples: {subset_size} items")
             else:
                 # Calculate 20% of total, but no more than 20 items and no more than total items
                 subset_size = min(total_items, min(20, max(10, int(total_items * 0.2))))
-                logger.info(f"Using automatic subset size calculation: {subset_size} items (20% of {total_items} total items)")
+                logger.debug(f"Using automatic subset size calculation: {subset_size} items (20% of {total_items} total items)")
         else:
             subset_size = None  # Use all items for final checks
-            logger.info("Using full dataset for evaluation")
+            logger.debug("Using full dataset for evaluation")
 
         experiment_config = experiment_config or {}
         experiment_config = {
@@ -281,9 +281,9 @@ class MetaPromptOptimizer(BaseOptimizer):
 
             # --- Step 2: Call the model ---
             try:
-                logger.info(f"Calling LLM with prompt length: {len(prompt_for_llm)}")
+                logger.debug(f"Calling LLM with prompt length: {len(prompt_for_llm)}")
                 raw_model_output = self._call_model(prompt=prompt_for_llm, system_prompt=None, is_reasoning=False)
-                logger.info(f"LLM raw response length: {len(raw_model_output)}")
+                logger.debug(f"LLM raw response length: {len(raw_model_output)}")
                 logger.debug(f"LLM raw output: {raw_model_output}")
             except Exception as e:
                 logger.error(f"Error calling model with prompt: {e}")
@@ -320,7 +320,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     break # Stop after stripping the first found prefix
             
             if original_cleaned_output != cleaned_model_output:
-                 logger.info(f"Raw model output: '{original_cleaned_output}' -> Cleaned for metric: '{cleaned_model_output}'")
+                 logger.debug(f"Raw model output: '{original_cleaned_output}' -> Cleaned for metric: '{cleaned_model_output}'")
 
             result = {
                 mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
@@ -329,7 +329,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         # Use dataset's get_items with limit for sampling
         logger.info(f"Starting evaluation with {subset_size if subset_size else 'all'} samples for metric: {metric_config.metric.name}")
-        return task_evaluator.evaluate(
+        score = task_evaluator.evaluate(
             dataset=dataset,
             metric_config=metric_config,
             evaluated_task=llm_task,
@@ -339,6 +339,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             experiment_config=experiment_config,
             optimization_id=optimization_id,
         )
+        logger.debug(f"Evaluation score: {score:.4f}")
+        return score
 
     def optimize_prompt(
         self,
@@ -500,10 +502,10 @@ class MetaPromptOptimizer(BaseOptimizer):
                 should_run_max_trials = True
 
                 # Initial trials
-                logger.info(f"Running initial {self.initial_trials} trials...")
+                logger.debug(f"Running initial {self.initial_trials} trials...")
                 for trial in range(self.initial_trials):
                     try:
-                        logger.info(f"Trial {trial + 1}/{self.initial_trials}")
+                        logger.debug(f"Trial {trial + 1}/{self.initial_trials}")
                         score = self.evaluate_prompt(
                             dataset=dataset,
                             metric_config=metric_config,
@@ -514,6 +516,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                             experiment_config=experiment_config,
                         )
                         scores.append(score)
+                        logger.debug(f"Trial {trial+1} score: {score:.4f}")
                     except Exception as e:
                         logger.error(f"Error in trial {trial + 1}: {e}")
                         continue
@@ -528,15 +531,15 @@ class MetaPromptOptimizer(BaseOptimizer):
                     self.max_trials > self.initial_trials and
                     avg_score_initial < best_score * self.adaptive_threshold):
                     should_run_max_trials = False
-                    logger.info(f"Skipping additional trials - score ({avg_score_initial:.4f}) below threshold ({best_score * self.adaptive_threshold:.4f})")
+                    logger.debug("Skipping additional trials...")
 
                 # Run additional trials
                 if should_run_max_trials and self.max_trials > self.initial_trials:
                     num_additional_trials = self.max_trials - self.initial_trials
-                    logger.info(f"Running {num_additional_trials} additional trials (up to {self.max_trials} total)...")
+                    logger.debug(f"Running {num_additional_trials} additional trials...")
                     for trial in range(self.initial_trials, self.max_trials):
                         try:
-                            logger.info(f"Additional trial {trial + 1}/{self.max_trials}")
+                            logger.debug(f"Additional trial {trial + 1}/{self.max_trials}")
                             score = self.evaluate_prompt(
                                 dataset=dataset,
                                 metric_config=metric_config,
@@ -547,6 +550,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                                 experiment_config=experiment_config,
                             )
                             scores.append(score)
+                            logger.debug(f"Additional trial {trial+1} score: {score:.4f}")
                         except Exception as e:
                             logger.error(f"Error in additional trial {trial + 1}: {e}")
                             continue
@@ -557,7 +561,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     prompt_scores.append((prompt, final_avg_score, scores))
                     logger.info(f"Completed {len(scores)} trials for prompt.")
                     logger.info(f"Final average score: {final_avg_score:.4f}")
-                    logger.info(f"Individual trial scores: {[f'{s:.4f}' for s in scores]}")
+                    logger.debug(f"Individual trial scores: {[f'{s:.4f}' for s in scores]}")
                 else:
                     # This case should be rare now due to the initial check, but good practice
                     logger.warning("No successful trials completed for this prompt.")
@@ -793,9 +797,9 @@ class MetaPromptOptimizer(BaseOptimizer):
     ) -> List[str]:
         """Generate candidate prompts using meta-prompting."""
         
-        logger.info(f"\nGenerating candidate prompts for round {round_num + 1}")
-        logger.info(f"Generating from prompt: {current_prompt}")
-        logger.info(f"Current best score: {best_score:.4f}")
+        logger.debug(f"\nGenerating candidate prompts for round {round_num + 1}")
+        logger.debug(f"Generating from prompt: {current_prompt}")
+        logger.debug(f"Current best score: {best_score:.4f}")
 
         # Pass single metric_config
         history_context = self._build_history_context(previous_rounds)

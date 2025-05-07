@@ -42,4 +42,5 @@ __all__ = [
     "TaskConfig",
     "from_dataset_field",
     "from_llm_response_text",
+    "setup_logging",
 ]

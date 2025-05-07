@@ -62,6 +62,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self.n_iterations = n_iterations
 
         self._opik_client = opik.Opik()
+        logger.debug(f"Initialized FewShotBayesianOptimizer with model: {model}")
 
     def _split_dataset(
         self, dataset: List[Dict[str, Any]], train_ratio: float
@@ -127,6 +128,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             },
         }
 
+        logger.info("Starting Optuna study for Few-Shot Bayesian Optimization...")
+
         def optimization_objective(trial: optuna.Trial) -> float:
             n_examples = trial.suggest_int(
                 "n_examples", self.min_examples, self.max_examples
@@ -165,6 +168,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             if n_samples is not None:
                 dataset_item_ids = random.sample(dataset_item_ids, n_samples)
 
+            logger.debug(f"Trial {trial.number}: n_examples={n_examples}, indices={example_indices}")
+            
+            logger.debug(f"Evaluating trial {trial.number}...")
             score = task_evaluator.evaluate(
                 dataset=opik_dataset,
                 dataset_item_ids=dataset_item_ids,
@@ -175,6 +181,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 experiment_config=experiment_config,
                 optimization_id=optimization_id,
             )
+            logger.debug(f"Trial {trial.number} score: {score:.4f}")
 
             trial.set_user_attr("score", score)
             trial.set_user_attr("param", param)
@@ -183,6 +190,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         # FIXME: pass in direction parameter?
         study = optuna.create_study(direction="maximize")
         study.optimize(optimization_objective, n_trials=n_trials)
+        logger.info("Optuna study finished.")
 
         best_trial = study.best_trial
         best_n_examples = best_trial.params["n_examples"]
@@ -248,6 +256,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         except Exception as e:
             if optimization:
                 optimization.update(status="cancelled")
+            logger.error(f"FewShotBayesian optimization failed: {e}", exc_info=True)
             raise e
 
     def evaluate_prompt(
@@ -309,6 +318,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
             dataset_item_ids = random.sample(all_ids, n_samples)
 
+        logger.debug(f"Starting FewShotBayesian evaluation...")
         score = task_evaluator.evaluate(
             dataset=dataset,
             dataset_item_ids=dataset_item_ids,
@@ -318,6 +328,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             project_name=self.project_name,
             experiment_config=experiment_config,
         )
+        logger.debug(f"Evaluation score: {score:.4f}")
 
         return score
 
