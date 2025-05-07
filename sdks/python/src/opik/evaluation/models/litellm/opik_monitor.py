@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 def lazy_import_OpikLogger() -> Optional["litellm.integrations.opik.opik.OpikLogger"]:
     try:
         from litellm.integrations.opik.opik import OpikLogger
+
         return OpikLogger
     except ImportError:
         return None
@@ -93,4 +94,5 @@ def _ensure_params_have_callback(params: Dict[str, Any]) -> Dict[str, Any]:
 @functools.lru_cache()
 def _callback_instance() -> "litellm.integrations.opik.opik.OpikLogger":  # type: ignore
     OpikLoggerClass = lazy_import_OpikLogger()
+    assert OpikLoggerClass is not None
     return OpikLoggerClass()
