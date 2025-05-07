@@ -80,6 +80,7 @@ public class ClickHouseContainerUtils {
 
             return container
                     .withReuse(reusable)
+                    .withNetworkAliases("clickhouse")
                     .withEnv("CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT", "1")
                     .withNetwork(network)
                     // Default user and password for test containers are test:test while for clickhouse it's default user and no password.
