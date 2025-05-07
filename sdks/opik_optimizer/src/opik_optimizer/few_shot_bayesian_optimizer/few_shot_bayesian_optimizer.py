@@ -4,28 +4,32 @@ import openai
 import opik
 import optuna
 
-from opik.integrations.openai import track_openai
 from opik import Dataset
 from opik_optimizer.optimization_config import mappers
 from opik_optimizer.optimization_config.configs import PromptTaskConfig, MetricConfig
-from opik_optimizer import optimization_dsl, base_optimizer
+from opik_optimizer import base_optimizer
 from . import prompt_parameter
 from . import prompt_templates
 from .._throttle import RateLimiter, rate_limited
-from .. import utils
 from .. import optimization_result, task_evaluator
+
+import litellm
+
+from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
 limiter = RateLimiter(max_calls_per_second=15)
 
-
 @rate_limited(limiter)
-def _call_model(client, model, messages, seed, **model_kwargs):
-    response = client.chat.completions.create(
+def _call_model(model, messages, seed, model_kwargs):
+    model_kwargs = opik_litellm_monitor.try_add_opik_monitoring_to_params(model_kwargs)
+    
+    response = litellm.completion(
         model=model,
         messages=messages,
         seed=seed,
         **model_kwargs,
     )
+
     return response
 
 
@@ -50,9 +54,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self.n_initial_prompts = n_initial_prompts
         self.n_iterations = n_iterations
 
-        self._openai_client = track_openai(
-            openai.OpenAI(), project_name=self.project_name
-        )
         self._opik_client = opik.Opik()
 
     def _split_dataset(
@@ -295,11 +296,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             prompt_ = template.format(**dataset_item)
 
             response = _call_model(
-                client=self._openai_client,
                 model=self.model,
                 messages=prompt_,
                 seed=self.seed,
-                **self.model_kwargs,
+                model_kwargs=self.model_kwargs,
             )
 
             return {
