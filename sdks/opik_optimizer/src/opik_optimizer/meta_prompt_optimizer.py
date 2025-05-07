@@ -154,7 +154,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         # Note: Basic retry logic could be added here using tenacity
         try:
             model_params = {
-                "temperature": getattr(self, "temperature", 0.7),
+                "temperature": getattr(self, "temperature", 0.3),
                 "max_tokens": getattr(self, "max_tokens", 1000),
                 "top_p": getattr(self, "top_p", 1.0),
                 "frequency_penalty": getattr(self, "frequency_penalty", 0.0),

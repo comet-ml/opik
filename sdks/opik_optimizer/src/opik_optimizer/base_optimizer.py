@@ -165,6 +165,10 @@ class BaseOptimizer:
             {
                 "model": model,
                 "messages": messages,
+                # Ensure required params like 'temperature', 'max_tokens' are present
+                # Defaults added here for safety, though usually set in __init__ kwargs
+                "temperature": api_params.get("temperature", 0.3),
+                "max_tokens": api_params.get("max_tokens", 1000),
             }
         )
         api_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(api_params)
