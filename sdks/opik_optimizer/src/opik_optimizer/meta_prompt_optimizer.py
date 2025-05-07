@@ -113,6 +113,44 @@ class MetaPromptOptimizer(BaseOptimizer):
             optimization_id=optimization_id,
         )
 
+    def _call_model(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        is_reasoning: bool = False,
+    ) -> str:
+        """Call the model with the given prompt and return the response."""
+        try:
+            # Filter out non-model parameters
+            model_params = {
+                "temperature": getattr(self, "temperature", 0.7),
+                "max_tokens": getattr(self, "max_tokens", 1000),
+                "top_p": getattr(self, "top_p", 1.0),
+                "frequency_penalty": getattr(self, "frequency_penalty", 0.0),
+                "presence_penalty": getattr(self, "presence_penalty", 0.0),
+            }
+
+            # Handle chat prompts
+            if hasattr(self, 'task_config') and getattr(self.task_config, 'use_chat_prompt', False):
+                messages = []
+                if system_prompt:
+                    messages.append({"role": "system", "content": system_prompt})
+                messages.append({"role": "user", "content": prompt})
+            else:
+                # For non-chat prompts, just use the prompt directly
+                messages = [{"role": "user", "content": prompt}]
+
+            model = self.reasoning_model if is_reasoning else self.model
+            response = litellm.completion(
+                model=model,
+                messages=messages,
+                **model_params
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            logger.error(f"Error calling model: {e}")
+            raise
+
     def _evaluate_prompt(
         self,
         dataset: opik.Dataset,
@@ -171,24 +209,29 @@ class MetaPromptOptimizer(BaseOptimizer):
                     f"Output field '{task_config.output_dataset_field}' not found in dataset sample"
                 )
 
-            from string import Template
+            # Handle chat prompts
+            if getattr(task_config, 'use_chat_prompt', False):
+                full_prompt = prompt
+            else:
+                # `prompt` is the instruction (initial or candidate prompt text).
+                # `dataset_item` contains the actual data for the current item.
+                
+                input_clauses = []
+                # Construct "Key: Value" string for each input field from the dataset_item
+                for field_name in task_config.input_dataset_fields:
+                    # This check is technically redundant due to earlier checks, but safe
+                    if field_name in dataset_item:
+                        input_clauses.append(f"{field_name.capitalize()}: {dataset_item[field_name]}")
+                
+                item_specific_inputs_str = "\n".join(input_clauses)
 
-            template = Template(prompt)
+                # Combine the base/candidate prompt (instruction) with the actual inputs for the current item.
+                full_prompt = f"{prompt}\n\n{item_specific_inputs_str}"
+
+            # For logging purposes, show the raw input values that were combined.
             field_mapping = {
-                field: dataset_item[field] for field in task_config.input_dataset_fields
+                field: dataset_item[field] for field in task_config.input_dataset_fields if field in dataset_item
             }
-            full_prompt = template.safe_substitute(field_mapping)
-
-            # If the prompt doesn't contain any of the input fields, format it properly
-            if not any(
-                field in full_prompt for field in task_config.input_dataset_fields
-            ):
-                context = dataset_item.get("metadata", {}).get("context", "")
-                question = dataset_item[task_config.input_dataset_fields[0]]
-                full_prompt = (
-                    f"{full_prompt}\n\nContext: {context}\nQuestion: {question}"
-                )
-
             logger.debug(f"Evaluating prompt with input: {field_mapping}")
             logger.debug(f"Full prompt: {full_prompt}")
 
@@ -199,6 +242,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             return result
 
         # Use dataset's get_items with limit for sampling
+        logger.info(f"Starting evaluation with {subset_size if subset_size else 'all'} samples")
         return task_evaluator.evaluate(
             dataset=dataset,
             metric_config=metric_config,
@@ -235,6 +279,15 @@ class MetaPromptOptimizer(BaseOptimizer):
         Returns:
             OptimizationResult: Structured result containing optimization details
         """
+        total_items = len(dataset.get_items())
+        if n_samples is not None and n_samples > total_items:
+            logger.warning(f"Requested n_samples ({n_samples}) is larger than dataset size ({total_items}). Using full dataset.")
+            n_samples = None
+
+        logger.info(f"Starting optimization with n_samples={n_samples}, auto_continue={auto_continue}")
+        logger.info(f"Dataset size: {total_items} items")
+        logger.info(f"Initial prompt: {task_config.instruction_prompt}")
+
         optimization = None
         try:
             optimization = self._opik_client.create_optimization(
@@ -337,12 +390,13 @@ class MetaPromptOptimizer(BaseOptimizer):
             # Evaluate each candidate with multiple trials
             prompt_scores = []
             for candidate_count, prompt in enumerate(candidate_prompts):
-                trial_scores = []
+                scores = []
                 should_continue = True
 
                 # First round of trials (always complete)
                 for trial in range(3):
                     try:
+                        logger.info(f"Trial {trial + 1}/3")
                         score = self.evaluate_prompt(
                             dataset=dataset,
                             metric_config=metric_config,
@@ -352,16 +406,17 @@ class MetaPromptOptimizer(BaseOptimizer):
                             use_full_dataset=False,
                             experiment_config=experiment_config,
                         )
-                        trial_scores.append(score)
-                        logger.info(
-                            f"Round {round_num + 1}/{self.max_rounds}, candidate prompt {candidate_count + 1}/{len(candidate_prompts)}, trial {trial + 1}/3 score: {score:.4f}"
-                        )
+                        scores.append(score)
                     except Exception as e:
                         logger.error(f"Error in trial {trial + 1}: {e}")
-                        trial_scores.append(0)  # Use 0 as fallback score
+                        continue
+
+                # If all trials failed, skip this prompt
+                if not scores:
+                    continue
 
                 # Check if we should continue with additional trials
-                avg_score = sum(trial_scores) / len(trial_scores)
+                avg_score = sum(scores) / len(scores)
                 if (
                     not self.auto_continue or avg_score < best_score * 0.8
                 ):  # If significantly worse, skip additional trials
@@ -376,20 +431,19 @@ class MetaPromptOptimizer(BaseOptimizer):
                                 metric_config=metric_config,
                                 task_config=task_config,
                                 prompt=prompt,
-                                use_full_dataset=False,  # Use subset for trials
+                                n_samples=n_samples,
+                                use_full_dataset=False,
+                                experiment_config=experiment_config,
                             )
-                            trial_scores.append(score)
-                            logger.info(
-                                f"Round {round_num + 1}/{self.max_rounds}, candidate prompt {candidate_count + 1}/{len(candidate_prompts)} trial {trial + 1}/6 score: {score:.4f}"
-                            )
+                            scores.append(score)
                         except Exception as e:
-                            logger.error(f"Error in trial {trial + 1}: {e}")
-                            trial_scores.append(0)  # Use 0 as fallback score
+                            logger.error(f"Error in additional trial {trial + 1}: {e}")
+                            continue
 
                 # Calculate average score for this prompt
-                avg_score = sum(trial_scores) / len(trial_scores)
-                prompt_scores.append((prompt, avg_score, trial_scores))
-                logger.info(f"Average score for prompt: {avg_score:.4f}")
+                if scores:  # Only calculate average if we have scores
+                    avg_score = sum(scores) / len(scores)
+                    prompt_scores.append((prompt, avg_score, scores))
 
             # Sort prompts by score and get the best one
             prompt_scores.sort(key=lambda x: x[1], reverse=True)
@@ -643,13 +697,62 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         Return a valid JSON array as specified."""
 
-        response = self._call_model(
-            prompt=user_prompt,
-            system_prompt=system_prompt,
-            is_reasoning=True,
-        )
+        try:
+            # Filter out non-model parameters
+            model_params = {
+                "temperature": 0.7,
+                "max_tokens": 1000,
+                "top_p": 1.0,
+                "frequency_penalty": 0.0,
+                "presence_penalty": 0.0,
+            }
 
-        return self._parse_candidate_prompts(response, current_prompt)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+
+            response = litellm.completion(
+                model=self.reasoning_model,
+                messages=messages,
+                **model_params
+            )
+            
+            content = response.choices[0].message.content
+            logger.debug(f"Raw response from model: {content}")
+            
+            # Try to extract JSON from the response
+            try:
+                # First try direct JSON parsing
+                result = json.loads(content)
+            except json.JSONDecodeError:
+                # If that fails, try to extract JSON from the text
+                import re
+                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                if json_match:
+                    try:
+                        result = json.loads(json_match.group())
+                    except json.JSONDecodeError:
+                        logger.error("Could not parse JSON from response")
+                        return [current_prompt]
+                else:
+                    logger.error("No JSON found in response")
+                    return [current_prompt]
+
+            if "prompts" in result:
+                prompts = [p["prompt"] for p in result["prompts"]]
+                for p in result["prompts"]:
+                    logger.info(f"Generated prompt: {p['prompt']}")
+                    logger.info(f"Improvement focus: {p['improvement_focus']}")
+                    logger.info(f"Reasoning: {p['reasoning']}")
+                return prompts
+            else:
+                logger.warning("Invalid response format - missing 'prompts' key")
+                return [current_prompt]
+        except Exception as e:
+            logger.error(f"Error generating candidate prompts: {e}")
+            logger.error("Falling back to current prompt")
+            return [current_prompt]
 
     def _build_history_context(self, previous_rounds: List[OptimizationRound]) -> str:
         """Build context from previous optimization rounds."""
@@ -665,27 +768,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                 context += f"- Score: {p['score']:.4f}\n"
                 context += f"  Prompt: {p['prompt']}\n"
         return context
-
-    def _parse_candidate_prompts(
-        self, response: str, fallback_prompt: str
-    ) -> List[str]:
-        """Parse the model's response to extract candidate prompts."""
-        try:
-            result = json.loads(response)
-            if "prompts" in result:
-                prompts = [p["prompt"] for p in result["prompts"]]
-                for p in result["prompts"]:
-                    logger.info(f"Generated prompt: {p['prompt']}")
-                    logger.info(f"Improvement focus: {p['improvement_focus']}")
-                    logger.info(f"Reasoning: {p['reasoning']}")
-                return prompts
-            else:
-                logger.warning("Invalid response format")
-                return [fallback_prompt]
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.error(f"Error parsing response: {e}")
-            logger.error(f"Raw response: {response}")
-            return [fallback_prompt]
 
     def _get_evaluation_subset(
         self, dataset: opik.Dataset, min_size: int = 20, max_size: int = 100
