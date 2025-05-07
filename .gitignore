@@ -15,6 +15,9 @@ target/
 # Python BE related
 /apps/opik-python-backend/images/
 
+# Opik opimizer related
+/sdks/opik_optimizer/benchmark_results/
+
 # FE related
 /apps/opik-frontend/dist
 /apps/opik-frontend/build

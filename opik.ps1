@@ -2,14 +2,15 @@
 
 [CmdletBinding()]
 param (
+    [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$options = @()
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
-$originalDir = Get-Location
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$dockerComposeDir = Join-Path $scriptDir "deployment\docker-compose"
 
 $REQUIRED_CONTAINERS = @(
     "opik-clickhouse-1",
@@ -188,11 +189,11 @@ function Start-MissingContainers {
     }
 
     Write-Host '[INFO] Starting missing containers...'
-    Set-Location -Path "$scriptDir\deployment\docker-compose"
-    $dockerArgs = @("compose", "-f", "docker-compose.yaml")
+
+    $dockerArgs = @("compose", "-f", (Join-Path $dockerComposeDir "docker-compose.yaml"))
 
     if ($PORT_MAPPING) {
-        $dockerArgs += "-f", "docker-compose.override.yaml"
+        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.override.yaml")
     }
 
     if ($GUARDRAILS_ENABLED) {
@@ -252,18 +253,16 @@ function Start-MissingContainers {
     if ($allRunning) {
         Send-InstallReport -Uuid $uuid -EventCompleted "true" -StartTime $startTime
     }
-
-    Set-Location -Path $originalDir
 }
 
 function Stop-Containers {
     Test-DockerStatus
     Write-Host '[INFO] Stopping all required containers...'
-    Set-Location -Path "$scriptDir\deployment\docker-compose"
-    $dockerArgs = @("compose", "-f", "docker-compose.yaml")
+
+    $dockerArgs = @("compose", "-f", (Join-Path $dockerComposeDir "docker-compose.yaml"))
 
     if ($PORT_MAPPING) {
-        $dockerArgs += "-f", "docker-compose.override.yaml"
+        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.override.yaml")
     }
     
     if ($GUARDRAILS_ENABLED) {
@@ -273,7 +272,6 @@ function Stop-Containers {
     $dockerArgs += "down"
     docker @dockerArgs
     Write-Host '[OK] All containers stopped and cleaned up!'
-    Set-Location -Path $originalDir
 }
 
 function Show-Banner {
@@ -358,7 +356,7 @@ switch ($option) {
             Show-Banner
             exit 0
         } else {
-            Write-Host '[WARN] Some containers are not running/healthy. Please run "' + (Get-VerifyCommand) + '".'
+            Write-Host "[WARN] Some containers are not running/healthy. Please run '$(Get-VerifyCommand)'."
             exit 1
         }
     }
@@ -378,7 +376,7 @@ switch ($option) {
         if (Test-ContainersStatus -ShowOutput:$true) {
             Show-Banner
         } else {
-            Write-Host '[WARN] Some containers are still not healthy. Please check manually using "' + (Get-VerifyCommand) + '".'
+            Write-Host "[WARN] Some containers are still not healthy. Please check manually using '$(Get-VerifyCommand)'."
             exit 1
         }
     }
