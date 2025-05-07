@@ -654,14 +654,13 @@ class MetaPromptOptimizer(BaseOptimizer):
         logger.info(f"Current prompt: {current_prompt}")
         logger.info(f"Current score: {best_score}")
 
-        system_prompt = """You are an expert prompt engineer. Your task is to improve the given prompt for a question-answering task.
-        The goal is to optimize the prompt to get concise, direct answers to questions.
-        Consider:
-        1. The task is to answer questions directly and accurately
-        2. The evaluation metric favors concise, precise answers
-        3. The prompt should guide the model to give short, factual responses
-        4. Avoid unnecessary explanations or structured responses
-        5. Focus on getting the core answer right
+        system_prompt = """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
+        Focus on making the prompt more effective by:
+        1. Being clear and specific about what is expected
+        2. Providing necessary context and constraints
+        3. Guiding the model to produce the desired output format
+        4. Removing ambiguity and unnecessary elements
+        5. Maintaining conciseness while being complete
 
         Return a JSON array of prompts with the following structure:
         {
@@ -682,18 +681,13 @@ class MetaPromptOptimizer(BaseOptimizer):
         {history_context}
         {task_context}
 
-        Analyze the examples provided and observe:
-        1. The typical length and format of successful answers
-        2. The language style and tone used
-        3. The level of detail in responses
-        4. The context and domain-specific terminology
-
-        Based on this analysis, generate {self.num_prompts_per_round} improved versions of this prompt.
+        Generate {self.num_prompts_per_round} improved versions of this prompt.
         Each version should:
-        1. Guide the model to give direct, factual answers
-        2. Keep responses concise and to the point
-        3. Avoid unnecessary explanations or structure
-        4. Focus on accuracy and precision
+        1. Be more specific and clear about expectations
+        2. Provide necessary context and constraints
+        3. Guide the model to produce the desired output format
+        4. Remove ambiguity and unnecessary elements
+        5. Maintain conciseness while being complete
 
         Return a valid JSON array as specified."""
 
