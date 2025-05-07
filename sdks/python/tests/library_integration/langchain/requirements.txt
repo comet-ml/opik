@@ -2,3 +2,4 @@ langchain_community
 langchain_google_vertexai
 langchain_openai
 langchain_anthropic
+anthropic!=0.51.0  # 0.51.0 broke langchain_anthropic 07.05.2025

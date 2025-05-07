@@ -8,6 +8,8 @@ from opik.opik_context import get_current_span_data
 from pydantic import BaseModel
 from ._throttle import RateLimiter, rate_limited
 from .cache_config import initialize_cache
+
+from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from .optimization_config.configs import TaskConfig, MetricConfig
 
 limiter = RateLimiter(max_calls_per_second=15)
@@ -16,7 +18,6 @@ limiter = RateLimiter(max_calls_per_second=15)
 litellm.drop_params = True
 
 # Set up logging:
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -163,15 +164,9 @@ class BaseOptimizer:
             {
                 "model": model,
                 "messages": messages,
-                "metadata": {
-                    "opik": {
-                        "current_span_data": get_current_span_data(),
-                        "tags": ["optimizer"],
-                    },
-                },
             }
         )
-
+        api_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(api_params)
         response = litellm.completion(**api_params)
         model_output = response.choices[0].message.content.strip()
         logger.debug(f"Model response: {model_output[:100]}...")

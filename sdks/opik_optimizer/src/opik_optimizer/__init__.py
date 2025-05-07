@@ -24,6 +24,9 @@ def __getattr__(name):
         return locals()[name]
     raise AttributeError(f"module 'opik_optimizer' has no attribute '{name}'")
 
+from opik.evaluation.models.litellm import warning_filters
+warning_filters.add_warning_filters()
+
 __all__ = [
     "BaseOptimizer",
     "FewShotBayesianOptimizer",
