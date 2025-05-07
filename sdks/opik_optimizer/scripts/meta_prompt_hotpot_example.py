@@ -1,5 +1,5 @@
 from opik_optimizer import MetaPromptOptimizer
-from opik.evaluation.metrics import Equals
+from opik.evaluation.metrics import LevenshteinRatio
 from opik_optimizer.demo import get_or_create_dataset
 
 from opik_optimizer import (
@@ -31,7 +31,7 @@ optimizer = MetaPromptOptimizer(
 # Create the optimization configuration
 
 metric_config = MetricConfig(
-    metric=Equals(project_name=project_name),
+    metric=LevenshteinRatio(project_name=project_name),
     inputs={
         "output": from_llm_response_text(),
         "reference": from_dataset_field(name="answer"),
