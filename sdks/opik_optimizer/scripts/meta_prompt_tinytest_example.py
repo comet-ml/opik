@@ -17,7 +17,7 @@ initial_prompt = """Answer the question."""
 
 # Initialize the optimizer with custom parameters
 optimizer = MetaPromptOptimizer(
-    model="o3-mini",  # Using o3-mini for evaluation
+    model="openai/o3-mini",  # Using o3-mini for evaluation (reasoning models are slow on metaprompter)
     project_name=project_name,
     max_rounds=1,  # Increased rounds for more optimization
     num_prompts_per_round=4,  # More prompts per round

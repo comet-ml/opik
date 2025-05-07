@@ -13,12 +13,12 @@ from opik_optimizer import (
 hotpot_dataset = get_or_create_dataset("hotpot-300")
 
 # Define the initial prompt to optimize
-initial_prompt = """Answer the question."""
+initial_prompt = "Answer the question."
 project_name = "optimize-metaprompt-hotpot"
 
 # Initialize the optimizer with custom parameters
 optimizer = MetaPromptOptimizer(
-    model="openai/gpt-4o-mini",  # Using o3-mini for evaluation
+    model="openai/gpt-4o-mini",  # Using gpt-4o-mini for evaluation for speed
     project_name=project_name,
     max_rounds=1,  # Number of optimization rounds
     num_prompts_per_round=4,  # Number of prompts to generate per round
@@ -52,7 +52,7 @@ result = optimizer.optimize_prompt(
     task_config=task_config,
     auto_continue=False,
     n_samples=10,  # Explicitly set to 10 samples
-    use_subsample=True,  # Force using subsample
+    use_subsample=True,  # Force using subsample for evaluation rounds
 )
 
 print(result)
