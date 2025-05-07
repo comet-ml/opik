@@ -726,6 +726,7 @@ class MetaPromptOptimizer(BaseOptimizer):
     ) -> OptimizationResult:
         """Create the final OptimizationResult object."""
         details = {
+            "prompt_type": "chat" if task_config.use_chat_prompt else "non-chat",
             "initial_prompt": task_config.instruction_prompt,
             "initial_score": initial_score,
             "final_prompt": best_prompt,
@@ -735,6 +736,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             "stopped_early": stopped_early,
             "metric_config": metric_config.dict(),
             "task_config": task_config.dict(),
+            "model": self.model,
+            "temperature": self.model_kwargs.get('temperature'),
         }
         
         return OptimizationResult(

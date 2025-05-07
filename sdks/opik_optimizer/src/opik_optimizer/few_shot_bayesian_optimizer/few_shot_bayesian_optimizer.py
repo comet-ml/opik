@@ -250,6 +250,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             metric_name=metric_config.metric.name,
             details={
                 "prompt_type": "chat",
+                "prompt_type": "chat" if task_config.use_chat_prompt else "non-chat",
                 "chat_messages": chat_messages_list,
                 "prompt_parameter": best_param,
                 "n_examples": best_n_examples,
