@@ -258,19 +258,34 @@ class MetaPromptOptimizer(BaseOptimizer):
 
             # --- Step 3: Clean the model's output before metric evaluation ---
             cleaned_model_output = raw_model_output.strip()
-            # List of common prefixes to strip. Case-insensitive check might be more robust,
-            # but for now, we'll do exact match on these common forms.
-            prefixes_to_strip = ["Answer:", "Answer :", "A:"] 
             original_cleaned_output = cleaned_model_output # For logging if changed
+
+            # Dynamically generate prefixes based on the output field name
+            output_field = task_config.output_dataset_field # e.g., "answer" or "label"
+            dynamic_prefixes = [
+                f"{output_field.capitalize()}:", 
+                f"{output_field.capitalize()} :",
+                f"{output_field}:", # Also check lowercase field name
+                f"{output_field} :",
+            ]
+            
+            # Add common generic prefixes
+            generic_prefixes = ["Answer:", "Answer :", "A:"]
+            
+            # Combine and remove duplicates (if any)
+            prefixes_to_strip = list(set(dynamic_prefixes + generic_prefixes))
+            logger.debug(f"Prefixes to strip: {prefixes_to_strip}")
+
             for prefix_to_check in prefixes_to_strip:
-                if cleaned_model_output.startswith(prefix_to_check):
+                # Perform case-insensitive check for robustness
+                if cleaned_model_output.lower().startswith(prefix_to_check.lower()):
+                    # Strip based on the actual length of the found prefix
                     cleaned_model_output = cleaned_model_output[len(prefix_to_check):].strip()
                     logger.debug(f"Stripped prefix '{prefix_to_check}', new output for metric: {cleaned_model_output}")
                     break # Stop after stripping the first found prefix
             
             if original_cleaned_output != cleaned_model_output:
                  logger.info(f"Raw model output: '{original_cleaned_output}' -> Cleaned for metric: '{cleaned_model_output}'")
-
 
             result = {
                 mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
