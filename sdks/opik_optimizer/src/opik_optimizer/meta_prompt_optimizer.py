@@ -464,12 +464,15 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         logger.info(f"Initial score: {initial_score:.4f}")
 
+        # Initialize TQDM with postfix placeholder
         pbar = tqdm(
             total=self.max_rounds,
             desc="Optimizing Prompt",
-            bar_format="{l_bar}{bar:20}{r_bar}",
+            unit="round",
+            bar_format="{l_bar}{bar:20}{r_bar} | {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]",
             position=0,
             leave=True,
+            postfix={"best_score": f"{initial_score:.4f}", "llm_calls": self.llm_call_counter} 
         )
 
         for round_num in range(self.max_rounds):
@@ -632,11 +635,13 @@ class MetaPromptOptimizer(BaseOptimizer):
                 stopped_early = True
                 break
 
-
+            # Update TQDM postfix
+            pbar.set_postfix({
+                "best_score": f"{best_score:.4f}", 
+                "improvement": f"{improvement:.2%}",
+                "llm_calls": self.llm_call_counter
+            })
             pbar.update(1)
-            pbar.set_postfix(
-                {"best_score": f"{best_score:.4f}", "improvement": f"{improvement:.2%}"}
-            )
 
         pbar.close()
 
