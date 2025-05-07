@@ -71,7 +71,12 @@ const AddOptimizationDialog: React.FunctionComponent<
   const [selectedModel, setSelectedModel] = useState<OPTIMIZATION_ALGORITHMS>(OPTIMIZATION_ALGORITHMS.metaPromptOptimizer);
   const section1 = "pip install opik-optimizer";
 
+  let optional_parameters = ''
+  if (selectedModel === OPTIMIZATION_ALGORITHMS.fewShotOptimizer || selectedModel === OPTIMIZATION_ALGORITHMS.miproOptimizer) {
+    optional_parameters = '\n        use_chat_prompt=True,'
+  }
   const importString = `from opik_optimizer import ${OPTIMIZATION_ALGORITHMS_MAP[selectedModel].class}
+
 import os
 import opik
 from opik.evaluation.metrics import Equals
@@ -93,14 +98,14 @@ from opik_optimizer import (
 prompt = "Answer the question."
 
 # Get the dataset to evaluate the prompt on
-client = Opik()
+client = opik.Opik()
 dataset = client.get_dataset(name="${
       datasetName || "dataset name placeholder"
     }")
 
 # Define the metric to evaluate the prompt on
 metric_config = MetricConfig(
-    metric=Equals(project_name=project_name),
+    metric=Equals(),
     inputs={
         "output": from_llm_response_text(),
         "reference": from_dataset_field(name="expected_output"),
@@ -108,14 +113,17 @@ metric_config = MetricConfig(
 )
 
 # Run the optimization
-optimizer = ${OPTIMIZATION_ALGORITHMS_MAP[selectedModel].class}()
+optimizer = ${OPTIMIZATION_ALGORITHMS_MAP[selectedModel].class}(
+    model="gpt-4o",
+)
+
 result = optimizer.optimize_prompt(
     dataset=dataset,
     metric_config=metric_config,
     task_config=TaskConfig(
         instruction_prompt=prompt,
         input_dataset_fields=["input"],
-        output_dataset_fields=["expected_output"],
+        output_dataset_field="expected_output",${optional_parameters}
     )
 )
 
