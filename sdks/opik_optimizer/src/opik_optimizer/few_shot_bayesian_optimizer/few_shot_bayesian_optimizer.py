@@ -4,6 +4,7 @@ import openai
 import opik
 import optuna
 import logging
+import json
 
 from opik import Dataset
 from opik_optimizer.optimization_config import mappers
@@ -23,6 +24,7 @@ from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 limiter = RateLimiter(max_calls_per_second=15)
 
 logger = logging.getLogger(__name__)
+
 
 @rate_limited(limiter)
 def _call_model(model, messages, seed, model_kwargs):
@@ -253,10 +255,25 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         prompt: List[Dict[Literal["role", "content"], str]],
         dataset: opik.Dataset,
         metric_config: MetricConfig,
+        task_config: Optional[TaskConfig] = None,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
         n_samples: int = None,
     ) -> float:
+
+        if isinstance(prompt, str):
+            if task_config is None:
+                raise ValueError(
+                    "To use a string prompt, please pass in task_config to evaluate_prompt()"
+                )
+
+            questions = {
+                field: ("{{%s}}" % field) for field in task_config.input_dataset_fields
+            }
+            prompt = [
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": json.dumps(questions)},
+            ]
 
         # Ensure prompt is correctly formatted
         if not all(
@@ -264,7 +281,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             for item in prompt
         ):
             raise ValueError(
-                "Prompt must be a list of dictionaries with 'role' and 'content' keys."
+                "A ChatPrompt must be a list of dictionaries with 'role' and 'content' keys."
             )
 
         template = prompt_templates.ChatPromptTemplate(
