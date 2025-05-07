@@ -12,17 +12,10 @@ import ApiKeyCard from "@/components/pages-shared/onboarding/ApiKeyCard/ApiKeyCa
 import GoogleColabCard from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
 import ConfiguredCodeHighlighter from "@/components/pages-shared/onboarding/ConfiguredCodeHighlighter/ConfiguredCodeHighlighter";
 
-export enum EVALUATOR_MODEL {
-  equals = "equals",
-  contains = "contains",
-  regex_match = "regex_match",
-  isJSON = "isJSON",
-  levenshtein = "levenshtein",
-  hallucination = "hallucination",
-  moderation = "moderation",
-  answer_relevance = "answer_relevance",
-  context_recall = "context_recall",
-  context_precision = "context_precision",
+export enum OPTIMIZATION_ALGORITHMS {
+  fewShotOptimizer = "FewShotBayesianOptimizer",
+  metaPromptOptimizer = "MetaPromptOptimizer",
+  miproOptimizer = "MiproOptimizer",
 }
 
 export interface ModelData {
@@ -31,105 +24,34 @@ export interface ModelData {
   scoreParameters?: string[];
 }
 
-const EVALUATOR_MODEL_MAP: Record<EVALUATOR_MODEL, ModelData> = {
-  [EVALUATOR_MODEL.equals]: {
-    class: "Equals",
-    scoreParameters: ["output", "reference"],
+const OPTIMIZATION_ALGORITHMS_MAP: Record<OPTIMIZATION_ALGORITHMS, ModelData> = {
+  [OPTIMIZATION_ALGORITHMS.metaPromptOptimizer]: {
+    class: "MetaPromptOptimizer",
   },
-  [EVALUATOR_MODEL.regex_match]: {
-    class: "RegexMatch",
-    // eslint-disable-next-line no-useless-escape
-    initParameters: `regex="\d{3}-\d{2}-\d{4}"`,
-    scoreParameters: ["output"],
+  [OPTIMIZATION_ALGORITHMS.fewShotOptimizer]: {
+    class: "FewShotBayesianOptimizer",
   },
-  [EVALUATOR_MODEL.contains]: {
-    class: "Contains",
-    scoreParameters: ["output", "reference"],
-  },
-  [EVALUATOR_MODEL.isJSON]: {
-    class: "IsJSON",
-    scoreParameters: ["output"],
-  },
-  [EVALUATOR_MODEL.levenshtein]: {
-    class: "LevenshteinRatio",
-    scoreParameters: ["output", "reference"],
-  },
-  [EVALUATOR_MODEL.moderation]: {
-    class: "Moderation",
-    scoreParameters: ["input", "output", "context"],
-  },
-  [EVALUATOR_MODEL.answer_relevance]: {
-    class: "AnswerRelevance",
-    scoreParameters: ["input", "output", "context"],
-  },
-  [EVALUATOR_MODEL.hallucination]: {
-    class: "Hallucination",
-    scoreParameters: ["input", "output", "context"],
-  },
-  [EVALUATOR_MODEL.context_recall]: {
-    class: "ContextRecall",
-    scoreParameters: ["input", "output", "context"],
-  },
-  [EVALUATOR_MODEL.context_precision]: {
-    class: "ContextPrecision",
-    scoreParameters: ["input", "output", "context"],
-  },
+  [OPTIMIZATION_ALGORITHMS.miproOptimizer]: {
+    class: "MiproOptimizer",
+  }
 };
 
-const HEURISTICS_MODELS_OPTIONS: DropdownOption<EVALUATOR_MODEL>[] = [
+const OPTIMIZATION_ALGORITHMS_OPTIONS: DropdownOption<OPTIMIZATION_ALGORITHMS>[] = [
   {
-    value: EVALUATOR_MODEL.equals,
-    label: "Equals",
-    description: "Checks for exact text match.",
+    value: OPTIMIZATION_ALGORITHMS.metaPromptOptimizer,
+    label: "Meta optimizer",
+    description: "Optimizes prompts using meta learning.",
   },
   {
-    value: EVALUATOR_MODEL.regex_match,
-    label: "Regex match",
-    description: "Verifies pattern conformity using regex.",
+    value: OPTIMIZATION_ALGORITHMS.fewShotOptimizer,
+    label: "Few-shot Bayesian optimizer",
+    description: "Optimizes prompts using few-shot learning and Bayesian optimization.",
   },
   {
-    value: EVALUATOR_MODEL.contains,
-    label: "Contains",
-    description: "Identifies presence of a substring.",
-  },
-  {
-    value: EVALUATOR_MODEL.isJSON,
-    label: "isJSON",
-    description: "Validates JSON format compliance.",
-  },
-  {
-    value: EVALUATOR_MODEL.levenshtein,
-    label: "Levenshtein",
-    description: "Calculates text similarity via edit distance.",
-  },
-];
-
-const LLM_JUDGES_MODELS_OPTIONS: DropdownOption<EVALUATOR_MODEL>[] = [
-  {
-    value: EVALUATOR_MODEL.hallucination,
-    label: "Hallucination",
-    description: "Detects generated false information.",
-  },
-  {
-    value: EVALUATOR_MODEL.moderation,
-    label: "Moderation",
-    description: "Checks adherence to content standards.",
-  },
-  {
-    value: EVALUATOR_MODEL.answer_relevance,
-    label: "Answer relevance",
-    description: "Evaluates how well the answer fits the question.",
-  },
-  {
-    value: EVALUATOR_MODEL.context_recall,
-    label: "Context recall",
-    description: "Measures retrieval of relevant context.",
-  },
-  {
-    value: EVALUATOR_MODEL.context_precision,
-    label: "Context precision",
-    description: "Checks accuracy of provided context details.",
-  },
+    value: OPTIMIZATION_ALGORITHMS.miproOptimizer,
+    label: "Mipro optimizer",
+    description: "Optimizes prompts using Mipro.",
+  }
 ];
 
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
@@ -146,81 +68,59 @@ const AddOptimizationDialog: React.FunctionComponent<
 
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [datasetName, setDatasetName] = useState("");
-  const [models, setModels] = useState<EVALUATOR_MODEL[]>([
-    LLM_JUDGES_MODELS_OPTIONS[0].value,
-  ]); // Set the first LLM judge model as checked
-  const section1 = "pip install opik";
+  const [selectedModel, setSelectedModel] = useState<OPTIMIZATION_ALGORITHMS>(OPTIMIZATION_ALGORITHMS.metaPromptOptimizer);
+  const section1 = "pip install opik-optimizer";
 
-  const importString =
-    models.length > 0
-      ? `from opik.evaluation.metrics import (${models
-          .map((m) => EVALUATOR_MODEL_MAP[m].class)
-          .join(", ")})
-  `
-      : ``;
-
-  const metricsString =
-    models.length > 0
-      ? `\nmetrics = [${models
-          .map(
-            (m) =>
-              EVALUATOR_MODEL_MAP[m].class +
-              "(" +
-              (EVALUATOR_MODEL_MAP[m].initParameters || "") +
-              ")",
-          )
-          .join(", ")}]\n`
-      : "";
-
-  const evaluation_task_output =
-    models.length > 0
-      ? `{
-        ${[
-          ...new Set(
-            models.flatMap((m) => EVALUATOR_MODEL_MAP[m].scoreParameters),
-          ),
-        ]
-          .map((p) =>
-            p === "context"
-              ? `"${p}": ["placeholder string"]`
-              : `"${p}": "placeholder string"`,
-          )
-          .join(",\n        ")}
-    }`
-      : `{"output": "placeholder string"}`;
-
-  const metricsParam =
-    models.length > 0
-      ? `,
-  scoring_metrics=metrics`
-      : "";
+  const importString = `from opik_optimizer import ${OPTIMIZATION_ALGORITHMS_MAP[selectedModel].class}
+import os
+import opik
+from opik.evaluation.metrics import Equals
+from opik_optimizer import (
+    MetricConfig,
+    TaskConfig,
+    from_dataset_field,
+    from_llm_response_text,
+)`;
 
   const section3 =
     "" +
-    `import os
-from opik import Opik
-from opik.evaluation import evaluate
+    `${importString}
 
+# Configure the SDK
 # INJECT_OPIK_CONFIGURATION
 
-${importString}
+# Define the prompt to optimize
+prompt = "Answer the question."
+
+# Get the dataset to evaluate the prompt on
 client = Opik()
 dataset = client.get_dataset(name="${
       datasetName || "dataset name placeholder"
     }")
 
-def evaluation_task(dataset_item):
-    # your LLM application is called here
+# Define the metric to evaluate the prompt on
+metric_config = MetricConfig(
+    metric=Equals(project_name=project_name),
+    inputs={
+        "output": from_llm_response_text(),
+        "reference": from_dataset_field(name="expected_output"),
+    },
+)
 
-    result = ${evaluation_task_output}
+# Run the optimization
+optimizer = ${OPTIMIZATION_ALGORITHMS_MAP[selectedModel].class}()
+result = optimizer.optimize_prompt(
+    dataset=dataset,
+    metric_config=metric_config,
+    task_config=TaskConfig(
+        instruction_prompt=prompt,
+        input_dataset_fields=["input"],
+        output_dataset_fields=["expected_output"],
+    )
+)
 
-    return result
-${metricsString}
-eval_results = evaluate(
-  experiment_name="my_evaluation",
-  dataset=dataset,
-  task=evaluation_task${metricsParam}
-)`;
+print(result)
+`;
 
   const { data, isLoading } = useDatasetsList(
     {
@@ -254,35 +154,20 @@ eval_results = evaluate(
     [setOpen],
   );
 
-  const checkboxChangeHandler = (id: EVALUATOR_MODEL) => {
-    setModels((state) => {
-      const localModels = state.slice();
-      const index = localModels.indexOf(id);
-
-      if (index !== -1) {
-        localModels.splice(index, 1);
-      } else {
-        localModels.push(id);
-      }
-
-      return localModels;
-    });
+  const checkboxChangeHandler = (id: OPTIMIZATION_ALGORITHMS) => {
+    setSelectedModel(id);
   };
 
   const generateList = (
-    title: string,
-    list: DropdownOption<EVALUATOR_MODEL>[],
+    list: DropdownOption<OPTIMIZATION_ALGORITHMS>[],
   ) => {
     return (
       <div>
-        <div className="comet-body-s-accented pb-1 pt-2 text-muted-slate">
-          {title}
-        </div>
         {list.map((m) => {
           return (
             <label key={m.value} className="flex cursor-pointer py-2.5">
               <Checkbox
-                checked={models.includes(m.value)}
+                checked={selectedModel === m.value}
                 onCheckedChange={() => checkboxChangeHandler(m.value)}
                 aria-label="Select row"
                 className="mt-0.5"
@@ -304,17 +189,16 @@ eval_results = evaluate(
     <SideDialog open={open} setOpen={openChangeHandler}>
       <div className="pb-20">
         <div className="pb-8">
-          <SheetTitle>Create a new optimization</SheetTitle>
+          <SheetTitle>Start an optimization run</SheetTitle>
           <div className="comet-body-s m-auto mt-4 w-[468px] self-center text-center text-muted-slate">
-            Select a dataset, assign the relevant evaluators, and follow the
-            instructions to track and compare your training runs
+            Select a dataset, choose the optimizer you would like to use, and
+            we will improve your prompt for you
           </div>
         </div>
         <div className="m-auto flex w-full max-w-[1250px] items-start gap-6">
           <div className="flex w-[250px] shrink-0 flex-col gap-2">
-            <div className="comet-title-s">Select evaluators</div>
-            {generateList("Heuristics metrics", HEURISTICS_MODELS_OPTIONS)}
-            {generateList("LLM Judges", LLM_JUDGES_MODELS_OPTIONS)}
+            <div className="comet-title-s">Optimization algorithms</div>
+            {generateList(OPTIMIZATION_ALGORITHMS_OPTIONS)}
           </div>
           <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-slate-200 p-6">
             <div className="comet-body-s text-foreground-secondary">
@@ -338,7 +222,7 @@ eval_results = evaluate(
             </div>
             <CodeHighlighter data={section1} />
             <div className="comet-body-s mt-4 text-foreground-secondary">
-              3. Create an Optimization
+              3. Create an Optimization run
             </div>
             <ConfiguredCodeHighlighter code={section3} />
           </div>
