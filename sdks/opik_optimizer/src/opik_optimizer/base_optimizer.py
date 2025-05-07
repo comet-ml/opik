@@ -47,6 +47,7 @@ class BaseOptimizer:
         self.project_name = project_name
         self._history = []
         self.experiment_config = None
+        self.llm_call_counter = 0
 
         # Initialize shared cache
         initialize_cache()
@@ -142,7 +143,7 @@ class BaseOptimizer:
 
     @rate_limited(limiter)
     def _call_model(
-        self, prompt: str, system_prompt: str = None, is_reasoning: bool = False
+        self, prompt: str, system_prompt: Optional[str] = None, is_reasoning: bool = False
     ) -> str:
         """Call the model to get suggestions based on the meta-prompt."""
         model = self.reasoning_model if is_reasoning else self.model
