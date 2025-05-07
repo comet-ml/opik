@@ -259,7 +259,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         if isinstance(prompt, str):
             if task_config is None:
-                raise Exception(
+                raise ValueError(
                     "To use a string prompt, please pass in task_config to evaluate_prompt()"
                 )
 
