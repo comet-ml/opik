@@ -753,17 +753,24 @@ class MetaPromptOptimizer(BaseOptimizer):
             },
         )
 
-    def _get_task_context(self) -> str:
-        """Get task-specific context from the dataset."""
+    def _get_task_context(self, metric_config: MetricConfig) -> str:
+        """Get task-specific context from the dataset and metric configuration."""
         if self.dataset is None or self.task_config is None:
             return ""
 
         input_fields = self.task_config.input_dataset_fields
         output_field = self.task_config.output_dataset_field
 
+        # Describe Single Metric
+        metric_name = metric_config.metric.name
+        description = getattr(metric_config.metric, 'description', 'No description available.')
+        goal = "higher is better" if getattr(metric_config.metric, 'higher_is_better', True) else "lower is better"
+        metrics_str = f"- {metric_name}: {description} ({goal})"
+
         context = "\nTask Context:\n"
         context += f"Input fields: {', '.join(input_fields)}\n"
         context += f"Output field: {output_field}\n"
+        context += f"Evaluation Metric:\n{metrics_str}\n"
 
         try:
             # Try get_items() first as it's the preferred method
@@ -800,30 +807,35 @@ class MetaPromptOptimizer(BaseOptimizer):
         best_score: float,
         round_num: int,
         previous_rounds: List[OptimizationRound],
+        metric_config: MetricConfig
     ) -> List[str]:
         """Generate candidate prompts using meta-prompting."""
+        
         logger.info(f"\nGenerating candidate prompts for round {round_num + 1}")
         logger.info(f"Generating from prompt: {current_prompt}")
         logger.info(f"Current best score: {best_score:.4f}")
 
+        # Pass single metric_config
         history_context = self._build_history_context(previous_rounds)
-        task_context = self._get_task_context()
+        task_context = self._get_task_context(metric_config=metric_config)
 
         user_prompt = f"""Current prompt: {current_prompt}
         Current score: {best_score}
         {history_context}
         {task_context}
 
+        Analyze the example provided, the metric description, and the history of scores.
         Generate {self.num_prompts_per_round} improved versions of this prompt.
-        Each version should:
-        1. Be more specific and clear about expectations
-        2. Provide necessary context and constraints
-        3. Guide the model to produce the desired output format
-        4. Remove ambiguity and unnecessary elements
-        5. Maintain conciseness while being complete
+        Focus on improving the score for the metric: {metric_config.metric.name}.
+        Each version should aim to:
+        1. Be more specific and clear about expectations based on the metric and task.
+        2. Provide necessary context and constraints.
+        3. Guide the model to produce the desired output format suitable for the metric.
+        4. Remove ambiguity and unnecessary elements.
+        5. Maintain conciseness while being complete.
 
         Return a valid JSON array as specified."""
-
+        
         try:
             # Use _call_model which handles selecting reasoning_model
             content = self._call_model(
@@ -897,14 +909,23 @@ class MetaPromptOptimizer(BaseOptimizer):
         if not previous_rounds:
             return ""
 
-        context = "\nPrevious rounds:\n"
-        for round_data in previous_rounds[-3:]:
+        context = "\nPrevious rounds (latest first):\n"
+        for round_data in reversed(previous_rounds[-3:]):
             context += f"\nRound {round_data.round_number}:\n"
-            context += f"Best score: {round_data.best_score:.4f}\n"
-            context += "Generated prompts:\n"
-            for p in round_data.generated_prompts:
-                context += f"- Score: {p['score']:.4f}\n"
-                context += f"  Prompt: {p['prompt']}\n"
+            context += f"Best score this round: {round_data.best_score:.4f}\n"
+            context += "Generated prompts this round (best first):\n"
+            
+            sorted_generated = sorted(
+                round_data.generated_prompts,
+                key=lambda p: p.get('score', -float('inf')),
+                reverse=True
+            )
+
+            for p in sorted_generated[:3]:
+                prompt_text = p.get('prompt', 'N/A')
+                score = p.get('score', float('nan'))
+                context += f"- Prompt: {prompt_text[:150]}...\n"
+                context += f"  Avg Score: {score:.4f}\n"
         return context
 
     def _get_evaluation_subset(
