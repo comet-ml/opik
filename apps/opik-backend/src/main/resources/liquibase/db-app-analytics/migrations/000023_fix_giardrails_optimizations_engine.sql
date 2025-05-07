@@ -1,10 +1,10 @@
 --liquibase formatted sql
 
---changeset liyaka:fix-guardrails-engine-01 id:drop-guardrails-table
+--changeset liyaka:000023-fix-guardrails-engine-01 id:drop-guardrails-table
 DROP TABLE IF EXISTS IF EMPTY ${ANALYTICS_DB_DATABASE_NAME}.guardrails ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
 --rollback --rollback empty -- Cannot rollback drop table operation
 
---changeset liyaka:fix-guardrails-engine-02 id:create-guardrails-table
+--changeset liyaka:000023-fix-guardrails-engine-02 id:create-guardrails-table
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.guardrails ON CLUSTER '{cluster}'
 (
    `id` FixedString(36),
@@ -27,11 +27,11 @@ ORDER BY (workspace_id, project_id, entity_type, entity_id, id)
 SETTINGS index_granularity = 8192;
 --rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.guardrails ON CLUSTER '{cluster}';
 
---changeset liyaka:fix-optimizations-engine-01 id:drop-optimizations-table
+--changeset liyaka:000023-fix-optimizations-engine-01 id:drop-optimizations-table
 DROP TABLE IF EXISTS IF EMPTY ${ANALYTICS_DB_DATABASE_NAME}.optimizations ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
 --rollback --rollback empty -- Cannot rollback drop table operation
 
---changeset liyaka:fix-optimizations-engine-02 id:create-optimizations-table
+--changeset liyaka:000023-fix-optimizations-engine-02 id:create-optimizations-table
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.optimizations ON CLUSTER '{cluster}'
 (
     `workspace_id` String,
