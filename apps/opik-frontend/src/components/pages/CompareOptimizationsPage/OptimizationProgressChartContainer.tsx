@@ -57,7 +57,7 @@ const OptimizationProgressChartContainer: React.FC<
   const renderContent = useCallback(() => {
     if (isPending) {
       return (
-        <div className={"flex size-full  min-h-32 items-center justify-center"}>
+        <div className="flex size-full min-h-32 items-center justify-center">
           <Spinner />
         </div>
       );
