@@ -53,7 +53,7 @@ You can find a full list the configuration options in the [helm chart documentat
 
 #### Configure ingress for opik-frontend
 
-```bash
+```yaml 
 component:
     frontend:
       ingress:
@@ -74,7 +74,7 @@ component:
 
 #### Configure LoadBalancer service for clickhouse
 
-```bash
+```yaml
 clickhouse:
   service:
     serviceTemplate: clickhouse-cluster-svc-lb-template
