@@ -8,8 +8,9 @@ from opik.opik_context import get_current_span_data
 from pydantic import BaseModel
 from ._throttle import RateLimiter, rate_limited
 from .cache_config import initialize_cache
-from .optimization_config.configs import PromptTaskConfig, MetricConfig
+
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
+from .optimization_config.configs import TaskConfig, MetricConfig
 
 limiter = RateLimiter(max_calls_per_second=15)
 
@@ -54,7 +55,7 @@ class BaseOptimizer:
         self,
         dataset: Union[str, opik.Dataset],
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         prompt: str,
         input_key: str,
         output_key: str,
@@ -67,7 +68,7 @@ class BaseOptimizer:
         Args:
            dataset: Opik dataset name, or Opik dataset
            metric_config: instance of a MetricConfig
-           task_config: instance of a PromptTaskConfig
+           task_config: instance of a TaskConfig
            prompt: the prompt to optimize
            input_key: input field of dataset
            output_key: output field of dataset
@@ -89,7 +90,7 @@ class BaseOptimizer:
         input_key: str,
         output_key: str,
         n_samples: int = 10,
-        task_config: Optional[PromptTaskConfig] = None,
+        task_config: Optional[TaskConfig] = None,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
         **kwargs,
@@ -100,7 +101,7 @@ class BaseOptimizer:
         Args:
            dataset: Opik dataset name, or Opik dataset
            metric_config: instance of a MetricConfig
-           task_config: instance of a PromptTaskConfig
+           task_config: instance of a TaskConfig
            prompt: the prompt to evaluate
            input_key: input field of dataset
            output_key: output field of dataset

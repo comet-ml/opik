@@ -3,11 +3,14 @@ from typing import Any, Dict, List, Tuple, Union, Optional, Callable, Literal
 import openai
 import opik
 import optuna
+import logging
 
 from opik import Dataset
 from opik_optimizer.optimization_config import mappers
-from opik_optimizer.optimization_config.configs import PromptTaskConfig, MetricConfig
-from opik_optimizer import base_optimizer
+
+from opik_optimizer.optimization_config.configs import TaskConfig, MetricConfig
+from opik_optimizer import optimization_dsl, base_optimizer
+
 from . import prompt_parameter
 from . import prompt_templates
 from .._throttle import RateLimiter, rate_limited
@@ -18,6 +21,8 @@ import litellm
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
 limiter = RateLimiter(max_calls_per_second=15)
+
+logger = logging.getLogger(__name__)
 
 @rate_limited(limiter)
 def _call_model(model, messages, seed, model_kwargs):
@@ -80,11 +85,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
     def _optimize_prompt(
         self,
-        optimization_id: str,
         dataset: Union[str, Dataset],
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         n_trials: int = 10,
+        optimization_id: Optional[str] = None,
         experiment_config: Optional[Dict] = None,
         n_samples: int = None,
     ) -> optimization_result.OptimizationResult:
@@ -208,18 +213,26 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self,
         dataset: Union[str, Dataset],
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         n_trials: int = 10,
         experiment_config: Optional[Dict] = None,
         n_samples: int = None,
     ) -> optimization_result.OptimizationResult:
+        optimization = None
         try:
             optimization = self._opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric_config.metric.name,
             )
+        except Exception:
+            logger.warning(
+                "Opik server does not support optimizations. Please upgrade opik."
+            )
+            optimization = None
+
+        try:
             result = self._optimize_prompt(
-                optimization_id=optimization.id,
+                optimization_id=optimization.id if optimization is not None else None,
                 dataset=dataset,
                 metric_config=metric_config,
                 task_config=task_config,
@@ -227,10 +240,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 experiment_config=experiment_config,
                 n_samples=n_samples,
             )
-            optimization.update(status="completed")
+            if optimization:
+                optimization.update(status="completed")
             return result
         except Exception as e:
-            optimization.update(status="cancelled")
+            if optimization:
+                optimization.update(status="cancelled")
             raise e
 
     def evaluate_prompt(

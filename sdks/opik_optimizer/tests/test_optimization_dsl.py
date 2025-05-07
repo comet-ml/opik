@@ -1,5 +1,5 @@
 import pytest
-from opik_optimizer.optimization_config.configs import MetricConfig, PromptTaskConfig, OptimizationConfig
+from opik_optimizer.optimization_config.configs import MetricConfig, TaskConfig, OptimizationConfig
 from opik_optimizer.optimization_config.mappers import from_dataset_field, from_llm_response_text
 from unittest.mock import MagicMock
 from opik.evaluation.metrics import BaseMetric
@@ -98,7 +98,7 @@ class TestOptimizationDSL:
         assert "inputs" in config_dict
 
     def test_optimization_config_initialization(self, exact_match_metric, mock_dataset):
-        task_config = PromptTaskConfig(
+        task_config = TaskConfig(
             instruction_prompt="Test instruction",
             input_dataset_fields=["input"],
             output_dataset_field="output"
@@ -117,10 +117,10 @@ class TestOptimizationDSL:
         )
         assert config.dataset == mock_dataset
         assert isinstance(config.objective, MetricConfig)
-        assert isinstance(config.task, PromptTaskConfig)
+        assert isinstance(config.task, TaskConfig)
 
     def test_optimization_config_minimize(self, exact_match_metric, mock_dataset):
-        task_config = PromptTaskConfig(
+        task_config = TaskConfig(
             instruction_prompt="Test instruction",
             input_dataset_fields=["input"],
             output_dataset_field="output"
@@ -141,7 +141,7 @@ class TestOptimizationDSL:
         assert config.optimization_direction == "minimize"
 
     def test_optimization_config_serialization(self, exact_match_metric, mock_dataset):
-        task_config = PromptTaskConfig(
+        task_config = TaskConfig(
             instruction_prompt="Test instruction",
             input_dataset_fields=["input"],
             output_dataset_field="output"

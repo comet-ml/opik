@@ -9,7 +9,7 @@ import json
 import os
 
 from .optimization_config import mappers
-from .optimization_config.configs import MetricConfig, PromptTaskConfig
+from .optimization_config.configs import MetricConfig, TaskConfig
 from .base_optimizer import BaseOptimizer, OptimizationRound
 from .optimization_result import OptimizationResult
 from .utils import get_tqdm
@@ -79,7 +79,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self,
         dataset: opik.Dataset,
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         prompt: str,
         use_full_dataset: bool = False,
         experiment_config: Optional[Dict] = None,
@@ -114,7 +114,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self,
         dataset: opik.Dataset,
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         prompt: str,
         use_full_dataset: bool,
         experiment_config: Optional[Dict],
@@ -204,7 +204,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self,
         dataset: Union[str, Dataset],
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         experiment_config: Optional[Dict] = None,
         n_samples: int = None,
         auto_continue: bool = False,
@@ -225,13 +225,21 @@ class MetaPromptOptimizer(BaseOptimizer):
         Returns:
             OptimizationResult: Structured result containing optimization details
         """
+        optimization = None
         try:
             optimization = self._opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric_config.metric.name,
             )
+        except Exception:
+            logger.warning(
+                "Opik server does not support optimizations. Please upgrade opik."
+            )
+            optimization = None
+
+        try:
             result = self._optimize_prompt(
-                optimization_id=optimization.id,
+                optimization_id=optimization.id if optimization is not None else None,
                 dataset=dataset,
                 metric_config=metric_config,
                 task_config=task_config,
@@ -240,10 +248,12 @@ class MetaPromptOptimizer(BaseOptimizer):
                 auto_continue=auto_continue,
                 **kwargs,
             )
-            optimization.update(status="completed")
+            if optimization:
+                optimization.update(status="completed")
             return result
         except Exception as e:
-            optimization.update(status="cancelled")
+            if optimization:
+                optimization.update(status="cancelled")
             raise e
 
     def _optimize_prompt(
@@ -251,7 +261,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         optimization_id: str,
         dataset: Union[str, Dataset],
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         experiment_config: Optional[Dict],
         n_samples: int,
         auto_continue: bool,
@@ -437,7 +447,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         logger.info(f"Initial score: {initial_score:.4f}")
         logger.info(f"Final best score: {best_score:.4f}")
         if initial_score != 0:
-            logger.info(f"Improvement: {(best_score - initial_score) / initial_score:.2%}")
+            logger.info(
+                f"Improvement: {(best_score - initial_score) / initial_score:.2%}"
+            )
         logger.info("Improvement: infinite")
         logger.info("\nFINAL OPTIMIZED PROMPT:")
         logger.info("-" * 80)
@@ -501,7 +513,7 @@ class MetaPromptOptimizer(BaseOptimizer):
     def _create_result(
         self,
         metric_config: MetricConfig,
-        task_config: PromptTaskConfig,
+        task_config: TaskConfig,
         best_prompt: str,
         best_score: float,
         initial_score: float,

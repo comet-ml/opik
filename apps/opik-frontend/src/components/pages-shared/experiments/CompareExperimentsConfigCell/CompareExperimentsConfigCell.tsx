@@ -37,7 +37,7 @@ const CompareExperimentsConfigCell: React.FC<
     }
 
     return (
-      <div className="comet-code size-full max-w-full overflow-hidden whitespace-pre-line break-words rounded-md border bg-[#FBFCFD] px-2 py-[11px]">
+      <div className="comet-code size-full max-w-full overflow-hidden whitespace-pre-wrap break-words rounded-md border bg-[#FBFCFD] px-2 py-[11px]">
         {showDiffView ? (
           <TextDiff content1={toString(baseData)} content2={toString(data)} />
         ) : (

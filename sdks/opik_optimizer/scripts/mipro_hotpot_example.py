@@ -5,7 +5,7 @@ from opik_optimizer import MiproOptimizer
 from opik_optimizer.demo import get_or_create_dataset, get_litellm_cache
 from opik_optimizer import (
     MetricConfig,
-    PromptTaskConfig,
+    TaskConfig,
     from_dataset_field,
     from_llm_response_text,
 )
@@ -41,7 +41,7 @@ metric_config = MetricConfig(
     },
 )
 
-task_config = PromptTaskConfig(
+task_config = TaskConfig(
     instruction_prompt="Answer the question",
     input_dataset_fields=["question"],
     output_dataset_field="answer",
