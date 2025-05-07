@@ -84,8 +84,37 @@ clickhouse:
 
 ### Configure Clickhouse backup on S3 (or minio)
 
-```bash
+#### With AWS Key and Secret key
 
+You will need to create a secret with the credentials for the S3 bucket you want to use for backup with following values:
+```bash
+access_key_id: <your access key id>
+access_key_secret: <your access key secret>
+```
+Add to your configuration
+```bash
+clickhouse:
+  backup:
+    enabled: true
+    bucketURL: https://<your bucket.s3.<region>.amazonaws.com
+    secretName: <your secret name with credential for clickhouse backup>
+    schedule: <your cron schedule, like "00 03 * * *">
+    baseBackup: ""
+```
+
+#### With IAM Role 
+
+```bash
+clickhouse:
+    backup:
+      serviceAccount:
+        enabled: true
+        annotations:
+          eks.amazonaws.com/role-arn: <your IAM role arn>
+      enabled: true
+      bucketURL: https://<your bucket.s3.<region>.amazonaws.com
+      schedule: <your cron schedule, like "00 03 * * *">
+      baseBackup: ""
 ```
 
 ### Use S3 bucket for Opik
