@@ -2,7 +2,7 @@
 
 --changeset liyaka:fix-guardrails-engine-01 id:drop-guardrails-table
 DROP TABLE IF EXISTS IF EMPTY ${ANALYTICS_DB_DATABASE_NAME}.guardrails ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
---rollback -- Cannot rollback drop table operation
+--rollback --rollback empty -- Cannot rollback drop table operation
 
 --changeset liyaka:fix-guardrails-engine-02 id:create-guardrails-table
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.guardrails ON CLUSTER '{cluster}'
@@ -29,7 +29,7 @@ SETTINGS index_granularity = 8192;
 
 --changeset liyaka:fix-optimizations-engine-01 id:drop-optimizations-table
 DROP TABLE IF EXISTS IF EMPTY ${ANALYTICS_DB_DATABASE_NAME}.optimizations ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
---rollback -- Cannot rollback drop table operation
+--rollback --rollback empty -- Cannot rollback drop table operation
 
 --changeset liyaka:fix-optimizations-engine-02 id:create-optimizations-table
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.optimizations ON CLUSTER '{cluster}'
