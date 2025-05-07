@@ -196,6 +196,23 @@ class OpikConfig(pydantic_settings.BaseSettings):
     If set to True - Opik will compress the JSON request body.
     """
 
+    cloud_limiter_api_calls_rate: int = 2_000
+    """
+    There’s a global rate limit of 2,000 request/minute per user across all REST API endpoints
+    """
+    cloud_limiter_api_calls_max_delay_ms: int = 5_000
+    """
+    The maximal delay in milliseconds to wait before applying API calls rate limit processing.
+    """
+    cloud_limiter_ingestion_rate: int = 5_000
+    """
+    The data ingestion limit of 5,000 events/minute per workspace and per user.
+    """
+    cloud_limiter_ingestion_max_delay_ms: int = 3_000
+    """
+    The maximal delay in milliseconds to wait before applying data ingestion rate limit processing.
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
