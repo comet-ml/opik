@@ -178,6 +178,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 logger.info(f"Using automatic subset size calculation: {subset_size} items (20% of {total_items} total items)")
         else:
             subset_size = None  # Use all items for final checks
+            logger.info("Using full dataset for evaluation")
 
         experiment_config = experiment_config or {}
         experiment_config = {
@@ -201,10 +202,12 @@ class MetaPromptOptimizer(BaseOptimizer):
 
             for input_key in task_config.input_dataset_fields:
                 if input_key not in dataset_item:
+                    logger.error(f"Input field '{input_key}' not found in dataset sample: {dataset_item}")
                     raise ValueError(
                         f"Input field '{input_key}' not found in dataset sample"
                     )
             if task_config.output_dataset_field not in dataset_item:
+                logger.error(f"Output field '{task_config.output_dataset_field}' not found in dataset sample: {dataset_item}")
                 raise ValueError(
                     f"Output field '{task_config.output_dataset_field}' not found in dataset sample"
                 )
@@ -235,7 +238,17 @@ class MetaPromptOptimizer(BaseOptimizer):
             logger.debug(f"Evaluating prompt with input: {field_mapping}")
             logger.debug(f"Full prompt: {full_prompt}")
 
-            model_output = self._call_model(full_prompt)
+            try:
+                logger.info(f"Calling LLM with prompt length: {len(full_prompt)}")
+                model_output = self._call_model(full_prompt)
+                logger.info(f"LLM response length: {len(model_output)}")
+                logger.debug(f"Model output: {model_output}")
+            except Exception as e:
+                logger.error(f"Error calling model with prompt: {e}")
+                logger.error(f"Failed prompt: {full_prompt}")
+                logger.error(f"Prompt length: {len(full_prompt)}")
+                raise
+
             result = {
                 mappers.EVALUATED_LLM_TASK_OUTPUT: model_output,
             }
@@ -294,9 +307,10 @@ class MetaPromptOptimizer(BaseOptimizer):
                 dataset_name=dataset.name,
                 objective_name=metric_config.metric.name,
             )
-        except Exception:
+            logger.info(f"Created optimization with ID: {optimization.id}")
+        except Exception as e:
             logger.warning(
-                "Opik server does not support optimizations. Please upgrade opik."
+                f"Opik server does not support optimizations: {e}. Please upgrade opik."
             )
             optimization = None
 
@@ -313,10 +327,13 @@ class MetaPromptOptimizer(BaseOptimizer):
             )
             if optimization:
                 optimization.update(status="completed")
+                logger.info("Optimization completed successfully")
             return result
         except Exception as e:
+            logger.error(f"Optimization failed: {e}")
             if optimization:
                 optimization.update(status="cancelled")
+                logger.info("Optimization marked as cancelled")
             raise e
 
     def _optimize_prompt(
@@ -347,7 +364,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                 },
             },
         }
-        best_score = self._evaluate_prompt(
+
+        logger.info("Evaluating initial prompt")
+        best_score = self.evaluate_prompt(
             optimization_id=optimization_id,
             dataset=dataset,
             metric_config=metric_config,
@@ -362,6 +381,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         rounds = []
         stopped_early = False
 
+        logger.info(f"Initial score: {initial_score:.4f}")
+
         # Initialize progress tracking with custom format
         pbar = tqdm(
             total=self.max_rounds,
@@ -372,17 +393,21 @@ class MetaPromptOptimizer(BaseOptimizer):
         )
 
         for round_num in range(self.max_rounds):
-            logger.info(f"\nRound {round_num + 1}/{self.max_rounds}")
+            logger.info(f"\n{'='*50}")
+            logger.info(f"Starting Round {round_num + 1}/{self.max_rounds}")
             logger.info(f"Current best score: {best_score:.4f}")
+            logger.info(f"Current best prompt: {best_prompt}")
 
             previous_best_score = best_score
             try:
+                logger.info("Generating candidate prompts")
                 candidate_prompts = self._generate_candidate_prompts(
                     current_prompt=current_prompt,
                     best_score=best_score,
                     round_num=round_num,
                     previous_rounds=rounds,
                 )
+                logger.info(f"Generated {len(candidate_prompts)} candidate prompts")
             except Exception as e:
                 logger.error(f"Error generating candidate prompts: {e}")
                 break
@@ -390,6 +415,9 @@ class MetaPromptOptimizer(BaseOptimizer):
             # Evaluate each candidate with multiple trials
             prompt_scores = []
             for candidate_count, prompt in enumerate(candidate_prompts):
+                logger.info(f"\nEvaluating candidate {candidate_count + 1}/{len(candidate_prompts)}")
+                logger.info(f"Prompt: {prompt}")
+                
                 scores = []
                 should_continue = True
 
@@ -413,19 +441,25 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 # If all trials failed, skip this prompt
                 if not scores:
+                    logger.warning("All trials failed for this prompt, skipping")
                     continue
 
                 # Check if we should continue with additional trials
                 avg_score = sum(scores) / len(scores)
+                logger.info(f"Average score after first 3 trials: {avg_score:.4f}")
+                
                 if (
                     not self.auto_continue or avg_score < best_score * 0.8
                 ):  # If significantly worse, skip additional trials
                     should_continue = False
+                    logger.info("Skipping additional trials - score too low")
 
                 # Additional trials if needed
                 if should_continue:
+                    logger.info("Running additional trials")
                     for trial in range(3, 6):  # Up to 6 total trials
                         try:
+                            logger.info(f"Additional trial {trial + 1}/6")
                             score = self.evaluate_prompt(
                                 dataset=dataset,
                                 metric_config=metric_config,
@@ -444,15 +478,26 @@ class MetaPromptOptimizer(BaseOptimizer):
                 if scores:  # Only calculate average if we have scores
                     avg_score = sum(scores) / len(scores)
                     prompt_scores.append((prompt, avg_score, scores))
+                    logger.info(f"Final average score for prompt: {avg_score:.4f}")
+                    logger.info(f"Individual trial scores: {[f'{s:.4f}' for s in scores]}")
+
+            # If no prompts were successfully evaluated, break
+            if not prompt_scores:
+                logger.warning("No prompts were successfully evaluated in this round")
+                break
 
             # Sort prompts by score and get the best one
             prompt_scores.sort(key=lambda x: x[1], reverse=True)
             if prompt_scores:
                 best_candidate, best_candidate_score, trial_scores = prompt_scores[0]
+                logger.info(f"\nBest candidate from this round:")
+                logger.info(f"Score: {best_candidate_score:.4f}")
+                logger.info(f"Prompt: {best_candidate}")
 
                 # Final evaluation with full dataset for the best candidate
                 if best_candidate_score > best_score:
-                    final_score = self._evaluate_prompt(
+                    logger.info("Running final evaluation")
+                    final_score = self.evaluate_prompt(
                         optimization_id=optimization_id,
                         dataset=dataset,
                         metric_config=metric_config,
@@ -465,18 +510,16 @@ class MetaPromptOptimizer(BaseOptimizer):
                     if final_score > best_score:
                         best_score = final_score
                         best_prompt = best_candidate
-                        logger.info(
-                            f"New best prompt found with score: {best_score:.4f}"
-                        )
-                        logger.info(
-                            f"Individual trial scores: {[f'{s:.4f}' for s in trial_scores]}"
-                        )
-                        logger.info(f"Best prompt: {best_prompt}")
+                        logger.info(f"New best prompt found!")
+                        logger.info(f"Score: {best_score:.4f}")
+                        logger.info(f"Prompt: {best_prompt}")
 
                 # Update current prompt for next round
                 current_prompt = best_candidate
 
             improvement = self._calculate_improvement(best_score, previous_best_score)
+            logger.info(f"Improvement in this round: {improvement:.2%}")
+            
             if improvement < self.improvement_threshold:
                 logger.info(
                     f"Improvement below threshold ({improvement:.2%} < {self.improvement_threshold:.2%}), stopping early"
@@ -513,9 +556,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         logger.info(f"Final best score: {best_score:.4f}")
         if initial_score != 0:
             logger.info(
-                f"Improvement: {(best_score - initial_score) / initial_score:.2%}"
+                f"Total improvement: {(best_score - initial_score) / initial_score:.2%}"
             )
-        logger.info("Improvement: infinite")
         logger.info("\nFINAL OPTIMIZED PROMPT:")
         logger.info("-" * 80)
         logger.info(best_prompt)
