@@ -36,6 +36,18 @@ def track_openai(
 
     openai_client.opik_tracked = True
 
+    _patch_openai_chat_completions(openai_client, project_name)
+
+    if hasattr(openai_client, "responses"):
+        _patch_openai_responses(openai_client, project_name)
+
+    return openai_client
+
+
+def _patch_openai_chat_completions(
+    openai_client: OpenAIClient,
+    project_name: Optional[str] = None,
+) -> None:
     chat_completions_decorator_factory = (
         openai_chat_completions_decorator.OpenaiChatCompletionsTrackDecorator()
     )
@@ -66,16 +78,6 @@ def track_openai(
         openai_client.beta.chat.completions.parse
     )
 
-    openai_responses_api_available = hasattr(openai_client, "responses") and hasattr(
-        openai_client.responses, "create"
-    )
-    if not openai_responses_api_available:
-        return openai_client
-
-    _patch_openai_responses(openai_client, project_name)
-
-    return openai_client
-
 
 def _patch_openai_responses(
     openai_client: OpenAIClient,
@@ -92,12 +94,24 @@ def _patch_openai_responses(
     if openai_client.base_url.host != "api.openai.com":
         responses_decorator_factory.provider = openai_client.base_url.host
 
-    responses_create_decorator = responses_decorator_factory.track(
-        type="llm",
-        name="responses_create",
-        generations_aggregator=response_events_aggregator.aggregate,
-        project_name=project_name,
-    )
-    openai_client.responses.create = responses_create_decorator(
-        openai_client.responses.create
-    )
+    if hasattr(openai_client.responses, "create"):
+        responses_create_decorator = responses_decorator_factory.track(
+            type="llm",
+            name="responses_create",
+            generations_aggregator=response_events_aggregator.aggregate,
+            project_name=project_name,
+        )
+        openai_client.responses.create = responses_create_decorator(
+            openai_client.responses.create
+        )
+
+    if hasattr(openai_client.responses, "parse"):
+        responses_parse_decorator = responses_decorator_factory.track(
+            type="llm",
+            name="responses_parse",
+            generations_aggregator=response_events_aggregator.aggregate,
+            project_name=project_name,
+        )
+        openai_client.responses.parse = responses_parse_decorator(
+            openai_client.responses.parse
+        )

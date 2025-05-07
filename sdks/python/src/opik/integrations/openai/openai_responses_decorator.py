@@ -37,7 +37,7 @@ RESPONSE_KEYS_TO_LOG_AS_OUTPUT = [
 class OpenaiResponsesTrackDecorator(base_track_decorator.BaseTrackDecorator):
     """
     An implementation of BaseTrackDecorator designed specifically for tracking
-    calls of OpenAI's `responses.create` functions.
+    calls of OpenAI's `responses.create` and `responses.parse` functions.
     """
 
     def __init__(self) -> None:
@@ -54,7 +54,7 @@ class OpenaiResponsesTrackDecorator(base_track_decorator.BaseTrackDecorator):
     ) -> arguments_helpers.StartSpanParameters:
         assert (
             kwargs is not None
-        ), "Expected kwargs to be not None in responses.create(**kwargs)"
+        ), "Expected kwargs to be not None in responses.create(**kwargs) or responses.parse(**kwargs)"
 
         name = track_options.name if track_options.name is not None else func.__name__
 
