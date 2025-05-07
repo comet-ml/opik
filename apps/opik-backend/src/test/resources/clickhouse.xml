@@ -1,0 +1,27 @@
+<clickhouse>
+    <macros>
+        <shard>01</shard>
+        <replica>clickhouse</replica>
+        <cluster>cluster</cluster>
+    </macros>
+    <zookeeper>
+        <node>
+            <host>zookeeper</host>
+            <port>2181</port>
+        </node>
+    </zookeeper>
+
+    <zookeeper_path>/clickhouse</zookeeper_path>
+    <zookeeper_session_timeout_ms>30000</zookeeper_session_timeout_ms>
+    
+    <remote_servers>
+        <cluster>
+        <shard>
+            <replica>
+            <host>clickhouse</host>
+            <port>9000</port>
+            </replica>
+        </shard>
+        </cluster>
+    </remote_servers>
+</clickhouse>
