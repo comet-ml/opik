@@ -11,11 +11,8 @@ from opik.api_objects import helpers, opik_client, trace
 from opik.decorator import arguments_helpers
 from opik.types import DistributedTraceHeadersDict
 
-from .decorators import (
-    ADKLLMTrackDecorator,
-    ADKToolTrackDecorator,
-    convert_adk_base_models,
-)
+from . import adk_decorators
+from . import llm_response_wrapper
 
 LOGGER = logging.getLogger(__name__)
 
@@ -39,8 +36,13 @@ class OpikTracer:
 
         self._last_model_output: Optional[Dict[str, Any]] = None
 
-        self._llm_tracer = ADKLLMTrackDecorator()
-        self._tool_tracer = ADKToolTrackDecorator()
+        self._llm_tracer = adk_decorators.ADKLLMTrackDecorator()
+        self._tool_tracer = adk_decorators.ADKToolTrackDecorator()
+
+        # monkey patch LLMResponse to store usage_metadata
+        old_function = LlmResponse.create
+        create_wrapper = llm_response_wrapper.LlmResponseCreateWrapper(old_function)
+        LlmResponse.create = create_wrapper
 
     def before_agent_callback(
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
@@ -56,7 +58,9 @@ class OpikTracer:
         trace_metadata = self.metadata.copy()
         trace_metadata["adk_invocation_id"] = callback_context.invocation_id
 
-        user_input = convert_adk_base_models(callback_context.user_content)
+        user_input = adk_decorators.convert_adk_base_models(
+            callback_context.user_content
+        )
 
         self.trace_data = trace.TraceData(
             id=helpers.generate_id(),
@@ -80,6 +84,10 @@ class OpikTracer:
         context_storage.pop_trace_data()
 
         output = self._last_model_output
+
+        # remove the custom metadata with opik usage we added
+        if output is not None:
+            llm_response_wrapper.pop_llm_usage_data(**output)
 
         self.trace_data.update(output=output).init_end_time()
 
@@ -129,7 +137,7 @@ class OpikTracer:
         except Exception:
             LOGGER.debug("Error checking for partial chunks", exc_info=True)
 
-        self._last_model_output = convert_adk_base_models(llm_response)
+        self._last_model_output = adk_decorators.convert_adk_base_models(llm_response)
 
         self._llm_tracer._after_call(
             output=llm_response,
