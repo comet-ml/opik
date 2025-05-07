@@ -243,7 +243,7 @@ print(result)
 
           <div className="flex w-[250px] shrink-0 flex-col gap-6 self-start">
             <ApiKeyCard />
-            <GoogleColabCard link="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/quickstart_notebook.ipynb" />
+            <GoogleColabCard link="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/optimizer_notebook.ipynb" />
           </div>
         </div>
       </div>
