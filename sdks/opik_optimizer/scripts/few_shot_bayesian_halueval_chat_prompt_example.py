@@ -8,6 +8,7 @@ from opik_optimizer import (
     TaskConfig,
     from_dataset_field,
     from_llm_response_text,
+    display_optimization_result
 )
 
 
@@ -83,4 +84,4 @@ result = optimizer.optimize_prompt(
     n_samples=10,
 )
 
-print("Result:", result)
+display_optimization_result(result)

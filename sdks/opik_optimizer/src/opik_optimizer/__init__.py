@@ -32,6 +32,9 @@ def __getattr__(name):
 from opik.evaluation.models.litellm import warning_filters
 warning_filters.add_warning_filters()
 
+from .optimization_result import OptimizationResult
+from .utils import display_optimization_result
+
 __all__ = [
     "BaseOptimizer",
     "FewShotBayesianOptimizer",
@@ -42,5 +45,7 @@ __all__ = [
     "TaskConfig",
     "from_dataset_field",
     "from_llm_response_text",
+    "OptimizationResult",
     "setup_logging",
+    "display_optimization_result",
 ]

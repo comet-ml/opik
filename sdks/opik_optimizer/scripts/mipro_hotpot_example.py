@@ -8,6 +8,7 @@ from opik_optimizer import (
     TaskConfig,
     from_dataset_field,
     from_llm_response_text,
+    display_optimization_result
 )
 
 project_name = "optimize-mipro-hotpot"
@@ -53,3 +54,5 @@ result = optimizer.optimize_prompt(
     metric_config=metric_config,
     task_config=task_config,
 )
+
+display_optimization_result(result)

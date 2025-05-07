@@ -7,12 +7,27 @@ import random
 import string
 from opik.api_objects.opik_client import Opik
 
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Optional, Callable, TYPE_CHECKING
 
 # Test dataset name for optimizer examples
 TEST_DATASET_NAME = "tiny-test-optimizer"
 
+try:
+    from rich import print as rprint
+    from rich.panel import Panel
+    RICH_AVAILABLE = True
+except ImportError:
+    RICH_AVAILABLE = False
+    # Define a dummy rprint if rich is not installed
+    def rprint(*args, **kwargs):
+        print(*args, **kwargs)
+    Panel = None # Define Panel as None if rich is not available
 
+# Type hint for OptimizationResult without circular import
+if TYPE_CHECKING:
+    from .optimization_result import OptimizationResult
+
+logger = logging.getLogger(__name__)
 
 def format_prompt(prompt: str, **kwargs: Any) -> str:
     """
@@ -182,3 +197,24 @@ def get_tqdm():
 
 def random_chars(n: int) -> str:
     return "".join(random.choice(string.ascii_letters) for _ in range(n))
+
+
+def display_optimization_result(result: 'OptimizationResult'):
+    """
+    Displays the OptimizationResult using rich formatting if available,
+    otherwise falls back to standard print.
+
+    Args:
+        result: The OptimizationResult object to display.
+    """
+    if not hasattr(result, '__rich__') and not hasattr(result, '__str__'):
+        logger.warning(f"Cannot display result of type {type(result)}. Expecting OptimizationResult.")
+        print(result) # Default print as fallback
+        return
+
+    if RICH_AVAILABLE:
+        # rich.print will automatically use __rich__ if available, else __str__
+        rprint(result)
+    else:
+        # Fallback to standard print using the object's __str__ method
+        print(result)

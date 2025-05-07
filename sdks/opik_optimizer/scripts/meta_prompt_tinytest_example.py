@@ -7,6 +7,7 @@ from opik_optimizer import (
     TaskConfig,
     from_dataset_field,
     from_llm_response_text,
+    display_optimization_result,
 )
 
 # Get or create the test dataset
@@ -50,4 +51,4 @@ result = optimizer.optimize_prompt(
     auto_continue=False,
 )
 
-print(result)
+display_optimization_result(result)

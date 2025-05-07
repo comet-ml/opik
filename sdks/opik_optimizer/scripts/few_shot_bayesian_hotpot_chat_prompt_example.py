@@ -7,6 +7,7 @@ from opik_optimizer import (
     TaskConfig,
     from_dataset_field,
     from_llm_response_text,
+    display_optimization_result
 )
 
 hot_pot_dataset = get_or_create_dataset("hotpot-300")
@@ -49,4 +50,4 @@ result = optimizer.optimize_prompt(
     n_samples=100,
 )
 
-print("Result:", result)
+display_optimization_result(result)
