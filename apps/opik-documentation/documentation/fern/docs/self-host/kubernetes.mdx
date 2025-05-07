@@ -87,12 +87,12 @@ clickhouse:
 #### With AWS Key and Secret key
 
 You will need to create a secret with the credentials for the S3 bucket you want to use for backup with following values:
-```bash
+```yaml
 access_key_id: <your access key id>
 access_key_secret: <your access key secret>
 ```
 Add to your configuration
-```bash
+```yaml
 clickhouse:
   backup:
     enabled: true
@@ -104,7 +104,7 @@ clickhouse:
 
 #### With IAM Role 
 
-```bash
+```yaml
 clickhouse:
     backup:
       serviceAccount:
@@ -121,7 +121,7 @@ clickhouse:
 
 #### Using AWS key and secret keys
 
-```bash
+```yaml
 component:
   backend:
     env:
@@ -136,7 +136,7 @@ component:
 
 If your IAM role is configured for the k8s nodes, the only things you will need is to set for opik-backend:
 
-```bash
+```yaml
 component:
   backend:
     env:
@@ -149,7 +149,7 @@ component:
 
 If your role should be used by opik-backend serviceAccount, in addition you need to set:
 
-```bash
+```yaml
 component:
   backend:
 
@@ -163,7 +163,7 @@ component:
 Supported from Opik chart version 1.4.2
 
 Configuration snippet for using external Clickhouse:
-```bash
+```yaml
 component:
     backend:
       ...
@@ -180,7 +180,7 @@ clickhouse:
     enabled: false
 ```
 The passwords can be handled in the secret, and then you should configure it as following
-```bash
+```yaml
 component:
     backend:
       ...
