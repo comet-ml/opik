@@ -188,35 +188,45 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             return score
 
         # FIXME: pass in direction parameter?
+
+        # Configure Optuna Logging
+        try:
+            optuna.logging.disable_default_handler()
+
+            optuna_logger = logging.getLogger("optuna")
+            package_level = logging.getLogger('opik_optimizer').getEffectiveLevel()
+            optuna_logger.setLevel(package_level)
+            optuna_logger.propagate = False 
+            logger.debug(f"Optuna logger configured to level {logging.getLevelName(package_level)} and set to not propagate.")
+
+        except Exception as e:
+            logger.warning(f"Could not configure Optuna logging within optimizer: {e}")
+
         study = optuna.create_study(direction="maximize")
         study.optimize(optimization_objective, n_trials=n_trials)
         logger.info("Optuna study finished.")
 
         best_trial = study.best_trial
         best_n_examples = best_trial.params["n_examples"]
-
         best_param: prompt_parameter.ChatPromptParameter = best_trial.user_attrs[
             "param"
         ]
 
+        chat_messages_list = best_param.as_template().format()
+        main_prompt_string = best_param.instruction 
+
         return optimization_result.OptimizationResult(
-            prompt=best_param.as_template().format(),
+            prompt=main_prompt_string,
             score=best_trial.user_attrs["score"],
             metric_name=metric_config.metric.name,
-            metadata={
+            details={
+                "prompt_type": "chat",
+                "chat_messages": chat_messages_list,
                 "prompt_parameter": best_param,
                 "n_examples": best_n_examples,
                 "example_indices": best_trial.params.get("example_indices", []),
                 "trial_number": best_trial.number,
-                "prompt_template": best_param.as_template(),
             },
-            best_prompt=None,
-            best_score=None,
-            best_metric_name=None,
-            best_details=None,
-            all_results=None,
-            history=[],
-            metric=None,
         )
 
     def optimize_prompt(

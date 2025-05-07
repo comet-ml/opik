@@ -36,14 +36,23 @@ class OptimizationResult(pydantic.BaseModel):
         """Helper to calculate improvement percentage string."""
         initial_s = self.details.get('initial_score')
         final_s = self.score
-        if initial_s is None or final_s is None:
-            return "N/A"
-        
+
+        # Check if initial score exists and is a number
+        if not isinstance(initial_s, (int, float)):
+            return "[dim]N/A (no initial score)[/dim]" if RICH_AVAILABLE else "N/A (no initial score)"
+
+        # Proceed with calculation only if initial_s is valid
         if initial_s != 0:
             improvement_pct = (final_s - initial_s) / abs(initial_s)
-            return f"{improvement_pct:.2%}"
+            # Basic coloring for rich, plain for str
+            color_start = ""
+            color_end = ""
+            if RICH_AVAILABLE:
+                if improvement_pct > 0: color_start, color_end = "[bold green]", "[/bold green]"
+                elif improvement_pct < 0: color_start, color_end = "[bold red]", "[/bold red]"
+            return f"{color_start}{improvement_pct:.2%}{color_end}"
         elif final_s > 0:
-            return "infinite (initial score was 0)"
+            return "[bold green]infinite[/bold green] (initial score was 0)" if RICH_AVAILABLE else "infinite (initial score was 0)"
         else:
              return "0.00% (no improvement from 0)"
 
@@ -51,9 +60,23 @@ class OptimizationResult(pydantic.BaseModel):
         """Provides a clean, well-formatted plain-text summary."""
         separator = "=" * 80
         rounds_ran = len(self.details.get('rounds', []))
-        initial_score_str = f"{self.details.get('initial_score', 'N/A'):.4f}"
+        
+        # Safely get and format initial score
+        initial_score = self.details.get('initial_score')
+        initial_score_str = f"{initial_score:.4f}" if isinstance(initial_score, (int, float)) else "N/A"
+        
         final_score_str = f"{self.score:.4f}"
-        improvement_str = self._calculate_improvement_str()
+        improvement_str = self._calculate_improvement_str().replace("[bold green]","").replace("[/bold green]","").replace("[bold red]","").replace("[/bold red]","").replace("[dim]","").replace("[/dim]","") # Strip rich tags for plain text
+        stopped_early = self.details.get('stopped_early', 'N/A')
+
+        # Display Chat Structure if available
+        final_prompt_display = self.prompt
+        if self.details.get("prompt_type") == "chat" and self.details.get("chat_messages"):
+            try:
+                chat_display = "\n".join([f"  {msg.get('role', 'unknown')}: {str(msg.get('content', ''))[:150]}..." for msg in self.details["chat_messages"]])
+                final_prompt_display = f"Instruction:\n  {self.prompt}\nFew-Shot Examples (Chat Structure):\n{chat_display}"
+            except Exception:
+                pass 
 
         output = [
             f"\n{separator}",
@@ -62,12 +85,12 @@ class OptimizationResult(pydantic.BaseModel):
             f"Metric Evaluated: {self.metric_name}",
             f"Initial Score:    {initial_score_str}",
             f"Final Best Score: {final_score_str}",
-            f"Total Improvement: {improvement_str}",
+            f"Total Improvement:{improvement_str.rjust(max(0, 18 - len('Total Improvement:')))}",
             f"Rounds Completed: {rounds_ran}",
-            f"Stopped Early:    {self.details.get('stopped_early', 'N/A')}",
-            f"\nFINAL OPTIMIZED PROMPT:",
+            f"Stopped Early:    {stopped_early}",
+            f"\nFINAL OPTIMIZED PROMPT / STRUCTURE:",
             f"--------------------------------------------------------------------------------",
-            f"{self.prompt}",
+            f"{final_prompt_display}",
             f"--------------------------------------------------------------------------------",
             f"{separator}"
         ]
@@ -75,37 +98,50 @@ class OptimizationResult(pydantic.BaseModel):
 
     def __rich__(self) -> Panel:
         """Provides a rich, formatted output for terminals supporting Rich."""
-        rounds_ran = len(self.details.get('rounds', []))
-        initial_score_str = f"{self.details.get('initial_score', 'N/A'):.4f}"
-        final_score_str = f"{self.score:.4f}"
         improvement_str = self._calculate_improvement_str()
-        initial_s = self.details.get('initial_score')
-        final_s = self.score
 
-        if initial_s is not None and final_s is not None:
-             if initial_s != 0:
-                 improvement_pct = (final_s - initial_s) / abs(initial_s)
-                 if improvement_pct > 0:
-                     improvement_str = f"[bold green]{improvement_str}[/bold green]"
-                 elif improvement_pct < 0:
-                     improvement_str = f"[bold red]{improvement_str}[/bold red]"
-             elif final_s > 0:
-                 improvement_str = "[bold green]infinite[/bold green] (initial score was 0)"
+        rounds_ran = len(self.details.get('rounds', []))
+        initial_score = self.details.get('initial_score')
+        # Format safely for rich display
+        initial_score_str = f"{initial_score:.4f}" if isinstance(initial_score, (int, float)) else "[dim]N/A[/dim]"
+        final_score_str = f"{self.score:.4f}"
+        stopped_early = self.details.get('stopped_early', 'N/A')
 
         table = Table.grid(padding=(0, 1))
         table.add_column(style="dim")
         table.add_column()
-        
+
         table.add_row("Metric Evaluated:", f"[bold]{self.metric_name}[/bold]")
         table.add_row("Initial Score:", initial_score_str)
         table.add_row("Final Best Score:", f"[bold cyan]{final_score_str}[/bold cyan]")
         table.add_row("Total Improvement:", improvement_str)
         table.add_row("Rounds Completed:", str(rounds_ran))
-        table.add_row("Stopped Early:", str(self.details.get('stopped_early', 'N/A')))
+        table.add_row("Stopped Early:", str(stopped_early))
+
+        # Display Chat Structure if available
+        prompt_renderable: Any = Text(self.prompt or "", overflow="fold") # Default to text
+        panel_title = "[bold]Final Optimized Prompt (Instruction)[/bold]"
+
+        if self.details.get("prompt_type") == "chat" and self.details.get("chat_messages"):
+            panel_title = "[bold]Final Optimized Prompt (Chat Structure)[/bold]"
+            try:
+                chat_group_items = [f"[dim]Instruction:[/dim] [i]{self.prompt}[/i]\n---"]
+                for msg in self.details["chat_messages"]:
+                    role = msg.get('role', 'unknown')
+                    content = str(msg.get('content', ''))
+                    role_style = "bold green" if role == "user" else ("bold blue" if role == "assistant" else ("bold magenta" if role == "system" else ""))
+                    chat_group_items.append(f"[{role_style}]{role.capitalize()}:[/] {content}")
+                    chat_group_items.append("---") # Separator
+                prompt_renderable = Group(*chat_group_items)
+
+            except Exception:
+                 # Fallback to simple text prompt
+                 prompt_renderable = Text(self.prompt or "", overflow="fold")
+                 panel_title = "[bold]Final Optimized Prompt (Instruction - fallback)[/bold]"
 
         prompt_panel = Panel(
-            Text(self.prompt, overflow="fold"),
-            title="[bold]Final Optimized Prompt[/bold]",
+            prompt_renderable,
+            title=panel_title,
             border_style="blue",
             padding=(1, 2)
         )
@@ -126,3 +162,10 @@ class OptimizationResult(pydantic.BaseModel):
 
     def model_dump(self) -> Dict[str, Any]:
         return super().model_dump()
+
+# Need to check if rich is available for the helper function
+try:
+    from rich import print as rprint
+    RICH_AVAILABLE = True
+except ImportError:
+    RICH_AVAILABLE = False
