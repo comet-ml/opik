@@ -1674,14 +1674,14 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
                             # Select color based on role - Use Style(color=...) for better control
                             (f"{msg.get('role', 'unk').capitalize()}: ", 
                              Style(color='blue' if msg.get('role') == 'system' else ('green' if msg.get('role') == 'user' else 'magenta'), bold=True)), 
-                            # Add Text object for content with soft_wrap
-                            Text(f"{msg.get('content', '')}", soft_wrap=True) 
+                            # Add Text object for content (removed soft_wrap)
+                            Text(f"{msg.get('content', '')}") 
                         )
                         for msg in final_prompt if isinstance(msg, dict) # Ensure msg is a dict
                     ])
                 elif isinstance(final_prompt, str):
-                    # Use Text object for string prompts as well for wrapping
-                    prompt_content = Text(final_prompt, soft_wrap=True)
+                    # Use Text object for string prompts as well for wrapping (removed soft_wrap)
+                    prompt_content = Text(final_prompt)
                 
                 # Ensure the panel itself doesn't prevent wrapping (default should be ok)
                 prompt_panel = Panel(prompt_content, title="Final Prompt", border_style="dim", padding=1)
