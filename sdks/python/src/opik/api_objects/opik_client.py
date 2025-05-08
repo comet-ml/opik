@@ -93,7 +93,7 @@ class Opik:
         self._use_batching = _use_batching
 
         self._initialize_streamer(
-            base_url=config_.url_override,
+            url_override=config_.url_override,
             workers=config_.background_workers,
             file_upload_worker_count=config_.file_upload_background_workers,
             api_key=config_.api_key,
@@ -113,7 +113,7 @@ class Opik:
 
     def _initialize_streamer(
         self,
-        base_url: str,
+        url_override: str,
         workers: int,
         file_upload_worker_count: int,
         api_key: Optional[str],
@@ -128,7 +128,7 @@ class Opik:
             compress_json_requests=enable_json_request_compression,
         )
         self._rest_client = rest_api_client.OpikApi(
-            base_url=base_url,
+            base_url=url_override,
             httpx_client=httpx_client_,
         )
         self._rest_client._client_wrapper._timeout = (

@@ -14,7 +14,7 @@ def construct_online_streamer(
     httpx_client: httpx.Client,
     use_batching: bool,
     file_upload_worker_count: int,
-    n_consumers: int = 1,
+    n_consumers: int,
 ) -> streamer.Streamer:
     message_processor = message_processors.MessageSender(rest_client=rest_client)
 

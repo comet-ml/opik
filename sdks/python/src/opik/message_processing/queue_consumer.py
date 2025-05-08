@@ -11,7 +11,7 @@ SLEEP_BETWEEN_LOOP_ITERATIONS = 0.1
 class QueueConsumer(threading.Thread):
     def __init__(
         self,
-        message_queue: "queue.Queue[Any]",
+        message_queue: queue.Queue[Any],
         message_processor: message_processors.BaseMessageProcessor,
         name: Optional[str] = None,
     ):

@@ -45,7 +45,6 @@ setup(
         "openai<2.0.0",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
         "pydantic>=2.0.0,<3.0.0",
-        "pyrate-limiter",
         "pytest",
         "rich",
         "sentry_sdk>=2.0.0",

@@ -15,7 +15,7 @@ LOGGER = logging.getLogger(__name__)
 class Streamer:
     def __init__(
         self,
-        message_queue: "queue.Queue[Any]",
+        message_queue: queue.Queue[Any],
         queue_consumers: List[queue_consumer.QueueConsumer],
         batch_manager: Optional[batch_manager.BatchManager],
         file_upload_manager: base_upload_manager.BaseFileUploadManager,
