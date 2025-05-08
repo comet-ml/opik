@@ -148,12 +148,14 @@ OPTIMIZER_CONFIGS = {
 }
 
 MODELS_TO_RUN = [
+    # Standard models
     "openai/gpt-4.1-2025-04-14",
-    "openai/o3-2025-04-16",
     "anthropic/claude-3-5-sonnet-20241022",
+    "openrouter/google/gemini-2.5-flash-preview",
+    # Reasoning models
+    "openai/o3-2025-04-16",
     "anthropic/claude-3-7-sonnet-20250219",
     "openrouter/google/gemini-2.5-pro-preview",
-    "openrouter/google/gemini-2.5-flash-preview",
 ]
 
 # Initial prompts for each dataset
