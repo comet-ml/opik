@@ -746,7 +746,7 @@ class BenchmarkRunner:
                 "history": opt_history_processed,
             }
 
-            # --- Final Prompt Evaluation (REMOVE suppression wrapper) --- 
+            # --- Final Prompt Evaluation --- 
             logger.info("--> Evaluating final prompt...")
             final_scores = {}
             start_time_eval_final = time.time()
