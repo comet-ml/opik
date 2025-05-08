@@ -2,6 +2,4 @@
 
 import typing
 
-ProjectDetailedVisibility = typing.Union[
-    typing.Literal["private", "public"], typing.Any
-]
+ProjectDetailedVisibility = typing.Union[typing.Literal["private", "public"], typing.Any]

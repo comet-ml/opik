@@ -150,9 +150,79 @@ export class OpikApiClient {
      * @param {OpikApiClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
+     *     await client.get()
+     */
+    public get(requestOptions?: OpikApiClient.RequestOptions): core.HttpResponsePromise<unknown> {
+        return core.HttpResponsePromise.fromPromise(this.__get(requestOptions));
+    }
+
+    private async __get(requestOptions?: OpikApiClient.RequestOptions): Promise<core.WithRawResponse<unknown>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/internal/test",
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return { data: _response.body, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/internal/test.");
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
+     * @param {OpikApiClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
      *     await client.isAlive()
      */
-    public async isAlive(requestOptions?: OpikApiClient.RequestOptions): Promise<unknown> {
+    public isAlive(requestOptions?: OpikApiClient.RequestOptions): core.HttpResponsePromise<unknown> {
+        return core.HttpResponsePromise.fromPromise(this.__isAlive(requestOptions));
+    }
+
+    private async __isAlive(requestOptions?: OpikApiClient.RequestOptions): Promise<core.WithRawResponse<unknown>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -180,13 +250,14 @@ export class OpikApiClient {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return _response.body;
+            return { data: _response.body, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -195,12 +266,14 @@ export class OpikApiClient {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /is-alive/ping.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -211,7 +284,11 @@ export class OpikApiClient {
      * @example
      *     await client.version()
      */
-    public async version(requestOptions?: OpikApiClient.RequestOptions): Promise<unknown> {
+    public version(requestOptions?: OpikApiClient.RequestOptions): core.HttpResponsePromise<unknown> {
+        return core.HttpResponsePromise.fromPromise(this.__version(requestOptions));
+    }
+
+    private async __version(requestOptions?: OpikApiClient.RequestOptions): Promise<core.WithRawResponse<unknown>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -239,13 +316,14 @@ export class OpikApiClient {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return _response.body;
+            return { data: _response.body, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -254,12 +332,14 @@ export class OpikApiClient {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /is-alive/ver.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }

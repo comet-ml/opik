@@ -2,6 +2,4 @@
 
 import typing
 
-ResponseFormatType = typing.Union[
-    typing.Literal["text", "json_object", "json_schema"], typing.Any
-]
+ResponseFormatType = typing.Union[typing.Literal["text", "json_object", "json_schema"], typing.Any]
