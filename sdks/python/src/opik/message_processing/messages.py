@@ -1,12 +1,13 @@
 import dataclasses
 import datetime
+from dataclasses import field
 from typing import Optional, Any, Dict, List, Union, Literal
 from ..types import SpanType, ErrorInfoDict, LLMProvider, AttachmentEntityType
 
 
 @dataclasses.dataclass
 class BaseMessage:
-    delivery_time: int
+    delivery_time: float = field(init=False, compare=False)
 
     def as_payload_dict(self) -> Dict[str, Any]:
         # we are not using dataclasses.as_dict() here
