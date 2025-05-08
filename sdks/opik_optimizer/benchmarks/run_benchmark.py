@@ -579,7 +579,6 @@ class BenchmarkRunner:
             
             initial_eval_time = time.time() - start_time_eval_initial
             scores_str = ", ".join([f"{k}: {v:.4f}" if isinstance(v, (int, float)) else f"{k}: N/A" for k, v in initial_scores.items()])
-            logger.info(f"<-- Initial eval done ({initial_eval_time:.2f}s). Scores: {scores_str}")
             logger.info(f"  Initial eval ({task_id}): {scores_str} ({initial_eval_time:.2f}s)")
             
             # Store initial evaluation results properly
@@ -689,7 +688,6 @@ class BenchmarkRunner:
             num_iter_log = getattr(results_obj, "num_iterations", len(getattr(results_obj, "history", [])))
             best_score_log = getattr(results_obj, "best_score", getattr(results_obj, "score", "N/A"))
             best_score_log_str = f"{best_score_log:.4f}" if isinstance(best_score_log, (int,float)) else str(best_score_log)
-            logger.info(f"<-- Optimization done ({opt_time:.2f}s). Iterations: {num_iter_log}, Best Score: {best_score_log_str}")
             console.print(f"  Optimization done ({task_id}): Iterations={num_iter_log}, Best Internal Score={best_score_log_str} ({opt_time:.2f}s)")
 
             # Process optimization history for structured logging
