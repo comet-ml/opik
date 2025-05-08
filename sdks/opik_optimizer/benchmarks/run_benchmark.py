@@ -745,10 +745,11 @@ class BenchmarkRunner:
                 "timestamp_end": datetime.now().isoformat(), # End of optimization block
                 "duration_seconds": opt_time,
                 "optimizer_type": optimizer_name,
-                "num_trials_configured": getattr(optimizer, 'n_trials', None), # Or actual_n_trials for FewShot
-                "num_samples_configured": getattr(optimizer, 'n_samples', None),
-                "best_score_achieved": best_score_log, # Score from the main objective metric
-                "final_prompt": getattr(results_obj, 'prompt', None),
+                # Fetch actual n_trials used (handle default case)
+                "num_trials_configured": getattr(results_obj.details, 'total_trials', actual_n_trials) if optimizer_name == "FewShotBayesianOptimizer" and hasattr(results_obj, 'details') else getattr(optimizer, 'n_trials', None),
+                "num_samples_configured": getattr(results_obj.details, 'n_samples', None) if optimizer_name == "FewShotBayesianOptimizer" and hasattr(results_obj, 'details') else getattr(optimizer, 'n_samples', None),
+                "best_score_achieved": getattr(results_obj, 'score', None), # Use results_obj.score for the best score
+                "final_prompt": results_obj.details.get("chat_messages") if optimizer_name == "FewShotBayesianOptimizer" and hasattr(results_obj, 'details') else getattr(results_obj, 'prompt', None), # Store full chat messages if FewShot
                 "history": opt_history_processed,
             }
 
@@ -758,19 +759,34 @@ class BenchmarkRunner:
             start_time_eval_final = time.time()
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 future_to_metric_final = {}
-                final_prompt_to_eval = getattr(results_obj, 'prompt', None)
-                if final_prompt_to_eval is None:
-                    logger.error("[red]No final prompt found.[/red]")
+                
+                # Determine the correct prompt format for final evaluation
+                final_prompt_to_eval = None
+                if optimizer_name == "FewShotBayesianOptimizer" and hasattr(results_obj, 'details'):
+                    final_prompt_to_eval = results_obj.details.get("chat_messages")
+                    if not final_prompt_to_eval: # Fallback if chat_messages isn't there for some reason
+                         final_prompt_to_eval = results_obj.details.get("prompt_parameter").as_template().format() # Reconstruct
+                    logger.info(f"Using FewShot chat messages for final eval.")
                 else:
-                    if isinstance(optimizer, FewShotBayesianOptimizer) and not isinstance(final_prompt_to_eval, list):
+                    final_prompt_to_eval = getattr(results_obj, 'prompt', None) # Use base prompt for others
+                    if isinstance(final_prompt_to_eval, str): # Ensure it's in list format if needed
                         final_prompt_to_eval = [{"role": "system", "content": final_prompt_to_eval}]
+                        logger.info(f"Using string prompt (wrapped as system) for final eval.")
                     
-                    # HACK: Add dummy user message for Anthropic if prompt is only a system message
+                if final_prompt_to_eval is None:
+                    logger.error("[red]No final prompt structure found for evaluation.[/red]")
+                else:
+                    # Apply Anthropic hack if necessary (check if final_prompt_to_eval is a list)
                     prompt_for_final_eval = final_prompt_to_eval
                     model_is_anthropic = "anthropic" in optimizer.model.lower()
                     if model_is_anthropic and isinstance(prompt_for_final_eval, list) and len(prompt_for_final_eval) == 1 and prompt_for_final_eval[0].get("role") == "system":
                         prompt_for_final_eval = prompt_for_final_eval + [{"role": "user", "content": "(Proceed based on system instructions)"}]
                         logger.warning(f"Applied Anthropic eval hack: Added dummy user message to final system prompt.")
+                    elif model_is_anthropic and isinstance(prompt_for_final_eval, list) and len(prompt_for_final_eval) > 1 and prompt_for_final_eval[-1].get("role") == "assistant":
+                         # If the last message is assistant (common in few-shot), add a dummy user msg
+                         prompt_for_final_eval = prompt_for_final_eval + [{"role": "user", "content": "(Proceed based on provided examples and system instructions)"}]
+                         logger.warning(f"Applied Anthropic eval hack: Added dummy user message after final assistant message in few-shot prompt.")
+
 
                     for metric_final_obj in metrics:
                         # Create metric-specific config for final eval - Handles ContextPrecision
@@ -796,23 +812,18 @@ class BenchmarkRunner:
                             )
                             logger.debug(f"Using default metric config for {metric_final_obj} for final eval")
 
-                        # Submit final evaluation job (remains the same logic)
+                        # Submit final evaluation job using the correctly formatted prompt_for_final_eval
                         if isinstance(optimizer, MetaPromptOptimizer):
+                             # MetaPromptOptimizer needs task_config passed to evaluate_prompt
                             future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_final_eval, task_config=config.task, prompt=prompt_for_final_eval, experiment_config=experiment_config)
                         else:
+                            # Other optimizers (like FewShot) take prompt directly
                             future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_final_eval, prompt=prompt_for_final_eval, experiment_config=experiment_config)
                         future_to_metric_final[future] = metric_final_obj
                         
                 for future in as_completed(future_to_metric_final):
                     metric_obj_final = future_to_metric_final[future]
                     try:
-                        # Skip evaluation if prompt format is likely incompatible with Anthropic
-                        # -- REMOVED the skipping logic here, applying hack instead --
-                        # model_is_anthropic = "anthropic" in optimizer.model.lower()
-                        # if model_is_anthropic and isinstance(final_prompt_to_eval, list) and len(final_prompt_to_eval) == 1 and final_prompt_to_eval[0].get("role") == "system":
-                        #      logger.warning(f"Skipping final eval for Anthropic model with system-only prompt for metric {metric_obj_final}.")
-                        #      final_scores[str(metric_obj_final)] = None # Mark as unevaluated
-                        # else:
                         final_scores[str(metric_obj_final)] = future.result()
                     except Exception as e:
                         final_scores[str(metric_obj_final)] = None
@@ -835,20 +846,12 @@ class BenchmarkRunner:
                     for metric, score in final_scores.items()
                 ],
                 "duration_seconds": final_eval_time,
-                "prompt_used": final_prompt_to_eval
+                "prompt_used": prompt_for_final_eval # Log the actual prompt used
             }
 
-            # Store the final prompt from raw_optimizer_result if available
-            optimizer_class_name = task_result.get("config", {}).get("optimizer_class", "")
-            if optimizer_class_name == "FewShotBayesianOptimizer":
-                if isinstance(raw_results_obj_for_saving, dict) and raw_results_obj_for_saving.get("details", {}).get("chat_messages"):
-                    task_result["final_prompt"] = raw_results_obj_for_saving["details"]["chat_messages"]
-                elif results_obj and hasattr(results_obj, 'details') and hasattr(results_obj.details, 'chat_messages'): # Should not be needed if raw_results is good
-                    task_result["final_prompt"] = results_obj.details.chat_messages
-            elif results_obj and hasattr(results_obj, 'prompt'):
-                task_result["final_prompt"] = results_obj.prompt
-            elif isinstance(raw_results_obj_for_saving, dict) and raw_results_obj_for_saving.get('prompt'):
-                task_result["final_prompt"] = raw_results_obj_for_saving['prompt']
+            # Store the final prompt representation in the top-level results (this is somewhat redundant now)
+            # Let's simplify and rely on the prompt_used in final_evaluation and the final_prompt in optimization_process
+            task_result["final_prompt"] = task_result["optimization_process"]["final_prompt"] # Keep top-level consistent with opt_process
 
             # Check for evaluation errors before setting status to success
             if evaluation_errors:
@@ -1332,7 +1335,11 @@ class BenchmarkRunner:
                 
                 # Optimization process details
                 opt_process = detail_data.get("optimization_process", {})
-                item_data["opt_num_iterations"] = len(opt_process.get("history", []))
+                # Correctly source num_iterations for FewShotBayesianOptimizer
+                if config_data.get("optimizer_class") == "FewShotBayesianOptimizer":
+                    item_data["opt_num_iterations"] = opt_process.get("num_trials_configured")
+                else:
+                    item_data["opt_num_iterations"] = len(opt_process.get("history", [])) # Default for round-based
                 item_data["opt_best_score_achieved"] = opt_process.get("best_score_achieved")
                 item_data["opt_duration_seconds"] = opt_process.get("duration_seconds")
 
@@ -1663,13 +1670,16 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
                             # Select color based on role - Use Style(color=...) for better control
                             (f"{msg.get('role', 'unk').capitalize()}: ", 
                              Style(color='blue' if msg.get('role') == 'system' else ('green' if msg.get('role') == 'user' else 'magenta'), bold=True)), 
-                            f"{msg.get('content', '')}" # Content
+                            # Add Text object for content with soft_wrap
+                            Text(f"{msg.get('content', '')}", soft_wrap=True) 
                         )
                         for msg in final_prompt if isinstance(msg, dict) # Ensure msg is a dict
                     ])
                 elif isinstance(final_prompt, str):
-                    prompt_content = Text(final_prompt)
+                    # Use Text object for string prompts as well for wrapping
+                    prompt_content = Text(final_prompt, soft_wrap=True)
                 
+                # Ensure the panel itself doesn't prevent wrapping (default should be ok)
                 prompt_panel = Panel(prompt_content, title="Final Prompt", border_style="dim", padding=1)
                 console.print(prompt_panel)
             else:
