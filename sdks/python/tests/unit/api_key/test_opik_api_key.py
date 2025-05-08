@@ -39,10 +39,10 @@ def test_parse_api_key__no_expected_attributes(capture_log):
 
 def test_parse_api_key__too_many_parts(capture_log):
     raw_key = "some API key" + DELIMITER_CHAR + "one" + DELIMITER_CHAR + "two"
-    comet_api_key = parse_api_key(raw_key)
+    opik_api_key = parse_api_key(raw_key)
 
-    assert comet_api_key is None
-    assert PARSE_API_KEY_TOO_MANY_PARTS % (3, raw_key) in capture_log.messages
+    assert opik_api_key is None
+    assert PARSE_API_KEY_TOO_MANY_PARTS % (3, "some*") in capture_log.messages
 
 
 def test_parse_api_key__happy_path__with_padding():
