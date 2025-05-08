@@ -99,7 +99,7 @@ class OptimizationResult(pydantic.BaseModel):
             f"\n{separator}",
             f"OPTIMIZATION COMPLETE",
             f"{separator}",
-            f"Optimizer:        {self.details.get('optimizer', type(self).__name__)}",
+            f"Optimizer:        {self.optimizer}",
             f"Model Used:       {model_name} (Temp: {temp_str})",
             f"Metric Evaluated: {self.metric_name}",
             f"Initial Score:    {initial_score_str}",
@@ -138,7 +138,7 @@ class OptimizationResult(pydantic.BaseModel):
 
         table.add_row(
             "Optimizer:",
-            f"[bold]{self.details.get('optimizer', type(self).__name__)}[/bold]",
+            f"[bold]{self.optimizer}[/bold]",
         )
         table.add_row("Model Used:", f"{model_name} ([dim]Temp:[/dim] {temp_str})")
         table.add_row("Metric Evaluated:", f"[bold]{self.metric_name}[/bold]")
