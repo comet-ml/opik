@@ -20,7 +20,7 @@ project_name = "optimize-metaprompt-hotpot"
 optimizer = MetaPromptOptimizer(
     model="openai/gpt-4o-mini",  # Using gpt-4o-mini for evaluation for speed
     project_name=project_name,
-    max_rounds=1,  # Number of optimization rounds
+    max_rounds=3,  # Number of optimization rounds
     num_prompts_per_round=4,  # Number of prompts to generate per round
     improvement_threshold=0.01,  # Minimum improvement required to continue
     temperature=0.1,  # Lower temperature for more focused responses
@@ -55,4 +55,4 @@ result = optimizer.optimize_prompt(
     use_subsample=True,  # Force using subsample for evaluation rounds
 )
 
-print(result)
+result.display()

@@ -1,14 +1,16 @@
 from typing import Optional, Union, List, Dict, Any
 import opik
 import logging
+import time
 
 import litellm
 from opik.evaluation import metrics
 from opik.opik_context import get_current_span_data
+from opik.rest_api.core import ApiError
+
 from pydantic import BaseModel
 from ._throttle import RateLimiter, rate_limited
 from .cache_config import initialize_cache
-
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from .optimization_config.configs import TaskConfig, MetricConfig
 
@@ -47,6 +49,7 @@ class BaseOptimizer:
         self.project_name = project_name
         self._history = []
         self.experiment_config = None
+        self.llm_call_counter = 0
 
         # Initialize shared cache
         initialize_cache()
@@ -142,7 +145,10 @@ class BaseOptimizer:
 
     @rate_limited(limiter)
     def _call_model(
-        self, prompt: str, system_prompt: str = None, is_reasoning: bool = False
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        is_reasoning: bool = False,
     ) -> str:
         """Call the model to get suggestions based on the meta-prompt."""
         model = self.reasoning_model if is_reasoning else self.model
@@ -164,11 +170,71 @@ class BaseOptimizer:
             {
                 "model": model,
                 "messages": messages,
+                # Ensure required params like 'temperature', 'max_tokens' are present
+                # Defaults added here for safety, though usually set in __init__ kwargs
+                "temperature": api_params.get("temperature", 0.3),
+                "max_tokens": api_params.get("max_tokens", 1000),
             }
         )
-        api_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(api_params)
-        response = litellm.completion(**api_params)
-        model_output = response.choices[0].message.content.strip()
-        logger.debug(f"Model response: {model_output[:100]}...")
 
-        return model_output
+        # Attempt to add Opik monitoring if available
+        try:
+            # Assuming opik_litellm_monitor is imported and configured elsewhere
+            api_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(
+                api_params
+            )
+            logger.debug("Opik monitoring hooks added to LiteLLM params.")
+        except Exception as e:
+            logger.warning(f"Could not add Opik monitoring to LiteLLM params: {e}")
+
+        logger.debug(
+            f"Final API params (excluding messages): { {k:v for k,v in api_params.items() if k != 'messages'} }"
+        )
+
+        # Increment Counter
+        self.llm_call_counter += 1
+        logger.debug(f"LLM Call Count: {self.llm_call_counter}")
+
+        try:
+            response = litellm.completion(**api_params)
+            model_output = response.choices[0].message.content.strip()
+            logger.debug(f"Model response from {model_to_use}: {model_output[:100]}...")
+            return model_output
+        except litellm.exceptions.RateLimitError as e:
+            logger.error(f"LiteLLM Rate Limit Error for model {model_to_use}: {e}")
+            # Consider adding retry logic here with tenacity
+            raise
+        except litellm.exceptions.APIConnectionError as e:
+            logger.error(f"LiteLLM API Connection Error for model {model_to_use}: {e}")
+            # Consider adding retry logic here
+            raise
+        except litellm.exceptions.ContextWindowExceededError as e:
+            logger.error(
+                f"LiteLLM Context Window Exceeded Error for model {model_to_use}. Prompt length: {len(prompt)}. Details: {e}"
+            )
+            raise
+        except litellm.exceptions.APIError as e:  # Catch broader API errors
+            logger.error(f"LiteLLM API Error for model {model_to_use}: {e}")
+            raise
+        except Exception as e:
+            # Catch any other unexpected errors
+            logger.error(
+                f"Unexpected error during model call to {model_to_use}: {type(e).__name__} - {e}"
+            )
+            raise
+
+    def update_optimization(self, optimization, status: str) -> None:
+        """
+        Update the optimization status
+        """
+        # FIXME: remove when a solution is added to opik's optimization.update method
+        count = 0
+        while count < 3:
+            try:
+                optimization.update(status="completed")
+                break
+            except ApiError:
+                count += 1
+                time.sleep(5)
+        if count == 3:
+            logger.warning("Unable to update optimization status; continuing...")

@@ -6,13 +6,10 @@ import opik
 
 from opik.integrations.dspy.callback import OpikCallback
 from opik.opik_context import get_current_span_data
-from opik.evaluation.metrics import BaseMetric
 from opik.evaluation import evaluate
 from opik import Dataset
-from opik_optimizer import optimization_dsl
 
 import dspy
-from dspy.clients.base_lm import BaseLM
 
 import litellm
 from litellm.caching import Cache
@@ -36,16 +33,7 @@ litellm.cache = Cache(type="disk", disk_cache_dir=disk_cache_dir)
 # Set up logging
 import logging
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Configure LiteLLM logging
-litellm_logger = logging.getLogger("LiteLLM")
-litellm_logger.setLevel(logging.WARNING)  # Only show warnings and errors from LiteLLM
-
-# Configure HTTPX logging
-httpx_logger = logging.getLogger("httpx")
-httpx_logger.setLevel(logging.WARNING)  # Only show warnings and errors from HTTPX
+logger = logging.getLogger(__name__)  # Inherits config from setup_logging
 
 
 class MiproOptimizer(BaseOptimizer):
@@ -57,6 +45,7 @@ class MiproOptimizer(BaseOptimizer):
         lm = LM(**self.model_kwargs)
         opik_callback = OpikCallback(project_name=self.project_name, log_graph=True)
         dspy.configure(lm=lm, callbacks=[opik_callback])
+        logger.debug(f"Initialized MiproOptimizer with model: {model}")
 
     def evaluate_prompt(
         self,
@@ -192,7 +181,13 @@ class MiproOptimizer(BaseOptimizer):
         count = len(evaluation.test_results)
         for i in range(count):
             total_score += evaluation.test_results[i].score_results[0].value
-        return total_score / count if count > 0 else 0.0
+        score = total_score / count if count > 0 else 0.0
+
+        logger.debug(
+            f"Starting Mipro evaluation for prompt type: {type(prompt).__name__}"
+        )
+        logger.debug(f"Evaluation score: {score:.4f}")
+        return score
 
     def optimize_prompt(
         self,
@@ -216,6 +211,9 @@ class MiproOptimizer(BaseOptimizer):
             )
             optimization = None
 
+        if not optimization:
+            logger.warning("Continuing without Opik optimization tracking.")
+
         try:
             result = self._optimize_prompt(
                 dataset=dataset,
@@ -227,11 +225,12 @@ class MiproOptimizer(BaseOptimizer):
                 **kwargs,
             )
             if optimization:
-                optimization.update(status="completed")
+                self.update_optimization(optimization, status="completed")
             return result
         except Exception as e:
+            logger.error(f"Mipro optimization failed: {e}", exc_info=True)
             if optimization:
-                optimization.update(status="cancelled")
+                self.update_optimization(optimization, status="cancelled")
             raise e
 
     def _optimize_prompt(
@@ -244,6 +243,7 @@ class MiproOptimizer(BaseOptimizer):
         optimization_id: Optional[str] = None,
         **kwargs,
     ) -> OptimizationResult:
+        logger.info("Preparing MIPRO optimization...")
         self.prepare_optimize_prompt(
             dataset=dataset,
             metric_config=metric_config,
@@ -253,7 +253,10 @@ class MiproOptimizer(BaseOptimizer):
             optimization_id=optimization_id,
             **kwargs,
         )
-        return self.continue_optimize_prompt()
+        logger.info("Starting MIPRO compilation...")
+        result = self.continue_optimize_prompt()
+        logger.info("MIPRO optimization complete.")
+        return result
 
     def prepare_optimize_prompt(
         self,
@@ -336,6 +339,10 @@ class MiproOptimizer(BaseOptimizer):
             log_dir=log_dir,
             experiment_config=experiment_config,
         )
+
+        logger.debug("Created DSPy training set.")
+        logger.debug(f"Using DSPy module: {type(self.module).__name__}")
+        logger.debug(f"Using metric function: {self.metric_function.__name__}")
 
     def load_from_checkpoint(self, filename):
         """
