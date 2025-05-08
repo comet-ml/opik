@@ -621,16 +621,12 @@ class BenchmarkRunner:
                     if num_processed_items == 1: optimizer.min_examples, optimizer.max_examples = 1, 1
                     cur_met_conf = config.objective
                     cur_task_conf = TaskConfig(instruction_prompt=initial_prompt, input_dataset_fields=[input_key], output_dataset_field=output_key, use_chat_prompt=True)
-                    
-                    # Use a fixed integer for n_trials in the actual call
-                    actual_n_trials = 10 
-                    logger.info(f"    (Using n_trials={actual_n_trials} for optimize_prompt call)")
                     results_obj = optimizer.optimize_prompt(
-                            dataset=processed_dataset,
+                        dataset=processed_dataset,
                         metric_config=cur_met_conf, 
                         task_config=cur_task_conf, 
-                        n_trials=actual_n_trials, # Pass the integer
-                        n_samples=100
+                        n_trials=getattr(optimizer, 'n_trials', 10),
+                        n_samples=getattr(optimizer, 'n_samples', 100)
                     )
                 else:
                     logger.error(f"Unsupported optimizer: {optimizer_name}")
@@ -739,11 +735,11 @@ class BenchmarkRunner:
                 "timestamp_end": datetime.now().isoformat(), # End of optimization block
                 "duration_seconds": opt_time,
                 "optimizer_type": optimizer_name,
-                # Fetch actual n_trials used (handle default case)
-                "num_trials_configured": getattr(results_obj.details, 'total_trials', actual_n_trials) if optimizer_name == "FewShotBayesianOptimizer" and hasattr(results_obj, 'details') else getattr(optimizer, 'n_trials', None),
-                "num_samples_configured": getattr(results_obj.details, 'n_samples', None) if optimizer_name == "FewShotBayesianOptimizer" and hasattr(results_obj, 'details') else getattr(optimizer, 'n_samples', None),
-                "best_score_achieved": getattr(results_obj, 'score', None), # Use results_obj.score for the best score
-                "final_prompt": results_obj.details.get("chat_messages") if optimizer_name == "FewShotBayesianOptimizer" and hasattr(results_obj, 'details') else getattr(results_obj, 'prompt', None), # Store full chat messages if FewShot
+                # Fetch configured trials/samples from optimizer instance attributes
+                "num_trials_configured": getattr(optimizer, 'n_trials', getattr(optimizer, 'n_iterations', None)), # Use n_iterations as fallback for FewShot
+                "num_samples_configured": getattr(optimizer, 'n_samples', None),
+                "best_score_achieved": getattr(results_obj, 'score', None), 
+                "final_prompt": results_obj.details.get("chat_messages") if optimizer_name == "FewShotBayesianOptimizer" and hasattr(results_obj, 'details') else getattr(results_obj, 'prompt', None), 
                 "history": opt_history_processed,
             }
 
@@ -1062,7 +1058,16 @@ class BenchmarkRunner:
                         continue # <<< Indent this to be PART of the if block
                         
                     exp_config = get_experiment_config(dataset_key, optimizer_key, model_name, test_mode=self.test_mode)
-                    current_future = executor.submit( self.run_optimization, dataset=dataset_obj, optimizer=optimizer_instance, metrics=DATASET_CONFIGS[dataset_key]["metrics"], initial_prompt=INITIAL_PROMPTS[dataset_key], input_key=DATASET_CONFIGS[dataset_key]["input_key"], output_key=DATASET_CONFIGS[dataset_key]["output_key"], experiment_config=exp_config,)
+                    current_future = executor.submit( 
+                        self.run_optimization, 
+                        dataset=dataset_obj, 
+                        optimizer=optimizer_instance, 
+                        metrics=DATASET_CONFIGS[dataset_key]["metrics"], 
+                        initial_prompt=INITIAL_PROMPTS[dataset_key], 
+                        input_key=DATASET_CONFIGS[dataset_key]["input_key"], 
+                        output_key=DATASET_CONFIGS[dataset_key]["output_key"], 
+                        experiment_config=exp_config
+                    )
                     
                     # Store more metadata for the live display
                     task_desc_short = f"{dataset_key}/{optimizer_key}/{sanitized_model_name_for_ids}" # Use sanitized name here too
@@ -1714,8 +1719,7 @@ def calculate_percentage_change(initial: Optional[float], final: Optional[float]
 def main():
     """Main function to run benchmarks with improved output formatting."""
     t_start = time.perf_counter()
-    # Setup our specific logger first with INFO level
-    setup_logging(level=logging.INFO, force=True, suppress_opik_core=False, suppress_noisy_libraries=False) # Explicitly set flags initially
+    setup_logging(level=logging.INFO, force=True)
     t_log_setup = time.perf_counter()
     logger.info(f"Initial logging setup took {t_log_setup - t_start:.4f}s")
     
