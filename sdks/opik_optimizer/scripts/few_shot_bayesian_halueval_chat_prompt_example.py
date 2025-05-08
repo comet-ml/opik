@@ -81,7 +81,7 @@ result = optimizer.optimize_prompt(
     dataset=halu_eval_dataset,
     metric_config=metric_config,
     task_config=task_config,
-    n_trials=5,
+    n_trials=10,
     n_samples=200,
 )
 

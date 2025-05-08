@@ -46,7 +46,7 @@ result = optimizer.optimize_prompt(
     metric_config=metric_config,
     task_config=task_config,
     n_trials=10,
-    n_samples=100,
+    n_samples=150,
 )
 
 print("Result:", result)
