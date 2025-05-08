@@ -11,7 +11,7 @@ setup(
     package_dir={"": "src"},
     python_requires=">=3.9",
     install_requires=[
-        "opik>=1.7.13", # FIXME: update version when new endpoints are complete
+        "opik>=1.7.17",
         "dspy>=2.6.18,<3",
         "litellm",
         "tqdm",

@@ -61,7 +61,7 @@ from opik_optimizer.demo import get_or_create_dataset
 from opik_optimizer import (
     OptimizationConfig,
     MetricConfig,
-    PromptTaskConfig,
+    TaskConfig,
     from_dataset_field,
     from_llm_response_text,
 )
@@ -96,7 +96,7 @@ optimization_config = OptimizationConfig(
             "reference": from_dataset_field(name="answer"),
         },
     ),
-    task=PromptTaskConfig(
+    task=TaskConfig(
         instruction_prompt=prompt_instruction,
         input_dataset_fields=["question"],
         output_dataset_field="answer",

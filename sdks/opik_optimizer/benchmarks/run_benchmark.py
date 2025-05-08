@@ -20,7 +20,7 @@ from opik_optimizer import (
     MiproOptimizer,
     OptimizationConfig,
     MetricConfig,
-    PromptTaskConfig,
+    TaskConfig,
     from_dataset_field,
     from_llm_response_text,
 )
@@ -312,7 +312,7 @@ class BenchmarkRunner:
                         "reference": from_dataset_field(name=output_key),
                     }
                 ),
-                task=PromptTaskConfig(
+                task=TaskConfig(
                     instruction_prompt=initial_prompt,
                     input_dataset_fields=[input_key],
                     output_dataset_field=output_key,
@@ -433,7 +433,7 @@ class BenchmarkRunner:
                         processed_config = OptimizationConfig(
                             dataset=processed_dataset,
                             objective=config.objective,
-                            task=PromptTaskConfig(
+                            task=TaskConfig(
                                 instruction_prompt=initial_prompt,
                                 input_dataset_fields=[input_key],
                                 output_dataset_field=output_key,
