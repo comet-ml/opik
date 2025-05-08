@@ -203,28 +203,28 @@ class BaseOptimizer:
                 retry_max_seconds=60  # Max backoff
             )
             model_output = response.choices[0].message.content.strip()
-            logger.debug(f"Model response from {model_to_use}: {model_output[:100]}...")
+            logger.debug(f"Model response from {model}: {model_output[:100]}...")
             return model_output
         except litellm.exceptions.RateLimitError as e:
-            logger.error(f"LiteLLM Rate Limit Error for model {model_to_use}: {e}")
+            logger.error(f"LiteLLM Rate Limit Error for model {model}: {e}")
             # Consider adding retry logic here with tenacity
             raise
         except litellm.exceptions.APIConnectionError as e:
-            logger.error(f"LiteLLM API Connection Error for model {model_to_use}: {e}")
+            logger.error(f"LiteLLM API Connection Error for model {model}: {e}")
             # Consider adding retry logic here
             raise
         except litellm.exceptions.ContextWindowExceededError as e:
             logger.error(
-                f"LiteLLM Context Window Exceeded Error for model {model_to_use}. Prompt length: {len(prompt)}. Details: {e}"
+                f"LiteLLM Context Window Exceeded Error for model {model}. Prompt length: {len(prompt)}. Details: {e}"
             )
             raise
         except litellm.exceptions.APIError as e:  # Catch broader API errors
-            logger.error(f"LiteLLM API Error for model {model_to_use}: {e}")
+            logger.error(f"LiteLLM API Error for model {model}: {e}")
             raise
         except Exception as e:
             # Catch any other unexpected errors
             logger.error(
-                f"Unexpected error during model call to {model_to_use}: {type(e).__name__} - {e}"
+                f"Unexpected error during model call to {model}: {type(e).__name__} - {e}"
             )
             raise
 
