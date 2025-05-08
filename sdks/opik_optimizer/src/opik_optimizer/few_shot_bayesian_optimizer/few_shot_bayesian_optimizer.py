@@ -33,6 +33,7 @@ def _call_model(model, messages, seed, model_kwargs):
         model=model,
         messages=messages,
         seed=seed,
+        num_retries=6,
         **model_kwargs,
     )
 

@@ -238,7 +238,10 @@ class MetaPromptOptimizer(BaseOptimizer):
             )
 
             response = litellm.completion(
-                model=model_to_use, messages=messages, **final_call_params
+                model=model_to_use, 
+                messages=messages, 
+                num_retries=6,
+                **final_call_params
             )
             return response.choices[0].message.content
         except litellm.exceptions.RateLimitError as e:
