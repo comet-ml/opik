@@ -37,8 +37,8 @@ logger = logging.getLogger(__name__)  # Inherits config from setup_logging
 
 
 class MiproOptimizer(BaseOptimizer):
-    def __init__(self, model, project_name: Optional[str] = None, **model_kwargs):
-        super().__init__(model, project_name, **model_kwargs)
+    def __init__(self, model, project_name: Optional[str] = None, verbose: int = 1, **model_kwargs):
+        super().__init__(model, project_name, verbose=verbose, **model_kwargs)
         self.tools = []
         self.num_threads = self.model_kwargs.pop("num_threads", 6)
         self.model_kwargs["model"] = self.model
@@ -56,6 +56,7 @@ class MiproOptimizer(BaseOptimizer):
         n_samples: int = 10,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
+        verbose: int = 1,
         **kwargs,
     ) -> float:
         """
@@ -69,6 +70,7 @@ class MiproOptimizer(BaseOptimizer):
             n_samples: number of items to test in the dataset
             dataset_item_ids: Optional list of dataset item IDs to evaluate
             experiment_config: Optional configuration for the experiment
+            verbose: Verbosity level
             **kwargs: Additional arguments for evaluation
 
         Returns:
@@ -174,6 +176,7 @@ class MiproOptimizer(BaseOptimizer):
             dataset_item_ids=dataset_item_ids,
             project_name=self.project_name,
             experiment_config=experiment_config,
+            verbose=verbose,
         )
 
         # Calculate average score across all metrics
@@ -328,7 +331,7 @@ class MiproOptimizer(BaseOptimizer):
             metric=self.metric_function,
             auto="light",
             num_threads=self.num_threads,
-            verbose=False,
+            verbose=(self.verbose == 1),
             num_candidates=self.num_candidates,
             seed=self.seed,
             opik_prompt_task_config=task_config,
