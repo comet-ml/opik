@@ -104,7 +104,6 @@ OPTIMIZER_CONFIGS = {
     "few_shot": {
         "class": "FewShotBayesianOptimizer",
         "params": {
-            # "model": "gpt-4o-mini", # This will be overridden by MODELS_TO_RUN
             "min_examples": 3,
             "max_examples": 8,
             "n_threads": 4,
@@ -114,7 +113,6 @@ OPTIMIZER_CONFIGS = {
     # "meta_prompt": {
     #     "class": "MetaPromptOptimizer",
     #     "params": {
-    #         # "model": "gpt-4o-mini", # Will be overridden
     #         "max_rounds": 3,
     #         "num_prompts_per_round": 4,
     #         "improvement_threshold": 0.01,
@@ -126,7 +124,6 @@ OPTIMIZER_CONFIGS = {
     # "mipro": {
     #     "class": "MiproOptimizer",
     #     "params": {
-    #         # "model": "gpt-4o-mini", # Will be overridden
     #         "temperature": 0.1,
     #         "max_tokens": 5000,
     #         "num_threads": 4,
@@ -135,7 +132,6 @@ OPTIMIZER_CONFIGS = {
     # "external_dspy_mipro": {
     #     "class": "ExternalDspyMiproOptimizer",
     #     "params": {
-    #         # "model": "openai/gpt-4o-mini", # Will be overridden
     #         "temperature": 0.1,
     #         "max_tokens": 5000,
     #         "num_threads": 1,
@@ -144,7 +140,6 @@ OPTIMIZER_CONFIGS = {
     # "external_adalflow": {
     #     "class": "ExternalAdalFlowOptimizer",
     #     "params": {
-    #         # "model": "gpt-4o-mini", # Will be overridden
     #         "temperature": 0.1,
     #         "max_tokens": 5000,
     #         "num_threads": 1,
@@ -153,12 +148,12 @@ OPTIMIZER_CONFIGS = {
 }
 
 MODELS_TO_RUN = [
-    # "openai/gpt-4.1-2025-04-14",
-    # "openai/o3-2025-04-16",
+    "openai/gpt-4.1-2025-04-14",
+    "openai/o3-2025-04-16",
     "anthropic/claude-3-5-sonnet-20241022",
     "anthropic/claude-3-7-sonnet-20250219",
-    # "openrouter/google/gemini-2.5-pro-preview",
-    # "openrouter/google/gemini-2.5-flash-preview",
+    "openrouter/google/gemini-2.5-pro-preview",
+    "openrouter/google/gemini-2.5-flash-preview",
 ]
 
 # Initial prompts for each dataset
