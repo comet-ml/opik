@@ -95,7 +95,7 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
   const isExceededLimit = spanQuota?.used >= spanQuota?.limit;
 
   const getExceededLabel = () => {
-    if (!isOrganizationAdmin) {
+    if (isOrganizationAdmin) {
       return (
         <span>
           You&apos;ve hit your plan limits.{" "}
@@ -114,10 +114,12 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
       );
     }
 
+    const isOneAdmin = firstThreeAdmins?.length === 1;
+
     return (
       <span>
         You&apos;ve hit your plan limits. To keep monitoring running, ask your
-        organization admins (
+        organization {isOneAdmin ? "admin" : "admins"} (
         {firstThreeAdmins?.map((user, idx) => (
           <React.Fragment key={user.userName}>
             <TooltipWrapper content={user.email}>
@@ -126,7 +128,7 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
             {idx !== firstThreeAdmins.length - 1 && ", "}
           </React.Fragment>
         ))}
-        ...) to upgrade your plan.
+        {!isOneAdmin && "..."}) to upgrade your plan.
       </span>
     );
   };
