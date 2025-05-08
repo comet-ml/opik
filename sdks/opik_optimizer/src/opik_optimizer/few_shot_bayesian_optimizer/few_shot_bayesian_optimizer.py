@@ -249,7 +249,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             score=best_score,
             metric_name=metric_config.metric.name,
             details={
-                "prompt_type": "chat",
                 "prompt_type": "chat" if task_config.use_chat_prompt else "non-chat",
                 "chat_messages": chat_messages_list,
                 "prompt_parameter": best_param,
@@ -262,6 +261,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "stopped_early": False,
                 "metric_config": metric_config.dict(),
                 "task_config": task_config.dict(),
+                "model": self.model,
+                "temperature": self.model_kwargs.get('temperature'),
             },
         )
 
