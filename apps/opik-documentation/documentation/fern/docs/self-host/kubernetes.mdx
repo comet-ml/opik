@@ -7,7 +7,7 @@ subtitle: Describes how to run Opik on a Kubernetes cluster
 
 For production deployments, we recommend using our Kubernetes Helm chart. This chart is designed to be highly configurable and has been battle-tested in Comet's managed cloud offering.
 
-## Prerequisites
+# Prerequisites
 
 In order to install Opik on a Kubernetes cluster, you will need to have the following tools installed:
 
@@ -15,18 +15,20 @@ In order to install Opik on a Kubernetes cluster, you will need to have the foll
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
 - Optional: [kubectx](https://github.com/ahmetb/kubectx) and [kubens](https://github.com/ahmetb/kubectx) to switch between Kubernetes clusters and namespaces.
 
-## Installation
+# Installation
 
 You can install Opik using the helm chart maintained by the Opik team by running the following commands:
 
+Add Opik Helm repo
+
 ```bash
-# Add Opik Helm repo
 helm repo add opik https://comet-ml.github.io/opik/
 helm repo update
+```
 
-# You can set VERSION to the specific Opik version or leave it as 'latest'
+You can set VERSION to the specific Opik version or leave it as 'latest'
+```bash
 VERSION=latest
-# Install Opik
 helm upgrade --install opik -n opik --create-namespace opik/opik \
     --set component.backend.image.tag=$VERSION \
     --set component.python-backend.image.tag=$VERSION \
@@ -40,18 +42,17 @@ You can port-forward any service you need to your local machine:
 kubectl port-forward -n opik svc/opik-frontend 5173
 ```
 
-
 Opik will be available at `http://localhost:5173`.
 
-## Configuration
+# Configuration
 
 You can find a full list the configuration options in the [helm chart documentation](https://github.com/comet-ml/opik/tree/main/deployment/helm_chart/opik).
 
-## Advanced deployment options
+# Advanced deployment options
 
-### Configure external access
+## Configure external access
 
-#### Configure ingress for opik-frontend
+### Configure ingress for opik-frontend
 
 ```yaml 
 component:
@@ -72,7 +73,7 @@ component:
                   pathType: Prefix
 ```
 
-#### Configure LoadBalancer service for clickhouse
+### Configure LoadBalancer service for clickhouse
 
 ```yaml
 clickhouse:
@@ -82,9 +83,9 @@ clickhouse:
       <your clickhouse LB service annotations>
 ```
 
-### Configure Clickhouse backup on S3 (or minio)
+## Configure Clickhouse backup on S3 (or minio)
 
-#### With AWS Key and Secret key
+### With AWS Key and Secret key
 
 You will need to create a secret with the credentials for the S3 bucket you want to use for backup with following values:
 ```yaml
@@ -102,7 +103,7 @@ clickhouse:
     baseBackup: ""
 ```
 
-#### With IAM Role 
+### With IAM Role 
 
 ```yaml
 clickhouse:
@@ -117,9 +118,22 @@ clickhouse:
       baseBackup: ""
 ```
 
-### Use S3 bucket for Opik
+## Configure replication for Clickhouse
 
-#### Using AWS key and secret keys
+<Tip>
+
+Known Limitation: You have to have Opik running before setting up replication for Clickhouse!
+
+</Tip>
+
+```yaml 
+clickhouse:
+  replicasCount: 2
+```
+
+## Use S3 bucket for Opik
+
+### Using AWS key and secret keys
 
 ```yaml
 component:
@@ -132,7 +146,7 @@ component:
       AWS_SECRET_ACCESS_KEY: <your AWS Secret>
 ```
 
-### Using IAM Role
+## Use IAM Role
 
 If your IAM role is configured for the k8s nodes, the only things you will need is to set for opik-backend:
 
@@ -159,7 +173,8 @@ component:
             eks.amazonaws.com/role-arn: <your IAM Role arn>
 ```
 
-### Using external Clickhouse installation
+## Use external Clickhouse installation
+
 Supported from Opik chart version 1.4.2
 
 Configuration snippet for using external Clickhouse:
@@ -180,6 +195,7 @@ clickhouse:
     enabled: false
 ```
 The passwords can be handled in the secret, and then you should configure it as following
+
 ```yaml
 component:
     backend:
@@ -200,7 +216,7 @@ clickhouse:
     enabled: false
 ```
 
-## Troubleshooting
+# Troubleshooting
 
 If you get this error when running helm
 ```bash
