@@ -1,5 +1,5 @@
 from opik.evaluation.metrics import Equals
-from opik_optimizer.few_shot_bayesian_optimizer import FewShotBayesianOptimizer
+from opik_optimizer import FewShotBayesianOptimizer
 from opik_optimizer.demo import get_or_create_dataset
 
 from opik_optimizer import (

@@ -1,6 +1,6 @@
 from opik.evaluation import metrics
 from opik.evaluation.metrics import score_result
-from opik_optimizer.few_shot_bayesian_optimizer import FewShotBayesianOptimizer
+from opik_optimizer import FewShotBayesianOptimizer
 from opik_optimizer.demo import get_or_create_dataset
 
 from opik_optimizer import (
@@ -24,7 +24,7 @@ class HaluEvalObjective(metrics.BaseMetric):
         true_negative_weight = 1.0
         true_positive_weight = 6.0
 
-        # The dataset is imbalanced (<20% hallucinations), higher true-positive weight will make the prompt more sensitive,
+        # The dataset is imbalanced, higher true-positive weight will make the prompt more sensitive,
         # leading to more hallucinations detected, but also to more false-positive classifications.
 
         if ground_truth == "no":
@@ -32,11 +32,13 @@ class HaluEvalObjective(metrics.BaseMetric):
                 value=(1 if ground_truth == output else 0) * true_negative_weight,
                 name=self.name,
             )
-
-        return score_result.ScoreResult(
-            value=(1 if ground_truth == output else 0) * true_positive_weight,
-            name=self.name,
-        )
+        elif ground_truth == "yes":
+            return score_result.ScoreResult(
+                value=(1 if ground_truth == output else 0) * true_positive_weight,
+                name=self.name,
+            )
+        else:
+            raise ValueError(f"Invalid ground truth value: {ground_truth}")
 
 
 project_name = "optimize-few-shot-bayesian-halueval"
@@ -54,7 +56,7 @@ Answer with just one word: 'yes' if there is a hallucination and 'no' if there i
 optimizer = FewShotBayesianOptimizer(
     model="gpt-4o-mini",
     project_name=project_name,
-    min_examples=2,
+    min_examples=4,
     max_examples=8,
     n_threads=6,
     seed=42,
@@ -80,7 +82,7 @@ result = optimizer.optimize_prompt(
     metric_config=metric_config,
     task_config=task_config,
     n_trials=5,
-    n_samples=10,
+    n_samples=200,
 )
 
 print("Result:", result)
