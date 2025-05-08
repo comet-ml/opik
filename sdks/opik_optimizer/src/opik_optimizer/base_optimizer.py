@@ -196,7 +196,12 @@ class BaseOptimizer:
         logger.debug(f"LLM Call Count: {self.llm_call_counter}")
 
         try:
-            response = litellm.completion(**api_params)
+            response = litellm.completion(
+                **api_params,
+                num_retries=5,  # Add number of retries
+                retry_after_seconds=10,  # Initial backoff
+                retry_max_seconds=60  # Max backoff
+            )
             model_output = response.choices[0].message.content.strip()
             logger.debug(f"Model response from {model_to_use}: {model_output[:100]}...")
             return model_output
