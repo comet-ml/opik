@@ -934,9 +934,9 @@ class TraceDAOImpl implements TraceDAO {
                     workspace_id,
                     project_id,
                     id,
-                    notEmpty(input) as input_count,
-                    notEmpty(output) as output_count,
-                    notEmpty(metadata) as metadata_count,
+                    if(has_input, 1, 0) as input_count,
+                    if(has_output, 1, 0) as output_count,
+                    if(has_metadata, 1, 0) as metadata_count,
                     length(tags) as tags_length,
                     if(end_time IS NOT NULL AND start_time IS NOT NULL
                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
