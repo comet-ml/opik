@@ -29,8 +29,7 @@ class MessageQueue(Generic[T]):
 
     def __init__(self, max_length: Optional[int] = None):
         self._deque: collections.deque[T] = collections.deque(maxlen=max_length)
-        self._mutex = threading.Lock()
-        self._not_empty = threading.Condition(self._mutex)
+        self._not_empty = threading.Condition()
 
     def put(self, message: T) -> None:
         with self._not_empty:
