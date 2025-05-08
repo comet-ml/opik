@@ -46,7 +46,15 @@ export class OpenTelemetryIngestion {
      * @example
      *     await client.openTelemetryIngestion.receiveProtobufTraces()
      */
-    public async receiveProtobufTraces(requestOptions?: OpenTelemetryIngestion.RequestOptions): Promise<unknown> {
+    public receiveProtobufTraces(
+        requestOptions?: OpenTelemetryIngestion.RequestOptions,
+    ): core.HttpResponsePromise<unknown> {
+        return core.HttpResponsePromise.fromPromise(this.__receiveProtobufTraces(requestOptions));
+    }
+
+    private async __receiveProtobufTraces(
+        requestOptions?: OpenTelemetryIngestion.RequestOptions,
+    ): Promise<core.WithRawResponse<unknown>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -74,13 +82,14 @@ export class OpenTelemetryIngestion {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return _response.body;
+            return { data: _response.body, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -89,12 +98,14 @@ export class OpenTelemetryIngestion {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/otel/v1/traces.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }

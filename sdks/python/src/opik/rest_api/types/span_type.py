@@ -2,6 +2,4 @@
 
 import typing
 
-SpanType = typing.Union[
-    typing.Literal["general", "tool", "llm", "guardrail"], typing.Any
-]
+SpanType = typing.Union[typing.Literal["general", "tool", "llm", "guardrail"], typing.Any]

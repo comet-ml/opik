@@ -55,11 +55,19 @@ export class Spans {
      *         text: "text"
      *     })
      */
-    public async addSpanComment(
+    public addSpanComment(
         id: string,
         request: OpikApi.Comment,
         requestOptions?: Spans.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__addSpanComment(id, request, requestOptions));
+    }
+
+    private async __addSpanComment(
+        id: string,
+        request: OpikApi.Comment,
+        requestOptions?: Spans.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -88,13 +96,14 @@ export class Spans {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -103,6 +112,7 @@ export class Spans {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -111,6 +121,7 @@ export class Spans {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -129,11 +140,19 @@ export class Spans {
      *         source: "ui"
      *     })
      */
-    public async addSpanFeedbackScore(
+    public addSpanFeedbackScore(
         id: string,
         request: OpikApi.FeedbackScore,
         requestOptions?: Spans.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__addSpanFeedbackScore(id, request, requestOptions));
+    }
+
+    private async __addSpanFeedbackScore(
+        id: string,
+        request: OpikApi.FeedbackScore,
+        requestOptions?: Spans.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -162,13 +181,14 @@ export class Spans {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -177,6 +197,7 @@ export class Spans {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -185,6 +206,7 @@ export class Spans {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -198,10 +220,17 @@ export class Spans {
      * @example
      *     await client.spans.getSpansByProject()
      */
-    public async getSpansByProject(
+    public getSpansByProject(
         request: OpikApi.GetSpansByProjectRequest = {},
         requestOptions?: Spans.RequestOptions,
-    ): Promise<OpikApi.SpanPagePublic> {
+    ): core.HttpResponsePromise<OpikApi.SpanPagePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getSpansByProject(request, requestOptions));
+    }
+
+    private async __getSpansByProject(
+        request: OpikApi.GetSpansByProjectRequest = {},
+        requestOptions?: Spans.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.SpanPagePublic>> {
         const {
             page,
             size,
@@ -285,18 +314,22 @@ export class Spans {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.SpanPagePublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.SpanPagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -305,12 +338,14 @@ export class Spans {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/spans.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -331,7 +366,17 @@ export class Spans {
      *         startTime: "2024-01-15T09:30:00Z"
      *     })
      */
-    public async createSpan(request: OpikApi.SpanWrite, requestOptions?: Spans.RequestOptions): Promise<void> {
+    public createSpan(
+        request: OpikApi.SpanWrite,
+        requestOptions?: Spans.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__createSpan(request, requestOptions));
+    }
+
+    private async __createSpan(
+        request: OpikApi.SpanWrite,
+        requestOptions?: Spans.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -360,17 +405,18 @@ export class Spans {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 409:
-                    throw new OpikApi.ConflictError(_response.error.body);
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -380,12 +426,14 @@ export class Spans {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/spans.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -406,7 +454,17 @@ export class Spans {
      *             }]
      *     })
      */
-    public async createSpans(request: OpikApi.SpanBatchWrite, requestOptions?: Spans.RequestOptions): Promise<void> {
+    public createSpans(
+        request: OpikApi.SpanBatchWrite,
+        requestOptions?: Spans.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__createSpans(request, requestOptions));
+    }
+
+    private async __createSpans(
+        request: OpikApi.SpanBatchWrite,
+        requestOptions?: Spans.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -435,13 +493,14 @@ export class Spans {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -450,12 +509,14 @@ export class Spans {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/spans/batch.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -471,7 +532,17 @@ export class Spans {
      * @example
      *     await client.spans.getSpanById("id")
      */
-    public async getSpanById(id: string, requestOptions?: Spans.RequestOptions): Promise<OpikApi.SpanPublic> {
+    public getSpanById(
+        id: string,
+        requestOptions?: Spans.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.SpanPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getSpanById(id, requestOptions));
+    }
+
+    private async __getSpanById(
+        id: string,
+        requestOptions?: Spans.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.SpanPublic>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -499,22 +570,26 @@ export class Spans {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.SpanPublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.SpanPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -524,12 +599,14 @@ export class Spans {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/spans/{id}.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -545,7 +622,14 @@ export class Spans {
      * @example
      *     await client.spans.deleteSpanById("id")
      */
-    public async deleteSpanById(id: string, requestOptions?: Spans.RequestOptions): Promise<void> {
+    public deleteSpanById(id: string, requestOptions?: Spans.RequestOptions): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteSpanById(id, requestOptions));
+    }
+
+    private async __deleteSpanById(
+        id: string,
+        requestOptions?: Spans.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -573,17 +657,18 @@ export class Spans {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 501:
-                    throw new OpikApi.NotImplementedError(_response.error.body);
+                    throw new OpikApi.NotImplementedError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -593,12 +678,14 @@ export class Spans {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling DELETE /v1/private/spans/{id}.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -617,11 +704,19 @@ export class Spans {
      *         traceId: "trace_id"
      *     })
      */
-    public async updateSpan(
+    public updateSpan(
         id: string,
         request: OpikApi.SpanUpdate,
         requestOptions?: Spans.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__updateSpan(id, request, requestOptions));
+    }
+
+    private async __updateSpan(
+        id: string,
+        request: OpikApi.SpanUpdate,
+        requestOptions?: Spans.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -650,17 +745,18 @@ export class Spans {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -670,12 +766,14 @@ export class Spans {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling PATCH /v1/private/spans/{id}.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -691,10 +789,17 @@ export class Spans {
      *         ids: ["ids"]
      *     })
      */
-    public async deleteSpanComments(
+    public deleteSpanComments(
         request: OpikApi.BatchDelete,
         requestOptions?: Spans.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteSpanComments(request, requestOptions));
+    }
+
+    private async __deleteSpanComments(
+        request: OpikApi.BatchDelete,
+        requestOptions?: Spans.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -723,13 +828,14 @@ export class Spans {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -738,6 +844,7 @@ export class Spans {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -746,6 +853,7 @@ export class Spans {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -762,11 +870,19 @@ export class Spans {
      *         name: "name"
      *     })
      */
-    public async deleteSpanFeedbackScore(
+    public deleteSpanFeedbackScore(
         id: string,
         request: OpikApi.DeleteFeedbackScore,
         requestOptions?: Spans.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteSpanFeedbackScore(id, request, requestOptions));
+    }
+
+    private async __deleteSpanFeedbackScore(
+        id: string,
+        request: OpikApi.DeleteFeedbackScore,
+        requestOptions?: Spans.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -795,13 +911,14 @@ export class Spans {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -810,6 +927,7 @@ export class Spans {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -818,6 +936,7 @@ export class Spans {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -831,10 +950,17 @@ export class Spans {
      * @example
      *     await client.spans.findFeedbackScoreNames1()
      */
-    public async findFeedbackScoreNames1(
+    public findFeedbackScoreNames1(
         request: OpikApi.FindFeedbackScoreNames1Request = {},
         requestOptions?: Spans.RequestOptions,
-    ): Promise<string[]> {
+    ): core.HttpResponsePromise<string[]> {
+        return core.HttpResponsePromise.fromPromise(this.__findFeedbackScoreNames1(request, requestOptions));
+    }
+
+    private async __findFeedbackScoreNames1(
+        request: OpikApi.FindFeedbackScoreNames1Request = {},
+        requestOptions?: Spans.RequestOptions,
+    ): Promise<core.WithRawResponse<string[]>> {
         const { projectId, type: type_ } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (projectId != null) {
@@ -875,18 +1001,22 @@ export class Spans {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.spans.findFeedbackScoreNames1.Response.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.spans.findFeedbackScoreNames1.Response.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -895,6 +1025,7 @@ export class Spans {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -903,6 +1034,7 @@ export class Spans {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -919,11 +1051,19 @@ export class Spans {
      * @example
      *     await client.spans.getSpanComment("commentId", "spanId")
      */
-    public async getSpanComment(
+    public getSpanComment(
         commentId: string,
         spanId: string,
         requestOptions?: Spans.RequestOptions,
-    ): Promise<OpikApi.Comment> {
+    ): core.HttpResponsePromise<OpikApi.Comment> {
+        return core.HttpResponsePromise.fromPromise(this.__getSpanComment(commentId, spanId, requestOptions));
+    }
+
+    private async __getSpanComment(
+        commentId: string,
+        spanId: string,
+        requestOptions?: Spans.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.Comment>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -951,22 +1091,26 @@ export class Spans {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.Comment.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.Comment.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -976,6 +1120,7 @@ export class Spans {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -984,6 +1129,7 @@ export class Spans {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -997,10 +1143,17 @@ export class Spans {
      * @example
      *     await client.spans.getSpanStats()
      */
-    public async getSpanStats(
+    public getSpanStats(
         request: OpikApi.GetSpanStatsRequest = {},
         requestOptions?: Spans.RequestOptions,
-    ): Promise<OpikApi.ProjectStatsPublic> {
+    ): core.HttpResponsePromise<OpikApi.ProjectStatsPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getSpanStats(request, requestOptions));
+    }
+
+    private async __getSpanStats(
+        request: OpikApi.GetSpanStatsRequest = {},
+        requestOptions?: Spans.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ProjectStatsPublic>> {
         const { projectId, projectName, traceId, type: type_, filters } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (projectId != null) {
@@ -1053,18 +1206,22 @@ export class Spans {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.ProjectStatsPublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.ProjectStatsPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -1073,12 +1230,14 @@ export class Spans {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/spans/stats.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -1099,10 +1258,17 @@ export class Spans {
      *             }]
      *     })
      */
-    public async scoreBatchOfSpans(
+    public scoreBatchOfSpans(
         request: OpikApi.FeedbackScoreBatch,
         requestOptions?: Spans.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__scoreBatchOfSpans(request, requestOptions));
+    }
+
+    private async __scoreBatchOfSpans(
+        request: OpikApi.FeedbackScoreBatch,
+        requestOptions?: Spans.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -1131,13 +1297,14 @@ export class Spans {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -1146,6 +1313,7 @@ export class Spans {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -1154,6 +1322,7 @@ export class Spans {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -1162,10 +1331,17 @@ export class Spans {
      * Search spans
      * @throws {@link OpikApi.BadRequestError}
      */
-    public async searchSpans(
+    public searchSpans(
         request: OpikApi.SpanSearchStreamRequestPublic = {},
         requestOptions?: Spans.RequestOptions,
-    ): Promise<stream.Readable> {
+    ): core.HttpResponsePromise<stream.Readable> {
+        return core.HttpResponsePromise.fromPromise(this.__searchSpans(request, requestOptions));
+    }
+
+    private async __searchSpans(
+        request: OpikApi.SpanSearchStreamRequestPublic = {},
+        requestOptions?: Spans.RequestOptions,
+    ): Promise<core.WithRawResponse<stream.Readable>> {
         const _response = await core.fetcher<stream.Readable>({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -1195,17 +1371,18 @@ export class Spans {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return _response.body;
+            return { data: _response.body, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body);
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -1215,12 +1392,14 @@ export class Spans {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/spans/search.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -1239,11 +1418,19 @@ export class Spans {
      *         text: "text"
      *     })
      */
-    public async updateSpanComment(
+    public updateSpanComment(
         commentId: string,
         request: OpikApi.Comment,
         requestOptions?: Spans.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__updateSpanComment(commentId, request, requestOptions));
+    }
+
+    private async __updateSpanComment(
+        commentId: string,
+        request: OpikApi.Comment,
+        requestOptions?: Spans.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -1272,17 +1459,18 @@ export class Spans {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -1292,6 +1480,7 @@ export class Spans {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -1300,6 +1489,7 @@ export class Spans {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
