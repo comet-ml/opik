@@ -51,10 +51,17 @@ export class FeedbackDefinitions {
      * @example
      *     await client.feedbackDefinitions.findFeedbackDefinitions()
      */
-    public async findFeedbackDefinitions(
+    public findFeedbackDefinitions(
         request: OpikApi.FindFeedbackDefinitionsRequest = {},
         requestOptions?: FeedbackDefinitions.RequestOptions,
-    ): Promise<OpikApi.FeedbackDefinitionPagePublic> {
+    ): core.HttpResponsePromise<OpikApi.FeedbackDefinitionPagePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__findFeedbackDefinitions(request, requestOptions));
+    }
+
+    private async __findFeedbackDefinitions(
+        request: OpikApi.FindFeedbackDefinitionsRequest = {},
+        requestOptions?: FeedbackDefinitions.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.FeedbackDefinitionPagePublic>> {
         const { page, size, name, type: type_ } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
@@ -103,18 +110,22 @@ export class FeedbackDefinitions {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.FeedbackDefinitionPagePublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.FeedbackDefinitionPagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -123,6 +134,7 @@ export class FeedbackDefinitions {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -131,6 +143,7 @@ export class FeedbackDefinitions {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -146,10 +159,17 @@ export class FeedbackDefinitions {
      *         type: "numerical"
      *     })
      */
-    public async createFeedbackDefinition(
+    public createFeedbackDefinition(
         request: OpikApi.FeedbackCreate,
         requestOptions?: FeedbackDefinitions.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__createFeedbackDefinition(request, requestOptions));
+    }
+
+    private async __createFeedbackDefinition(
+        request: OpikApi.FeedbackCreate,
+        requestOptions?: FeedbackDefinitions.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -178,13 +198,14 @@ export class FeedbackDefinitions {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -193,6 +214,7 @@ export class FeedbackDefinitions {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -201,6 +223,7 @@ export class FeedbackDefinitions {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -214,10 +237,17 @@ export class FeedbackDefinitions {
      * @example
      *     await client.feedbackDefinitions.getFeedbackDefinitionById("id")
      */
-    public async getFeedbackDefinitionById(
+    public getFeedbackDefinitionById(
         id: string,
         requestOptions?: FeedbackDefinitions.RequestOptions,
-    ): Promise<OpikApi.FeedbackPublic> {
+    ): core.HttpResponsePromise<OpikApi.FeedbackPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getFeedbackDefinitionById(id, requestOptions));
+    }
+
+    private async __getFeedbackDefinitionById(
+        id: string,
+        requestOptions?: FeedbackDefinitions.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.FeedbackPublic>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -245,18 +275,22 @@ export class FeedbackDefinitions {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.FeedbackPublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.FeedbackPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -265,6 +299,7 @@ export class FeedbackDefinitions {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -273,6 +308,7 @@ export class FeedbackDefinitions {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -289,11 +325,19 @@ export class FeedbackDefinitions {
      *         type: "numerical"
      *     })
      */
-    public async updateFeedbackDefinition(
+    public updateFeedbackDefinition(
         id: string,
         request: OpikApi.FeedbackUpdate,
         requestOptions?: FeedbackDefinitions.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__updateFeedbackDefinition(id, request, requestOptions));
+    }
+
+    private async __updateFeedbackDefinition(
+        id: string,
+        request: OpikApi.FeedbackUpdate,
+        requestOptions?: FeedbackDefinitions.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -322,13 +366,14 @@ export class FeedbackDefinitions {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -337,6 +382,7 @@ export class FeedbackDefinitions {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -345,6 +391,7 @@ export class FeedbackDefinitions {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -360,10 +407,17 @@ export class FeedbackDefinitions {
      * @example
      *     await client.feedbackDefinitions.deleteFeedbackDefinitionById("id")
      */
-    public async deleteFeedbackDefinitionById(
+    public deleteFeedbackDefinitionById(
         id: string,
         requestOptions?: FeedbackDefinitions.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteFeedbackDefinitionById(id, requestOptions));
+    }
+
+    private async __deleteFeedbackDefinitionById(
+        id: string,
+        requestOptions?: FeedbackDefinitions.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -391,17 +445,18 @@ export class FeedbackDefinitions {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 409:
-                    throw new OpikApi.ConflictError(_response.error.body);
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -411,6 +466,7 @@ export class FeedbackDefinitions {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -419,6 +475,7 @@ export class FeedbackDefinitions {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -436,10 +493,17 @@ export class FeedbackDefinitions {
      *         ids: ["ids"]
      *     })
      */
-    public async deleteFeedbackDefinitionsBatch(
+    public deleteFeedbackDefinitionsBatch(
         request: OpikApi.BatchDelete,
         requestOptions?: FeedbackDefinitions.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteFeedbackDefinitionsBatch(request, requestOptions));
+    }
+
+    private async __deleteFeedbackDefinitionsBatch(
+        request: OpikApi.BatchDelete,
+        requestOptions?: FeedbackDefinitions.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -468,17 +532,18 @@ export class FeedbackDefinitions {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 409:
-                    throw new OpikApi.ConflictError(_response.error.body);
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -488,6 +553,7 @@ export class FeedbackDefinitions {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -496,6 +562,7 @@ export class FeedbackDefinitions {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }

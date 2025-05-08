@@ -2,6 +2,4 @@
 
 import typing
 
-AssistantMessageRole = typing.Union[
-    typing.Literal["system", "user", "assistant", "tool", "function"], typing.Any
-]
+AssistantMessageRole = typing.Union[typing.Literal["system", "user", "assistant", "tool", "function"], typing.Any]
