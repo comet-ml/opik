@@ -24,6 +24,23 @@ from .base64_helper import decode_base64
 
 LOGGER = logging.getLogger(__name__)
 
+
+def _redact_sensitive_data(data: str, visible_chars: int = 4) -> str:
+    """
+    Redacts sensitive data by showing only the first few characters and replacing the rest with asterisks.
+
+    Args:
+        data (str): The sensitive data to redact.
+        visible_chars (int): The number of characters to leave visible at the start.
+
+    Returns:
+        str: The redacted version of the data.
+    """
+    if not data or len(data) <= visible_chars:
+        return "*" * len(data)
+    return data[:visible_chars] + "*" * (len(data) - visible_chars)
+
+
 DELIMITER_CHAR = "*"
 
 
@@ -76,6 +93,7 @@ def parse_api_key(raw_key: str) -> Optional[OpikApiKey]:
         return None
 
     parts = raw_key.split(DELIMITER_CHAR)
+    redacted = _redact_sensitive_data(raw_key)
     size = len(parts)
     if size == 1:
         LOGGER.debug("Opik API key doesn't have attributes associated")
@@ -87,11 +105,11 @@ def parse_api_key(raw_key: str) -> Optional[OpikApiKey]:
             attributes = json.loads(data)
         else:
             # edge case - delimiter found but no encoded JSON afterward
-            LOGGER.warning(PARSE_API_KEY_EMPTY_EXPECTED_ATTRIBUTES % raw_key)
+            LOGGER.warning(PARSE_API_KEY_EMPTY_EXPECTED_ATTRIBUTES % redacted)
             raw_key = parts[0]  # remove obsolete delimiter
             attributes = None
 
         return OpikApiKey(api_key_raw=raw_key, api_key=parts[0], attributes=attributes)
 
-    LOGGER.warning(PARSE_API_KEY_TOO_MANY_PARTS, size, raw_key)
+    LOGGER.warning(PARSE_API_KEY_TOO_MANY_PARTS, size, redacted)
     return None
