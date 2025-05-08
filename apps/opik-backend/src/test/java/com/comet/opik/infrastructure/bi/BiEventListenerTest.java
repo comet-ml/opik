@@ -12,6 +12,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.cache.CacheManager;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -146,7 +147,7 @@ class BiEventListenerTest {
     }
 
     @Test
-    void shouldReportFirstTraceCreatedEvent(UsageReportService usageReportService) {
+    void shouldReportFirstTraceCreatedEvent(UsageReportService usageReportService, CacheManager cacheManager) {
         var workspaceId = UUID.randomUUID().toString();
         var workspaceName = UUID.randomUUID().toString();
         var apiKey = UUID.randomUUID().toString();
@@ -154,6 +155,8 @@ class BiEventListenerTest {
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
         Trace trace = factory.manufacturePojo(Trace.class);
+
+        cacheManager.evict(Metadata.FIRST_TRACE_CREATED.getValue(), false).block();
 
         traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
