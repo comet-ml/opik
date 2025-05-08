@@ -982,7 +982,7 @@ class BenchmarkRunner:
                 # Extract dataset from desc (first part before '/')
                 try:
                     dataset_part = desc.split('/')[0].replace("Running: ", "").strip()
-                    display_text = f" • {dataset_part} / {model_original}" 
+                    display_text = f" • {dataset_part}/{model_original}" 
                 except Exception:
                     display_text = f" • {desc}" # Fallback to full desc
                 opt_short = opt.replace("Optimizer", "") # Less aggressive shortening
