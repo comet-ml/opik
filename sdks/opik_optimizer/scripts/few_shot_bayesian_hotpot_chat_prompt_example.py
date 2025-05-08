@@ -1,4 +1,4 @@
-from opik.evaluation.metrics import Equals
+from opik.evaluation.metrics import LevenshteinRatio
 from opik_optimizer import FewShotBayesianOptimizer
 from opik_optimizer.demo import get_or_create_dataset
 
@@ -27,7 +27,7 @@ optimizer = FewShotBayesianOptimizer(
 )
 
 metric_config = MetricConfig(
-    metric=Equals(project_name=project_name),
+    metric=LevenshteinRatio(project_name=project_name),
     inputs={
         "output": from_llm_response_text(),
         "reference": from_dataset_field(name="answer"),
@@ -49,4 +49,4 @@ result = optimizer.optimize_prompt(
     n_samples=150,
 )
 
-print("Result:", result)
+result.display()

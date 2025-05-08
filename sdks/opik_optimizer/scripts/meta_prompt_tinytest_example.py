@@ -50,4 +50,4 @@ result = optimizer.optimize_prompt(
     auto_continue=False,
 )
 
-print(result)
+result.display()

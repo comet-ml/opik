@@ -53,3 +53,5 @@ result = optimizer.optimize_prompt(
     metric_config=metric_config,
     task_config=task_config,
 )
+
+result.display()

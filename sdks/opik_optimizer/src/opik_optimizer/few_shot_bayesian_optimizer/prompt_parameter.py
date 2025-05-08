@@ -26,7 +26,7 @@ class ChatPromptParameter(pydantic.BaseModel):
                     },
                     {
                         "role": "user",
-                        "content": json.dumps({param: f"{{{{param}}}}" for param in self.task_input_parameters})
+                        "content": json.dumps({param: f"{{{{{param}}}}}" for param in self.task_input_parameters})
                     }
                 ]
             )

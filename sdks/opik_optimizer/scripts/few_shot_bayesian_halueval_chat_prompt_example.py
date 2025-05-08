@@ -85,4 +85,4 @@ result = optimizer.optimize_prompt(
     n_samples=200,
 )
 
-print("Result:", result)
+result.display()
