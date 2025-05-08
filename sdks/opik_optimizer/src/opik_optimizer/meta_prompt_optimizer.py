@@ -179,11 +179,13 @@ class MetaPromptOptimizer(BaseOptimizer):
         prompt: str,
         system_prompt: Optional[str] = None,
         is_reasoning: bool = False,
+        optimization_id: Optional[str] = None,
     ) -> str:
         """Call the model with the given prompt and return the response."""
         # Note: Basic retry logic could be added here using tenacity
         try:
-            model_params = {
+            # Basic LLM parameters (e.g., temperature, max_tokens)
+            llm_config_params = {
                 "temperature": getattr(self, "temperature", 0.3),
                 "max_tokens": getattr(self, "max_tokens", 1000),
                 "top_p": getattr(self, "top_p", 1.0),
@@ -191,23 +193,44 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "presence_penalty": getattr(self, "presence_penalty", 0.0),
             }
 
+            # Prepare metadata that we want to be part of the LLM call context.
+            metadata_for_opik = {}
+            if self.project_name:
+                metadata_for_opik["project_name"] = self.project_name # Top-level for general use
+                metadata_for_opik["opik"] = {"project_name": self.project_name}
+                
+            if optimization_id:
+                # Also add to opik-specific structure if project_name was added
+                if "opik" in metadata_for_opik:
+                    metadata_for_opik["opik"]["optimization_id"] = optimization_id
+
+            metadata_for_opik["optimizer_name"] = self.__class__.__name__
+            metadata_for_opik["opik_call_type"] = "reasoning" if is_reasoning else "evaluation_llm_task_direct"
+
+            if metadata_for_opik: 
+                llm_config_params["metadata"] = metadata_for_opik
+
             messages = []
-            # Use system prompt only if provided *and* it's a reasoning call or chat is configured
             if system_prompt and (is_reasoning or getattr(self.task_config, 'use_chat_prompt', False)):
                  messages.append({"role": "system", "content": system_prompt})
-            
-            # Add the main prompt/user message
             messages.append({"role": "user", "content": prompt})
 
-            # Determine which model to use
             model_to_use = self.reasoning_model if is_reasoning else self.model
 
-            logger.debug(f"Calling model '{model_to_use}' with messages: {messages}")
-            model_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(model_params)
+            # Pass llm_config_params (which now includes our metadata) to the Opik monitor.
+            # The monitor is expected to return a dictionary suitable for spreading into litellm.completion,
+            # having handled our metadata and added any Opik-specific configurations.
+            final_call_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(llm_config_params.copy())
+
+            logger.debug(
+                f"Calling model '{model_to_use}' with messages: {messages}, "
+                f"final params for litellm (from monitor): {final_call_params}"
+            )
+            
             response = litellm.completion(
                 model=model_to_use,
                 messages=messages,
-                **model_params
+                **final_call_params
             )
             return response.choices[0].message.content
         except litellm.exceptions.RateLimitError as e:
@@ -312,7 +335,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             # --- Step 2: Call the model ---
             try:
                 logger.debug(f"Calling LLM with prompt length: {len(prompt_for_llm)}")
-                raw_model_output = self._call_model(prompt=prompt_for_llm, system_prompt=None, is_reasoning=False)
+                raw_model_output = self._call_model(prompt=prompt_for_llm, system_prompt=None, is_reasoning=False, optimization_id=optimization_id)
                 logger.debug(f"LLM raw response length: {len(raw_model_output)}")
                 logger.debug(f"LLM raw output: {raw_model_output}")
             except Exception as e:
@@ -409,7 +432,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         try:
             optimization = self._opik_client.create_optimization(
                 dataset_name=dataset.name,
-                objective_name=metric_config.metric.name,
+                objective_name=metric_config.metric.name
             )
             logger.info(f"Created optimization with ID: {optimization.id}")
         except Exception as e:
@@ -519,6 +542,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     round_num=round_num,
                     previous_rounds=rounds,
                     metric_config=metric_config,
+                    optimization_id=optimization_id
                 )
                 logger.info(f"Generated {len(candidate_prompts)} candidate prompts")
             except Exception as e:
@@ -830,7 +854,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         best_score: float,
         round_num: int,
         previous_rounds: List[OptimizationRound],
-        metric_config: MetricConfig
+        metric_config: MetricConfig,
+        optimization_id: Optional[str] = None
     ) -> List[str]:
         """Generate candidate prompts using meta-prompting."""
         
@@ -865,6 +890,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 prompt=user_prompt,
                 system_prompt=self._REASONING_SYSTEM_PROMPT,
                 is_reasoning=True,
+                optimization_id=optimization_id
             )
             logger.debug(f"Raw response from reasoning model: {content}")
 
