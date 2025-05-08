@@ -1,7 +1,7 @@
 import collections
 import time
 from queue import Empty
-from threading import Condition
+import threading
 from typing import TypeVar, Optional, Generic
 
 T = TypeVar("T")
@@ -28,35 +28,39 @@ class MessageQueue(Generic[T]):
     """
 
     def __init__(self, max_length: Optional[int] = None):
-        self.deque: collections.deque[T] = collections.deque(maxlen=max_length)
-        self.not_empty = Condition()
+        self._deque: collections.deque[T] = collections.deque(maxlen=max_length)
+        self._mutex = threading.Lock()
+        self._not_empty = threading.Condition(self._mutex)
 
     def put(self, message: T) -> None:
-        self.deque.appendleft(message)
-        self.not_empty.notify()
+        with self._not_empty:
+            self._deque.appendleft(message)
+            self._not_empty.notify()
 
     def put_back(self, message: T) -> None:
-        self.deque.append(message)
-        self.not_empty.notify()
+        with self._not_empty:
+            self._deque.append(message)
+            self._not_empty.notify()
 
     def get(self, timeout: float) -> T:
-        if timeout is None or timeout < 0:
-            raise ValueError("'timeout' must be a non-negative number")
+        with self._not_empty:
+            if timeout is None or timeout < 0:
+                raise ValueError("'timeout' must be a non-negative number")
 
-        endtime = time.monotonic() + timeout
-        while len(self.deque) == 0:
-            remaining = endtime - time.monotonic()
-            if remaining <= 0.0:
+            endtime = time.monotonic() + timeout
+            while len(self._deque) == 0:
+                remaining = endtime - time.monotonic()
+                if remaining <= 0.0:
+                    raise Empty
+                self._not_empty.wait(remaining)
+
+            try:
+                return self._deque.pop()
+            except IndexError:
                 raise Empty
-            self.not_empty.wait(remaining)
-
-        try:
-            return self.deque.pop()
-        except IndexError:
-            raise Empty
 
     def empty(self) -> bool:
-        return len(self.deque) == 0
+        return len(self._deque) == 0
 
     def __len__(self) -> int:
-        return len(self.deque)
+        return len(self._deque)
