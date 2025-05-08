@@ -77,3 +77,12 @@ class GuardrailValidationFailed(OpikException):
 
     def __str__(self) -> str:
         return f"{self.message}. Failed validations: {self.failed_validations}\n"
+
+
+class OpikCloudRequestRateLimited(OpikException):
+    """Exception raised when the Opik Cloud limits the request rate."""
+
+    def __init__(self, message: str, retry_after: float):
+        self.message = message
+        self.retry_after = retry_after
+        super().__init__(message)

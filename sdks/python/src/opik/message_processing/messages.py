@@ -6,10 +6,14 @@ from ..types import SpanType, ErrorInfoDict, LLMProvider, AttachmentEntityType
 
 @dataclasses.dataclass
 class BaseMessage:
+    delivery_time: int
+
     def as_payload_dict(self) -> Dict[str, Any]:
         # we are not using dataclasses.as_dict() here
-        # because it will try to deepcopy all object and will fail if there is non-serializable object
-        return {**self.__dict__}
+        # because it will try to deepcopy all objects and will fail if there is a non-serializable object
+        data = {**self.__dict__}
+        data.pop("delivery_time")
+        return data
 
 
 @dataclasses.dataclass
@@ -157,7 +161,7 @@ class CreateTraceBatchMessage(BaseMessage):
 @dataclasses.dataclass
 class GuardrailBatchItemMessage(BaseMessage):
     """
-    There is no handler for that in message processor, it exists
+    There is no handler for that in the message processor, it exists
     only as an item of BatchMessage
     """
 

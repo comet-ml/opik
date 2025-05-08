@@ -54,8 +54,8 @@ class MessageSender(BaseMessageProcessor):
             handler(message)
         except rest_api_core.ApiError as exception:
             if exception.status_code == 409:
-                # sometimes retry mechanism works in a way that it sends the same request 2 times.
-                # second request is rejected by the backend, we don't want users to an error.
+                # sometimes a retry mechanism works in a way that it sends the same request 2 times.
+                # the second request is rejected by the backend, we don't want users to an error.
                 return
 
             error_fingerprint = _generate_error_fingerprint(exception, message)
