@@ -51,8 +51,9 @@ def setup_logging(
     package_logger.propagate = False # Don't duplicate messages in root logger
 
     # Set levels for noisy libraries like LiteLLM and httpx
-    logging.getLogger("opik").setLevel(logging.WARNING)
     logging.getLogger("LiteLLM").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("dspy").setLevel(logging.WARNING)
     logging.getLogger("datasets").setLevel(logging.WARNING)
