@@ -1244,11 +1244,11 @@ class BenchmarkRunner:
                         live.update(generate_live_display())
                         
                         self.save_checkpoint() # Save checkpoint after each task (implicitly saves self.results)
+                        self.save_results() # Save CSV summary incrementally
 
         # --- End of Live Block --- 
         overall_duration = time.time() - overall_start_time
         print_benchmark_footer(self.results, successful_tasks, failed_tasks, overall_duration, completed_results_display)
-        self.save_results() # Call to generate final summary CSV
 
     def save_results(self):
         """Save summary results to CSV. Detailed results are already saved as individual task JSONs."""
@@ -1256,13 +1256,17 @@ class BenchmarkRunner:
             logger.info("[yellow]No task metadata in self.results to generate CSV summary.[/yellow]")
             return
 
-        # Ensure current_run_id is available for naming the summary CSV
-        run_id_for_filename = self.current_run_id if hasattr(self, 'current_run_id') and self.current_run_id else f"summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        
+        # Ensure current_run_id and task_results_dir are available for naming/pathing the summary CSV
+        if not hasattr(self, 'current_run_id') or not self.current_run_id or not hasattr(self, 'task_results_dir') or not self.task_results_dir:
+             logger.warning("[yellow]Cannot save summary CSV: run_id or task_results_dir not set.[/yellow]")
+             return
+             
+        run_id_for_filename = self.current_run_id 
         csv_filename = f"run_summary_{run_id_for_filename}.csv"
-        csv_path_abs = (self.output_dir / csv_filename).resolve()
+        # Save the CSV inside the run-specific task results directory
+        csv_path_abs = (self.task_results_dir / csv_filename).resolve()
 
-        logger.info(f"Generating summary CSV from individual task JSONs listed in self.results...")
+        logger.info(f"Generating/Updating summary CSV: [blue]{csv_path_abs}[/blue]")
 
         flat_data_for_csv = []
         for task_summary in self.results:
