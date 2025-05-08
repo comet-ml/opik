@@ -454,7 +454,8 @@ class BenchmarkRunner:
 
         dataset_name = experiment_config["dataset"]
         optimizer_name = type(optimizer).__name__
-        logger.info(f"Starting opt task_id: [bold magenta]{task_id}[/bold magenta] ({dataset_name} / {optimizer_name})")
+        console.print(f"🏁 Starting task: [bold magenta]{task_id}[/bold magenta] ({dataset_name} / {optimizer_name} / {optimizer.model})")
+        logger.info(f"Starting opt task_id: {task_id}...")
 
         # Initialize comprehensive result structure
         task_result = {
@@ -522,6 +523,7 @@ class BenchmarkRunner:
             )
 
             # --- Initial Prompt Evaluation (REMOVE suppression wrapper) --- 
+            # --- Initial Prompt Evaluation --- 
             logger.info("--> Evaluating initial prompt...")
             start_time_eval_initial = time.time()
             initial_scores = {}
@@ -578,6 +580,7 @@ class BenchmarkRunner:
             initial_eval_time = time.time() - start_time_eval_initial
             scores_str = ", ".join([f"{k}: {v:.4f}" if isinstance(v, (int, float)) else f"{k}: N/A" for k, v in initial_scores.items()])
             logger.info(f"<-- Initial eval done ({initial_eval_time:.2f}s). Scores: {scores_str}")
+            logger.info(f"  Initial eval ({task_id}): {scores_str} ({initial_eval_time:.2f}s)")
             
             # Store initial evaluation results properly
             task_result["initial_evaluation"] = {
@@ -687,6 +690,7 @@ class BenchmarkRunner:
             best_score_log = getattr(results_obj, "best_score", getattr(results_obj, "score", "N/A"))
             best_score_log_str = f"{best_score_log:.4f}" if isinstance(best_score_log, (int,float)) else str(best_score_log)
             logger.info(f"<-- Optimization done ({opt_time:.2f}s). Iterations: {num_iter_log}, Best Score: {best_score_log_str}")
+            console.print(f"  Optimization done ({task_id}): Iterations={num_iter_log}, Best Internal Score={best_score_log_str} ({opt_time:.2f}s)")
 
             # Process optimization history for structured logging
             opt_history_processed = []
@@ -827,6 +831,7 @@ class BenchmarkRunner:
             final_eval_time = time.time() - start_time_eval_final
             final_scores_str = ", ".join([f"{k}: {v:.4f}" if isinstance(v, (int, float)) else f"{k}: N/A" for k, v in final_scores.items()])
             logger.info(f"<-- Final eval done ({final_eval_time:.2f}s). Scores: {final_scores_str}")
+            logger.info(f"  Final eval ({task_id}): {final_scores_str} ({final_eval_time:.2f}s)")
 
             # Store final evaluation results properly
             task_result["final_evaluation"] = {
@@ -858,6 +863,10 @@ class BenchmarkRunner:
             task_result["timestamp_end_task"] = datetime.now().isoformat()
             task_result["duration_seconds_task"] = total_run_time_task
             logger.info(f"Completed opt task_id: [bold magenta]{task_id}[/bold magenta] in {total_run_time_task:.2f}s")
+            if task_result["status"] == "success":
+                console.print(f"[green]✓ Completed task: [bold magenta]{task_id}[/bold magenta] in {total_run_time_task:.2f}s[/green]")
+            else:
+                console.print(f"[red]✗ Failed task: [bold magenta]{task_id}[/bold magenta] in {total_run_time_task:.2f}s (Status: {task_result['status']})[/red]")
             return task_result
         
         except Exception as e:
