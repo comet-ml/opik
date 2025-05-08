@@ -13,7 +13,8 @@ class BaseMessage:
         # we are not using dataclasses.as_dict() here
         # because it will try to deepcopy all objects and will fail if there is a non-serializable object
         data = {**self.__dict__}
-        data.pop("delivery_time")
+        if "delivery_time" in data:
+            data.pop("delivery_time")
         return data
 
 
