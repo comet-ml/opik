@@ -1,6 +1,5 @@
 from typing import List, Dict, Any, Optional, Union
 import opik
-from opik.evaluation import metrics
 from opik import Dataset
 import litellm
 from litellm.caching import Cache

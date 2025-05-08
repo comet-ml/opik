@@ -6,13 +6,10 @@ import opik
 
 from opik.integrations.dspy.callback import OpikCallback
 from opik.opik_context import get_current_span_data
-from opik.evaluation.metrics import BaseMetric
 from opik.evaluation import evaluate
 from opik import Dataset
-from opik_optimizer import optimization_dsl
 
 import dspy
-from dspy.clients.base_lm import BaseLM
 
 import litellm
 from litellm.caching import Cache

@@ -3,12 +3,10 @@ import opik
 import logging
 
 import litellm
-from opik.evaluation import metrics
-from opik.opik_context import get_current_span_data
+
 from pydantic import BaseModel
 from ._throttle import RateLimiter, rate_limited
 from .cache_config import initialize_cache
-
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from .optimization_config.configs import TaskConfig, MetricConfig
 

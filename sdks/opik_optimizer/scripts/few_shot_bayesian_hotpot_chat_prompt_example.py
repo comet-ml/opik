@@ -1,5 +1,5 @@
 from opik.evaluation.metrics import Equals
-from opik_optimizer.few_shot_bayesian_optimizer import FewShotBayesianOptimizer
+from opik_optimizer import FewShotBayesianOptimizer
 from opik_optimizer.demo import get_or_create_dataset
 
 from opik_optimizer import (
@@ -46,7 +46,7 @@ result = optimizer.optimize_prompt(
     metric_config=metric_config,
     task_config=task_config,
     n_trials=10,
-    n_samples=100,
+    n_samples=150,
 )
 
 print("Result:", result)

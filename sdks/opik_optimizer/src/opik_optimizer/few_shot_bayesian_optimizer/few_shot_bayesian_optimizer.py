@@ -10,7 +10,7 @@ from opik import Dataset
 from opik_optimizer.optimization_config import mappers
 
 from opik_optimizer.optimization_config.configs import TaskConfig, MetricConfig
-from opik_optimizer import optimization_dsl, base_optimizer
+from opik_optimizer import base_optimizer
 
 from . import prompt_parameter
 from . import prompt_templates
@@ -24,7 +24,6 @@ from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 limiter = RateLimiter(max_calls_per_second=15)
 
 logger = logging.getLogger(__name__)
-
 
 @rate_limited(limiter)
 def _call_model(model, messages, seed, model_kwargs):
