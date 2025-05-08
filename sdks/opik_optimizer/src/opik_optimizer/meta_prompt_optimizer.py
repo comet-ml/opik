@@ -16,7 +16,7 @@ from .optimization_result import OptimizationResult
 from .utils import get_tqdm
 from opik_optimizer import task_evaluator
 from opik.api_objects import opik_client
-
+from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 tqdm = get_tqdm()
 
 # Using disk cache for LLM calls
@@ -28,6 +28,35 @@ logger = logging.getLogger(__name__) # Gets logger configured by setup_logging
 
 class MetaPromptOptimizer(BaseOptimizer):
     """Optimizer that uses meta-prompting to improve prompts based on examples and performance."""
+
+    # --- Constants for Default Configuration ---
+    DEFAULT_MAX_ROUNDS = 3
+    DEFAULT_PROMPTS_PER_ROUND = 4
+    DEFAULT_IMPROVEMENT_THRESHOLD = 0.05
+    DEFAULT_INITIAL_TRIALS = 3
+    DEFAULT_MAX_TRIALS = 6
+    DEFAULT_ADAPTIVE_THRESHOLD = 0.8 # Set to None to disable adaptive trials
+
+    # --- Reasoning System Prompt ---
+    _REASONING_SYSTEM_PROMPT = """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
+        Focus on making the prompt more effective by:
+        1. Being clear and specific about what is expected
+        2. Providing necessary context and constraints
+        3. Guiding the model to produce the desired output format
+        4. Removing ambiguity and unnecessary elements
+        5. Maintaining conciseness while being complete
+
+        Return a JSON array of prompts with the following structure:
+        {
+            "prompts": [
+                {
+                    "prompt": "the improved prompt text",
+                    "improvement_focus": "what aspect this prompt improves",
+                    "reasoning": "why this improvement should help"
+                }
+            ]
+        }"""
+
 
     # --- Constants for Default Configuration ---
     DEFAULT_MAX_ROUNDS = 3
@@ -221,7 +250,6 @@ class MetaPromptOptimizer(BaseOptimizer):
         else:
             subset_size = None  # Use all items for final checks
             logger.debug("Using full dataset for evaluation")
-
         experiment_config = experiment_config or {}
         experiment_config = {
             **experiment_config,
@@ -321,7 +349,6 @@ class MetaPromptOptimizer(BaseOptimizer):
             
             if original_cleaned_output != cleaned_model_output:
                  logger.debug(f"Raw model output: '{original_cleaned_output}' -> Cleaned for metric: '{cleaned_model_output}'")
-
             result = {
                 mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
             }
