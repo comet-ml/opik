@@ -98,7 +98,7 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
     if (!isOrganizationAdmin) {
       return (
         <span>
-          You've hit your plan limits.{" "}
+          You`&apos;`ve hit your plan limits.{" "}
           <a
             href={buildUrl(
               `organizations/${workspace?.organizationId}/billing`,
@@ -116,7 +116,7 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
 
     return (
       <span>
-        You've hit your plan limits. To keep monitoring running, ask your
+        You`&apos;`ve hit your plan limits. To keep monitoring running, ask your
         organization admins (
         {firstThreeAdmins?.map((user, idx) => (
           <React.Fragment key={user.userName}>
