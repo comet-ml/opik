@@ -51,10 +51,17 @@ export class Projects {
      * @example
      *     await client.projects.findProjects()
      */
-    public async findProjects(
+    public findProjects(
         request: OpikApi.FindProjectsRequest = {},
         requestOptions?: Projects.RequestOptions,
-    ): Promise<OpikApi.ProjectPagePublic> {
+    ): core.HttpResponsePromise<OpikApi.ProjectPagePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__findProjects(request, requestOptions));
+    }
+
+    private async __findProjects(
+        request: OpikApi.FindProjectsRequest = {},
+        requestOptions?: Projects.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ProjectPagePublic>> {
         const { page, size, name, sorting } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
@@ -101,18 +108,22 @@ export class Projects {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.ProjectPagePublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.ProjectPagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -121,12 +132,14 @@ export class Projects {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/projects.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -145,7 +158,17 @@ export class Projects {
      *         name: "name"
      *     })
      */
-    public async createProject(request: OpikApi.ProjectWrite, requestOptions?: Projects.RequestOptions): Promise<void> {
+    public createProject(
+        request: OpikApi.ProjectWrite,
+        requestOptions?: Projects.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__createProject(request, requestOptions));
+    }
+
+    private async __createProject(
+        request: OpikApi.ProjectWrite,
+        requestOptions?: Projects.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -174,19 +197,20 @@ export class Projects {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body);
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 422:
-                    throw new OpikApi.UnprocessableEntityError(_response.error.body);
+                    throw new OpikApi.UnprocessableEntityError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -196,12 +220,14 @@ export class Projects {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/projects.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -215,7 +241,17 @@ export class Projects {
      * @example
      *     await client.projects.getProjectById("id")
      */
-    public async getProjectById(id: string, requestOptions?: Projects.RequestOptions): Promise<OpikApi.ProjectPublic> {
+    public getProjectById(
+        id: string,
+        requestOptions?: Projects.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.ProjectPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getProjectById(id, requestOptions));
+    }
+
+    private async __getProjectById(
+        id: string,
+        requestOptions?: Projects.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ProjectPublic>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -243,18 +279,22 @@ export class Projects {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.ProjectPublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.ProjectPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -263,12 +303,14 @@ export class Projects {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/projects/{id}.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -284,7 +326,14 @@ export class Projects {
      * @example
      *     await client.projects.deleteProjectById("id")
      */
-    public async deleteProjectById(id: string, requestOptions?: Projects.RequestOptions): Promise<void> {
+    public deleteProjectById(id: string, requestOptions?: Projects.RequestOptions): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteProjectById(id, requestOptions));
+    }
+
+    private async __deleteProjectById(
+        id: string,
+        requestOptions?: Projects.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -312,17 +361,18 @@ export class Projects {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 409:
-                    throw new OpikApi.ConflictError(_response.error.body);
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -332,12 +382,14 @@ export class Projects {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling DELETE /v1/private/projects/{id}.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -355,11 +407,19 @@ export class Projects {
      * @example
      *     await client.projects.updateProject("id")
      */
-    public async updateProject(
+    public updateProject(
         id: string,
         request: OpikApi.ProjectUpdate = {},
         requestOptions?: Projects.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__updateProject(id, request, requestOptions));
+    }
+
+    private async __updateProject(
+        id: string,
+        request: OpikApi.ProjectUpdate = {},
+        requestOptions?: Projects.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -388,19 +448,20 @@ export class Projects {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body);
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 422:
-                    throw new OpikApi.UnprocessableEntityError(_response.error.body);
+                    throw new OpikApi.UnprocessableEntityError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -410,12 +471,14 @@ export class Projects {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling PATCH /v1/private/projects/{id}.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -431,10 +494,17 @@ export class Projects {
      *         ids: ["ids"]
      *     })
      */
-    public async deleteProjectsBatch(
+    public deleteProjectsBatch(
         request: OpikApi.BatchDelete,
         requestOptions?: Projects.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteProjectsBatch(request, requestOptions));
+    }
+
+    private async __deleteProjectsBatch(
+        request: OpikApi.BatchDelete,
+        requestOptions?: Projects.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -463,13 +533,14 @@ export class Projects {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -478,12 +549,14 @@ export class Projects {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/projects/delete.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -497,10 +570,17 @@ export class Projects {
      * @example
      *     await client.projects.findFeedbackScoreNamesByProjectIds()
      */
-    public async findFeedbackScoreNamesByProjectIds(
+    public findFeedbackScoreNamesByProjectIds(
         request: OpikApi.FindFeedbackScoreNamesByProjectIdsRequest = {},
         requestOptions?: Projects.RequestOptions,
-    ): Promise<OpikApi.FeedbackScoreNames> {
+    ): core.HttpResponsePromise<OpikApi.FeedbackScoreNames> {
+        return core.HttpResponsePromise.fromPromise(this.__findFeedbackScoreNamesByProjectIds(request, requestOptions));
+    }
+
+    private async __findFeedbackScoreNamesByProjectIds(
+        request: OpikApi.FindFeedbackScoreNamesByProjectIdsRequest = {},
+        requestOptions?: Projects.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.FeedbackScoreNames>> {
         const { projectIds } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (projectIds != null) {
@@ -535,18 +615,22 @@ export class Projects {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.FeedbackScoreNames.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.FeedbackScoreNames.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -555,6 +639,7 @@ export class Projects {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -563,6 +648,7 @@ export class Projects {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -580,11 +666,19 @@ export class Projects {
      * @example
      *     await client.projects.getProjectMetrics("id")
      */
-    public async getProjectMetrics(
+    public getProjectMetrics(
         id: string,
         request: OpikApi.ProjectMetricRequestPublic = {},
         requestOptions?: Projects.RequestOptions,
-    ): Promise<OpikApi.ProjectMetricResponsePublic> {
+    ): core.HttpResponsePromise<OpikApi.ProjectMetricResponsePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getProjectMetrics(id, request, requestOptions));
+    }
+
+    private async __getProjectMetrics(
+        id: string,
+        request: OpikApi.ProjectMetricRequestPublic = {},
+        requestOptions?: Projects.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ProjectMetricResponsePublic>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -613,24 +707,28 @@ export class Projects {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.ProjectMetricResponsePublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.ProjectMetricResponsePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body);
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -640,6 +738,7 @@ export class Projects {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -648,6 +747,7 @@ export class Projects {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -661,10 +761,17 @@ export class Projects {
      * @example
      *     await client.projects.getProjectStats()
      */
-    public async getProjectStats(
+    public getProjectStats(
         request: OpikApi.GetProjectStatsRequest = {},
         requestOptions?: Projects.RequestOptions,
-    ): Promise<OpikApi.ProjectStatsSummary> {
+    ): core.HttpResponsePromise<OpikApi.ProjectStatsSummary> {
+        return core.HttpResponsePromise.fromPromise(this.__getProjectStats(request, requestOptions));
+    }
+
+    private async __getProjectStats(
+        request: OpikApi.GetProjectStatsRequest = {},
+        requestOptions?: Projects.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ProjectStatsSummary>> {
         const { page, size, name, sorting } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
@@ -711,18 +818,22 @@ export class Projects {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.ProjectStatsSummary.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.ProjectStatsSummary.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -731,12 +842,14 @@ export class Projects {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/projects/stats.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -756,10 +869,17 @@ export class Projects {
      *         name: "name"
      *     })
      */
-    public async retrieveProject(
+    public retrieveProject(
         request: OpikApi.ProjectRetrieveDetailed,
         requestOptions?: Projects.RequestOptions,
-    ): Promise<OpikApi.ProjectDetailed> {
+    ): core.HttpResponsePromise<OpikApi.ProjectDetailed> {
+        return core.HttpResponsePromise.fromPromise(this.__retrieveProject(request, requestOptions));
+    }
+
+    private async __retrieveProject(
+        request: OpikApi.ProjectRetrieveDetailed,
+        requestOptions?: Projects.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ProjectDetailed>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -788,26 +908,30 @@ export class Projects {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.ProjectDetailed.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.ProjectDetailed.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body);
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 case 422:
-                    throw new OpikApi.UnprocessableEntityError(_response.error.body);
+                    throw new OpikApi.UnprocessableEntityError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -817,6 +941,7 @@ export class Projects {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -825,6 +950,7 @@ export class Projects {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }

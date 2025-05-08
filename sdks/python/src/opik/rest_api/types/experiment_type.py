@@ -2,6 +2,4 @@
 
 import typing
 
-ExperimentType = typing.Union[
-    typing.Literal["regular", "trial", "mini-batch"], typing.Any
-]
+ExperimentType = typing.Union[typing.Literal["regular", "trial", "mini-batch"], typing.Any]

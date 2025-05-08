@@ -51,10 +51,17 @@ export class Prompts {
      * @example
      *     await client.prompts.getPrompts()
      */
-    public async getPrompts(
+    public getPrompts(
         request: OpikApi.GetPromptsRequest = {},
         requestOptions?: Prompts.RequestOptions,
-    ): Promise<OpikApi.PromptPagePublic> {
+    ): core.HttpResponsePromise<OpikApi.PromptPagePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getPrompts(request, requestOptions));
+    }
+
+    private async __getPrompts(
+        request: OpikApi.GetPromptsRequest = {},
+        requestOptions?: Prompts.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.PromptPagePublic>> {
         const { page, size, name } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
@@ -97,18 +104,22 @@ export class Prompts {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.PromptPagePublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.PromptPagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -117,12 +128,14 @@ export class Prompts {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/prompts.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -142,7 +155,17 @@ export class Prompts {
      *         name: "name"
      *     })
      */
-    public async createPrompt(request: OpikApi.PromptWrite, requestOptions?: Prompts.RequestOptions): Promise<void> {
+    public createPrompt(
+        request: OpikApi.PromptWrite,
+        requestOptions?: Prompts.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__createPrompt(request, requestOptions));
+    }
+
+    private async __createPrompt(
+        request: OpikApi.PromptWrite,
+        requestOptions?: Prompts.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -171,21 +194,22 @@ export class Prompts {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body);
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 409:
-                    throw new OpikApi.ConflictError(_response.error.body);
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
                 case 422:
-                    throw new OpikApi.UnprocessableEntityError(_response.error.body);
+                    throw new OpikApi.UnprocessableEntityError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -195,12 +219,14 @@ export class Prompts {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/prompts.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -223,10 +249,17 @@ export class Prompts {
      *         }
      *     })
      */
-    public async createPromptVersion(
+    public createPromptVersion(
         request: OpikApi.CreatePromptVersionDetail,
         requestOptions?: Prompts.RequestOptions,
-    ): Promise<OpikApi.PromptVersionDetail> {
+    ): core.HttpResponsePromise<OpikApi.PromptVersionDetail> {
+        return core.HttpResponsePromise.fromPromise(this.__createPromptVersion(request, requestOptions));
+    }
+
+    private async __createPromptVersion(
+        request: OpikApi.CreatePromptVersionDetail,
+        requestOptions?: Prompts.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.PromptVersionDetail>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -255,26 +288,30 @@ export class Prompts {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.PromptVersionDetail.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.PromptVersionDetail.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body);
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 409:
-                    throw new OpikApi.ConflictError(_response.error.body);
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
                 case 422:
-                    throw new OpikApi.UnprocessableEntityError(_response.error.body);
+                    throw new OpikApi.UnprocessableEntityError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -284,6 +321,7 @@ export class Prompts {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -292,6 +330,7 @@ export class Prompts {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -307,7 +346,17 @@ export class Prompts {
      * @example
      *     await client.prompts.getPromptById("id")
      */
-    public async getPromptById(id: string, requestOptions?: Prompts.RequestOptions): Promise<OpikApi.PromptDetail> {
+    public getPromptById(
+        id: string,
+        requestOptions?: Prompts.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.PromptDetail> {
+        return core.HttpResponsePromise.fromPromise(this.__getPromptById(id, requestOptions));
+    }
+
+    private async __getPromptById(
+        id: string,
+        requestOptions?: Prompts.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.PromptDetail>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -335,22 +384,26 @@ export class Prompts {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.PromptDetail.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.PromptDetail.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -360,12 +413,14 @@ export class Prompts {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/prompts/{id}.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -387,11 +442,19 @@ export class Prompts {
      *         name: "name"
      *     })
      */
-    public async updatePrompt(
+    public updatePrompt(
         id: string,
         request: OpikApi.PromptUpdatable,
         requestOptions?: Prompts.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__updatePrompt(id, request, requestOptions));
+    }
+
+    private async __updatePrompt(
+        id: string,
+        request: OpikApi.PromptUpdatable,
+        requestOptions?: Prompts.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -420,23 +483,24 @@ export class Prompts {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body);
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 case 409:
-                    throw new OpikApi.ConflictError(_response.error.body);
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
                 case 422:
-                    throw new OpikApi.UnprocessableEntityError(_response.error.body);
+                    throw new OpikApi.UnprocessableEntityError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -446,12 +510,14 @@ export class Prompts {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling PUT /v1/private/prompts/{id}.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -465,7 +531,14 @@ export class Prompts {
      * @example
      *     await client.prompts.deletePrompt("id")
      */
-    public async deletePrompt(id: string, requestOptions?: Prompts.RequestOptions): Promise<void> {
+    public deletePrompt(id: string, requestOptions?: Prompts.RequestOptions): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deletePrompt(id, requestOptions));
+    }
+
+    private async __deletePrompt(
+        id: string,
+        requestOptions?: Prompts.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -493,13 +566,14 @@ export class Prompts {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -508,12 +582,14 @@ export class Prompts {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling DELETE /v1/private/prompts/{id}.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -529,10 +605,17 @@ export class Prompts {
      *         ids: ["ids"]
      *     })
      */
-    public async deletePromptsBatch(
+    public deletePromptsBatch(
         request: OpikApi.BatchDelete,
         requestOptions?: Prompts.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deletePromptsBatch(request, requestOptions));
+    }
+
+    private async __deletePromptsBatch(
+        request: OpikApi.BatchDelete,
+        requestOptions?: Prompts.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -561,13 +644,14 @@ export class Prompts {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -576,12 +660,14 @@ export class Prompts {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/prompts/delete.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -597,10 +683,17 @@ export class Prompts {
      * @example
      *     await client.prompts.getPromptVersionById("versionId")
      */
-    public async getPromptVersionById(
+    public getPromptVersionById(
         versionId: string,
         requestOptions?: Prompts.RequestOptions,
-    ): Promise<OpikApi.PromptVersionDetail> {
+    ): core.HttpResponsePromise<OpikApi.PromptVersionDetail> {
+        return core.HttpResponsePromise.fromPromise(this.__getPromptVersionById(versionId, requestOptions));
+    }
+
+    private async __getPromptVersionById(
+        versionId: string,
+        requestOptions?: Prompts.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.PromptVersionDetail>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -628,22 +721,26 @@ export class Prompts {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.PromptVersionDetail.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.PromptVersionDetail.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -653,6 +750,7 @@ export class Prompts {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -661,6 +759,7 @@ export class Prompts {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -675,11 +774,19 @@ export class Prompts {
      * @example
      *     await client.prompts.getPromptVersions("id")
      */
-    public async getPromptVersions(
+    public getPromptVersions(
         id: string,
         request: OpikApi.GetPromptVersionsRequest = {},
         requestOptions?: Prompts.RequestOptions,
-    ): Promise<OpikApi.PromptVersionPagePublic> {
+    ): core.HttpResponsePromise<OpikApi.PromptVersionPagePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getPromptVersions(id, request, requestOptions));
+    }
+
+    private async __getPromptVersions(
+        id: string,
+        request: OpikApi.GetPromptVersionsRequest = {},
+        requestOptions?: Prompts.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.PromptVersionPagePublic>> {
         const { page, size } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
@@ -718,18 +825,22 @@ export class Prompts {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.PromptVersionPagePublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.PromptVersionPagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -738,6 +849,7 @@ export class Prompts {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -746,6 +858,7 @@ export class Prompts {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -765,10 +878,17 @@ export class Prompts {
      *         name: "name"
      *     })
      */
-    public async retrievePromptVersion(
+    public retrievePromptVersion(
         request: OpikApi.PromptVersionRetrieveDetail,
         requestOptions?: Prompts.RequestOptions,
-    ): Promise<OpikApi.PromptVersionDetail> {
+    ): core.HttpResponsePromise<OpikApi.PromptVersionDetail> {
+        return core.HttpResponsePromise.fromPromise(this.__retrievePromptVersion(request, requestOptions));
+    }
+
+    private async __retrievePromptVersion(
+        request: OpikApi.PromptVersionRetrieveDetail,
+        requestOptions?: Prompts.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.PromptVersionDetail>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -797,26 +917,30 @@ export class Prompts {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.PromptVersionDetail.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.PromptVersionDetail.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body);
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 case 422:
-                    throw new OpikApi.UnprocessableEntityError(_response.error.body);
+                    throw new OpikApi.UnprocessableEntityError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -826,6 +950,7 @@ export class Prompts {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -834,6 +959,7 @@ export class Prompts {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }

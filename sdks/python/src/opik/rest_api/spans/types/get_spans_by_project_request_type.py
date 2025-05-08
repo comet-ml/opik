@@ -2,6 +2,4 @@
 
 import typing
 
-GetSpansByProjectRequestType = typing.Union[
-    typing.Literal["general", "tool", "llm", "guardrail"], typing.Any
-]
+GetSpansByProjectRequestType = typing.Union[typing.Literal["general", "tool", "llm", "guardrail"], typing.Any]

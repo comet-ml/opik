@@ -56,7 +56,17 @@ export class Check {
      *         "key": "value"
      *     })
      */
-    public async access(request: OpikApi.AuthDetailsHolder, requestOptions?: Check.RequestOptions): Promise<void> {
+    public access(
+        request: OpikApi.AuthDetailsHolder,
+        requestOptions?: Check.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__access(request, requestOptions));
+    }
+
+    private async __access(
+        request: OpikApi.AuthDetailsHolder,
+        requestOptions?: Check.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -85,13 +95,13 @@ export class Check {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 401:
-                    throw new OpikApi.UnauthorizedError(_response.error.body);
+                    throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 403:
                     throw new OpikApi.ForbiddenError(
                         serializers.ErrorMessage.parseOrThrow(_response.error.body, {
@@ -100,11 +110,13 @@ export class Check {
                             allowUnrecognizedEnumValues: true,
                             breadcrumbsPrefix: ["response"],
                         }),
+                        _response.rawResponse,
                     );
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -114,12 +126,14 @@ export class Check {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/auth.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -135,7 +149,15 @@ export class Check {
      * @example
      *     await client.check.getWorkspaceName()
      */
-    public async getWorkspaceName(requestOptions?: Check.RequestOptions): Promise<OpikApi.WorkspaceNameHolder> {
+    public getWorkspaceName(
+        requestOptions?: Check.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.WorkspaceNameHolder> {
+        return core.HttpResponsePromise.fromPromise(this.__getWorkspaceName(requestOptions));
+    }
+
+    private async __getWorkspaceName(
+        requestOptions?: Check.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.WorkspaceNameHolder>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -163,18 +185,21 @@ export class Check {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.WorkspaceNameHolder.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.WorkspaceNameHolder.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 401:
-                    throw new OpikApi.UnauthorizedError(_response.error.body);
+                    throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 403:
                     throw new OpikApi.ForbiddenError(
                         serializers.ErrorMessage.parseOrThrow(_response.error.body, {
@@ -183,11 +208,13 @@ export class Check {
                             allowUnrecognizedEnumValues: true,
                             breadcrumbsPrefix: ["response"],
                         }),
+                        _response.rawResponse,
                     );
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -197,12 +224,14 @@ export class Check {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/auth/workspace.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }

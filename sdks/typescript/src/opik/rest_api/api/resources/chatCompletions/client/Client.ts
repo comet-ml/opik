@@ -51,10 +51,17 @@ export class ChatCompletions {
      * @example
      *     await client.chatCompletions.createChatCompletions()
      */
-    public async createChatCompletions(
+    public createChatCompletions(
         request: OpikApi.ChatCompletionRequest = {},
         requestOptions?: ChatCompletions.RequestOptions,
-    ): Promise<OpikApi.ChatCompletionResponse> {
+    ): core.HttpResponsePromise<OpikApi.ChatCompletionResponse> {
+        return core.HttpResponsePromise.fromPromise(this.__createChatCompletions(request, requestOptions));
+    }
+
+    private async __createChatCompletions(
+        request: OpikApi.ChatCompletionRequest = {},
+        requestOptions?: ChatCompletions.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ChatCompletionResponse>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -83,18 +90,22 @@ export class ChatCompletions {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.ChatCompletionResponse.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.ChatCompletionResponse.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -103,6 +114,7 @@ export class ChatCompletions {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -111,6 +123,7 @@ export class ChatCompletions {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }

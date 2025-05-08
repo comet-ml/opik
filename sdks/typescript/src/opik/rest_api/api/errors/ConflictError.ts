@@ -3,13 +3,15 @@
  */
 
 import * as errors from "../../errors/index";
+import * as core from "../../core";
 
 export class ConflictError extends errors.OpikApiError {
-    constructor(body?: unknown) {
+    constructor(body?: unknown, rawResponse?: core.RawResponse) {
         super({
             message: "ConflictError",
             statusCode: 409,
             body: body,
+            rawResponse: rawResponse,
         });
         Object.setPrototypeOf(this, ConflictError.prototype);
     }

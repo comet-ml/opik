@@ -2,6 +2,4 @@
 
 import typing
 
-FeedbackScoreBatchItemSource = typing.Union[
-    typing.Literal["ui", "sdk", "online_scoring"], typing.Any
-]
+FeedbackScoreBatchItemSource = typing.Union[typing.Literal["ui", "sdk", "online_scoring"], typing.Any]

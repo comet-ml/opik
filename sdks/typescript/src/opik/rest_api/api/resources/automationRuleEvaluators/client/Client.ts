@@ -51,10 +51,17 @@ export class AutomationRuleEvaluators {
      * @example
      *     await client.automationRuleEvaluators.findEvaluators()
      */
-    public async findEvaluators(
+    public findEvaluators(
         request: OpikApi.FindEvaluatorsRequest = {},
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
-    ): Promise<OpikApi.AutomationRuleEvaluatorPagePublic> {
+    ): core.HttpResponsePromise<OpikApi.AutomationRuleEvaluatorPagePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__findEvaluators(request, requestOptions));
+    }
+
+    private async __findEvaluators(
+        request: OpikApi.FindEvaluatorsRequest = {},
+        requestOptions?: AutomationRuleEvaluators.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.AutomationRuleEvaluatorPagePublic>> {
         const { projectId, name, page, size } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (projectId != null) {
@@ -101,18 +108,22 @@ export class AutomationRuleEvaluators {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.AutomationRuleEvaluatorPagePublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.AutomationRuleEvaluatorPagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -121,6 +132,7 @@ export class AutomationRuleEvaluators {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -129,6 +141,7 @@ export class AutomationRuleEvaluators {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -144,10 +157,17 @@ export class AutomationRuleEvaluators {
      *         type: "llm_as_judge"
      *     })
      */
-    public async createAutomationRuleEvaluator(
+    public createAutomationRuleEvaluator(
         request: OpikApi.AutomationRuleEvaluatorWrite,
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__createAutomationRuleEvaluator(request, requestOptions));
+    }
+
+    private async __createAutomationRuleEvaluator(
+        request: OpikApi.AutomationRuleEvaluatorWrite,
+        requestOptions?: AutomationRuleEvaluators.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -176,13 +196,14 @@ export class AutomationRuleEvaluators {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -191,6 +212,7 @@ export class AutomationRuleEvaluators {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -199,6 +221,7 @@ export class AutomationRuleEvaluators {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -216,10 +239,17 @@ export class AutomationRuleEvaluators {
      *         }
      *     })
      */
-    public async deleteAutomationRuleEvaluatorBatch(
+    public deleteAutomationRuleEvaluatorBatch(
         request: OpikApi.DeleteAutomationRuleEvaluatorBatchRequest,
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteAutomationRuleEvaluatorBatch(request, requestOptions));
+    }
+
+    private async __deleteAutomationRuleEvaluatorBatch(
+        request: OpikApi.DeleteAutomationRuleEvaluatorBatchRequest,
+        requestOptions?: AutomationRuleEvaluators.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const { projectId, body: _body } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (projectId != null) {
@@ -255,13 +285,14 @@ export class AutomationRuleEvaluators {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -270,6 +301,7 @@ export class AutomationRuleEvaluators {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -278,6 +310,7 @@ export class AutomationRuleEvaluators {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -292,11 +325,19 @@ export class AutomationRuleEvaluators {
      * @example
      *     await client.automationRuleEvaluators.getEvaluatorById("id")
      */
-    public async getEvaluatorById(
+    public getEvaluatorById(
         id: string,
         request: OpikApi.GetEvaluatorByIdRequest = {},
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
-    ): Promise<OpikApi.AutomationRuleEvaluatorPublic> {
+    ): core.HttpResponsePromise<OpikApi.AutomationRuleEvaluatorPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getEvaluatorById(id, request, requestOptions));
+    }
+
+    private async __getEvaluatorById(
+        id: string,
+        request: OpikApi.GetEvaluatorByIdRequest = {},
+        requestOptions?: AutomationRuleEvaluators.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.AutomationRuleEvaluatorPublic>> {
         const { projectId } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (projectId != null) {
@@ -331,18 +372,22 @@ export class AutomationRuleEvaluators {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.AutomationRuleEvaluatorPublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.AutomationRuleEvaluatorPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -351,6 +396,7 @@ export class AutomationRuleEvaluators {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -359,6 +405,7 @@ export class AutomationRuleEvaluators {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -375,11 +422,19 @@ export class AutomationRuleEvaluators {
      *         type: "llm_as_judge"
      *     })
      */
-    public async updateAutomationRuleEvaluator(
+    public updateAutomationRuleEvaluator(
         id: string,
         request: OpikApi.AutomationRuleEvaluatorUpdate,
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__updateAutomationRuleEvaluator(id, request, requestOptions));
+    }
+
+    private async __updateAutomationRuleEvaluator(
+        id: string,
+        request: OpikApi.AutomationRuleEvaluatorUpdate,
+        requestOptions?: AutomationRuleEvaluators.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -408,13 +463,14 @@ export class AutomationRuleEvaluators {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -423,6 +479,7 @@ export class AutomationRuleEvaluators {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -431,6 +488,7 @@ export class AutomationRuleEvaluators {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -445,11 +503,19 @@ export class AutomationRuleEvaluators {
      * @example
      *     await client.automationRuleEvaluators.getEvaluatorLogsById("id")
      */
-    public async getEvaluatorLogsById(
+    public getEvaluatorLogsById(
         id: string,
         request: OpikApi.GetEvaluatorLogsByIdRequest = {},
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
-    ): Promise<OpikApi.LogPage> {
+    ): core.HttpResponsePromise<OpikApi.LogPage> {
+        return core.HttpResponsePromise.fromPromise(this.__getEvaluatorLogsById(id, request, requestOptions));
+    }
+
+    private async __getEvaluatorLogsById(
+        id: string,
+        request: OpikApi.GetEvaluatorLogsByIdRequest = {},
+        requestOptions?: AutomationRuleEvaluators.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.LogPage>> {
         const { size } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (size != null) {
@@ -484,18 +550,22 @@ export class AutomationRuleEvaluators {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.LogPage.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.LogPage.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -504,6 +574,7 @@ export class AutomationRuleEvaluators {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -512,6 +583,7 @@ export class AutomationRuleEvaluators {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }

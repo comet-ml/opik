@@ -2,6 +2,4 @@
 
 import typing
 
-UploadAttachmentRequestEntityType = typing.Union[
-    typing.Literal["trace", "span"], typing.Any
-]
+UploadAttachmentRequestEntityType = typing.Union[typing.Literal["trace", "span"], typing.Any]

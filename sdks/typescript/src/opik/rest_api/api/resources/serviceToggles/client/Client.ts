@@ -50,9 +50,15 @@ export class ServiceToggles {
      * @example
      *     await client.serviceToggles.getServiceToggles()
      */
-    public async getServiceToggles(
+    public getServiceToggles(
         requestOptions?: ServiceToggles.RequestOptions,
-    ): Promise<OpikApi.ServiceTogglesConfig> {
+    ): core.HttpResponsePromise<OpikApi.ServiceTogglesConfig> {
+        return core.HttpResponsePromise.fromPromise(this.__getServiceToggles(requestOptions));
+    }
+
+    private async __getServiceToggles(
+        requestOptions?: ServiceToggles.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ServiceTogglesConfig>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -80,18 +86,22 @@ export class ServiceToggles {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.ServiceTogglesConfig.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.ServiceTogglesConfig.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -100,12 +110,14 @@ export class ServiceToggles {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/toggles.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }

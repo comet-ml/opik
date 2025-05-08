@@ -53,10 +53,17 @@ export class LlmProviderKey {
      *         ids: ["ids"]
      *     })
      */
-    public async deleteLlmProviderApiKeysBatch(
+    public deleteLlmProviderApiKeysBatch(
         request: OpikApi.BatchDelete,
         requestOptions?: LlmProviderKey.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteLlmProviderApiKeysBatch(request, requestOptions));
+    }
+
+    private async __deleteLlmProviderApiKeysBatch(
+        request: OpikApi.BatchDelete,
+        requestOptions?: LlmProviderKey.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -85,13 +92,14 @@ export class LlmProviderKey {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -100,6 +108,7 @@ export class LlmProviderKey {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -108,6 +117,7 @@ export class LlmProviderKey {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -120,9 +130,15 @@ export class LlmProviderKey {
      * @example
      *     await client.llmProviderKey.findLlmProviderKeys()
      */
-    public async findLlmProviderKeys(
+    public findLlmProviderKeys(
         requestOptions?: LlmProviderKey.RequestOptions,
-    ): Promise<OpikApi.ProviderApiKeyPagePublic> {
+    ): core.HttpResponsePromise<OpikApi.ProviderApiKeyPagePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__findLlmProviderKeys(requestOptions));
+    }
+
+    private async __findLlmProviderKeys(
+        requestOptions?: LlmProviderKey.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ProviderApiKeyPagePublic>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -150,18 +166,22 @@ export class LlmProviderKey {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.ProviderApiKeyPagePublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.ProviderApiKeyPagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -170,12 +190,14 @@ export class LlmProviderKey {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/llm-provider-key.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -195,10 +217,17 @@ export class LlmProviderKey {
      *         apiKey: "api_key"
      *     })
      */
-    public async storeLlmProviderApiKey(
+    public storeLlmProviderApiKey(
         request: OpikApi.ProviderApiKeyWrite,
         requestOptions?: LlmProviderKey.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__storeLlmProviderApiKey(request, requestOptions));
+    }
+
+    private async __storeLlmProviderApiKey(
+        request: OpikApi.ProviderApiKeyWrite,
+        requestOptions?: LlmProviderKey.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -227,13 +256,13 @@ export class LlmProviderKey {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 401:
-                    throw new OpikApi.UnauthorizedError(_response.error.body);
+                    throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 403:
                     throw new OpikApi.ForbiddenError(
                         serializers.ErrorMessage.parseOrThrow(_response.error.body, {
@@ -242,11 +271,13 @@ export class LlmProviderKey {
                             allowUnrecognizedEnumValues: true,
                             breadcrumbsPrefix: ["response"],
                         }),
+                        _response.rawResponse,
                     );
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -256,6 +287,7 @@ export class LlmProviderKey {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -264,6 +296,7 @@ export class LlmProviderKey {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -279,10 +312,17 @@ export class LlmProviderKey {
      * @example
      *     await client.llmProviderKey.getLlmProviderApiKeyById("id")
      */
-    public async getLlmProviderApiKeyById(
+    public getLlmProviderApiKeyById(
         id: string,
         requestOptions?: LlmProviderKey.RequestOptions,
-    ): Promise<OpikApi.ProviderApiKeyPublic> {
+    ): core.HttpResponsePromise<OpikApi.ProviderApiKeyPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getLlmProviderApiKeyById(id, requestOptions));
+    }
+
+    private async __getLlmProviderApiKeyById(
+        id: string,
+        requestOptions?: LlmProviderKey.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ProviderApiKeyPublic>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -310,22 +350,26 @@ export class LlmProviderKey {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.ProviderApiKeyPublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.ProviderApiKeyPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -335,6 +379,7 @@ export class LlmProviderKey {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -343,6 +388,7 @@ export class LlmProviderKey {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -363,11 +409,19 @@ export class LlmProviderKey {
      *         apiKey: "api_key"
      *     })
      */
-    public async updateLlmProviderApiKey(
+    public updateLlmProviderApiKey(
         id: string,
         request: OpikApi.ProviderApiKeyUpdate,
         requestOptions?: LlmProviderKey.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__updateLlmProviderApiKey(id, request, requestOptions));
+    }
+
+    private async __updateLlmProviderApiKey(
+        id: string,
+        request: OpikApi.ProviderApiKeyUpdate,
+        requestOptions?: LlmProviderKey.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -396,13 +450,13 @@ export class LlmProviderKey {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 401:
-                    throw new OpikApi.UnauthorizedError(_response.error.body);
+                    throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 403:
                     throw new OpikApi.ForbiddenError(
                         serializers.ErrorMessage.parseOrThrow(_response.error.body, {
@@ -411,13 +465,15 @@ export class LlmProviderKey {
                             allowUnrecognizedEnumValues: true,
                             breadcrumbsPrefix: ["response"],
                         }),
+                        _response.rawResponse,
                     );
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -427,6 +483,7 @@ export class LlmProviderKey {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -435,6 +492,7 @@ export class LlmProviderKey {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }

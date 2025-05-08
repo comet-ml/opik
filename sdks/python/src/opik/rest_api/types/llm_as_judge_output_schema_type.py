@@ -2,6 +2,4 @@
 
 import typing
 
-LlmAsJudgeOutputSchemaType = typing.Union[
-    typing.Literal["BOOLEAN", "INTEGER", "DOUBLE"], typing.Any
-]
+LlmAsJudgeOutputSchemaType = typing.Union[typing.Literal["BOOLEAN", "INTEGER", "DOUBLE"], typing.Any]
