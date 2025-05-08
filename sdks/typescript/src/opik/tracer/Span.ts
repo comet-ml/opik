@@ -1,11 +1,14 @@
 import { OpikClient } from "@/client/Client";
 import type { Span as ISpan, SpanUpdate } from "@/rest_api/api";
+import { generateId } from "@/utils/generateId";
 
 export interface SavedSpan extends ISpan {
   id: string;
 }
 
 export class Span {
+  private childSpans: Span[] = [];
+
   constructor(
     public data: SavedSpan,
     private opik: OpikClient
@@ -47,5 +50,37 @@ export class Span {
     this.data = { ...this.data, ...updates };
 
     return this;
+  };
+
+  public span = (
+    spanData: Omit<
+      ISpan,
+      | "startTime"
+      | "traceId"
+      | "parentSpanId"
+      | "projectId"
+      | "projectName"
+      | "id"
+    > & {
+      startTime?: Date;
+    }
+  ) => {
+    const projectName = this.data.projectName ?? this.opik.config.projectName;
+
+    const spanWithId: SavedSpan = {
+      id: generateId(),
+      startTime: new Date(),
+      ...spanData,
+      projectName,
+      traceId: this.data.traceId,
+      parentSpanId: this.data.id,
+    };
+
+    this.opik.spanBatchQueue.create(spanWithId);
+
+    const span = new Span(spanWithId, this.opik);
+    this.childSpans.push(span);
+
+    return span;
   };
 }
