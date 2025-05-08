@@ -120,11 +120,13 @@ clickhouse:
 
 ## Configure replication for Clickhouse
 
-<Tip>
+<Warning>
 
-Known Limitation: You have to have Opik running before setting up replication for Clickhouse!
+**Important Limitation:**  
+You must have Opik running *before* you enable replication for ClickHouse.  
+Attempting to set up replication before Opik is running may result in errors or misconfiguration.
 
-</Tip>
+</Warning>
 
 ```yaml 
 clickhouse:
