@@ -41,34 +41,34 @@ DATASET_CONFIGS = {
         "output_key": "answer",
         "huggingface_path": "gsm8k",
     },
-    "ragbench_sentence_relevance": {
-        "name": "RAGBench Sentence Relevance",
-        "metrics": [AnswerRelevance(require_context=False)],
-        "input_key": "question",
-        "output_key": "sentence",
-        "huggingface_path": "ragbench_sentence_relevance",
-    },
-    "election_questions": {
-        "name": "Election Questions",
-        "metrics": [Hallucination()],
-        "input_key": "question",
-        "output_key": "label",
-        "huggingface_path": "election_questions",
-    },
-    "medhallu": {
-        "name": "MedHallu",
-        "metrics": [Hallucination(), AnswerRelevance(require_context=False)],
-        "input_key": "question",
-        "output_key": "ground_truth",
-        "huggingface_path": "medhallu",
-    },
-    "rag_hallucinations": {
-        "name": "RAG Hallucinations",
-        "metrics": [Hallucination(), ContextPrecision()],
-        "input_key": "question",
-        "output_key": "answer",
-        "huggingface_path": "rag_hallucinations",
-    },
+    # "ragbench_sentence_relevance": {
+    #     "name": "RAGBench Sentence Relevance",
+    #     "metrics": [AnswerRelevance(require_context=False)],
+    #     "input_key": "question",
+    #     "output_key": "sentence",
+    #     "huggingface_path": "ragbench_sentence_relevance",
+    # },
+    # "election_questions": {
+    #     "name": "Election Questions",
+    #     "metrics": [Hallucination()],
+    #     "input_key": "question",
+    #     "output_key": "label",
+    #     "huggingface_path": "election_questions",
+    # },
+    # "medhallu": {
+    #     "name": "MedHallu",
+    #     "metrics": [Hallucination(), AnswerRelevance(require_context=False)],
+    #     "input_key": "question",
+    #     "output_key": "ground_truth",
+    #     "huggingface_path": "medhallu",
+    # },
+    # "rag_hallucinations": {
+    #     "name": "RAG Hallucinations",
+    #     "metrics": [Hallucination(), ContextPrecision()],
+    #     "input_key": "question",
+    #     "output_key": "answer",
+    #     "huggingface_path": "rag_hallucinations",
+    # },
     # "hotpotqa": {
     #     "name": "HotpotQA",
     #     "metrics": [AnswerRelevance(), ContextPrecision()],
@@ -104,7 +104,7 @@ OPTIMIZER_CONFIGS = {
     "few_shot": {
         "class": "FewShotBayesianOptimizer",
         "params": {
-            "model": "gpt-4o-mini",
+            # "model": "gpt-4o-mini", # This will be overridden by MODELS_TO_RUN
             "min_examples": 3,
             "max_examples": 8,
             "n_threads": 4,
@@ -114,7 +114,7 @@ OPTIMIZER_CONFIGS = {
     # "meta_prompt": {
     #     "class": "MetaPromptOptimizer",
     #     "params": {
-    #         "model": "gpt-4o-mini",
+    #         # "model": "gpt-4o-mini", # Will be overridden
     #         "max_rounds": 3,
     #         "num_prompts_per_round": 4,
     #         "improvement_threshold": 0.01,
@@ -126,7 +126,7 @@ OPTIMIZER_CONFIGS = {
     # "mipro": {
     #     "class": "MiproOptimizer",
     #     "params": {
-    #         "model": "gpt-4o-mini",
+    #         # "model": "gpt-4o-mini", # Will be overridden
     #         "temperature": 0.1,
     #         "max_tokens": 5000,
     #         "num_threads": 4,
@@ -135,7 +135,7 @@ OPTIMIZER_CONFIGS = {
     # "external_dspy_mipro": {
     #     "class": "ExternalDspyMiproOptimizer",
     #     "params": {
-    #         "model": "openai/gpt-4o-mini",
+    #         # "model": "openai/gpt-4o-mini", # Will be overridden
     #         "temperature": 0.1,
     #         "max_tokens": 5000,
     #         "num_threads": 1,
@@ -144,13 +144,22 @@ OPTIMIZER_CONFIGS = {
     # "external_adalflow": {
     #     "class": "ExternalAdalFlowOptimizer",
     #     "params": {
-    #         "model": "gpt-4o-mini",
+    #         # "model": "gpt-4o-mini", # Will be overridden
     #         "temperature": 0.1,
     #         "max_tokens": 5000,
     #         "num_threads": 1,
     #     },
     # },
 }
+
+MODELS_TO_RUN = [
+    # "openai/gpt-4.1-2025-04-14",
+    # "openai/o3-2025-04-16",
+    "anthropic/claude-3-5-sonnet-20241022",
+    "anthropic/claude-3-7-sonnet-20250219",
+    # "openrouter/google/gemini-2.5-pro-preview",
+    # "openrouter/google/gemini-2.5-flash-preview",
+]
 
 # Initial prompts for each dataset
 INITIAL_PROMPTS = {
@@ -166,12 +175,13 @@ INITIAL_PROMPTS = {
 }
 
 
-def get_experiment_config(dataset_name: str, optimizer_name: str, test_mode: bool = False) -> Dict:
+def get_experiment_config(dataset_name: str, optimizer_name: str, model_name: str, test_mode: bool = False) -> Dict:
     """Get experiment configuration with metadata."""
     version_info = sys.version_info
     return {
         "dataset": dataset_name,
         "optimizer": optimizer_name,
+        "model_name": model_name,
         "timestamp": datetime.now().isoformat(),
         "test_mode": test_mode,  # Include test mode in experiment config
         "environment": {
@@ -181,13 +191,14 @@ def get_experiment_config(dataset_name: str, optimizer_name: str, test_mode: boo
             "opik_version": opik_optimizer.__version__,
         },
         "parameters": {
-            "model": OPTIMIZER_CONFIGS[optimizer_name]["params"]["model"],
+            "model": model_name,
             "temperature": OPTIMIZER_CONFIGS[optimizer_name]["params"].get(
                 "temperature", 0.1
             ),
             "max_tokens": OPTIMIZER_CONFIGS[optimizer_name]["params"].get(
                 "max_tokens", 5000
             ),
+            **{k: v for k, v in OPTIMIZER_CONFIGS[optimizer_name]["params"].items() if k != 'model'}
         },
         "metrics": [str(m) for m in DATASET_CONFIGS[dataset_name]["metrics"]],
     }
