@@ -568,13 +568,6 @@ class BenchmarkRunner:
                 for future in as_completed(future_to_metric):
                     metric_obj = future_to_metric[future]
                     try:
-                        # Skip evaluation if prompt format is likely incompatible with Anthropic
-                        # -- REMOVED the skipping logic here, applying hack instead --
-                        # model_is_anthropic = "anthropic" in optimizer.model.lower()
-                        # if model_is_anthropic and isinstance(formatted_initial_prompt, list) and len(formatted_initial_prompt) == 1 and formatted_initial_prompt[0].get("role") == "system":
-                        #     logger.warning(f"Skipping initial eval for Anthropic model with system-only prompt for metric {metric_obj}.")
-                        #     initial_scores[str(metric_obj)] = None # Mark as unevaluated
-                        # else:
                         initial_scores[str(metric_obj)] = future.result()
                     except Exception as e:
                         initial_scores[str(metric_obj)] = None
