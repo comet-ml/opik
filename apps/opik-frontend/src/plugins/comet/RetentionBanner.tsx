@@ -51,7 +51,7 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
 
   const { data: organizationMembers } = useOrganizationMembers(
     {
-      organizationId: organization?.id,
+      organizationId: organization?.id ?? "",
     },
     {
       enabled: !!organization?.id,

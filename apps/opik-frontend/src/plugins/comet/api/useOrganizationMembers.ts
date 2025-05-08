@@ -1,10 +1,6 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { QueryConfig } from "../api";
-
-interface OrganizationMember {
-  username: string;
-  email: string;
-}
+import { OrganizationMember } from "@/plugins/comet/types";
 
 interface UseOrganizationMembers {
   organizationId: string;
