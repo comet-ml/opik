@@ -98,6 +98,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         adaptive_trial_threshold: Optional[float] = DEFAULT_ADAPTIVE_THRESHOLD,
         num_threads: int = 12,
         project_name: Optional[str] = None,
+        verbose: int = 1,
         **model_kwargs,
     ):
         """
@@ -114,6 +115,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             adaptive_trial_threshold: If not None, prompts scoring below `best_score * adaptive_trial_threshold` after initial trials won't get max trials.
             num_threads: Number of threads for parallel evaluation
             project_name: Optional project name for tracking
+            verbose: Controls internal logging/progress bars (0=off, 1=on).
             **model_kwargs: Additional model parameters
         """
         super().__init__(model=model, project_name=project_name, **model_kwargs)
@@ -125,6 +127,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.max_trials = max_trials_per_candidate
         self.adaptive_threshold = adaptive_trial_threshold
         self.num_threads = num_threads
+        self.verbose = verbose
         self.dataset = None
         self.task_config = None
         self._opik_client = opik_client.get_client_cached()
@@ -428,6 +431,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             n_samples=subset_size,  # Use subset_size for trials, None for full dataset
             experiment_config=experiment_config,
             optimization_id=optimization_id,
+            verbose=self.verbose,
         )
         logger.debug(f"Evaluation score: {score:.4f}")
         return score
@@ -549,6 +553,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             n_samples=n_samples,
             experiment_config=experiment_config,
             use_full_dataset=n_samples is None,
+            verbose=self.verbose,
         )
         best_score = initial_score
         best_prompt = current_prompt
@@ -616,6 +621,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                             n_samples=n_samples,
                             use_full_dataset=False,
                             experiment_config=experiment_config,
+                            verbose=self.verbose,
                         )
                         scores.append(score)
                         logger.debug(f"Trial {trial+1} score: {score:.4f}")
@@ -658,6 +664,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                                 n_samples=n_samples,
                                 use_full_dataset=False,
                                 experiment_config=experiment_config,
+                                verbose=self.verbose,
                             )
                             scores.append(score)
                             logger.debug(
@@ -709,6 +716,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     experiment_config=experiment_config,
                     n_samples=n_samples,
                     use_full_dataset=n_samples is None,
+                    verbose=self.verbose,
                 )
                 logger.info(
                     f"Final evaluation score for best candidate: {final_score_best_cand:.4f}"

@@ -56,6 +56,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         n_threads: int = 8,
         n_initial_prompts: int = 5,
         n_iterations: int = 10,
+        verbose: int = 1,
         **model_kwargs,
     ) -> None:
         super().__init__(model, project_name, **model_kwargs)
@@ -65,7 +66,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self.n_threads = n_threads
         self.n_initial_prompts = n_initial_prompts
         self.n_iterations = n_iterations
-
+        self.verbose = verbose
         self._opik_client = opik.Opik()
         logger.debug(f"Initialized FewShotBayesianOptimizer with model: {model}")
 
@@ -167,6 +168,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             project_name=self.project_name,
             experiment_config=initial_eval_config,
             optimization_id=optimization_id,
+            verbose=self.verbose,
         )
         logger.info(f"Initial (zero-shot) score: {initial_score:.4f}")
 
@@ -224,6 +226,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 project_name=self.project_name,
                 experiment_config=trial_config,
                 optimization_id=optimization_id,
+                verbose=self.verbose,
             )
             logger.debug(f"Trial {trial.number} score: {score:.4f}")
 
@@ -245,7 +248,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             logger.warning(f"Could not configure Optuna logging within optimizer: {e}")
 
         study = optuna.create_study(direction="maximize")
-        study.optimize(optimization_objective, n_trials=n_trials)
+        study.optimize(optimization_objective, n_trials=n_trials, show_progress_bar=(self.verbose == 1))
         logger.info("Optuna study finished.")
 
         best_trial = study.best_trial
@@ -389,6 +392,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             num_threads=self.n_threads,
             project_name=self.project_name,
             experiment_config=experiment_config,
+            verbose=self.verbose,
         )
         logger.debug(f"Evaluation score: {score:.4f}")
 

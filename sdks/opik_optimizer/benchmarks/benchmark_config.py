@@ -110,6 +110,7 @@ OPTIMIZER_CONFIGS = {
             "seed": 42,
             "n_trials": 10,
             "n_samples": 100,
+            "verbose": 0,
         },
     },
     # "meta_prompt": {
