@@ -522,7 +522,6 @@ class BenchmarkRunner:
                 )
             )
 
-            # --- Initial Prompt Evaluation (REMOVE suppression wrapper) --- 
             # --- Initial Prompt Evaluation --- 
             logger.info("--> Evaluating initial prompt...")
             start_time_eval_initial = time.time()
