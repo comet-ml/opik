@@ -593,7 +593,7 @@ class BenchmarkRunner:
                 "prompt_used": formatted_initial_prompt
             }
 
-            # --- Run Optimization (REMOVE suppression wrapper) --- 
+            # --- Run Optimization --- 
             n_trials_log = getattr(optimizer, 'n_trials', 'N/A')
             logger.info(f"--> Running optimization ({n_trials_log} trials)...")
             start_time_opt = time.time()
