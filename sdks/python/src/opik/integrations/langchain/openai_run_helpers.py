@@ -27,13 +27,16 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
     """
     Attempts to extract and return the token usage from the given run dictionary.
 
-    Depending on the execution type (invoke, streaming mode, async etc.), or even the model name itself,
-    token usage info might be in different places, different formats or completely missing.
+    Depending on the execution type (invoke, streaming mode, async, etc.), or even the model name itself,
+    token usage info might be in different places, different formats, or completely missing.
     """
     try:
         if run_dict["outputs"]["llm_output"] is not None:
             token_usage_dict = run_dict["outputs"]["llm_output"]["token_usage"]
+            if not isinstance(token_usage_dict, dict):
+                return None
             return llm_usage.OpikUsage.from_openai_completions_dict(token_usage_dict)
+
         # streaming mode handling
         # token usage data MAY be available at the end of streaming
         # in async mode may not provide token usage info
