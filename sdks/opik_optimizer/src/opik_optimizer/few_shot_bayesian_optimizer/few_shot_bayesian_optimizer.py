@@ -29,12 +29,17 @@ logger = logging.getLogger(__name__)
 def _call_model(model, messages, seed, model_kwargs):
     model_kwargs = opik_litellm_monitor.try_add_opik_monitoring_to_params(model_kwargs)
 
+    # Filter out optimizer-specific params that are not for litellm.completion
+    filtered_kwargs = model_kwargs.copy()
+    filtered_kwargs.pop('n_trials', None)
+    filtered_kwargs.pop('n_samples', None)
+
     response = litellm.completion(
         model=model,
         messages=messages,
         seed=seed,
-        num_retries=6,
-        **model_kwargs,
+        num_retries=6, # Keep retries
+        **filtered_kwargs, # Pass filtered kwargs
     )
 
     return response

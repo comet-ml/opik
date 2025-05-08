@@ -108,6 +108,8 @@ OPTIMIZER_CONFIGS = {
             "max_examples": 8,
             "n_threads": 4,
             "seed": 42,
+            "n_trials": 10,
+            "n_samples": 100,
         },
     },
     # "meta_prompt": {
