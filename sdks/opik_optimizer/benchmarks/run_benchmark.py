@@ -828,7 +828,6 @@ class BenchmarkRunner:
             
             final_eval_time = time.time() - start_time_eval_final
             final_scores_str = ", ".join([f"{k}: {v:.4f}" if isinstance(v, (int, float)) else f"{k}: N/A" for k, v in final_scores.items()])
-            logger.info(f"<-- Final eval done ({final_eval_time:.2f}s). Scores: {final_scores_str}")
             logger.info(f"  Final eval ({task_id}): {final_scores_str} ({final_eval_time:.2f}s)")
 
             # Store final evaluation results properly
@@ -860,7 +859,6 @@ class BenchmarkRunner:
             total_run_time_task = time.time() - start_time_run_opt
             task_result["timestamp_end_task"] = datetime.now().isoformat()
             task_result["duration_seconds_task"] = total_run_time_task
-            logger.info(f"Completed opt task_id: [bold magenta]{task_id}[/bold magenta] in {total_run_time_task:.2f}s")
             if task_result["status"] == "success":
                 console.print(f"[green]✓ Completed task: [bold magenta]{task_id}[/bold magenta] in {total_run_time_task:.2f}s[/green]")
             else:
