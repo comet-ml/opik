@@ -39,6 +39,8 @@ def _redact_sensitive_data(data: str, visible_chars: int = 4) -> str:
     if not data or len(data) <= visible_chars:
         return "*" * len(data)
     return data[:visible_chars] + "*" * (len(data) - visible_chars)
+
+
 DELIMITER_CHAR = "*"
 
 
