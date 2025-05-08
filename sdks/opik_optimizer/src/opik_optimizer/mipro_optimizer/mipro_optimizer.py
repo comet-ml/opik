@@ -35,7 +35,9 @@ litellm.cache = Cache(type="disk", disk_cache_dir=disk_cache_dir)
 
 # Set up logging
 import logging
-logger = logging.getLogger(__name__) # Inherits config from setup_logging
+
+logger = logging.getLogger(__name__)  # Inherits config from setup_logging
+
 
 class MiproOptimizer(BaseOptimizer):
     def __init__(self, model, project_name: Optional[str] = None, **model_kwargs):
@@ -184,7 +186,9 @@ class MiproOptimizer(BaseOptimizer):
             total_score += evaluation.test_results[i].score_results[0].value
         score = total_score / count if count > 0 else 0.0
 
-        logger.debug(f"Starting Mipro evaluation for prompt type: {type(prompt).__name__}")
+        logger.debug(
+            f"Starting Mipro evaluation for prompt type: {type(prompt).__name__}"
+        )
         logger.debug(f"Evaluation score: {score:.4f}")
         return score
 
@@ -212,7 +216,7 @@ class MiproOptimizer(BaseOptimizer):
 
         if not optimization:
             logger.warning("Continuing without Opik optimization tracking.")
-        
+
         try:
             result = self._optimize_prompt(
                 dataset=dataset,
@@ -224,12 +228,12 @@ class MiproOptimizer(BaseOptimizer):
                 **kwargs,
             )
             if optimization:
-                optimization.update(status="completed")
+                self.update_optimization(optimization, status="completed")
             return result
         except Exception as e:
             logger.error(f"Mipro optimization failed: {e}", exc_info=True)
             if optimization:
-                optimization.update(status="cancelled")
+                self.update_optimization(optimization, status="cancelled")
             raise e
 
     def _optimize_prompt(

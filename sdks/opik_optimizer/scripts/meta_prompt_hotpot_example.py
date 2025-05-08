@@ -7,7 +7,6 @@ from opik_optimizer import (
     TaskConfig,
     from_dataset_field,
     from_llm_response_text,
-    display_optimization_result
 )
 
 # Get or create the Hotpot dataset
@@ -56,4 +55,4 @@ result = optimizer.optimize_prompt(
     use_subsample=True,  # Force using subsample for evaluation rounds
 )
 
-display_optimization_result(result)
+result.display()

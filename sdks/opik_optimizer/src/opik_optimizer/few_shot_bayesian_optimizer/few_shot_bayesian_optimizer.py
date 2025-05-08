@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 @rate_limited(limiter)
 def _call_model(model, messages, seed, model_kwargs):
     model_kwargs = opik_litellm_monitor.try_add_opik_monitoring_to_params(model_kwargs)
-    
+
     response = litellm.completion(
         model=model,
         messages=messages,
@@ -114,7 +114,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             dataset_items = opik_dataset.get_items()
 
         experiment_config = experiment_config or {}
-        base_experiment_config = { # Base config for reuse
+        base_experiment_config = {  # Base config for reuse
             **experiment_config,
             **{
                 "optimizer": self.__class__.__name__,
@@ -132,9 +132,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             instruction=initial_instruction,
             task_input_parameters=task_config.input_dataset_fields,
             task_output_parameter=task_config.output_dataset_field,
-            demo_examples=[], # No examples
+            demo_examples=[],  # No examples
         )
-        zero_shot_llm_task = self._build_task_from_prompt_template(zero_shot_param.as_template())
+        zero_shot_llm_task = self._build_task_from_prompt_template(
+            zero_shot_param.as_template()
+        )
 
         initial_eval_config = base_experiment_config.copy()
         initial_eval_config["configuration"]["prompt"] = initial_instruction
@@ -144,11 +146,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         all_dataset_item_ids = [item["id"] for item in dataset_items]
         eval_dataset_item_ids = all_dataset_item_ids
         if n_samples is not None and n_samples < len(all_dataset_item_ids):
-             eval_dataset_item_ids = random.sample(all_dataset_item_ids, n_samples)
-             logger.info(f"Using {n_samples} samples for evaluations.")
+            eval_dataset_item_ids = random.sample(all_dataset_item_ids, n_samples)
+            logger.info(f"Using {n_samples} samples for evaluations.")
         else:
-             logger.info(f"Using all {len(all_dataset_item_ids)} samples for evaluations.")
-
+            logger.info(
+                f"Using all {len(all_dataset_item_ids)} samples for evaluations."
+            )
 
         initial_score = task_evaluator.evaluate(
             dataset=opik_dataset,
@@ -161,7 +164,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             optimization_id=optimization_id,
         )
         logger.info(f"Initial (zero-shot) score: {initial_score:.4f}")
-
 
         # Start Optuna Study
         logger.info("Starting Optuna study for Few-Shot Bayesian Optimization...")
@@ -196,12 +198,16 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
             # Log trial config
             trial_config = base_experiment_config.copy()
-            trial_config["configuration"]["prompt"] = instruction # Base instruction
-            trial_config["configuration"]["examples"] = processed_demo_examples # Log stringified examples
+            trial_config["configuration"]["prompt"] = instruction  # Base instruction
+            trial_config["configuration"][
+                "examples"
+            ] = processed_demo_examples  # Log stringified examples
             trial_config["configuration"]["n_examples"] = n_examples
             trial_config["configuration"]["example_indices"] = example_indices
 
-            logger.debug(f"Trial {trial.number}: n_examples={n_examples}, indices={example_indices}")
+            logger.debug(
+                f"Trial {trial.number}: n_examples={n_examples}, indices={example_indices}"
+            )
             logger.debug(f"Evaluating trial {trial.number}...")
 
             score = task_evaluator.evaluate(
@@ -224,10 +230,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         try:
             optuna.logging.disable_default_handler()
             optuna_logger = logging.getLogger("optuna")
-            package_level = logging.getLogger('opik_optimizer').getEffectiveLevel()
+            package_level = logging.getLogger("opik_optimizer").getEffectiveLevel()
             optuna_logger.setLevel(package_level)
             optuna_logger.propagate = False
-            logger.debug(f"Optuna logger configured to level {logging.getLevelName(package_level)} and set to not propagate.")
+            logger.debug(
+                f"Optuna logger configured to level {logging.getLevelName(package_level)} and set to not propagate."
+            )
         except Exception as e:
             logger.warning(f"Could not configure Optuna logging within optimizer: {e}")
 
@@ -239,7 +247,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         best_score = best_trial.value
         best_n_examples = best_trial.params["n_examples"]
         best_example_indices = best_trial.user_attrs.get("example_indices", [])
-        best_param: prompt_parameter.ChatPromptParameter = best_trial.user_attrs["param"]
+        best_param: prompt_parameter.ChatPromptParameter = best_trial.user_attrs[
+            "param"
+        ]
 
         chat_messages_list = best_param.as_template().format()
         main_prompt_string = best_param.instruction
@@ -262,7 +272,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "metric_config": metric_config.dict(),
                 "task_config": task_config.dict(),
                 "model": self.model,
-                "temperature": self.model_kwargs.get('temperature'),
+                "temperature": self.model_kwargs.get("temperature"),
             },
         )
 
@@ -298,11 +308,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 n_samples=n_samples,
             )
             if optimization:
-                optimization.update(status="completed")
+                self.update_optimization(optimization, status="completed")
             return result
         except Exception as e:
             if optimization:
-                optimization.update(status="cancelled")
+                self.update_optimization(optimization, status="cancelled")
             logger.error(f"FewShotBayesian optimization failed: {e}", exc_info=True)
             raise e
 
@@ -397,5 +407,3 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             }
 
         return llm_task
-
-
