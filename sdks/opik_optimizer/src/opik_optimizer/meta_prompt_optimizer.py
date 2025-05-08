@@ -17,6 +17,7 @@ from .utils import get_tqdm
 from opik_optimizer import task_evaluator
 from opik.api_objects import opik_client
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
+
 tqdm = get_tqdm()
 
 # Using disk cache for LLM calls
@@ -202,6 +203,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             model_to_use = self.reasoning_model if is_reasoning else self.model
 
             logger.debug(f"Calling model '{model_to_use}' with messages: {messages}")
+            model_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(model_params)
             response = litellm.completion(
                 model=model_to_use,
                 messages=messages,
