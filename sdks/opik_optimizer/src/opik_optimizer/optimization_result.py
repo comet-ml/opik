@@ -38,6 +38,7 @@ class OptimizationResult(pydantic.BaseModel):
     optimizer: str = "Optimizer"
     tool_prompts: Optional[Dict[str, str]] = None
     opik_metadata: Optional[Dict[str, Any]] = None
+    llm_calls: Optional[int] = None
 
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
