@@ -123,7 +123,12 @@ start_missing_containers() {
   echo "🔄 Starting missing containers..."
 
   if [[ "${BUILD_MODE}" = "true" ]]; then
-    export COMPOSE_BAKE=true
+    if docker buildx bake --help >/dev/null 2>&1; then
+      echo "ℹ️ Bake is available on Docker Buildx. Exporting COMPOSE_BAKE=true"
+      export COMPOSE_BAKE=true
+    else
+      echo "ℹ️ Bake is not available on Docker Buildx. Not using it for builds"
+    fi
   fi
 
   local cmd
