@@ -28,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import DataTableColumnResizer from "@/components/shared/DataTable/DataTableColumnResizer";
+import DataTableTooltipContext from "@/components/shared/DataTable/DataTableTooltipContext";
 import DataTableWrapper, {
   DataTableWrapperProps,
 } from "@/components/shared/DataTable/DataTableWrapper";
@@ -344,69 +345,71 @@ const DataTable = <TData, TValue>({
 
   return (
     <TableWrapper>
-      <Table
-        ref={tableRef}
-        style={{
-          ...(!autoWidth && { minWidth: table.getTotalSize() }),
-          ...(tableHeight && { "--data-table-height": `${tableHeight}px` }),
-        }}
-      >
-        <colgroup>
-          {cols.map((i) => (
-            <col key={i.id} style={{ width: `${i.size}px` }} />
-          ))}
-        </colgroup>
-        <TableHeader
-          className={cn(stickyHeader && "sticky z-10")}
-          {...(stickyHeader && {
-            ...{ [STICKY_ATTRIBUTE_VERTICAL]: STICKY_DIRECTION.vertical },
-          })}
+      <DataTableTooltipContext>
+        <Table
+          ref={tableRef}
+          style={{
+            ...(!autoWidth && { minWidth: table.getTotalSize() }),
+            ...(tableHeight && { "--data-table-height": `${tableHeight}px` }),
+          }}
         >
-          {table.getHeaderGroups().map((headerGroup, index, groups) => {
-            const isLastRow = index === groups.length - 1;
+          <colgroup>
+            {cols.map((i) => (
+              <col key={i.id} style={{ width: `${i.size}px` }} />
+            ))}
+          </colgroup>
+          <TableHeader
+            className={cn(stickyHeader && "sticky z-10")}
+            {...(stickyHeader && {
+              ...{ [STICKY_ATTRIBUTE_VERTICAL]: STICKY_DIRECTION.vertical },
+            })}
+          >
+            {table.getHeaderGroups().map((headerGroup, index, groups) => {
+              const isLastRow = index === groups.length - 1;
 
-            return (
-              <TableRow
-                key={headerGroup.id}
-                className={cn(
-                  "bg-soft-background",
-                  !isLastRow && "!border-b-0",
-                )}
-              >
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead
-                      key={header.id}
-                      data-header-id={header.id}
-                      style={{
-                        zIndex: TABLE_HEADER_Z_INDEX,
-                        ...getCommonPinningStyles(header.column, true),
-                      }}
-                      className={getCommonPinningClasses(header.column, true)}
-                      colSpan={header.colSpan}
-                    >
-                      {header.isPlaceholder
-                        ? ""
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
-                      {isResizable ? (
-                        <DataTableColumnResizer header={header} />
-                      ) : null}
-                    </TableHead>
-                  );
-                })}
-              </TableRow>
-            );
-          })}
-        </TableHeader>
-        <TableBody
-          table={table}
-          renderRow={renderRow}
-          renderNoData={renderNoData}
-        />
-      </Table>
+              return (
+                <TableRow
+                  key={headerGroup.id}
+                  className={cn(
+                    "bg-soft-background",
+                    !isLastRow && "!border-b-0",
+                  )}
+                >
+                  {headerGroup.headers.map((header) => {
+                    return (
+                      <TableHead
+                        key={header.id}
+                        data-header-id={header.id}
+                        style={{
+                          zIndex: TABLE_HEADER_Z_INDEX,
+                          ...getCommonPinningStyles(header.column, true),
+                        }}
+                        className={getCommonPinningClasses(header.column, true)}
+                        colSpan={header.colSpan}
+                      >
+                        {header.isPlaceholder
+                          ? ""
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext(),
+                            )}
+                        {isResizable ? (
+                          <DataTableColumnResizer header={header} />
+                        ) : null}
+                      </TableHead>
+                    );
+                  })}
+                </TableRow>
+              );
+            })}
+          </TableHeader>
+          <TableBody
+            table={table}
+            renderRow={renderRow}
+            renderNoData={renderNoData}
+          />
+        </Table>
+      </DataTableTooltipContext>
     </TableWrapper>
   );
 };

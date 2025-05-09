@@ -1,5 +1,6 @@
-import React from "react";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import React, { useCallback } from "react";
+import { Slot } from "@radix-ui/react-slot";
+import { useTablePopover } from "@/components/shared/DataTable/DataTableTooltipContext";
 
 type CellTooltipWrapperProps = {
   content?: string;
@@ -12,12 +13,23 @@ const CellTooltipWrapper: React.FC<CellTooltipWrapperProps> = ({
   content,
   children,
 }) => {
+  const { showPopover, hidePopover } = useTablePopover();
+  const triggerRef = React.useRef<HTMLElement>(null);
+
+  const handleMouseEnter = useCallback(() => {
+    showPopover(content, triggerRef);
+  }, [content, showPopover]);
+
   const showTooltip =
     content && content !== "-" && content.length > MIN_CHARACTERS_FOR_TOOLTIP;
   return showTooltip ? (
-    <TooltipWrapper content={content} stopClickPropagation>
+    <Slot
+      ref={triggerRef}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={hidePopover}
+    >
       {children}
-    </TooltipWrapper>
+    </Slot>
   ) : (
     children
   );
