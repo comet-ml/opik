@@ -7,6 +7,7 @@ setup(
     author="Comet ML",
     author_email="support@comet.com",
     long_description=open("README.md", encoding="utf-8").read(),
+    long_description_content_type='text/markdown',
     url="https://github.com/comet-ml/opik",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
