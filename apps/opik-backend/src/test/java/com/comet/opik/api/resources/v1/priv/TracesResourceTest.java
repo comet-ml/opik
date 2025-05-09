@@ -573,6 +573,43 @@ class TracesResourceTest {
         }
 
         @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void get__whenApiKeyIsPresent__thenReturnSearchTrace(String apiKey,
+                Visibility visibility, int expectedCode) {
+
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, workspaceId);
+            mockGetWorkspaceIdByName(workspaceName, workspaceId);
+
+            Project project = factory.manufacturePojo(Project.class).toBuilder().name(DEFAULT_PROJECT)
+                    .visibility(visibility).build();
+            var projectId = projectResourceClient.createProject(project, okApikey, workspaceName);
+
+            var trace = createTrace()
+                    .toBuilder()
+                    .projectId(null)
+                    .projectName(DEFAULT_PROJECT)
+                    .build();
+            create(trace, okApikey, workspaceName);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + "/search")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity
+                            .json(TraceSearchStreamRequest.builder().projectId(projectId).build()))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                if (expectedCode == 404) {
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(projectId));
+                }
+            }
+        }
+
+        @ParameterizedTest
         @MethodSource("credentials")
         @DisplayName("Trace feedback, when api key is present, then return proper response")
         void feedback__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
@@ -975,6 +1012,42 @@ class TracesResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity
                             .json(TraceThreadIdentifier.builder().projectId(projectId).threadId(threadId).build()))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                if (expectedCode == 404) {
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(projectId));
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void get__whenApiKeyIsPresent__thenReturnSearchTrace(String sessionToken,
+                Visibility visibility,
+                String workspaceName, int expectedCode) {
+
+            mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
+
+            Project project = factory.manufacturePojo(Project.class).toBuilder().visibility(visibility).build();
+            var projectId = projectResourceClient.createProject(project, API_KEY, workspaceName);
+
+            var threadId = UUID.randomUUID().toString();
+            var trace = createTrace()
+                    .toBuilder()
+                    .projectId(null)
+                    .threadId(threadId)
+                    .projectName(project.name())
+                    .build();
+            create(trace, API_KEY, workspaceName);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + "/search")
+                    .request()
+                    .cookie(SESSION_COOKIE, sessionToken)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity
+                            .json(TraceSearchStreamRequest.builder().projectId(projectId).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
                 if (expectedCode == 404) {

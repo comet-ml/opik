@@ -280,16 +280,9 @@ public class SpanService {
 
     @WithSpan
     public Flux<Span> search(int limit, @NonNull SpanSearchCriteria criteria) {
+        criteria = findProjectAndVerifyVisibility(criteria);
 
-        if (criteria.projectId() != null) {
-            return spanDAO.search(limit, criteria);
-        }
-
-        return findProject(criteria)
-                .flatMap(project -> project.stream().findFirst().map(Mono::just).orElseGet(Mono::empty))
-                .map(project -> criteria.toBuilder().projectId(project.id()).build())
-                .flatMapMany(newCriteria -> spanDAO.search(limit, newCriteria))
-                .switchIfEmpty(Flux.empty());
+        return spanDAO.search(limit, criteria);
     }
 
     public Mono<Void> deleteByTraceIds(Set<UUID> traceIds) {

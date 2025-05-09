@@ -447,15 +447,9 @@ class TraceServiceImpl implements TraceService {
 
     @Override
     public Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria) {
+        criteria = findProjectAndVerifyVisibility(criteria);
 
-        if (criteria.projectId() != null) {
-            return dao.search(limit, criteria);
-        }
-
-        return getProjectByName(criteria.projectName())
-                .map(project -> criteria.toBuilder().projectId(project.id()).build())
-                .flatMapMany(newCriteria -> dao.search(limit, newCriteria))
-                .switchIfEmpty(Flux.empty());
+        return dao.search(limit, criteria);
     }
 
     @Override
