@@ -183,6 +183,7 @@ def get_experiment_config(dataset_name: str, optimizer_name: str, model_name: st
     optimizer_params = OPTIMIZER_CONFIGS.get(optimizer_name, {}).get("params", {})
     current_params = optimizer_params.copy()
     current_params["model"] = model_name
+
     return {
         "dataset": dataset_name,
         "optimizer": optimizer_name,
