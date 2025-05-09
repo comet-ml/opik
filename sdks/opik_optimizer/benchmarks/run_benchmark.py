@@ -9,20 +9,17 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
 import argparse
 import logging
-import io # For SuppressOutput
-import os # For SuppressOutput
+import io
+import os
 import dspy
-
 import pandas as pd
-# from datasets import load_dataset # No longer directly used here, handled by opik_optimizer.demo
-# from tqdm import tqdm # Replaced with rich.progress
 
 # Rich imports
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, ProgressColumn, TaskProgressColumn
 from rich.panel import Panel
 from rich.console import Console, Group
 from rich.rule import Rule
-from rich import print as rprint # Use rprint for direct rich printing (like tables)
+from rich import print as rprint
 from rich.table import Table
 from rich.text import Text
 from rich.console import Console
@@ -32,8 +29,8 @@ from rich.style import Style
 from rich.live import Live
 from rich.align import Align
 from rich import box
-from rich.status import Status # For dataset caching status
-from rich.padding import Padding # For layout spacing
+from rich.status import Status
+from rich.padding import Padding
 
 import opik_optimizer
 from opik_optimizer import (
@@ -50,30 +47,29 @@ from opik_optimizer.demo import get_or_create_dataset
 from opik_optimizer.cache_config import initialize_cache, clear_cache
 from opik.evaluation.metrics.llm_judges.context_precision.metric import ContextPrecision
 from opik_optimizer.logging_config import setup_logging
-from opik_optimizer import utils as opik_utils # Import the utils module
-from opik_optimizer import optimization_result as opik_opt_result # Import opt result module
-from opik.evaluation.metrics import BaseMetric # Added for custom JSON serializer
+from opik_optimizer import utils as opik_utils
+from opik_optimizer import optimization_result as opik_opt_result
+from opik.evaluation.metrics import BaseMetric
 
 from benchmark_config import (
     DATASET_CONFIGS, 
     OPTIMIZER_CONFIGS, 
     INITIAL_PROMPTS,
-    MODELS_TO_RUN, # Import MODELS_TO_RUN
+    MODELS_TO_RUN,
     get_project_config,
     get_experiment_config,
 )
 from benchmark_monitor import get_optimization_monitor
 
-# Initialize logger for this module
 logger = logging.getLogger(__name__)
 console = Console(
-    width=120,  # Increased width slightly
+    width=120,
     style=Style(color="white"),
     highlight=True,
     soft_wrap=True,
 )
 
-# Define consistent styles
+# TODO: Move to opik_optimizer.utils
 STYLES = {
     "header": Style(color="cyan", bold=True),
     "success": Style(color="green", bold=True),
@@ -82,8 +78,6 @@ STYLES = {
     "info": Style(color="blue"),
     "dim": Style(dim=True),
 }
-
-# Configure progress bar columns
 PROGRESS_COLUMNS = (
     SpinnerColumn(),
     TextColumn("[progress.description]{task.description}"),
@@ -96,12 +90,15 @@ PROGRESS_COLUMNS = (
 )
 
 # Custom JSON serializer to handle specific object types
+# TODO: Move to benchmark_utils module
 def custom_json_serializer(obj: Any) -> Any:
+    """Custom JSON serializer to handle specific object types."""
     if isinstance(obj, BaseMetric):
         # For metric objects, return their string representation or a more detailed dict if available
         # For simplicity, str(obj) often gives a good summary (e.g., class name)
         return str(obj) 
-    if hasattr(obj, 'isoformat'): # For datetime objects not handled by pydantic model_dump
+    # For datetime objects not handled by pydantic model_dump
+    if hasattr(obj, 'isoformat'):
         return obj.isoformat()
     if isinstance(obj, Path):
         return str(obj.resolve())
@@ -113,6 +110,7 @@ def custom_json_serializer(obj: Any) -> Any:
         raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable and str() failed")
 
 # Function to clean metric name representation
+# TODO: Move to opik_optimizer.utils
 def clean_metric_name(metric_key_str: str) -> str:
     """Extracts class name like 'LevenshteinRatio' from string representations."""
     if isinstance(metric_key_str, str) and '<' in metric_key_str and 'object at' in metric_key_str:
@@ -128,7 +126,15 @@ def clean_metric_name(metric_key_str: str) -> str:
     return metric_key_str # Return as is if not matching the object format
 
 class BenchmarkRunner:
-    def __init__(self, output_dir: str = "benchmark_results", max_workers: int = 2, seed: int = 42, test_mode: bool = False, resume_enabled: bool = False, retry_failed_run_id: Optional[str] = None):
+    def __init__(
+            self,
+            output_dir: str = "benchmark_results",
+            max_workers: int = 2,
+            seed: int = 42,
+            test_mode: bool = False,
+            resume_enabled: bool = False,
+            retry_failed_run_id: Optional[str] = None\
+        ):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
         self.results = []
@@ -145,6 +151,7 @@ class BenchmarkRunner:
         self.workspace = self.project_config["workspace"]
         
         # Set global random seed
+        # TODO: Move to opik_optimizer.utils and use across all benchmarks as opik_utils.set_global_random_seed()
         import random
         import numpy as np
         random.seed(seed)
@@ -155,14 +162,13 @@ class BenchmarkRunner:
         initialize_cache()
         logger.info("[green]Shared cache initialized.[/green]")
         
-        # Create checkpoint directory
+        # Checkpoint handling
         self.checkpoint_dir = self.output_dir / "checkpoints"
         self.checkpoint_dir.mkdir(exist_ok=True)
         logger.info(f"Checkpoint directory created/ensured at [blue]{self.checkpoint_dir}[/blue]")
-        
-        # Load latest checkpoint if exists
         self.load_latest_checkpoint()
 
+    # TODO: Move to a dataset_utils module
     def pre_cache_datasets(self):
         """Pre-cache all datasets if not already cached, with Rich Status and Console output."""
         console.print(Rule("Phase 1: Dataset Caching & Loading", style="dim blue"))
@@ -173,8 +179,7 @@ class BenchmarkRunner:
                 datasets_processed += 1
                 status_msg = f"[yellow]({datasets_processed}/{total_datasets}) Checking dataset: [bold]{dataset_config['name']}[/bold]...[/yellow]"
                 status.update(status=status_msg)
-                console.print(status_msg) # Print directly to console as well
-
+                console.print(status_msg)
                 cache_key = f"{dataset_key}_{self.test_mode}"
                 if cache_key not in self.dataset_cache:
                     console.print(f"  Attempting to load [bold]{dataset_config['name']}[/bold] (not cached)...")
@@ -196,17 +201,16 @@ class BenchmarkRunner:
                     items_count = len(self.dataset_cache[cache_key].get_items()) if self.dataset_cache[cache_key] else 0
                     msg = f"[green]✓ Using cached {dataset_config['name']}[/green] ([cyan]{items_count}[/cyan] items)"
                     logger.info(msg)
-                    console.print(f"  {msg}") # Print cache status too
-            
+                    console.print(f"  {msg}")
             final_status_msg = "[bold green]Dataset Caching & Loading Complete![/bold green]"
             status.update(status=final_status_msg)
         console.print(Rule(style="dim blue"))
 
+    # TODO: Move to a benchmark_utils module
     def load_latest_checkpoint(self):
         """Load the latest checkpoint if it exists, or a specific one if retry_failed_run_id is set."""
         checkpoint_files = []
         specific_checkpoint_to_load = None
-
         if self.retry_failed_run_id:
             logger.info(f"Attempting to load checkpoint for specific run_id to retry: [bold yellow]{self.retry_failed_run_id}[/bold yellow]")
             # Glob for checkpoints matching the specific run_id
@@ -216,10 +220,10 @@ class BenchmarkRunner:
                 # To prevent falling back to a generic latest checkpoint, we exit or signal error.
                 # For now, treat as if no checkpoint found for resume purposes.
                 self.results = []
-                self.current_run_id = None # It was for a specific past run
+                self.current_run_id = None
                 self.task_results_dir = None
                 self.resuming_run_active = False
-                self.retry_failed_run_id = None # Clear it as we can't proceed with retry
+                self.retry_failed_run_id = None
                 return
             specific_checkpoint_to_load = max(specific_run_checkpoints, key=lambda x: x.stat().st_mtime)
             logger.info(f"Found specific checkpoint to retry: [blue]{specific_checkpoint_to_load}[/blue]")
@@ -239,7 +243,6 @@ class BenchmarkRunner:
             return
 
         logger.info(f"Loading checkpoint from: [blue]{specific_checkpoint_to_load}[/blue]")
-        
         try:
             with open(specific_checkpoint_to_load, "r") as f:
                 checkpoint_data = json.load(f)
@@ -248,7 +251,7 @@ class BenchmarkRunner:
             self.results = []
             self.current_run_id = None 
             self.task_results_dir = None
-            self.resuming_run_active = False # Not resuming if checkpoint load fails
+            self.resuming_run_active = False
             return
 
         # Restore state from checkpoint
@@ -262,13 +265,13 @@ class BenchmarkRunner:
             if self.current_run_id:
                 self.task_results_dir = self.output_dir / "task_results" / self.current_run_id
                 logger.warning(f"[yellow]task_results_dir not found in checkpoint, inferred to: {self.task_results_dir}[/yellow]")
-                self.task_results_dir.mkdir(parents=True, exist_ok=True) # Ensure it exists
+                self.task_results_dir.mkdir(parents=True, exist_ok=True)
             else:
                 self.task_results_dir = None
                 logger.warning("[yellow]run_id and task_results_dir not found in checkpoint. Resuming might be problematic.[/yellow]")
 
         self.results = checkpoint_data.get("results_summary", [])
-        self.test_mode = checkpoint_data.get("test_mode", self.test_mode) # Keep self.test_mode if not in checkpoint
+        self.test_mode = checkpoint_data.get("test_mode", self.test_mode)
         self.project_config = checkpoint_data.get("project_config", self.project_config)
         if self.project_config:
             self.project_name = self.project_config.get("name", self.project_name)
@@ -282,18 +285,13 @@ class BenchmarkRunner:
             self.monitor.prompts_history = monitor_state.get("prompts_history", [])
 
         # Restore dataset cache keys and reload datasets if necessary
-        # This part remains largely the same, ensuring datasets are available
         dataset_cache_keys = checkpoint_data.get("dataset_cache_keys", [])
         if dataset_cache_keys:
             logger.info("Restoring dataset cache...")
             for key in dataset_cache_keys:
                 if key not in self.dataset_cache:
-                    # Attempt to parse dataset_name and test_mode_suffix from key
                     parts = key.rsplit('_', 1)
                     dataset_name_from_key = parts[0]
-                    # test_mode_suffix = parts[1] if len(parts) > 1 else None 
-                    # We rely on self.test_mode which should be correctly set from checkpoint or args
-
                     if dataset_name_from_key in DATASET_CONFIGS:
                         logger.info(f"  Re-caching dataset for key: {key} (name: {dataset_name_from_key})")
                         self.load_dataset(dataset_name_from_key, DATASET_CONFIGS[dataset_name_from_key]["huggingface_path"])
@@ -303,8 +301,6 @@ class BenchmarkRunner:
         # Restore environment details from checkpoint if needed (e.g., seed, max_workers)
         # These are typically set by args, but checkpoint can provide context of the saved run.
         env_details = checkpoint_data.get("environment", {})
-        # self.seed = env_details.get("seed", self.seed) # Args should override for a new run, but good for info
-        # self.max_workers = env_details.get("max_workers", self.max_workers)
         logger.info(f"Checkpoint loaded. Run ID: [bold yellow]{self.current_run_id}[/bold yellow]")
         logger.info(f"  Restored [cyan]{len(self.results)}[/cyan] task summaries from checkpoint.")
         logger.info(f"  Restored [cyan]{len(self.monitor.metrics_history)}[/cyan] metrics history entries.")
@@ -312,7 +308,7 @@ class BenchmarkRunner:
         logger.info(f"  Restored [cyan]{len(dataset_cache_keys)}[/cyan] dataset cache keys.")
         logger.info(f"  Original run seed: {env_details.get('seed')}, max_workers: {env_details.get('max_workers')}")
         
-        if self.resume_enabled or self.retry_failed_run_id: # Activate resume if EITHER normal resume or retrying a specific run
+        if self.resume_enabled or self.retry_failed_run_id:
             self.resuming_run_active = True
             if self.retry_failed_run_id:
                 # When retrying, the current_run_id of the BenchmarkRunner instance should be the one we are retrying.
@@ -350,14 +346,13 @@ class BenchmarkRunner:
         # self.results now contains task metadata (summaries), not full deep results.
         # The full results are in individual JSON files per task.
         # So, no complex serialization of optimization_history is needed here.
-
         checkpoint_data = {
             "checkpoint_timestamp": timestamp,
             "run_id": self.current_run_id,
             "task_results_dir": str(self.task_results_dir.resolve()) if hasattr(self, 'task_results_dir') and self.task_results_dir else None,
             "test_mode": self.test_mode,
-            "project_config": self.project_config, # Still useful to save the overall project config used
-            "results_summary": self.results, # List of task metadata dicts
+            "project_config": self.project_config,
+            "results_summary": self.results,
             "dataset_cache_keys": list(self.dataset_cache.keys()),
             "monitor_state": {
                 "metrics_history": self.monitor.metrics_history if hasattr(self.monitor, 'metrics_history') else [],
@@ -365,12 +360,11 @@ class BenchmarkRunner:
             },
             "environment": {
                 "python_version": sys.version,
-                "opik_optimizer_version": opik_optimizer.__version__, # Added opik_optimizer version
+                "opik_optimizer_version": opik_optimizer.__version__,
                 "seed": self.seed,
                 "max_workers": self.max_workers
             }
         }
-        
         try:
             with open(checkpoint_file, "w") as f:
                 json.dump(checkpoint_data, f, indent=2)
@@ -379,12 +373,16 @@ class BenchmarkRunner:
             logger.error(f"[red]Failed to save checkpoint to {checkpoint_file}: {e}[/red]")
             logger.exception("Traceback for saving checkpoint:")
 
-    def load_dataset(self, dataset_name: str, huggingface_path: str) -> Any:
+    # TODO: Move to a dataset_utils module
+    def load_dataset(
+            self,
+            dataset_name: str,
+            huggingface_path: str
+        ) -> Any:
         """Load dataset from HuggingFace or create if not exists, passing the seed."""
         cache_key = f"{dataset_name}_{self.test_mode}"
         if cache_key in self.dataset_cache:
             return self.dataset_cache[cache_key]
-            
         try:
             logger.info(f"\nLoading dataset [bold]{dataset_name}[/bold] from [blue]{huggingface_path}[/blue] (Test Mode: {self.test_mode}, Seed: {self.seed})...")
             # Pass the runner's seed to the dataset creation/loading function
@@ -393,18 +391,14 @@ class BenchmarkRunner:
                 test_mode=self.test_mode, 
                 seed=self.seed # Pass the seed here
             )
-            
             if dataset is None:
                 logger.warning(f"[yellow]Failed to load dataset {dataset_name}[/yellow]")
-                return None
-                
+                return None   
             items = dataset.get_items()
             if not items:
                 logger.warning(f"[yellow]Warning: Dataset {dataset_name} loaded but has no items[/yellow]")
-                # Still cache the empty dataset object to avoid reloading attempts
                 self.dataset_cache[cache_key] = dataset
-                return dataset # Return the empty dataset
-                
+                return dataset
             logger.info(f"[green]Successfully loaded {dataset_name}[/green] with [cyan]{len(items)}[/cyan] examples")
             self.dataset_cache[cache_key] = dataset
             return dataset
@@ -414,19 +408,24 @@ class BenchmarkRunner:
             logger.exception(f"Traceback for error loading dataset [bold]{dataset_name}[/bold]:")
             return None
 
-    def create_optimizer(self, optimizer_config: Dict, model_name: str, project_name: str) -> Any:
+    def create_optimizer(
+            self,
+            optimizer_config: Dict,
+            model_name: str,
+            project_name: str
+        ) -> Any:
         """Create optimizer instance based on configuration."""
         try:
             optimizer_class_name = optimizer_config["class"]
             params = optimizer_config["params"].copy()
-            params["model"] = model_name # Ensure model is set correctly
+            params["model"] = model_name
             params["project_name"] = project_name
             params.pop("workspace", None)
             params["seed"] = self.seed
-            # Ensure verbose is set from config, default to 1 if missing
             params.setdefault("verbose", 1)
             
             # Adjust params for OpenAI reasoning models BEFORE init
+            # TODO: Should be universal across all optimizers not just benchmarks
             if model_name.startswith("openai/o"):            
                 logger.info(f"Adjusting params for OpenAI reasoning model ({model_name}) before init...")
                 params["temperature"] = 1.0
@@ -440,17 +439,24 @@ class BenchmarkRunner:
             # Handle external optimizers (if any were defined)
             # if optimizer_class_name == "ExternalDspyMiproOptimizer": ...
             # elif optimizer_class_name == "ExternalAdalFlowOptimizer": ...
-            
-            # Handle internal optimizers
             optimizer_class = globals()[optimizer_class_name]
-            # Pass the potentially modified params
             return optimizer_class(**params)
         except Exception as e:
             logger.error(f"[red]Error creating optimizer {optimizer_config['class']} for model {model_name}: {e}[/red]")
             logger.exception(f"Traceback for error creating optimizer [bold]{optimizer_config['class']}[/bold]:")
             return None
 
-    def run_optimization(self, dataset: Any, optimizer: Any, metrics: List[Any], initial_prompt: str, input_key: str, output_key: str, experiment_config: Dict) -> Dict:
+    def run_optimization(
+            self,
+            dataset: Any,
+            optimizer: Any,
+            metrics: List[Any],
+            initial_prompt: str,
+            input_key: str,
+            output_key: str,
+            experiment_config: Dict
+        ) -> Dict:
+        """Run optimization for a single task."""
         if dataset is None or optimizer is None:
             logger.error("[bold red]Error: Dataset or optimizer is None[/bold red]")
             return None
@@ -465,21 +471,18 @@ class BenchmarkRunner:
         timestamp_for_task_id = datetime.now().strftime('%Y%m%d%H%M%S%f') # Added microseconds for more uniqueness
         task_id = f"{experiment_config['dataset']}-{experiment_config['optimizer']}-{model_name_for_task_id}-{timestamp_for_task_id}"
 
-        # --- Task-specific File Logging Setup ---
+        # Task-specific File Logging Setup ---
         task_log_file_path = None
         file_handler = None
         root_logger = logging.getLogger() # Get the root logger
         original_root_level = root_logger.level
 
         # Target specific loggers for temporary un-suppression
-        opik_logger = logging.getLogger("opik") # Covers opik_optimizer top-level
-        # Explicitly target known optimizer module loggers
-        # Assuming __name__ is used in those modules, their names would be:
+        opik_logger = logging.getLogger("opik")
         fsbo_logger_name = "opik_optimizer.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer"
         mpo_logger_name = "opik_optimizer.meta_prompt_optimizer"
         fsbo_logger = logging.getLogger(fsbo_logger_name)
         mpo_logger = logging.getLogger(mpo_logger_name)
-
         tqdm_logger = logging.getLogger("tqdm")
         noisy_libs_for_task_log_control = ["LiteLLM", "urllib3", "requests", "httpx", "dspy", "datasets", "optuna", "filelock", "httpcore", "openai"] 
         controlled_noisy_loggers = {name: logging.getLogger(name) for name in noisy_libs_for_task_log_control}
@@ -501,23 +504,23 @@ class BenchmarkRunner:
                 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(processName)s - %(threadName)s - %(message)s')
                 file_handler.setFormatter(formatter)
                 
+                # Root logger at DEBUG to catch everything for the file
                 root_logger.addHandler(file_handler)
-                root_logger.setLevel(logging.DEBUG) # Root logger at DEBUG to catch everything for the file
+                root_logger.setLevel(logging.DEBUG) 
 
                 # Temporarily adjust specific loggers for file output
                 opik_logger.propagate = True
                 opik_logger.setLevel(logging.INFO) 
-                fsbo_logger.propagate = True # Ensure propagation
-                fsbo_logger.setLevel(logging.INFO) # Set desired level
+                fsbo_logger.propagate = True
+                fsbo_logger.setLevel(logging.INFO)
                 mpo_logger.propagate = True
                 mpo_logger.setLevel(logging.INFO)
-
                 tqdm_logger.propagate = True
                 tqdm_logger.setLevel(logging.INFO) 
                 
                 for name, logger_instance in controlled_noisy_loggers.items():
-                    logger_instance.propagate = True # Ensure they can reach the root handler
-                    logger_instance.setLevel(logging.WARNING) # Set them to WARNING for task file
+                    logger_instance.propagate = True
+                    logger_instance.setLevel(logging.WARNING)
                 
                 logger.info(f"Task-specific logging for {task_id} directed to: {task_log_file_path} (opik/tqdm at INFO; noisy libs at WARNING for this file)")
             except Exception as e_log_setup:
@@ -525,26 +528,25 @@ class BenchmarkRunner:
                 file_handler = None
         else:
             logger.warning(f"[yellow]task_results_dir not available, skipping task-specific file logging for {task_id}[/yellow]")
-        # -----------------------------------------------------------------
 
         dataset_name = experiment_config["dataset"]
         optimizer_name = type(optimizer).__name__
         console.print(f"🏁 Starting task: [bold magenta]{task_id}[/bold magenta] ({dataset_name} / {optimizer_name} / {optimizer.model})")
-        logger.info(f"Starting opt task_id: {task_id}...")
+        logger.info(f"Starting optimization task: {task_id}...")
 
         # Initialize comprehensive result structure
         task_result = {
-            "run_id": self.current_run_id, # This should ideally be passed in or set at a higher level for a single benchmark run
+            "run_id": self.current_run_id,
             "task_id": task_id,
             "timestamp_start_task": datetime.now().isoformat(),
             "timestamp_end_task": None,
             "duration_seconds_task": None,
-            "status": "failure", # Default to failure, update on success
+            "status": "failure",
             "error_message": None,
             "test_mode": self.test_mode,
             "seed": self.seed,
             "max_workers": self.max_workers,
-            "project_name_opik": getattr(optimizer, 'project_name', None), # Assuming optimizer has project_name
+            "project_name_opik": getattr(optimizer, 'project_name', None),
             "environment": {
                 "python_version": sys.version,
                 "opik_optimizer_version": opik_optimizer.__version__,
@@ -564,12 +566,11 @@ class BenchmarkRunner:
             "initial_evaluation": None,
             "optimization_process": None,
             "final_evaluation": None,
-            "raw_optimizer_result": None, # For storing the direct output of optimize_prompt
+            "raw_optimizer_result": None,
         }
 
         # List to collect errors during evaluation steps
         evaluation_errors = []
-
         try:
             if isinstance(optimizer, FewShotBayesianOptimizer):
                 formatted_initial_prompt = [{"role": "system", "content": initial_prompt}]
@@ -597,39 +598,40 @@ class BenchmarkRunner:
                 )
             )
 
-            # --- Initial Prompt Evaluation --- 
-            logger.info("--> Evaluating initial prompt...")
+            # Initial Prompt Evaluation --- 
+            logger.debug("--> Evaluating initial prompt...")
             start_time_eval_initial = time.time()
             initial_scores = {}
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 future_to_metric = {}
                 for metric in metrics:
-                    # Create metric-specific config - Handles ContextPrecision
+                    # Create metric-specific config (Handles ContextPrecision)
                     if isinstance(metric, ContextPrecision):
-                        metric_config_eval = MetricConfig(
-                            metric=metric,
-                            inputs={
-                                "input": from_dataset_field(name=input_key), # Often 'question'
-                                "output": from_llm_response_text(), # LLM response
-                                "expected_output": from_dataset_field(name="answer"), # Map to 'answer' field
-                                "context": from_dataset_field(name="context") # Context field
-                            },
-                            # No scoring_key_mapping needed if inputs match metric.score args
-                        )
-                        logger.debug(f"Using ContextPrecision config mapping expected_output->answer for initial eval")
-                    else: # Default config for other metrics
                         metric_config_eval = MetricConfig(
                             metric=metric,
                             inputs={
                                 "input": from_dataset_field(name=input_key),
                                 "output": from_llm_response_text(),
-                                "reference": from_dataset_field(name=output_key), # Usually 'answer' or similar
+                                "expected_output": from_dataset_field(name="answer"),
+                                "context": from_dataset_field(name="context")
+                            },
+                        )
+                        logger.debug(f"Using ContextPrecision config mapping expected_output->answer for initial eval")
+                    else:
+                        # Default config for other metrics
+                        metric_config_eval = MetricConfig(
+                            metric=metric,
+                            inputs={
+                                "input": from_dataset_field(name=input_key),
+                                "output": from_llm_response_text(),
+                                "reference": from_dataset_field(name=output_key),
                             }
                         )
                         logger.debug(f"Using default metric config for {metric} for initial eval")
                     
                     prompt_for_eval = formatted_initial_prompt
                     # HACK: Add dummy user message for Anthropic if prompt is only a system message
+                    # FIXME: This is a hack to work around the fact that Anthropic models don't support system messages in the same way other models do.
                     model_is_anthropic = "anthropic" in optimizer.model.lower()
                     if model_is_anthropic and isinstance(prompt_for_eval, list) and len(prompt_for_eval) == 1 and prompt_for_eval[0].get("role") == "system":
                         prompt_for_eval = prompt_for_eval + [{"role": "user", "content": "(Proceed based on system instructions)"}]
@@ -638,9 +640,23 @@ class BenchmarkRunner:
                     # Conditional evaluate_prompt call
                     if isinstance(optimizer, (MetaPromptOptimizer, MiproOptimizer)):
                         # Both MetaPrompt and Mipro need task_config now
-                        future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_eval, task_config=config.task, prompt=prompt_for_eval, experiment_config=experiment_config)
-                    else: # Default for FewShotBayesianOptimizer and others that might be added
-                        future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_eval, prompt=prompt_for_eval, experiment_config=experiment_config)
+                        future = executor.submit(
+                            optimizer.evaluate_prompt,
+                            dataset=dataset,
+                            metric_config=metric_config_eval,
+                            task_config=config.task, # FIXME: This is a hack to work around the fact that MetaPrompt and Mipro need task_config now.
+                            prompt=prompt_for_eval,
+                            experiment_config=experiment_config
+                        )
+                    else:
+                        # Default for FewShotBayesianOptimizer and others that might be added
+                        future = executor.submit(
+                            optimizer.evaluate_prompt,
+                            dataset=dataset,
+                            metric_config=metric_config_eval,
+                            prompt=prompt_for_eval,
+                            experiment_config=experiment_config
+                        )
                     future_to_metric[future] = metric
 
                 for future in as_completed(future_to_metric):
@@ -671,21 +687,20 @@ class BenchmarkRunner:
                 "prompt_used": formatted_initial_prompt
             }
 
-            # --- Run Optimization --- 
+            # Run Optimization
             n_trials_log = getattr(optimizer, 'n_trials', 'N/A')
             logger.info(f"--> Running optimization ({n_trials_log} trials)...")
             start_time_opt = time.time()
             results_obj = None
-            raw_results_obj_for_saving = None # To store the direct output
+            raw_results_obj_for_saving = None
 
             try:
                 if isinstance(optimizer, (MetaPromptOptimizer, MiproOptimizer)):
-                    # Unpack config object for MetaPromptOptimizer/MiproOptimizer
                     results_obj = optimizer.optimize_prompt(
                         dataset=config.dataset,
                         metric_config=config.objective,
                         task_config=config.task,
-                        experiment_config=experiment_config # Pass experiment_config too
+                        experiment_config=experiment_config
                     )
                 elif isinstance(optimizer, FewShotBayesianOptimizer):
                     processed_dataset = get_or_create_dataset(dataset_config["huggingface_path"], test_mode=self.test_mode)
@@ -720,6 +735,8 @@ class BenchmarkRunner:
                 
                 # Store the raw result object before any processing, if serializable or convertible
                 if results_obj:
+                    # FIXME: This is a hack to work around the fact that Mipro's results_obj is not serializable.
+                    # TODO: Move this to a separate function and call it for all optimizers.
                     try:
                         # Attempt to convert to dict if it's a Pydantic model or similar
                         if hasattr(results_obj, 'model_dump') and callable(results_obj.model_dump):
@@ -755,37 +772,30 @@ class BenchmarkRunner:
                 task_result["duration_seconds_task"] = time.time() - start_time_run_opt
                 return task_result
             finally:
-                # --- Task-specific File Logging Teardown ---
+                # Task-specific File Logging Teardown
                 if file_handler:
                     root_logger.removeHandler(file_handler)
                     file_handler.close()
                     logger.info(f"Closed task-specific log file: {task_log_file_path}")
                 
                 root_logger.setLevel(original_root_level)
-                
                 opik_level_orig, opik_prop_orig = original_levels_and_propagate["opik"]
                 opik_logger.setLevel(opik_level_orig)
                 opik_logger.propagate = opik_prop_orig
-                
                 fsbo_level_orig, fsbo_prop_orig = original_levels_and_propagate[fsbo_logger_name]
                 fsbo_logger.setLevel(fsbo_level_orig)
                 fsbo_logger.propagate = fsbo_prop_orig
-
                 mpo_level_orig, mpo_prop_orig = original_levels_and_propagate[mpo_logger_name]
                 mpo_logger.setLevel(mpo_level_orig)
                 mpo_logger.propagate = mpo_prop_orig
-                
                 tqdm_level_orig, tqdm_prop_orig = original_levels_and_propagate["tqdm"]
                 tqdm_logger.setLevel(tqdm_level_orig)
                 tqdm_logger.propagate = tqdm_prop_orig
-
                 for name, logger_instance in controlled_noisy_loggers.items():
                     level_orig, prop_orig = original_levels_and_propagate[name]
                     logger_instance.setLevel(level_orig)
-                    logger_instance.propagate = prop_orig
-                
+                    logger_instance.propagate = prop_orig                
                 logger.debug("Restored original logging levels/propagation for root and controlled loggers.")
-                # ------------------------------------------
 
             opt_time = time.time() - start_time_opt
             if results_obj is None:
@@ -793,7 +803,6 @@ class BenchmarkRunner:
                 task_result["error_message"] = f"Optimization failed for {optimizer_name}, results_obj is None."
                 task_result["timestamp_end_task"] = datetime.now().isoformat()
                 task_result["duration_seconds_task"] = time.time() - start_time_run_opt
-                # No finally block here, as it's for run_optimization's own setup/teardown
                 return task_result
                 
             # Process optimization history for structured logging
@@ -927,29 +936,21 @@ class BenchmarkRunner:
                 if best_score_val_for_log is None: 
                     best_score_val_for_log = getattr(results_obj, "best_score", None)
             
-            best_score_log_str = f"{best_score_val_for_log:.4f}" if isinstance(best_score_val_for_log, (int, float)) else "[dim]N/A[/dim]" # Changed to N/A for None
+            best_score_log_str = f"{best_score_val_for_log:.4f}" if isinstance(best_score_val_for_log, (int, float)) else "[dim]N/A[/dim]"
             console.print(f"  Optimization done ({task_id}): Iterations={num_iter_log}, Best Internal Score (from optimizer)={best_score_log_str} ({opt_time:.2f}s)")
 
-                        # --- Final Prompt Evaluation --- 
-            logger.info("--> Entering Final Prompt Evaluation Stage...") 
-            logger.critical(f"CRITICAL_DEBUG: At Final Eval Setup. Optimizer is '{optimizer_name}'. results_obj type is {type(results_obj)}.")
-
+            # Final Prompt Evaluation 
+            logger.debug("--> Entering Final Prompt Evaluation Stage...") 
             final_scores = {}
             start_time_eval_final = time.time()
-            final_eval_time = 0.0 # Initialize here
+            final_eval_time = 0.0 
 
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor_final_eval:
                 future_to_metric_final = {}
-                
-                final_prompt_to_eval = None # For logging/storage
-                prompt_for_actual_eval = None # For actual evaluation call
+                final_prompt_to_eval = None 
+                prompt_for_actual_eval = None
 
-                logger.critical(f"CRITICAL_DEBUG: About to check optimizer_name ('{optimizer_name}') for specific final eval logic.")
-
-                # Setup prompt_for_actual_eval and final_prompt_to_eval based on optimizer type
                 if optimizer_name == "MiproOptimizer":
-                    logger.critical("<<<<< CRITICAL_DEBUG: INSIDE MiproOptimizer FINAL EVAL LOGIC (Top Level) >>>>>")
-                    # print(f"PRINT_DEBUG: Entered MiproOptimizer block. Optimizer name: {optimizer_name}") 
                     try:
                         if hasattr(results_obj, 'details') and \
                            isinstance(results_obj.details, dict) and \
@@ -961,21 +962,18 @@ class BenchmarkRunner:
                             final_prompt_to_eval = [{"role": "system", "content": str(instr_prompt)}]
                             logger.info(f"MIPRO FINAL EVAL: Successfully set prompt_for_actual_eval to DSPy module: {type(prompt_for_actual_eval)}")
                         else:
-                            logger.error("[red]MiproOptimizer: Could not get valid DSPy program from results_obj.details for final eval. Setting prompt_for_actual_eval to None.[/red]")
-                            # evaluation_errors.append("MiproOptimizer: No valid DSPy program for final eval.") # Already handled by prompt_for_actual_eval is None check
+                            logger.error("[red]MiproOptimizer: Could not get valid DSPy program for final eval. Setting prompt_for_actual_eval to None.[/red]")
+                            evaluation_errors.append("MiproOptimizer: No valid DSPy program for final eval.")
                             final_prompt_to_eval = [{"role": "system", "content": "Error: Mipro program not found for final eval."}]
                             prompt_for_actual_eval = None 
                     except Exception as e_mipro_setup:
-                        logger.error(f"[red]CRITICAL ERROR during Mipro final eval prompt setup: {e_mipro_setup}[/red]")
+                        logger.error(f"[red]ERROR during Mipro final eval prompt setup: {e_mipro_setup}[/red]") # Simplified critical
                         logger.exception("Traceback for Mipro final eval prompt setup error:")
-                        evaluation_errors.append(f"Mipro setup error: {str(e_mipro_setup)}") # Ensure this error is added
+                        evaluation_errors.append(f"Mipro setup error: {str(e_mipro_setup)}")
                         prompt_for_actual_eval = None 
-                        final_prompt_to_eval = [{"role": "system", "content": "Error during Mipro final eval setup."}]
+                        final_prompt_to_eval = [{"role": "system", "content": "Error during Mipro final eval prompt setup."}]
 
                 elif optimizer_name == "FewShotBayesianOptimizer": 
-                    logger.critical("<<<<< CRITICAL_DEBUG: INSIDE FewShotBayesianOptimizer FINAL EVAL LOGIC >>>>>")
-                    # print(f"PRINT_DEBUG: Entered FewShotBayesianOptimizer block. Optimizer name: {optimizer_name}")
-                    # RESTORED ORIGINAL LOGIC
                     try:
                         details = getattr(results_obj, 'details', None)
                         if results_obj and details: 
@@ -984,28 +982,24 @@ class BenchmarkRunner:
                             if not prompt_for_actual_eval and details.get("prompt_parameter") and hasattr(details.get("prompt_parameter"), "as_template") :
                                  prompt_for_actual_eval = details.get("prompt_parameter").as_template().format()
                                  final_prompt_to_eval = prompt_for_actual_eval
-                            
                             if prompt_for_actual_eval is not None:
                                 logger.info(f"Using FewShot chat messages for final eval. Type: {type(prompt_for_actual_eval)}")
                             else:
                                 logger.warning("FewShotBayesianOptimizer: chat_messages and formatted prompt_parameter were None. Setting prompt_for_actual_eval to None.")
                                 final_prompt_to_eval = [{"role": "system", "content": "Error: FewShot prompt data missing for final eval."}]
-                                # prompt_for_actual_eval is already None or will be if the above were None
                         else:
                             logger.warning(f"FewShotBayesianOptimizer: results_obj or results_obj.details is None. Cannot get chat_messages. results_obj is None: {results_obj is None}. Setting prompt_for_actual_eval to None.")
                             prompt_for_actual_eval = None 
                             final_prompt_to_eval = [{"role": "system", "content": "Error: FewShot details missing for final eval."}]
                     except Exception as e_fsbo_setup:
-                        logger.error(f"[red]CRITICAL ERROR during FewShot final eval prompt setup: {e_fsbo_setup}[/red]")
+                        logger.error(f"[red]ERROR during FewShot final eval prompt setup: {e_fsbo_setup}[/red]")
                         logger.exception("Traceback for FewShot final eval prompt setup error:")
-                        evaluation_errors.append(f"FewShotBayesianOptimizer setup error: {str(e_fsbo_setup)}") # Ensure this error is added
+                        evaluation_errors.append(f"FewShotBayesianOptimizer setup error: {str(e_fsbo_setup)}")
                         prompt_for_actual_eval = None
                         final_prompt_to_eval = [{"role": "system", "content": "Error during FewShot final eval prompt setup."}]
                 
-                else: # MetaPromptOptimizer and other fallbacks
-                    logger.critical(f"<<<<< CRITICAL_DEBUG: INSIDE ELSE (MetaPrompt/Fallback) FINAL EVAL LOGIC for {optimizer_name} >>>>>")
-                    # print(f"PRINT_DEBUG: Entered MetaPrompt/Fallback block. Optimizer name: {optimizer_name}")
-                    # RESTORED ORIGINAL LOGIC
+                else:
+                    # MetaPromptOptimizer and other fallbacks
                     try:
                         string_prompt = getattr(results_obj, 'prompt', None)
                         prompt_for_actual_eval = string_prompt 
@@ -1020,13 +1014,11 @@ class BenchmarkRunner:
                             final_prompt_to_eval = string_prompt 
                             logger.info(f"MetaPrompt/Fallback: results_obj.prompt is type {type(string_prompt)} for {optimizer_name}. Using as is for actual eval if not None.")
                     except Exception as e_meta_setup:
-                        logger.error(f"[red]CRITICAL ERROR during MetaPrompt/Fallback final eval prompt setup: {e_meta_setup}[/red]")
+                        logger.error(f"[red]ERROR during MetaPrompt/Fallback final eval prompt setup: {e_meta_setup}[/red]")
                         logger.exception("Traceback for MetaPrompt/Fallback final eval prompt setup error:")
-                        evaluation_errors.append(f"MetaPrompt/Fallback setup error: {str(e_meta_setup)}") # Ensure this error is added
+                        evaluation_errors.append(f"MetaPrompt/Fallback setup error: {str(e_meta_setup)}")
                         prompt_for_actual_eval = None
                         final_prompt_to_eval = [{"role": "system", "content": "Error during MetaPrompt/Fallback final eval prompt setup."}]
-                
-                logger.debug(f"FINAL EVAL: About to submit. optimizer_name='{optimizer_name}', type(prompt_for_actual_eval)='{type(prompt_for_actual_eval)}', prompt_for_actual_eval is None: {prompt_for_actual_eval is None}")
 
                 if prompt_for_actual_eval is None:
                     logger.error("[red]No final prompt structure or program found for actual evaluation after setup. Skipping submission of final eval tasks.[/red]")
@@ -1040,9 +1032,10 @@ class BenchmarkRunner:
                     
                     if isinstance(current_prompt_for_anthropic_hack, list):
                         prompt_to_submit_anthropic_hacked = list(current_prompt_for_anthropic_hack)
+                        # FIXME: This is a hack to work around the fact that Anthropic models don't support system messages in the same way other models do.
                         model_is_anthropic = "anthropic" in optimizer.model.lower()
                         if model_is_anthropic and len(prompt_to_submit_anthropic_hacked) == 1 and prompt_to_submit_anthropic_hacked[0].get("role") == "system":
-                            if prompt_for_actual_eval is current_prompt_for_anthropic_hack: # Apply to actual if it was the list
+                            if prompt_for_actual_eval is current_prompt_for_anthropic_hack:
                                 actual_prompt_for_submission = prompt_to_submit_anthropic_hacked + [{"role": "user", "content": "(Proceed based on system instructions)"}]
                             logger.warning(f"Applied Anthropic eval hack to final prompt for {optimizer_name}.")
                         elif model_is_anthropic and len(prompt_to_submit_anthropic_hacked) > 1 and prompt_to_submit_anthropic_hacked[-1].get("role") == "assistant":
@@ -1068,9 +1061,8 @@ class BenchmarkRunner:
                                     inputs={"input": from_dataset_field(name=input_key), "output": from_llm_response_text(), "reference": from_dataset_field(name=output_key)}
                                 )
                             
-                            logger.debug(f"FINAL EVAL: Value of metric_config_final_eval before submit: {metric_config_final_eval}")
                             eval_n_samples_final = 5 if self.test_mode else None
-
+                            logger.debug(f"FINAL EVAL: Value of metric_config_final_eval before submit: {metric_config_final_eval}")
                             logger.debug("--- ARGS FOR FINAL EVAL SUBMIT ---")
                             logger.debug(f"  optimizer.evaluate_prompt func: {optimizer.evaluate_prompt}")
                             logger.debug(f"  dataset is None: {dataset is None}, type: {type(dataset)}")
@@ -1081,7 +1073,6 @@ class BenchmarkRunner:
                             logger.debug(f"  experiment_config is None: {experiment_config is None}, type: {type(experiment_config)}")
                             logger.debug(f"  n_samples_final value: {eval_n_samples_final}")
                             logger.debug("--- END ARGS ---")
-                            
                             try:
                                 arg_optimizer_evaluate_prompt = optimizer.evaluate_prompt
                                 arg_dataset = dataset
@@ -1095,7 +1086,6 @@ class BenchmarkRunner:
                                     logger.error("[bold red]CRITICAL ERROR: arg_task_config is None before submit for final eval. Skipping this metric.[/bold red]")
                                     evaluation_errors.append(f"Task config was None for final eval of metric {metric_final_obj}")
                                     continue
-
                                 if None in [arg_dataset, arg_metric_config, arg_prompt, arg_experiment_config]: 
                                     error_detail_submit = f"Core argument None for final eval of metric {metric_final_obj}: dataset={arg_dataset is None}, mc={arg_metric_config is None}, task_config_was_problem=False, p={arg_prompt is None}, exp_conf={arg_experiment_config is None}"
                                     logger.error(f"[bold red]CRITICAL ERROR: One or more core arguments for final eval submit is None. {error_detail_submit} Skipping submit.[/bold red]")
@@ -1150,13 +1140,9 @@ class BenchmarkRunner:
             # final_eval_time calculation moved here, after the ThreadPoolExecutor block
             if future_to_metric_final or (not metrics and prompt_for_actual_eval is not None) : 
                 final_eval_time = time.time() - start_time_eval_final
-            # If prompt_for_actual_eval was None and no futures were submitted, final_eval_time remains 0.0
             
             final_scores_str = ", ".join([f"{k}: {v:.4f}" if isinstance(v, (int, float)) else f"{k}: N/A" for k, v in final_scores.items()]) 
             logger.info(f"  Final eval ({task_id}): {final_scores_str} ({final_eval_time:.2f}s)")
-            
-            # This is where task_result["final_evaluation"] will be set
-            # Ensure final_prompt_to_eval is used for "prompt_used"
 
             # Store final evaluation results properly
             task_result["final_evaluation"] = {
@@ -1169,21 +1155,17 @@ class BenchmarkRunner:
                     for metric_key, score_val in final_scores.items() 
                 ],
                 "duration_seconds": final_eval_time, 
-                "prompt_used": final_prompt_to_eval # Use the consistently defined final_prompt_to_eval
+                "prompt_used": final_prompt_to_eval
             }
 
-            # Store the final prompt representation in the top-level results (this is somewhat redundant now)
-            # Let's simplify and rely on the prompt_used in final_evaluation and the final_prompt in optimization_process
-            task_result["final_prompt"] = task_result["optimization_process"]["final_prompt"] # Keep top-level consistent with opt_process
-
-            # Check for evaluation errors before setting status to success
+            task_result["final_prompt"] = task_result["optimization_process"]["final_prompt"]
             if evaluation_errors:
                  task_result["error_message"] = "; ".join(evaluation_errors)
-                 task_result["status"] = "failure_in_evaluation" # More specific status
+                 task_result["status"] = "failure_in_evaluation"
             else:
                  task_result["status"] = "success"
 
-            # --- Package Results --- 
+            # Package Results
             total_run_time_task = time.time() - start_time_run_opt
             task_result["timestamp_end_task"] = datetime.now().isoformat()
             task_result["duration_seconds_task"] = total_run_time_task
@@ -1199,10 +1181,14 @@ class BenchmarkRunner:
             task_result["error_message"] = f"Outer exception in run_optimization: {str(e)} - Traceback: {traceback.format_exc()}"
             task_result["status"] = "failure"
             task_result["timestamp_end_task"] = datetime.now().isoformat()
-            task_result["duration_seconds_task"] = time.time() - start_time_run_opt # Ensure this is set even on outer error
+            task_result["duration_seconds_task"] = time.time() - start_time_run_opt
             return task_result
 
-    def run_benchmark(self, datasets: List[str] = None, optimizers: List[str] = None):
+    def run_benchmark(
+            self,
+            datasets: List[str] = None,
+            optimizers: List[str] = None
+        ):
         """Run benchmark with Live display showing overall progress and active tasks."""
         overall_start_time = time.time()
         if datasets is None: datasets = list(DATASET_CONFIGS.keys())
@@ -1237,9 +1223,6 @@ class BenchmarkRunner:
                 elif res_summary.get("status", "").startswith("failure"):
                     # failed_tasks +=1 # Also potentially double counted
                     pass
-            # logger.info(f"[green]Resuming: Initialized task counts from checkpoint - Success: {successful_tasks}, Failed: {failed_tasks}[/green]")
-            # The actual successful_tasks and failed_tasks for *this run* start at 0.
-            # The progress bar and skipping logic will handle counts from previous runs.
             pass # Initializing successful_tasks and failed_tasks to 0 is correct for a new run/retry session.
 
         completed_results_display = []
@@ -1249,7 +1232,6 @@ class BenchmarkRunner:
         progress = Progress(*PROGRESS_COLUMNS, console=console, transient=False, expand=True)
         
         # Determine actual number of tasks that will be submitted for progress bar total
-        # This logic needs to be before overall_progress_task is added
         tasks_to_plan_for_progress = []
         for ds_key_prog in active_datasets_to_run:
             for opt_key_prog in optimizers:
@@ -1257,14 +1239,12 @@ class BenchmarkRunner:
                     tasks_to_plan_for_progress.append((ds_key_prog, opt_key_prog, model_name_prog))
         
         num_tasks_for_progress_bar = 0
-        # For resume/retry, we need to use current_run_id_for_resume_logic to check results from the *correct* previous run.
         run_id_to_check_for_resume = self.current_run_id_for_resume_logic if hasattr(self, 'current_run_id_for_resume_logic') and self.resuming_run_active else None
 
         if self.retry_failed_run_id and self.resuming_run_active and self.results and run_id_to_check_for_resume:
             logger.info(f"Retry mode: Filtering tasks based on previous run_id: {run_id_to_check_for_resume}")
             tasks_to_actually_retry_count = 0
             for task_to_plan_tuple in tasks_to_plan_for_progress:
-                # Check if this task (dataset, optimizer, model) failed in the specific run_id we are retrying
                 found_in_results = False
                 failed_in_target_run = False
                 for res_summary_prog in self.results:
@@ -1275,13 +1255,15 @@ class BenchmarkRunner:
                             if res_summary_prog.get("status") != "success":
                                 failed_in_target_run = True
                             break # Found the task in the target run results
-                if not found_in_results: # Task wasn't in the specified run_id's results at all (e.g. new combo added)
+                # Task wasn't in the specified run_id's results at all (e.g. new combo added)
+                if not found_in_results:
                     logger.info(f"  Task {task_to_plan_tuple} not found in results of run {run_id_to_check_for_resume}, will run as new.")
                     tasks_to_actually_retry_count += 1
                 elif failed_in_target_run:
                     logger.info(f"  Task {task_to_plan_tuple} FAILED in run {run_id_to_check_for_resume}, will be retried.")
                     tasks_to_actually_retry_count += 1
-                else: # Successfully completed in target run
+                # Successfully completed in target run
+                else:
                     logger.info(f"  Task {task_to_plan_tuple} was SUCCESSFUL in run {run_id_to_check_for_resume}, will be skipped.")
             num_tasks_for_progress_bar = tasks_to_actually_retry_count
             logger.info(f"Retry mode: Progress bar total set to {num_tasks_for_progress_bar} (tasks from run '{run_id_to_check_for_resume}' to retry or run as new).")
@@ -1325,9 +1307,9 @@ class BenchmarkRunner:
             for status_info in active_tasks_status.values():
                 desc = status_info.get("desc", "Unknown Task") 
                 opt = status_info.get("optimizer", "?") 
-                # Use the original model name stored in status_info["model"]
-                model_original = status_info.get("model", "?") 
+                model_original = status_info.get("model", "?") # Use the original model name stored in status_info["model"]
                 # Extract dataset from desc (first part before '/')
+                # TODO: Move this to a function
                 try:
                     dataset_part = desc.split('/')[0].replace("Running: ", "").strip()
                     display_text = f" • {dataset_part} + {model_original}" 
@@ -1342,7 +1324,6 @@ class BenchmarkRunner:
                  active_tasks_content = Group(Text("Waiting for tasks...", style="dim"))
             else:
                  active_tasks_content = Group(*active_list)
-                 
             updated_active_panel = Panel(active_tasks_content, title="Active Tasks", border_style="blue", padding=(0,1))
             return Group(progress, Padding(summary_line, (0, 0, 1, 0)), updated_active_panel)
 
@@ -1350,11 +1331,11 @@ class BenchmarkRunner:
             live.update(generate_live_display())
             future_to_meta = {}
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                # --- Submission Loop --- 
+                # Submission Loop 
                 tasks_to_plan = []
                 for ds_key in active_datasets_to_run:
                     for opt_key in optimizers:
-                        for model_to_run in MODELS_TO_RUN: # Added model loop
+                        for model_to_run in MODELS_TO_RUN:
                             base_opt_config = OPTIMIZER_CONFIGS[opt_key]
                             # Create a copy of the params to avoid modifying the global config
                             current_opt_params = base_opt_config.get("params", {}).copy()
@@ -1369,13 +1350,13 @@ class BenchmarkRunner:
                             sanitized_model_name = model_to_run.replace("/", "-")
                             tasks_to_plan.append((ds_key, opt_key, model_to_run, sanitized_model_name, current_optimizer_config_for_task))
 
-                # Prepare a set of successfully completed task configurations for quick lookup if resuming
+                # Prepare a set of successfully completed task configurations if resuming
                 completed_task_keys_from_checkpoint = set()
-                # Also, if retrying a specific failed run, identify tasks that actually failed in that run
+                # Also, if retrying a specific failed run, identify tasks that actually failed
                 tasks_to_explicitly_retry_keys = set() 
-                run_id_to_use_for_skipping_logic = None # Initialize here
+                run_id_to_use_for_skipping_logic = None
 
-                if self.resuming_run_active and self.results: # self.results loaded from a checkpoint
+                if self.resuming_run_active and self.results:
                     run_id_to_use_for_skipping_logic = self.current_run_id_for_resume_logic if hasattr(self, 'current_run_id_for_resume_logic') else None
                     logger.info(f"Resume/Retry active. Using run_id '{run_id_to_use_for_skipping_logic}' for task skipping/retrying logic.")
 
@@ -1432,8 +1413,8 @@ class BenchmarkRunner:
                         failed_tasks += 1
                         progress.update(overall_progress_task, advance=1)
                         summary_line.plain = f"Run: {self.current_run_id} | Tasks: {successful_tasks+failed_tasks}/{total_tasks} | Success: {successful_tasks} | Failed: {failed_tasks} | Active: {len(active_tasks_status)}"
-                        live.update(generate_live_display()) # Update display after failure
-                        continue # <<< Indent this to be PART of the if block
+                        live.update(generate_live_display())
+                        continue
                         
                     exp_config = get_experiment_config(dataset_key, optimizer_key, model_name, test_mode=self.test_mode)
                                         
@@ -1449,25 +1430,24 @@ class BenchmarkRunner:
                     )
                     
                     # Store more metadata for the live display
-                    task_desc_short = f"{dataset_key}/{optimizer_key}/{sanitized_model_name_for_ids}" # Use sanitized name here too
+                    task_desc_short = f"{dataset_key}/{optimizer_key}/{sanitized_model_name_for_ids}"
                     future_to_meta[current_future] = {
                         "dataset_key": dataset_key, 
                         "optimizer_key": optimizer_key, 
-                        "desc": task_desc_short, # task_desc_short now includes model_name
+                        "desc": task_desc_short,
                         "optimizer_name": type(optimizer_instance).__name__,
-                        "model_name": model_name, # model_name is from the loop
-                        "sanitized_model_name": sanitized_model_name_for_ids # Sanitized name
+                        "model_name": model_name,
+                        "sanitized_model_name": sanitized_model_name_for_ids
                     }
                     active_tasks_status[current_future] = {
                         "desc": f"Running: {task_desc_short}",
                         "optimizer": type(optimizer_instance).__name__,
-                        "model": model_name # Store ORIGINAL model name here
-                        # Or maybe model_name? Let's use sanitized for consistency with IDs.
+                        "model": model_name
                     }
                     summary_line.plain = f"Run: {self.current_run_id} | Tasks: {successful_tasks+failed_tasks}/{num_tasks_for_progress_bar} | Success: {successful_tasks} | Failed: {failed_tasks} | Active: {len(active_tasks_status)}"
                     live.update(generate_live_display())
 
-                # --- Processing Loop --- 
+                # Processing Loop 
                 for future_item in as_completed(future_to_meta.keys()):
                     meta = future_to_meta[future_item]
                     d_key, o_key = meta["dataset_key"], meta["optimizer_key"]
@@ -1476,7 +1456,7 @@ class BenchmarkRunner:
                     task_desc_short = meta["desc"]
                     run_status_flag = "failure" 
                     result_data = None
-                    task_id_for_log = "unknown_task" # Will be updated if result_data is valid
+                    task_id_for_log = "unknown_task"
 
                     logger.debug(f"Future {id(future_item)} (Meta: {meta}) completed. Attempting to remove from active_tasks_status (current size: {len(active_tasks_status)}). Keys: {list(active_tasks_status.keys())}")
                     if future_item in active_tasks_status:
@@ -1491,9 +1471,8 @@ class BenchmarkRunner:
                             task_id_for_log = result_data.get("task_id", f"{d_key}-{o_key}-{sanitized_model_name_for_ids}-no_task_id_in_res")
                             task_json_filename = f"{task_id_for_log}.json"
                             task_json_path = self.task_results_dir / task_json_filename
-                            logger.debug(f"Constructed task JSON path: {task_json_path}") # Log the path
+                            logger.debug(f"Constructed task JSON path: {task_json_path}")
                             try:
-                                # Ensure directory exists 
                                 self.task_results_dir.mkdir(parents=True, exist_ok=True)
                                 with open(task_json_path, "w") as f_task_json:
                                     json.dump(result_data, f_task_json, indent=2, default=custom_json_serializer)
@@ -1511,9 +1490,8 @@ class BenchmarkRunner:
                                 "timestamp_end_task": result_data.get("timestamp_end_task"),
                                 "duration_seconds_task": result_data.get("duration_seconds_task"),
                                 "json_file_path": str(task_json_path.resolve()),
-                                "model_name_used": model_name_original, # Store original model name here
-                                # Store only key final metrics for quick summary, actuals are in JSON
-                                "final_primary_score": None, # Placeholder
+                                "model_name_used": model_name_original,
+                                "final_primary_score": None, # TODO: Add this
                             }
                             
                             if result_data.get("status") == "success":
@@ -1539,10 +1517,10 @@ class BenchmarkRunner:
                             status_message = f"[red]✗ Failed (Invalid Data): {task_desc_short}[/red]"
                             # Append a basic failure entry to self.results if result_data is bad
                             self.results.append({
-                                "task_id": f"{d_key}-{o_key}-{sanitized_model_name_for_ids}-invalid_data", # Use sanitized name
+                                "task_id": f"{d_key}-{o_key}-{sanitized_model_name_for_ids}-invalid_data",
                                 "run_id": self.current_run_id,
-                                "dataset": d_key, # from meta
-                                "optimizer": o_key, # from meta
+                                "dataset": d_key,
+                                "optimizer": o_key,
                                 "status": "failure_system_error",
                                 "error_message": "Optimizer task returned None or invalid data structure.",
                                 "json_file_path": None,
@@ -1556,7 +1534,7 @@ class BenchmarkRunner:
                         status_message = f"[red]✗ Failed (Exc Future): {task_desc_short}[/red]"
                         # Append a basic failure entry to self.results for future exceptions
                         self.results.append({
-                            "task_id": f"{d_key}-{o_key}-{sanitized_model_name_for_ids}-future_exception", # Use sanitized name
+                            "task_id": f"{d_key}-{o_key}-{sanitized_model_name_for_ids}-future_exception",
                             "run_id": self.current_run_id,
                             "dataset": d_key,
                             "optimizer": o_key,
@@ -1619,16 +1597,15 @@ class BenchmarkRunner:
                         self.save_checkpoint() # Save checkpoint after each task (implicitly saves self.results)
                         self.save_results() # Save CSV summary incrementally
 
-        # --- End of Live Block --- 
+        # End of Live Block
         overall_duration = time.time() - overall_start_time
         print_benchmark_footer(self.results, successful_tasks, failed_tasks, overall_duration, completed_results_display)
 
     def save_results(self):
         """Save summary results to CSV. Detailed results are already saved as individual task JSONs."""
-        if not self.results: # self.results now contains task metadata summaries
+        if not self.results:
             logger.info("[yellow]No task metadata in self.results to generate CSV summary.[/yellow]")
             return
-
         # Ensure current_run_id and task_results_dir are available for naming/pathing the summary CSV
         if not hasattr(self, 'current_run_id') or not self.current_run_id or not hasattr(self, 'task_results_dir') or not self.task_results_dir:
              logger.warning("[yellow]Cannot save summary CSV: run_id or task_results_dir not set.[/yellow]")
@@ -1636,14 +1613,13 @@ class BenchmarkRunner:
              
         run_id_for_filename = self.current_run_id 
         csv_filename = f"run_summary_{run_id_for_filename}.csv"
-        # Save the CSV inside the run-specific task results directory
         csv_path_abs = (self.task_results_dir / csv_filename).resolve()
-
         logger.info(f"Generating/Updating summary CSV: [blue]{csv_path_abs}[/blue]")
 
         flat_data_for_csv = []
         for task_summary in self.results:
-            # Default item data for CSV, including failures/skips
+            # Default item data for CSV
+            # TODO: Move this to a function or pydantic model
             item_data = {
                 "run_id": task_summary.get("run_id"),
                 "task_id": task_summary.get("task_id"),
@@ -1658,7 +1634,6 @@ class BenchmarkRunner:
 
             json_path = task_summary.get("json_file_path")
             if task_summary.get("status") != "success" or not json_path:
-                # If failed/skipped and we have a JSON path, try to get error message
                 if json_path:
                     try:
                         with open(json_path, "r") as f_detail:
@@ -1667,18 +1642,17 @@ class BenchmarkRunner:
                     except Exception: 
                         item_data["error_message"] = "(Failed to read details from JSON)"
                 else:
-                     item_data["error_message"] = task_summary.get("error_message", "(No JSON path found)") # Error might be in summary
-                
+                     item_data["error_message"] = task_summary.get("error_message", "(No JSON path found)")
                 flat_data_for_csv.append(item_data)
-                continue # Skip detailed score processing for non-success
+                # Skip detailed score processing for non-success
+                continue
 
             try:
                 with open(json_path, "r") as f_detail:
                     detail_data = json.load(f_detail)
-                
+
                 # Define current_task_config_data from detail_data for this task
                 current_task_config_data = detail_data.get("config", {})
-
                 # Update basic info just in case summary was incomplete
                 # Use current_task_config_data here and throughout this block
                 optimizer_params = current_task_config_data.get("optimizer_params", {})
@@ -1692,12 +1666,12 @@ class BenchmarkRunner:
                 item_data["status"] = detail_data.get("status", item_data["status"])
                 item_data["duration_seconds_task"] = detail_data.get("duration_seconds_task", item_data["duration_seconds_task"])
                 item_data["initial_prompt_template"] = current_task_config_data.get("initial_prompt")
-                item_data["dataset_size"] = None # Placeholder
+                item_data["dataset_size"] = None # TODO: Add this
 
                 initial_eval = detail_data.get("initial_evaluation", {})
                 if initial_eval and isinstance(initial_eval.get("metrics"), list):
                     for metric_res in initial_eval["metrics"]:
-                        # Use cleaned name for CSV header key
+                        # Use cleaned name for CSV headers
                         metric_name_cleaned = clean_metric_name(str(metric_res.get("metric_name", "unknown_metric")))
                         metric_name_for_header = metric_name_cleaned.replace(" ", "_").replace(".", "_") 
                         item_data[f"initial_{metric_name_for_header}_score"] = metric_res.get("score")
@@ -1705,7 +1679,7 @@ class BenchmarkRunner:
                 final_eval = detail_data.get("final_evaluation", {})
                 if final_eval and isinstance(final_eval.get("metrics"), list):
                     for metric_res in final_eval["metrics"]:
-                         # Use cleaned name for CSV header key
+                        # Use cleaned name for CSV header key
                         metric_name_cleaned = clean_metric_name(str(metric_res.get("metric_name", "unknown_metric")))
                         metric_name_for_header = metric_name_cleaned.replace(" ", "_").replace(".", "_") 
                         item_data[f"final_{metric_name_for_header}_score"] = metric_res.get("score")
@@ -1721,7 +1695,6 @@ class BenchmarkRunner:
                 
                 item_data["opt_best_score_achieved"] = opt_process.get("best_score_achieved")
                 item_data["opt_duration_seconds"] = opt_process.get("duration_seconds")
-                
                 temp_val = None
                 if optimizer_class_from_detail == "FewShotBayesianOptimizer":
                     raw_opt_res = detail_data.get("raw_optimizer_result", {})
@@ -1736,17 +1709,19 @@ class BenchmarkRunner:
                 # Add Final Prompt (serialize if it's a list/dict)
                 final_prompt_data = opt_process.get("final_prompt")
                 if isinstance(final_prompt_data, (list, dict)):
+                     # Try JSON serialization first, fallback to string
                      try:
-                         item_data["final_prompt"] = json.dumps(final_prompt_data) # Store complex prompt as JSON string
+                         item_data["final_prompt"] = json.dumps(final_prompt_data)
                      except Exception:
-                         item_data["final_prompt"] = str(final_prompt_data) # Fallback to string
+                         item_data["final_prompt"] = str(final_prompt_data)
                 else:
-                    item_data["final_prompt"] = final_prompt_data # Store simple string prompt as is
+                    item_data["final_prompt"] = final_prompt_data
 
-                item_data["opt_llm_calls"] = opt_process.get("llm_calls_total_optimization") # Add to CSV data
-
+                # Add LLM calls to CSV
+                item_data["opt_llm_calls"] = opt_process.get("llm_calls_total_optimization")
                 flat_data_for_csv.append(item_data)
 
+            # Handle file errors
             except FileNotFoundError:
                 logger.error(f"[red]JSON file not found for task {task_summary.get('task_id')}: {task_summary.get('json_file_path')}[/red]")
             except json.JSONDecodeError:
@@ -1771,8 +1746,6 @@ class BenchmarkRunner:
         else:
             logger.info("[yellow]No suitable data processed to create CSV summary.[/yellow]")
         
-        # self.save_checkpoint() # Checkpoint is now saved after each task, not here.
-        # The detailed JSON results (per task) are also saved progressively.
         
     def print_summary(self):
         """Print summary of results using Rich table (this is called by print_benchmark_footer)."""
@@ -1782,9 +1755,15 @@ class BenchmarkRunner:
             
         # This method is effectively replaced by print_benchmark_footer's logic,
         # but if called directly, it should behave like print_benchmark_footer.
+        # TODO: Remove this method if not needed
         print_benchmark_footer(self.results)
 
-def create_result_panel(dataset_name: str, optimizer_name: str, task_detail_data: Dict[str, Any]) -> Panel:
+# TODO: Move this to a separate benchmark_utils.py file
+def create_result_panel(
+        dataset_name: str,
+        optimizer_name: str,
+        task_detail_data: Dict[str, Any]
+    ) -> Panel:
     """Create a consistent panel for displaying optimization results, including the final prompt."""
     
     # Extract details from task_detail_data
@@ -1805,15 +1784,15 @@ def create_result_panel(dataset_name: str, optimizer_name: str, task_detail_data
     metrics_dict = {**initial_scores_panel_data, **final_scores_panel_data}
 
     table = Table.grid(padding=(0, 2), expand=True)
-    table.add_column(style="dim", width=20) # Increased width slightly for longer labels
+    table.add_column(style="dim", width=20)
     table.add_column()
 
     table.add_row("Dataset:", f"[bold]{dataset_name}[/bold]")
     table.add_row("Optimizer:", f"[bold]{optimizer_name}[/bold]")
     table.add_row("Time Taken:", f"{time_taken:.2f}s" if isinstance(time_taken, (float, int)) else "[dim]N/A[/dim]")
 
-    temp_val_panel = config_data.get("optimizer_params", {}).get("temperature") # Get temp from config
-    if temp_val_panel is None: # Fallback for FewShot from raw_optimizer_result if needed
+    temp_val_panel = config_data.get("optimizer_params", {}).get("temperature")
+    if temp_val_panel is None:
         if config_data.get("optimizer_class") == "FewShotBayesianOptimizer":
             raw_opt_res = task_detail_data.get("raw_optimizer_result", {})
             temp_val_panel = raw_opt_res.get("details", {}).get("temperature")
@@ -1830,7 +1809,7 @@ def create_result_panel(dataset_name: str, optimizer_name: str, task_detail_data
     percent_changes_grp = []
     initial_score_values = {}
 
-    metric_keys_ordered = [] # To maintain a consistent order for display
+    metric_keys_ordered = []
     for key_str, value in metrics_dict.items():
         if not str(key_str).startswith("Final "):
             clean_name = clean_metric_name(str(key_str))
@@ -1844,8 +1823,7 @@ def create_result_panel(dataset_name: str, optimizer_name: str, task_detail_data
         value_str = f"{value:.4f}" if isinstance(value, (float, int)) else ("[dim]N/A[/dim]" if value is None else str(value))
         initial_scores_grp.append(Text.assemble(f" • {name_key}: ", (value_str, style)))
 
-        final_key_str = f"Final {name_key}" # Construct the potential final key
-        # Search for final key flexibly (e.g. could be "Final <metric object str>")
+        final_key_str = f"Final {name_key}"
         final_value = None
         for mk, mv in metrics_dict.items():
             if clean_metric_name(str(mk).replace("Final ", "")) == name_key and str(mk).startswith("Final "):
@@ -1855,7 +1833,6 @@ def create_result_panel(dataset_name: str, optimizer_name: str, task_detail_data
         final_style = STYLES["success"] if isinstance(final_value, (float, int)) else STYLES["warning"]
         final_value_str = f"{final_value:.4f}" if isinstance(final_value, (float, int)) else ("[dim]N/A[/dim]" if final_value is None else str(final_value))
         final_scores_grp.append(Text.assemble(f" • {name_key}: ", (final_value_str, final_style)))
-        
         percent_change_text = calculate_percentage_change(value, final_value, name_key)
         percent_changes_grp.append(Text.assemble(f" • {name_key}: ", percent_change_text))
 
@@ -1874,22 +1851,18 @@ def create_result_panel(dataset_name: str, optimizer_name: str, task_detail_data
     else:
         table.add_row("Scores:", Text("[dim]N/A[/dim]"))
         
-    # iter_val = optimization_details.get("num_iterations")
-    # Calculate iterations from the length of the history array
-    history_for_iter_count = optimization_details.get("history", []) # Use .get("history", []) not .get("optimization_history")
+    history_for_iter_count = optimization_details.get("history", [])
     iter_val = len(history_for_iter_count) if isinstance(history_for_iter_count, list) else 0
-    iter_str = f"[bold cyan]{iter_val}[/bold cyan]" if iter_val > 0 else "[dim]N/A[/dim]" # Show N/A if 0 iterations
+    iter_str = f"[bold cyan]{iter_val}[/bold cyan]" if iter_val > 0 else "[dim]N/A[/dim]"
     table.add_row("Iterations:", iter_str)
-
     best_score_val = optimization_details.get("best_score_achieved")
     best_score_str = f"[bold cyan]{best_score_val:.4f}[/bold cyan]" if isinstance(best_score_val, (float, int)) else "[dim]N/A[/dim]"
     table.add_row("Best Score (Opt):", best_score_str)
-    table.add_row() # Add an empty row for spacing before Score History
+    table.add_row()
 
     if "error" in optimization_details:
         table.add_row("Opt. Details:", Text(f"[red]Error: {optimization_details['error'][:100]}...[/red]", overflow="ellipsis"))
     else:
-        # Use "history" key directly, as "optimization_history" might not be what's populated in optimization_details
         history = optimization_details.get("history", []) 
         if history and isinstance(history, list):
             history_summary_parts = []
@@ -1939,11 +1912,12 @@ def create_result_panel(dataset_name: str, optimizer_name: str, task_detail_data
             if history_summary_parts:
                 table.add_row("Score History:", Group(*history_summary_parts))
 
-    # --- Final Prompt Section --- 
+    # Final Prompt Section 
     final_prompt_data = task_detail_data.get("final_prompt", task_detail_data.get("optimization_process", {}).get("final_prompt"))
     prompt_content_display: Any
     if final_prompt_data is not None:
-        if isinstance(final_prompt_data, list): # Handle chat format
+        # Handle chat format
+        if isinstance(final_prompt_data, list):
             prompt_elements = []
             for msg in final_prompt_data:
                 if not isinstance(msg, dict): continue 
@@ -1955,12 +1929,12 @@ def create_result_panel(dataset_name: str, optimizer_name: str, task_detail_data
                 elif msg.get('role') == 'assistant': style = Style(color='magenta', bold=True)
                 else: style = Style(dim=True)
                 prompt_elements.append(Text(f"{role}: ", style=style))
-                prompt_elements.append(Text(content, overflow="fold")) # Add overflow="fold"
+                prompt_elements.append(Text(content, overflow="fold"))
                 prompt_elements.append(Text("")) 
             if prompt_elements: prompt_elements.pop()
             prompt_content_display = Group(*prompt_elements) if prompt_elements else Text("[dim](Empty chat list)[/dim]")
         elif isinstance(final_prompt_data, str):
-            prompt_content_display = Text(final_prompt_data, overflow="fold") # Add overflow="fold"
+            prompt_content_display = Text(final_prompt_data, overflow="fold")
         else:
             prompt_content_display = Text("[dim](Final prompt is not a recognized string or chat list)[/dim]")
     else:
@@ -1969,37 +1943,31 @@ def create_result_panel(dataset_name: str, optimizer_name: str, task_detail_data
     final_prompt_panel = Panel(prompt_content_display, title="Final Prompt", border_style="dim", padding=1, expand=True)
 
     # Combine main table and final prompt panel into a single Group for the main panel
-    # Add an extra newline Text object for spacing if desired between table and prompt panel
     main_content_group = Group(table, Text("\n"), final_prompt_panel)
-
-    # Corrected panel title and border style handling
     border_style_obj = STYLES.get(run_status.lower(), STYLES.get("default", Style(color="yellow"))) 
-    
-    # color_tag_str = border_style_obj.color if border_style_obj.color else "yellow"
-    
     status_text_upper = run_status.upper() 
     escaped_status_text = Text(status_text_upper).plain
-
-    # title_status_markup = f"[{color_tag_str}]{escaped_status_text}[/]"
     
     status_text_styled: Text
     try:
-        # Pass the entire Style object for styling the status text
         status_text_styled = Text(escaped_status_text, style=border_style_obj)
     except Exception as e_style_apply: 
         logger.error(f"[red]Error applying style object '{border_style_obj}' to status '{escaped_status_text}': {e_style_apply}. Using plain text fallback.[/red]")
-        # Fallback: try to get a color string, or default to plain
         color_fallback_str = border_style_obj.color if border_style_obj.color and isinstance(border_style_obj.color, str) else "default"
-        if color_fallback_str == "default": # Further fallback if color wasn't a string
+        if color_fallback_str == "default":
              status_text_styled = Text(f"{escaped_status_text} ({run_status.lower()})") 
         else:
              status_text_styled = Text(f"{escaped_status_text} ({run_status.lower()})", style=color_fallback_str)
 
     panel_title_text = Text.assemble(status_text_styled, f" {optimizer_name} on {dataset_name}")
-    
     return Panel(main_content_group, title=panel_title_text, border_style=border_style_obj, padding=(1, 2), expand=True)
 
-def print_benchmark_header(datasets: List[str], optimizers: List[str], test_mode: bool):
+# TODO: Move this to a separate benchmark_utils.py file
+def print_benchmark_header(
+        datasets: List[str],
+        optimizers: List[str],
+        test_mode: bool
+    ):
     """Print a clean header for the benchmark run."""
     console.print(Rule("[bold blue]Benchmark Configuration[/bold blue]", style="blue"))
     
@@ -2015,7 +1983,7 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
     """Print footer with stats, pivoted results table, and individual panels+prompts."""
     console.print(Rule("[bold blue]Benchmark Run Complete[/bold blue]", style="blue"))
     
-    # --- Overall Statistics Panel --- 
+    # Overall Statistics Panel
     summary_table = Table(box=box.ROUNDED, show_header=False, padding=(0,1), show_edge=False)
     summary_table.add_row("Total Benchmarks Run:", f"[bold cyan]{successful_tasks + failed_tasks}[/bold cyan]")
     summary_table.add_row("Successful Tasks:", f"[bold green]{successful_tasks}[/bold green]")
@@ -2023,7 +1991,7 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
     summary_table.add_row("Total Duration:", f"[cyan]{total_duration:.2f}s[/cyan]")
     console.print(Panel(summary_table, title="Overall Statistics", border_style="blue", padding=(1,2), expand=False))
 
-    # --- Detailed Pivoted Results Table --- 
+    # Detailed Pivoted Results Table
     if results: 
         logger.info("Generating detailed pivoted results table for footer...")
         results_table = Table(box=box.SIMPLE_HEAVY, show_header=True, header_style=STYLES["header"], title="Detailed Results Summary", title_style="dim", show_lines=True, padding=(0,1,0,1))
@@ -2045,8 +2013,8 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
 
         for task_summary in results: # task_summary is an item from self.results
             if task_summary.get("status") != "success" or not task_summary.get("json_file_path"):
-                continue # Skip non-successful or tasks without detailed JSON for this table
-
+                # Skip non-successful or tasks without detailed JSON for this table
+                continue
             try:
                 with open(task_summary["json_file_path"], "r") as f_detail:
                     detail_data = json.load(f_detail)
@@ -2060,7 +2028,6 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
 
                 # Ensure 'config' dictionary is fetched from detail_data, this is the correct scope
                 current_task_config_data = detail_data.get("config", {})
-
                 table_key = (dataset_name, optimizer_name, model_name)
                 if table_key not in processed_data_for_table:
                     processed_data_for_table[table_key] = {
@@ -2069,7 +2036,7 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
                         "time": time_taken,
                         "task_id": task_id, 
                         "temperature": None,
-                        "llm_calls_total_optimization": None # Initialize for processed_data_for_table
+                        "llm_calls_total_optimization": None
                     }
                 else: 
                     processed_data_for_table[table_key]["time"] = time_taken 
@@ -2102,6 +2069,7 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
                     all_metrics_names.add(metric_display_name)
                     processed_data_for_table[table_key]["final"][metric_display_name] = metric_entry.get("score")
 
+            # TODO: Move this to a separate benchmark error handling section
             except FileNotFoundError:
                 logger.warning(f"[yellow]Footer Table: JSON file not found for task {task_summary.get('task_id')}: {task_summary.get('json_file_path')}[/yellow]")
             except json.JSONDecodeError:
@@ -2111,16 +2079,15 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
 
         # Sort by dataset, then optimizer, then model for consistent table output
         sorted_table_keys = sorted(processed_data_for_table.keys())
-        
-        last_dataset_optimizer_model = None # Used for section breaks
+        last_dataset_optimizer_model = None
+
         for i, key_tuple in enumerate(sorted_table_keys):
             dataset, optimizer, model = key_tuple
             data_for_run_key = processed_data_for_table[key_tuple]
             time_taken_for_run = data_for_run_key.get("time", 0)
-            temperature_for_run = data_for_run_key.get("temperature") # Get temperature
-            llm_calls_for_run = data_for_run_key.get("llm_calls_total_optimization") # Get LLM calls for this run key
+            temperature_for_run = data_for_run_key.get("temperature")
+            llm_calls_for_run = data_for_run_key.get("llm_calls_total_optimization")
             scores_by_metric = {"initial": data_for_run_key["initial"], "final": data_for_run_key["final"]}
-            
             is_new_block = (last_dataset_optimizer_model != key_tuple)
             
             for metric_i, metric_name_to_display in enumerate(sorted(list(all_metrics_names))):
@@ -2138,7 +2105,6 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
                     model_text = Text('\n'.join(model_parts), overflow="ellipsis")
                     model_text.truncate(20)
                     
-                    # Display dataset, optimizer, model, temp, and time only for the first metric of a block
                     display_dataset = dataset_text if metric_i == 0 else ""
                     display_optimizer = optimizer if metric_i == 0 else ""
                     display_model = model_text if metric_i == 0 else ""
@@ -2146,7 +2112,7 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
                     display_llm_calls = str(llm_calls_for_run) if llm_calls_for_run is not None and metric_i == 0 else ("[dim]-[/dim]" if metric_i == 0 else "") # Display LLM calls
                     display_time = f"{time_taken_for_run:.2f}" if metric_i == 0 else ""
                     
-                    # Add a line (end_section) before a new block, but not for the very first block
+                    # Add a line (end_section)
                     end_section_flag = is_new_block and i > 0 and metric_i == 0
 
                     results_table.add_row(
@@ -2154,7 +2120,7 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
                         display_optimizer,
                         display_model, 
                         display_temp,
-                        display_llm_calls, # Add to row
+                        display_llm_calls,
                         metric_name_to_display,
                         display_time,
                         initial_str,
@@ -2171,17 +2137,23 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
     else:
         console.print("[yellow]No results (task summaries) available to generate detailed summary table.[/yellow]")
 
-    # --- Individual Task Panels + Final Prompts --- 
+    # Individual Task Panels + Final Prompts
     console.print(Rule("Individual Task Results & Final Prompts", style="dim blue"))
     if completed_display_items:
-        for panel in completed_display_items: # Now only contains the panel
+        for panel in completed_display_items:
             console.print(panel)
-            console.print() # Add space between task outputs
+            console.print()
     else:
         console.print("[yellow]No individual task panels were generated.[/yellow]")
 
-def calculate_percentage_change(initial: Optional[float], final: Optional[float], metric_name: str) -> Text:
-    # Define metrics where lower is better
+# TODO: Move this to a separate benchmark_utils.py file
+def calculate_percentage_change(
+        initial: Optional[float],
+        final: Optional[float],
+        metric_name: str
+    ) -> Text:
+    """Calculate the percentage change between two values."""
+
     LOWER_IS_BETTER = ["hallucination", "contextprecision"]
     metric_name_lower = metric_name.lower()
     lower_is_better = any(term in metric_name_lower for term in LOWER_IS_BETTER)
@@ -2205,18 +2177,21 @@ def calculate_percentage_change(initial: Optional[float], final: Optional[float]
 def main():
     """Main function to run benchmarks with improved output formatting."""
     t_start = time.perf_counter()
-    setup_logging(level=logging.DEBUG, force=True) # Temporarily set to DEBUG for console
+
+    # Temporarily set to DEBUG for console
+    # TODO: Set in config
+    setup_logging(level=logging.INFO, force=True)
     t_log_setup = time.perf_counter()
     logger.info(f"Initial logging setup took {t_log_setup - t_start:.4f}s")
     
-    # --- Aggressive Logger Suppression --- 
+    # Aggressive Logger Suppression
     # Silence opik core directly and forcefully
     opik_logger = logging.getLogger("opik")
     opik_logger.setLevel(logging.CRITICAL)
     opik_logger.propagate = False
-    for handler in opik_logger.handlers[:]: # Remove existing handlers
+    for handler in opik_logger.handlers[:]:
         opik_logger.removeHandler(handler)
-    opik_logger.addHandler(logging.NullHandler()) # Add NullHandler to prevent "no handler" warnings
+    opik_logger.addHandler(logging.NullHandler())
     logger.info("[yellow]Forcefully silenced 'opik' core logger (Level CRITICAL, NullHandler).[/yellow]")
     
     # Silence tqdm via logger
@@ -2231,10 +2206,9 @@ def main():
     noisy_libs = [ "LiteLLM", "urllib3", "requests", "httpx", "dspy", "datasets", "optuna", "filelock" ]
     for lib_name in noisy_libs:
         lib_logger = logging.getLogger(lib_name)
-        lib_logger.setLevel(logging.WARNING) # Use WARNING for these, CRITICAL might hide real issues
-        # Optionally remove handlers/add NullHandler if WARNING isn't enough
+        lib_logger.setLevel(logging.WARNING)
     logger.info(f"[yellow]Set level to WARNING for: {', '.join(noisy_libs)}[/yellow]")
-    # ------------------------------------
+
     t_log_suppress = time.perf_counter()
     logger.info(f"Logger suppression took {t_log_suppress - t_log_setup:.4f}s")
 
@@ -2249,11 +2223,9 @@ def main():
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--test-mode", action="store_true", default=False, help="Run in test mode with 5 examples per dataset")
     parser.add_argument("--resume", action="store_true", default=False, help="Attempt to resume from latest checkpoint, skipping successfully completed tasks")
-    # Add arguments for specifying datasets and optimizers
     parser.add_argument("--datasets", type=str, nargs='*', default=None, help=f"Space-separated list of dataset keys to run. Available: {list(DATASET_CONFIGS.keys())}")
     parser.add_argument("--optimizers", type=str, nargs='*', default=None, help=f"Space-separated list of optimizer keys to run. Available: {list(OPTIMIZER_CONFIGS.keys())}")
     parser.add_argument("--retry-failed-run", type=str, default=None, metavar="RUN_ID", help="Specify a previous RUN_ID to retry only its failed tasks. Successful tasks from that run will be skipped.")
-
     args = parser.parse_args()
 
     # If no specific operational arguments are given (other than defaults for output_dir, max_workers, seed)
@@ -2269,7 +2241,8 @@ def main():
         args.seed != parser.get_default("seed"),
     ])
 
-    if not operational_args_provided and sys.stdin.isatty(): # Only prompt if interactive
+    # Only prompt if interactive
+    if not operational_args_provided and sys.stdin.isatty():
         parser.print_help()
         console.print("\n[bold yellow]No specific benchmark parameters or resume flag provided.[/bold yellow]")
         console.print("This will run ALL datasets and ALL optimizers in full mode.")
@@ -2286,9 +2259,9 @@ def main():
 
     output_path = Path(args.output_dir)
     output_path.mkdir(exist_ok=True)
-    
     logger.info("Initializing BenchmarkRunner...")
     t_runner_start = time.perf_counter()
+    
     runner = BenchmarkRunner(
         output_dir=args.output_dir,
         max_workers=args.max_workers,
