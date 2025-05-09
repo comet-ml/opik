@@ -917,6 +917,7 @@ class BenchmarkRunner:
                 "best_score_achieved": getattr(results_obj, 'score', None), 
                 "final_prompt": results_obj.details.get("chat_messages") if optimizer_name == "FewShotBayesianOptimizer" and hasattr(results_obj, 'details') else getattr(results_obj, 'prompt', None), 
                 "history": opt_history_processed,
+                "llm_calls_total_optimization": getattr(results_obj, 'llm_calls', None) # Extract llm_calls
             }
 
             # Calculate num_iter_log and print console message *after* task_result["optimization_process"] is populated
@@ -1445,8 +1446,7 @@ class BenchmarkRunner:
                                 opt_proc = result_data.get("optimization_process", {})
                                 temp_val_panel = None
                                 
-                                # Ensure detail_data and its config are accessed correctly for panel creation
-                                panel_task_config_data = result_data.get("config", {}) # result_data is detail_data here
+                                panel_task_config_data = result_data.get("config", {})
 
                                 if panel_task_config_data.get("optimizer_class") == "FewShotBayesianOptimizer":
                                     raw_opt_res = result_data.get("raw_optimizer_result", {})
@@ -1456,11 +1456,16 @@ class BenchmarkRunner:
                                     if not exp_params: 
                                          exp_params = panel_task_config_data.get("optimizer_params", {})
                                     temp_val_panel = exp_params.get("temperature")
+                                
+                                # Fetch llm_calls_total_optimization from opt_proc for the panel
+                                llm_calls_for_panel = opt_proc.get("llm_calls_total_optimization")
+
                                 opt_details_summary = {
                                     "num_iterations": len(opt_proc.get("history", [])),
                                     "best_score": opt_proc.get("best_score_achieved"),
                                     "optimization_history": opt_proc.get("history", []),
-                                    "temperature": temp_val_panel # Store temperature here
+                                    "temperature": temp_val_panel,
+                                    "llm_calls_total_optimization": llm_calls_for_panel # Add it here
                                 }
                         
                         else: # result_data is None (exception occurred during future processing)
@@ -1612,6 +1617,8 @@ class BenchmarkRunner:
                 else:
                     item_data["final_prompt"] = final_prompt_data # Store simple string prompt as is
 
+                item_data["opt_llm_calls"] = opt_process.get("llm_calls_total_optimization") # Add to CSV data
+
                 flat_data_for_csv.append(item_data)
 
             except FileNotFoundError:
@@ -1666,6 +1673,11 @@ def create_result_panel(dataset_name: str, optimizer_name: str, metrics: dict, t
     temp_val_panel = optimization_details.get("temperature") # Fetch temperature
     temp_str_panel = f"{temp_val_panel:.1f}" if isinstance(temp_val_panel, (int, float)) else "[dim]N/A[/dim]"
     table.add_row("Temperature (🔥):", temp_str_panel)
+
+    # Add LLM Calls display to panel
+    llm_calls_count = optimization_details.get("llm_calls_total_optimization")
+    llm_calls_str = str(llm_calls_count) if llm_calls_count is not None else "[dim]N/A[/dim]"
+    table.add_row("LLM Calls (Opt):", llm_calls_str)
 
     # --- Scores --- 
     score_rows = []
@@ -1835,6 +1847,7 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
         results_table.add_column("Optimizer", no_wrap=True)
         results_table.add_column("Model", no_wrap=True, max_width=20, overflow="ellipsis") # Added Model column
         results_table.add_column("🔥", justify="center", no_wrap=True) # Temperature column
+        results_table.add_column("LLM Calls", justify="right", no_wrap=True) # New column for LLM Calls
         results_table.add_column("Metric", no_wrap=True)
         results_table.add_column("Time (s)", justify="right", no_wrap=True)
         results_table.add_column("Initial", justify="right", no_wrap=True)
@@ -1871,7 +1884,8 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
                         "final": {},
                         "time": time_taken,
                         "task_id": task_id, 
-                        "temperature": None 
+                        "temperature": None,
+                        "llm_calls_total_optimization": None # Initialize for processed_data_for_table
                     }
                 else: 
                     processed_data_for_table[table_key]["time"] = time_taken 
@@ -1887,6 +1901,10 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
                          exp_params_table = current_task_config_data.get("optimizer_params", {})
                     temp_val_table = exp_params_table.get("temperature")
                 processed_data_for_table[table_key]["temperature"] = temp_val_table
+                
+                # Fetch and store LLM calls for the summary table
+                opt_process_summary = detail_data.get("optimization_process", {})
+                processed_data_for_table[table_key]["llm_calls_total_optimization"] = opt_process_summary.get("llm_calls_total_optimization")
 
                 initial_eval_metrics = detail_data.get("initial_evaluation", {}).get("metrics", [])
                 for metric_entry in initial_eval_metrics:
@@ -1916,6 +1934,7 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
             data_for_run_key = processed_data_for_table[key_tuple]
             time_taken_for_run = data_for_run_key.get("time", 0)
             temperature_for_run = data_for_run_key.get("temperature") # Get temperature
+            llm_calls_for_run = data_for_run_key.get("llm_calls_total_optimization") # Get LLM calls for this run key
             scores_by_metric = {"initial": data_for_run_key["initial"], "final": data_for_run_key["final"]}
             
             is_new_block = (last_dataset_optimizer_model != key_tuple)
@@ -1940,6 +1959,7 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
                     display_optimizer = optimizer if metric_i == 0 else ""
                     display_model = model_text if metric_i == 0 else ""
                     display_temp = f"{temperature_for_run:.1f}" if isinstance(temperature_for_run, (int, float)) else "[dim]-[/dim]" if metric_i == 0 else ""
+                    display_llm_calls = str(llm_calls_for_run) if llm_calls_for_run is not None and metric_i == 0 else ("[dim]-[/dim]" if metric_i == 0 else "") # Display LLM calls
                     display_time = f"{time_taken_for_run:.2f}" if metric_i == 0 else ""
                     
                     # Add a line (end_section) before a new block, but not for the very first block
@@ -1949,7 +1969,8 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
                         display_dataset,
                         display_optimizer,
                         display_model, 
-                        display_temp, # Add temperature display
+                        display_temp,
+                        display_llm_calls, # Add to row
                         metric_name_to_display,
                         display_time,
                         initial_str,
