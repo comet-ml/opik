@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiagohora:add_base_url_and_headers_to_ll_provider_api_key
+--changeset thiagohora:000016_add_base_url_and_headers_to_ll_provider_api_key
 
 ALTER TABLE llm_provider_api_key
     ADD COLUMN headers JSON DEFAULT NULL,
