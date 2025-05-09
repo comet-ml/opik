@@ -66,7 +66,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self.llm_call_counter = 0
         logger.debug(f"Initialized FewShotBayesianOptimizer with model: {model}")
 
-    @rate_limited(limiter)
+    @_throttle.rate_limited(_limiter)
     def _call_model_internal(self, messages: List[Dict[str, str]], seed: int, model_kwargs: Dict[str, Any]) -> Any:
         self.llm_call_counter += 1
         

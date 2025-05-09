@@ -4,7 +4,7 @@ import logging
 import time
 
 import litellm
-import . _throttle
+from . import _throttle
 from opik.rest_api.core import ApiError
 
 from pydantic import BaseModel
