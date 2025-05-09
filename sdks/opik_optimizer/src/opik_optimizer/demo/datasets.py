@@ -28,33 +28,44 @@ def get_or_create_dataset(
         "rag_hallucinations",
     ],
     test_mode: bool = False,
+    seed: int = 42,
 ) -> opik.Dataset:
-    """Get or create a dataset from HuggingFace."""
+    """Get or create a dataset from HuggingFace, using the provided seed for sampling."""
     try:
-        # Try to get existing dataset first
         opik_client = opik.Opik()
         dataset_name = f"{name}_test" if test_mode else name
+        dataset = None # Initialize dataset variable
         
+        print(f"Checking for existing dataset: {dataset_name}...") # Add log
         try:
-            dataset = opik_client.get_dataset(dataset_name)
-            if dataset:  # Check if dataset exists
-                items = dataset.get_items()
-                if items and len(items) > 0:  # Check if dataset has data
-                    return dataset
-                # If dataset exists but is empty, delete it
-                print(f"Dataset {dataset_name} exists but is empty - deleting it...")
-                opik_client.delete_dataset(dataset_name)
-        except Exception:
-            # If dataset doesn't exist, we'll create it
-            pass
+            existing_dataset = opik_client.get_dataset(dataset_name)
+            if existing_dataset:
+                print(f"Found existing dataset object for {dataset_name}. Checking items...") # Add log
+                items = existing_dataset.get_items()
+                # Check explicitly if items is a list and has content
+                if isinstance(items, list) and len(items) > 0:
+                    print(f"Existing dataset {dataset_name} has {len(items)} items. Using cached version.") # Add log
+                    return existing_dataset # Return the cached dataset
+                else:
+                    # Dataset exists but appears empty/invalid items
+                    print(f"Existing dataset {dataset_name} found but has no valid items (items type: {type(items)}, len: {len(items) if isinstance(items, list) else 'N/A'}). Will proceed to load/recreate.")
+            else:
+                # get_dataset returned None
+                print(f"Opik client returned None for get_dataset({dataset_name}). Dataset likely doesn't exist.") # Add log
+        except Exception as get_exc:
+            # Exception during get_dataset - assume it doesn't exist
+            print(f"Exception during get_dataset({dataset_name}): {get_exc}. Assuming dataset needs creation.") # Add log
+            pass # Proceed to load/create
 
-        # Load data based on dataset name
+        # --- If we reach here, dataset needs loading/creation ---
+        print(f"Proceeding to load data for {dataset_name} from source...")
+        # Load data based on dataset name, passing seed where relevant
         if name == "hotpot-300":
-            data = _load_hotpot_300(test_mode)
+            data = _load_hotpot_300(test_mode, seed=seed)
         elif name == "hotpot-500":
-            data = _load_hotpot_500(test_mode)
+            data = _load_hotpot_500(test_mode, seed=seed)
         elif name == "halu-eval-300":
-            data = _load_halu_eval_300(test_mode)
+            data = _load_halu_eval_300(test_mode, seed=seed)
         elif name == "tiny-test":
             data = _load_tiny_test()
         elif name == "gsm8k":
@@ -75,36 +86,42 @@ def get_or_create_dataset(
             data = _load_medhallu(test_mode)
         elif name == "rag_hallucinations":
             data = _load_rag_hallucinations(test_mode)
-        elif name == "math-50":
-            data = _load_math_50()
         else:
             raise HaltError(f"Unknown dataset: {name}")
 
         if not data:
-            raise HaltError(f"No data loaded for dataset: {name}")
+            raise HaltError(f"No data loaded for dataset source: {name}")
 
-        # Create dataset in Opik
+        # Create or potentially update dataset in Opik
         try:
-            dataset = opik_client.create_dataset(dataset_name)  # Use dataset_name with test mode suffix
+            print(f"Attempting to create dataset: {dataset_name}...")
+            dataset = opik_client.create_dataset(dataset_name)
+            print(f"Dataset {dataset_name} created. Inserting {len(data)} items...")
         except opik.rest_api.core.api_error.ApiError as e:
-            if e.status_code == 409:  # Dataset already exists
-                # Try to get the dataset again
+            if e.status_code == 409: # Dataset already exists (conflict)
+                print(f"Dataset {dataset_name} already exists (Code 409). Getting existing dataset to insert/update...")
                 dataset = opik_client.get_dataset(dataset_name)
                 if not dataset:
-                    raise HaltError(f"Dataset {dataset_name} exists but is empty")
-                return dataset
-            raise HaltError(f"Failed to create dataset {dataset_name}: {e}")
+                    raise HaltError(f"Conflict creating {dataset_name}, but failed to retrieve existing.")
+                print(f"Retrieved existing dataset {dataset_name}. Attempting to insert/update {len(data)} items...")
+            else:
+                raise HaltError(f"API error creating dataset {dataset_name}: {e}")
+        except Exception as create_exc:
+             raise HaltError(f"Unexpected error creating dataset {dataset_name}: {create_exc}")
 
         # Insert data into the dataset
         try:
             dataset.insert(data)
+            print(f"Successfully inserted {len(data)} items into {dataset_name}.")
         except Exception as e:
             raise HaltError(f"Failed to insert data into dataset {dataset_name}: {e}")
 
         # Verify data was added
         items = dataset.get_items()
         if not items or len(items) == 0:
-            raise HaltError(f"Failed to add data to dataset {dataset_name}")
+            raise HaltError(f"Verification failed: No items found in dataset {dataset_name} after insert.")
+        else:
+             print(f"Verified {len(items)} items in dataset {dataset_name} after insert.")
 
         return dataset
     except HaltError:
@@ -115,11 +132,10 @@ def get_or_create_dataset(
         raise HaltError(f"Critical error loading dataset {name}: {e}")
 
 
-def _load_hotpot_500(test_mode: bool = False) -> List[Dict[str, Any]]:
+def _load_hotpot_500(test_mode: bool = False, seed: int = 42) -> List[Dict[str, Any]]:
     from dspy.datasets import HotPotQA
 
-    seed = 2024
-    size = 500 if not test_mode else 5
+    size = 5 if test_mode else 500
 
     try:
         trainset = [
@@ -139,11 +155,10 @@ def _load_hotpot_500(test_mode: bool = False) -> List[Dict[str, Any]]:
     return data
 
 
-def _load_hotpot_300(test_mode: bool = False) -> List[Dict[str, Any]]:
+def _load_hotpot_300(test_mode: bool = False, seed: int = 42) -> List[Dict[str, Any]]:
     from dspy.datasets import HotPotQA
 
-    seed = 42
-    size = 300 if not test_mode else 3
+    size = 5 if test_mode else 300
 
     try:
         trainset = [
@@ -163,7 +178,7 @@ def _load_hotpot_300(test_mode: bool = False) -> List[Dict[str, Any]]:
     return data
 
 
-def _load_halu_eval_300(test_mode: bool = False) -> List[Dict[str, Any]]:
+def _load_halu_eval_300(test_mode: bool = False, seed: int = 42) -> List[Dict[str, Any]]:
     import pandas as pd
 
     try:
@@ -173,7 +188,10 @@ def _load_halu_eval_300(test_mode: bool = False) -> List[Dict[str, Any]]:
     except Exception:
         raise Exception("Unable to download HaluEval; please try again") from None
 
-    df = df.sample(n=300, random_state=42)
+    size = 5 if test_mode else 300
+    sample_size = min(size, len(df))
+    
+    df_sampled = df.sample(n=sample_size, random_state=seed)
 
     dataset_records = [
         {
@@ -181,7 +199,7 @@ def _load_halu_eval_300(test_mode: bool = False) -> List[Dict[str, Any]]:
             "llm_output": x["chatgpt_response"],
             "expected_hallucination_label": x["hallucination"],
         }
-        for x in df.to_dict(orient="records")
+        for x in df_sampled.to_dict(orient="records")
     ]
 
     return dataset_records

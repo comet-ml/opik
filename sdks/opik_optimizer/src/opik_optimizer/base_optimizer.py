@@ -4,15 +4,15 @@ import logging
 import time
 
 import litellm
+from . import _throttle
 from opik.rest_api.core import ApiError
 
 from pydantic import BaseModel
-from ._throttle import RateLimiter, rate_limited
 from .cache_config import initialize_cache
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from .optimization_config.configs import TaskConfig, MetricConfig
 
-limiter = RateLimiter(max_calls_per_second=8)
+_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 # Don't use unsupported params:
 litellm.drop_params = True
@@ -32,19 +32,21 @@ class OptimizationRound(BaseModel):
 
 
 class BaseOptimizer:
-    def __init__(self, model: str, project_name: Optional[str] = None, **model_kwargs):
+    def __init__(self, model: str, project_name: Optional[str] = None, verbose: int = 1, **model_kwargs):
         """
         Base class for optimizers.
 
         Args:
            model: LiteLLM model name
            project_name: Opik project name
+           verbose: Controls internal logging/progress bars (0=off, 1=on).
            model_kwargs: additional args for model (eg, temperature)
         """
         self.model = model
         self.reasoning_model = model
         self.model_kwargs = model_kwargs
         self.project_name = project_name
+        self.verbose = verbose
         self._history = []
         self.experiment_config = None
         self.llm_call_counter = 0
@@ -141,7 +143,89 @@ class BaseOptimizer:
         """
         self._history.append(round_data)
 
+    @_throttle.rate_limited(_limiter)
+    def _call_model(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        is_reasoning: bool = False,
+    ) -> str:
+        """Call the model to get suggestions based on the meta-prompt."""
+        model = self.reasoning_model if is_reasoning else self.model
+        messages = []
 
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+            logger.debug(f"Using custom system prompt: {system_prompt[:100]}...")
+        else:
+            messages.append(
+                {"role": "system", "content": "You are a helpful assistant."}
+            )
+
+        messages.append({"role": "user", "content": prompt})
+        logger.debug(f"Calling model {model} with prompt: {prompt[:100]}...")
+
+        api_params = self.model_kwargs.copy()
+        api_params.update(
+            {
+                "model": model,
+                "messages": messages,
+                # Ensure required params like 'temperature', 'max_tokens' are present
+                # Defaults added here for safety, though usually set in __init__ kwargs
+                "temperature": api_params.get("temperature", 0.3),
+                "max_tokens": api_params.get("max_tokens", 1000),
+            }
+        )
+
+        # Attempt to add Opik monitoring if available
+        try:
+            # Assuming opik_litellm_monitor is imported and configured elsewhere
+            api_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(
+                api_params
+            )
+            logger.debug("Opik monitoring hooks added to LiteLLM params.")
+        except Exception as e:
+            logger.warning(f"Could not add Opik monitoring to LiteLLM params: {e}")
+
+        logger.debug(
+            f"Final API params (excluding messages): { {k:v for k,v in api_params.items() if k != 'messages'} }"
+        )
+
+        # Increment Counter
+        self.llm_call_counter += 1
+        logger.debug(f"LLM Call Count: {self.llm_call_counter}")
+
+        try:
+            # Determine the actual model string being used
+            model_str_to_check = self.reasoning_model if is_reasoning else self.model
+            api_params["num_retries"] = 6 
+            response = litellm.completion(**api_params)
+            
+            model_output = response.choices[0].message.content.strip()
+            logger.debug(f"Model response from {model_str_to_check}: {model_output[:100]}...")
+            return model_output
+        except litellm.exceptions.RateLimitError as e:
+            logger.error(f"LiteLLM Rate Limit Error for model {model_str_to_check}: {e}")
+            raise
+        except litellm.exceptions.APIConnectionError as e:
+            logger.error(f"LiteLLM API Connection Error for model {model_str_to_check}: {e}")
+            raise
+        except litellm.exceptions.ContextWindowExceededError as e:
+            logger.error(
+                f"LiteLLM Context Window Exceeded Error for model {model_str_to_check}. Prompt length: {len(prompt)}. Details: {e}"
+            )
+            raise
+        except litellm.exceptions.APIError as e:  # Catch broader API errors
+            logger.error(f"LiteLLM API Error for model {model_str_to_check}: {e}")
+            raise
+        except Exception as e:
+            # Catch any other unexpected errors
+            logger.error(
+                f"Unexpected error during model call to {model_str_to_check}: {type(e).__name__} - {e}"
+            )
+            raise
+
+            
     def update_optimization(self, optimization, status: str) -> None:
         """
         Update the optimization status
