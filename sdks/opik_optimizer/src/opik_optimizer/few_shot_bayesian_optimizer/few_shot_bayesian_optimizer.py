@@ -256,7 +256,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         except Exception as e:
             logger.warning(f"Could not configure Optuna logging within optimizer: {e}")
 
-        study = optuna.create_study(direction="maximize")
+        # Explicitly create and seed the sampler for Optuna
+        sampler = optuna.samplers.TPESampler(seed=self.seed)
+        study = optuna.create_study(direction="maximize", sampler=sampler)
+        
         study.optimize(optimization_objective, n_trials=n_trials, show_progress_bar=(self.verbose >= 1))
         logger.info("Optuna study finished.")
 
