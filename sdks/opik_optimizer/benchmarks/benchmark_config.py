@@ -34,13 +34,13 @@ def get_project_config(test_mode: bool = False) -> Dict:
 
 # Dataset configurations
 DATASET_CONFIGS = {
-    "gsm8k": {
-        "name": "GSM8K",
-        "metrics": [LevenshteinRatio()],
-        "input_key": "question",
-        "output_key": "answer",
-        "huggingface_path": "gsm8k",
-    },
+    # "gsm8k": {
+    #     "name": "GSM8K",
+    #     "metrics": [LevenshteinRatio()],
+    #     "input_key": "question",
+    #     "output_key": "answer",
+    #     "huggingface_path": "gsm8k",
+    # },
     # "ragbench_sentence_relevance": {
     #     "name": "RAGBench Sentence Relevance",
     #     "metrics": [AnswerRelevance(require_context=False)],
@@ -55,13 +55,13 @@ DATASET_CONFIGS = {
     #     "output_key": "label",
     #     "huggingface_path": "election_questions",
     # },
-    # "medhallu": {
-    #     "name": "MedHallu",
-    #     "metrics": [Hallucination(), AnswerRelevance(require_context=False)],
-    #     "input_key": "question",
-    #     "output_key": "ground_truth",
-    #     "huggingface_path": "medhallu",
-    # },
+    "medhallu": {
+        "name": "MedHallu",
+        "metrics": [Hallucination(), AnswerRelevance(require_context=False)],
+        "input_key": "question",
+        "output_key": "ground_truth",
+        "huggingface_path": "medhallu",
+    },
     # "rag_hallucinations": {
     #     "name": "RAG Hallucinations",
     #     "metrics": [Hallucination(), ContextPrecision()],
@@ -83,13 +83,13 @@ DATASET_CONFIGS = {
     #     "output_key": "answer",
     #     "huggingface_path": "ai2_arc",
     # },
-    # "truthfulqa": {
-    #     "name": "TruthfulQA",
-    #     "metrics": [Hallucination(), AnswerRelevance()],
-    #     "input_key": "question",
-    #     "output_key": "answer",
-    #     "huggingface_path": "truthful_qa",
-    # },
+    "truthfulqa": {
+        "name": "TruthfulQA",
+        "metrics": [Hallucination(), AnswerRelevance()],
+        "input_key": "question",
+        "output_key": "answer",
+        "huggingface_path": "truthful_qa",
+    },
     # "cnn_dailymail": {
     #     "name": "CNN/Daily Mail",
     #     "metrics": [LevenshteinRatio(), ContextRecall()],
@@ -105,42 +105,42 @@ OPTIMIZER_CONFIGS = {
     # TEST configs
     ##############
 
-    "few_shot": {
-        "class": "FewShotBayesianOptimizer",
-        "params": {
-            "min_examples": 2,
-            "max_examples": 3,
-            "n_threads": 6,
-            "n_trials": 3,
-            "n_samples": 100,
-            "seed": 42,
-            "verbose": 0,
-        },
-    },
-    "meta_prompt": {
-        "class": "MetaPromptOptimizer",
-        "params": {
-            "max_rounds": 2,
-            "num_prompts_per_round": 2,
-            "improvement_threshold": 0.01,
-            "temperature": 0.1,
-            "max_completion_tokens": 9000,
-            "num_threads": 5,
-            "subsample_size": 5,
-            "seed": 42,
-            "verbose": 0,
-        },
-    },
-    "mipro": {
-        "class": "MiproOptimizer",
-        "params": {
-            "temperature": 0.1,
-            "max_tokens": 5000,
-            "num_threads": 10,
-            "seed": 42,
-            "verbose": 0,
-        },
-    },
+    # "few_shot": {
+    #     "class": "FewShotBayesianOptimizer",
+    #     "params": {
+    #         "min_examples": 2,
+    #         "max_examples": 3,
+    #         "n_threads": 6,
+    #         "n_trials": 3,
+    #         "n_samples": 100,
+    #         "seed": 42,
+    #         "verbose": 0,
+    #     },
+    # },
+    # "meta_prompt": {
+    #     "class": "MetaPromptOptimizer",
+    #     "params": {
+    #         "max_rounds": 2,
+    #         "num_prompts_per_round": 2,
+    #         "improvement_threshold": 0.01,
+    #         "temperature": 0.1,
+    #         "max_completion_tokens": 9000,
+    #         "num_threads": 5,
+    #         "subsample_size": 5,
+    #         "seed": 42,
+    #         "verbose": 0,
+    #     },
+    # },
+    # "mipro": {
+    #     "class": "MiproOptimizer",
+    #     "params": {
+    #         "temperature": 0.1,
+    #         "max_tokens": 5000,
+    #         "num_threads": 10,
+    #         "seed": 42,
+    #         "verbose": 0,
+    #     },
+    # },
 
 
     ##############
@@ -151,7 +151,7 @@ OPTIMIZER_CONFIGS = {
     #     "class": "FewShotBayesianOptimizer",
     #     "params": {
     #         "min_examples": 3,
-    #         "max_examples": 8,
+    #         "max_examples": 7,
     #         "n_threads": 4,
     #         "seed": 42,
     #         "n_trials": 10,
@@ -159,19 +159,48 @@ OPTIMIZER_CONFIGS = {
     #         "verbose": 0,
     #     },
     # },
-    # "meta_prompt": {
-    #     "class": "MetaPromptOptimizer",
-    #     "params": {
-    #         "max_rounds": 3,
-    #         "num_prompts_per_round": 4,
-    #         "improvement_threshold": 0.01,
-    #         "temperature": 0.1,
-    #         "max_completion_tokens": 9000,
-    #         "num_threads": 5,
-    #         "subsample_size": 10,
-    #         "verbose": 0,
-    #     },
-    # },
+    "meta_prompt": {
+        "class": "MetaPromptOptimizer",
+        "params": {
+            "max_rounds": 3,
+            "num_prompts_per_round": 4,
+            "improvement_threshold": 0.01,
+            "temperature": 0.1,
+            "max_completion_tokens": 9000,
+            "num_threads": 5,
+            "subsample_size": 10,
+            "verbose": 0,
+            "enable_context": True,
+        },
+    },
+    "meta_prompt_no_context": {
+        "class": "MetaPromptOptimizer",
+        "params": {
+            "max_rounds": 3,
+            "num_prompts_per_round": 4,
+            "improvement_threshold": 0.01,
+            "temperature": 0.1,
+            "max_completion_tokens": 9000,
+            "num_threads": 5,
+            "subsample_size": 10,
+            "verbose": 0,
+            "enable_context": False,
+        },
+    },
+    "meta_prompt_single_cot": {
+        "class": "MetaPromptOptimizer",
+        "params": {
+            "max_rounds": 1,
+            "num_prompts_per_round": 1,
+            "improvement_threshold": 0.01,
+            "temperature": 0.1,
+            "max_completion_tokens": 9000,
+            "num_threads": 5,
+            "subsample_size": 10,
+            "verbose": 0,
+            "enable_context": False,
+        },
+    },
     # "mipro": {
     #     "class": "MiproOptimizer",
     #     "params": {

@@ -530,8 +530,12 @@ class BenchmarkRunner:
             logger.warning(f"[yellow]task_results_dir not available, skipping task-specific file logging for {task_id}[/yellow]")
 
         dataset_name = experiment_config["dataset"]
-        optimizer_name = type(optimizer).__name__
-        console.print(f"🏁 Starting task: [bold magenta]{task_id}[/bold magenta] ({dataset_name} / {optimizer_name} / {optimizer.model})")
+        optimizer_config_name_display = experiment_config["optimizer"]
+        actual_optimizer_class_name_display = type(optimizer).__name__.lower().replace("_", "-")
+        model_name_display = optimizer.model
+
+        # Use the optimizer_config_name_display for the console print
+        console.print(f"🏁 Starting task: [bold magenta]{task_id}[/bold magenta] ({dataset_name} / {optimizer_config_name_display} / {model_name_display})")
         logger.info(f"Starting optimization task: {task_id}...")
 
         # Initialize comprehensive result structure
@@ -556,8 +560,8 @@ class BenchmarkRunner:
                 "dataset_config_name": dataset_name,
                 "dataset_huggingface_path": DATASET_CONFIGS[dataset_name]["huggingface_path"],
                 "optimizer_config_name": experiment_config["optimizer"],
-                "optimizer_class": optimizer_name,
-                "model_name": optimizer.model, # Store the actual model name used
+                "optimizer_class": actual_optimizer_class_name_display,
+                "model_name": model_name_display,
                 "optimizer_params": OPTIMIZER_CONFIGS[experiment_config["optimizer"]]["params"],
                 "initial_prompt": initial_prompt,
                 "input_key": input_key,
@@ -727,8 +731,8 @@ class BenchmarkRunner:
                         n_samples=getattr(optimizer, 'n_samples', 100)
                     )
                 else:
-                    logger.error(f"Unsupported optimizer: {optimizer_name}")
-                    task_result["error_message"] = f"Unsupported optimizer: {optimizer_name}"
+                    logger.error(f"Unsupported optimizer: {actual_optimizer_class_name_display}")
+                    task_result["error_message"] = f"Unsupported optimizer: {actual_optimizer_class_name_display}"
                     task_result["timestamp_end_task"] = datetime.now().isoformat()
                     task_result["duration_seconds_task"] = time.time() - start_time_run_opt
                     return task_result
@@ -765,9 +769,9 @@ class BenchmarkRunner:
                 task_result["raw_optimizer_result"] = raw_results_obj_for_saving
 
             except Exception as e:
-                logger.error(f"[red]Error during {optimizer_name}.optimize_prompt: {e}[/red]")
+                logger.error(f"[red]Error during {actual_optimizer_class_name_display}.optimize_prompt: {e}[/red]")
                 logger.exception("Traceback:")
-                task_result["error_message"] = f"Error in {optimizer_name}.optimize_prompt: {str(e)}"
+                task_result["error_message"] = f"Error in {actual_optimizer_class_name_display}.optimize_prompt: {str(e)}"
                 task_result["timestamp_end_task"] = datetime.now().isoformat()
                 task_result["duration_seconds_task"] = time.time() - start_time_run_opt
                 return task_result
@@ -799,8 +803,8 @@ class BenchmarkRunner:
 
             opt_time = time.time() - start_time_opt
             if results_obj is None:
-                logger.error(f"[bold red]Optimization failed for {optimizer_name}. results_obj is None.[/bold red]")
-                task_result["error_message"] = f"Optimization failed for {optimizer_name}, results_obj is None."
+                logger.error(f"[bold red]Optimization failed for {actual_optimizer_class_name_display}. results_obj is None.[/bold red]")
+                task_result["error_message"] = f"Optimization failed for {actual_optimizer_class_name_display}, results_obj is None."
                 task_result["timestamp_end_task"] = datetime.now().isoformat()
                 task_result["duration_seconds_task"] = time.time() - start_time_run_opt
                 return task_result
@@ -809,11 +813,11 @@ class BenchmarkRunner:
             opt_history_processed = []
             global_iteration_count = 0 
             try:
-                if optimizer_name == "MetaPromptOptimizer": # Specific handling for MetaPromptOptimizer
+                if actual_optimizer_class_name_display == "MetaPromptOptimizer":
                     if hasattr(results_obj, 'details') and isinstance(results_obj.details, dict) and \
                        'rounds' in results_obj.details and results_obj.details['rounds'] and \
                        isinstance(results_obj.details['rounds'], list):
-                        logger.debug(f"Processing {optimizer_name} history from results_obj.details['rounds'] for task {task_id}")
+                        logger.debug(f"Processing {actual_optimizer_class_name_display} history from results_obj.details['rounds'] for task {task_id}")
                         for round_obj in results_obj.details['rounds']:
                             round_number_val = getattr(round_obj, "round_number", "N/A")
                             generated_prompts_list = getattr(round_obj, "generated_prompts", [])
@@ -846,7 +850,7 @@ class BenchmarkRunner:
                                         })
                                     opt_history_processed.append(iter_detail)
                             else:
-                                logger.warning(f"'generated_prompts' attribute in round_obj for {optimizer_name} task {task_id} is not a list. Found: {type(generated_prompts_list)}")
+                                logger.warning(f"'generated_prompts' attribute in round_obj for {actual_optimizer_class_name_display} task {task_id} is not a list. Found: {type(generated_prompts_list)}")
                     else:
                         details_type_msg = f"results_obj.details type: {type(results_obj.details)}" if hasattr(results_obj, 'details') else "results_obj has no 'details' attribute"
                         rounds_info_msg = ""
@@ -854,33 +858,33 @@ class BenchmarkRunner:
                             rounds_info_msg = f"'rounds' key in details: {'rounds' in results_obj.details}. Value of details['rounds']: {results_obj.details.get('rounds')}"
                         logger.warning(f"Condition failed for processing MetaPromptOptimizer/MiproOptimizer history for task {task_id}. {details_type_msg}. {rounds_info_msg}")
                 
-                elif optimizer_name == "MiproOptimizer": # NEW DEDICATED BLOCK FOR MIPRO
-                    print(f"PRINT_DEBUG_HISTORY ({optimizer_name}, {task_id}): Entered DEDICATED MiproOptimizer history processing block.")
-                    logger.debug(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): Entered DEDICATED MiproOptimizer history processing block.")
+                elif actual_optimizer_class_name_display == "MiproOptimizer": # NEW DEDICATED BLOCK FOR MIPRO
+                    print(f"PRINT_DEBUG_HISTORY ({actual_optimizer_class_name_display}, {task_id}): Entered DEDICATED MiproOptimizer history processing block.")
+                    logger.debug(f"HISTORY_DEBUG ({actual_optimizer_class_name_display}, {task_id}): Entered DEDICATED MiproOptimizer history processing block.")
                     if hasattr(results_obj, "history") and results_obj.history is not None:
-                        logger.debug(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): results_obj.history exists and is not None. Type: {type(results_obj.history)}.")
+                        logger.debug(f"HISTORY_DEBUG ({actual_optimizer_class_name_display}, {task_id}): results_obj.history exists and is not None. Type: {type(results_obj.history)}.")
                         if isinstance(results_obj.history, list):
-                            logger.debug(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): results_obj.history IS a list. Length: {len(results_obj.history)}.")
+                            logger.debug(f"HISTORY_DEBUG ({actual_optimizer_class_name_display}, {task_id}): results_obj.history IS a list. Length: {len(results_obj.history)}.")
                             if results_obj.history:
                                 opt_history_processed = results_obj.history
-                                logger.debug(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): Assigned results_obj.history to opt_history_processed. Length now: {len(opt_history_processed)}.")
+                                logger.debug(f"HISTORY_DEBUG ({actual_optimizer_class_name_display}, {task_id}): Assigned results_obj.history to opt_history_processed. Length now: {len(opt_history_processed)}.")
                                 if opt_history_processed and isinstance(opt_history_processed[0], dict):
-                                    logger.debug(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): First item of opt_history_processed: {list(opt_history_processed[0].keys())}")
+                                    logger.debug(f"HISTORY_DEBUG ({actual_optimizer_class_name_display}, {task_id}): First item of opt_history_processed: {list(opt_history_processed[0].keys())}")
                                 elif not opt_history_processed:
-                                    logger.warning(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): opt_history_processed is EMPTY after assignment. THIS IS UNEXPECTED.")
+                                    logger.warning(f"HISTORY_DEBUG ({actual_optimizer_class_name_display}, {task_id}): opt_history_processed is EMPTY after assignment. THIS IS UNEXPECTED.")
                             else:
-                                logger.warning(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): results_obj.history IS AN EMPTY list. opt_history_processed will be empty.")
+                                logger.warning(f"HISTORY_DEBUG ({actual_optimizer_class_name_display}, {task_id}): results_obj.history IS AN EMPTY list. opt_history_processed will be empty.")
                                 opt_history_processed = []
                         else:
-                            logger.warning(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): results_obj.history is NOT a list. Type: {type(results_obj.history)}. opt_history_processed will be empty.")
+                            logger.warning(f"HISTORY_DEBUG ({actual_optimizer_class_name_display}, {task_id}): results_obj.history is NOT a list. Type: {type(results_obj.history)}. opt_history_processed will be empty.")
                             opt_history_processed = []
                     else:
-                        logger.warning(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): results_obj has NO 'history' attribute or it is None. opt_history_processed will be empty.")
+                        logger.warning(f"HISTORY_DEBUG ({actual_optimizer_class_name_display}, {task_id}): results_obj has NO 'history' attribute or it is None. opt_history_processed will be empty.")
                         opt_history_processed = []
 
-                elif optimizer_name == "FewShotBayesianOptimizer": # Existing block for FewShot, slightly adjusted
-                    print(f"PRINT_DEBUG_HISTORY ({optimizer_name}, {task_id}): Entered FewShotBayesianOptimizer history processing block.")
-                    logger.debug(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): Entered FewShotBayesianOptimizer history processing block.")
+                elif actual_optimizer_class_name_display == "FewShotBayesianOptimizer": # Existing block for FewShot, slightly adjusted
+                    print(f"PRINT_DEBUG_HISTORY ({actual_optimizer_class_name_display}, {task_id}): Entered FewShotBayesianOptimizer history processing block.")
+                    logger.debug(f"HISTORY_DEBUG ({actual_optimizer_class_name_display}, {task_id}): Entered FewShotBayesianOptimizer history processing block.")
                     if hasattr(results_obj, "history") and results_obj.history is not None:
                         if isinstance(results_obj.history, list):
                             if results_obj.history:
@@ -890,14 +894,14 @@ class BenchmarkRunner:
                     else: opt_history_processed = [] # Simplified for brevity, but should be the detailed logging
 
                 else: # Fallback for other or unknown optimizer types
-                    logger.debug(f"Processing history with fallback logic for {optimizer_name} task {task_id}")
+                    logger.debug(f"Processing history with fallback logic for {actual_optimizer_class_name_display} task {task_id}")
                     raw_history_fallback = []
                     if hasattr(results_obj, "history") and results_obj.history and isinstance(results_obj.history, list):
                         raw_history_fallback = results_obj.history
                     elif isinstance(results_obj, dict) and "history" in results_obj and isinstance(results_obj["history"], list):
                         raw_history_fallback = results_obj["history"]
                     else:
-                        logger.warning(f"No 'history' list found in results_obj for fallback processing of {optimizer_name} task {task_id}")
+                        logger.warning(f"No 'history' list found in results_obj for fallback processing of {actual_optimizer_class_name_display} task {task_id}")
 
                     for i, hist_item_fallback in enumerate(raw_history_fallback):
                         global_iteration_count += 1
@@ -933,18 +937,18 @@ class BenchmarkRunner:
                         opt_history_processed.append(iter_detail)
             
             except Exception as e_hist_proc:
-                logger.error(f"[red]Error processing optimization history for task {task_id} (optimizer: {optimizer_name}): {e_hist_proc}[/red]")
+                logger.error(f"[red]Error processing optimization history for task {task_id} (optimizer: {actual_optimizer_class_name_display}): {e_hist_proc}[/red]")
                 logger.exception("Traceback for history processing error:")
 
             task_result["optimization_process"] = {
                 "timestamp_start": datetime.fromtimestamp(start_time_opt).isoformat(),
                 "timestamp_end": datetime.now().isoformat(),
                 "duration_seconds": opt_time,
-                "optimizer_type": optimizer_name,
+                "optimizer_type": actual_optimizer_class_name_display,
                 "num_trials_configured": getattr(optimizer, 'n_trials', getattr(optimizer, 'n_iterations', None)),
                 "num_samples_configured": getattr(optimizer, 'n_samples', None),
                 "best_score_achieved": getattr(results_obj, 'score', None), 
-                "final_prompt": results_obj.details.get("chat_messages") if optimizer_name == "FewShotBayesianOptimizer" and hasattr(results_obj, 'details') else getattr(results_obj, 'prompt', None), 
+                "final_prompt": results_obj.details.get("chat_messages") if actual_optimizer_class_name_display == "FewShotBayesianOptimizer" and hasattr(results_obj, 'details') else getattr(results_obj, 'prompt', None), 
                 "history": opt_history_processed,
                 "llm_calls_total_optimization": getattr(results_obj, 'llm_calls', None) # Extract llm_calls
             }
@@ -972,7 +976,7 @@ class BenchmarkRunner:
                 final_prompt_to_eval = None 
                 prompt_for_actual_eval = None
 
-                if optimizer_name == "MiproOptimizer":
+                if actual_optimizer_class_name_display == "MiproOptimizer":
                     try:
                         if hasattr(results_obj, 'details') and \
                            isinstance(results_obj.details, dict) and \
@@ -995,7 +999,7 @@ class BenchmarkRunner:
                         prompt_for_actual_eval = None 
                         final_prompt_to_eval = [{"role": "system", "content": "Error during Mipro final eval prompt setup."}]
 
-                elif optimizer_name == "FewShotBayesianOptimizer": 
+                elif actual_optimizer_class_name_display == "FewShotBayesianOptimizer": 
                     try:
                         details = getattr(results_obj, 'details', None)
                         if results_obj and details: 
@@ -1027,14 +1031,14 @@ class BenchmarkRunner:
                         prompt_for_actual_eval = string_prompt 
                         if isinstance(string_prompt, str):
                             final_prompt_to_eval = [{"role": "system", "content": string_prompt}]
-                            logger.info(f"Using string prompt (wrapped as system for logging) for final eval for {optimizer_name}.")
+                            logger.info(f"Using string prompt (wrapped as system for logging) for final eval for {actual_optimizer_class_name_display}.")
                         elif string_prompt is None: 
                             final_prompt_to_eval = [{"role": "system", "content": "Error: Prompt was None for final eval."}]
-                            logger.warning(f"MetaPrompt/Fallback: results_obj.prompt was None for {optimizer_name}. Setting prompt_for_actual_eval to None.")
+                            logger.warning(f"MetaPrompt/Fallback: results_obj.prompt was None for {actual_optimizer_class_name_display}. Setting prompt_for_actual_eval to None.")
                             prompt_for_actual_eval = None 
                         else: 
                             final_prompt_to_eval = string_prompt 
-                            logger.info(f"MetaPrompt/Fallback: results_obj.prompt is type {type(string_prompt)} for {optimizer_name}. Using as is for actual eval if not None.")
+                            logger.info(f"MetaPrompt/Fallback: results_obj.prompt is type {type(string_prompt)} for {actual_optimizer_class_name_display}. Using as is for actual eval if not None.")
                     except Exception as e_meta_setup:
                         logger.error(f"[red]ERROR during MetaPrompt/Fallback final eval prompt setup: {e_meta_setup}[/red]")
                         logger.exception("Traceback for MetaPrompt/Fallback final eval prompt setup error:")
@@ -1045,11 +1049,11 @@ class BenchmarkRunner:
                 if prompt_for_actual_eval is None:
                     logger.error("[red]No final prompt structure or program found for actual evaluation after setup. Skipping submission of final eval tasks.[/red]")
                     if not evaluation_errors: 
-                        evaluation_errors.append(f"{optimizer_name}: No valid prompt/program for final evaluation after setup attempts.")
+                        evaluation_errors.append(f"{actual_optimizer_class_name_display}: No valid prompt/program for final evaluation after setup attempts.")
                 else:
                     actual_prompt_for_submission = prompt_for_actual_eval 
                     current_prompt_for_anthropic_hack = prompt_for_actual_eval
-                    if optimizer_name == "MiproOptimizer": 
+                    if actual_optimizer_class_name_display == "MiproOptimizer": 
                         current_prompt_for_anthropic_hack = final_prompt_to_eval 
                     
                     if isinstance(current_prompt_for_anthropic_hack, list):
@@ -1059,16 +1063,16 @@ class BenchmarkRunner:
                         if model_is_anthropic and len(prompt_to_submit_anthropic_hacked) == 1 and prompt_to_submit_anthropic_hacked[0].get("role") == "system":
                             if prompt_for_actual_eval is current_prompt_for_anthropic_hack:
                                 actual_prompt_for_submission = prompt_to_submit_anthropic_hacked + [{"role": "user", "content": "(Proceed based on system instructions)"}]
-                            logger.warning(f"Applied Anthropic eval hack to final prompt for {optimizer_name}.")
+                            logger.warning(f"Applied Anthropic eval hack to final prompt for {actual_optimizer_class_name_display}.")
                         elif model_is_anthropic and len(prompt_to_submit_anthropic_hacked) > 1 and prompt_to_submit_anthropic_hacked[-1].get("role") == "assistant":
                             if prompt_for_actual_eval is current_prompt_for_anthropic_hack:
                                 actual_prompt_for_submission = prompt_to_submit_anthropic_hacked + [{"role": "user", "content": "(Proceed based on provided examples and system instructions)"}]
-                            logger.warning(f"Applied Anthropic eval hack (few-shot case) to final prompt for {optimizer_name}.")
+                            logger.warning(f"Applied Anthropic eval hack (few-shot case) to final prompt for {actual_optimizer_class_name_display}.")
                     
                     logger.debug(f"FINAL EVAL: Submitting tasks to executor. Prompt type for submission: {type(actual_prompt_for_submission)}")
                     
                     if not metrics: 
-                        logger.warning(f"FINAL EVAL ({optimizer_name}): Metrics list is empty. No final evaluation tasks to submit.")
+                        logger.warning(f"FINAL EVAL ({actual_optimizer_class_name_display}): Metrics list is empty. No final evaluation tasks to submit.")
                     else:
                         for metric_idx, metric_final_obj in enumerate(metrics):
                             metric_config_final_eval = None 
@@ -1131,19 +1135,19 @@ class BenchmarkRunner:
                                 logger.exception("Traceback for submission error (e_submit):") 
                                 evaluation_errors.append(submit_err_msg)
                     
-                logger.debug(f"FINAL EVAL ({optimizer_name}): All {len(future_to_metric_final)} final eval futures submitted. Now processing results.")
+                logger.debug(f"FINAL EVAL ({actual_optimizer_class_name_display}): All {len(future_to_metric_final)} final eval futures submitted. Now processing results.")
                 for future in as_completed(future_to_metric_final):
                     metric_obj_final = future_to_metric_final[future]
                     try:
                         final_scores[str(metric_obj_final)] = future.result()
                     except Exception as e_final_eval: 
                         final_scores[str(metric_obj_final)] = None
-                        logger.critical(f"CRITICAL_DEBUG: Exception during final_scores future.result() for {metric_obj_final} ({optimizer_name})")
+                        logger.critical(f"CRITICAL_DEBUG: Exception during final_scores future.result() for {metric_obj_final} ({actual_optimizer_class_name_display})")
                         logger.critical(f"  Exception type: {type(e_final_eval)}")
                         logger.critical(f"  Exception args: {e_final_eval.args}")
                         logger.critical(f"  Exception str: {str(e_final_eval)}")
                         tb_str_final_eval = traceback.format_exc()
-                        console.print(f"[bold red]RAW TRACEBACK from future.result() in final eval ({metric_obj_final} for {optimizer_name}):[/bold red]\n{tb_str_final_eval}")
+                        console.print(f"[bold red]RAW TRACEBACK from future.result() in final eval ({metric_obj_final} for {actual_optimizer_class_name_display}):[/bold red]\n{tb_str_final_eval}")
                         logger.exception("  Full Traceback for final eval future.result() error (logged):") 
 
                         exc_type_name = type(e_final_eval).__name__
@@ -1155,7 +1159,7 @@ class BenchmarkRunner:
                         if not exc_str or exc_str.strip().lower() == "none": 
                             err_msg_detail = f"Exception of type {exc_type_name} occurred"
                             if e_final_eval.args: err_msg_detail += f" with args: {exc_args_str}"
-                        err_msg = f"Final eval err ({metric_obj_final} for {optimizer_name}): {err_msg_detail}"
+                        err_msg = f"Final eval err ({metric_obj_final} for {actual_optimizer_class_name_display}): {err_msg_detail}"
                         logger.error(f"[red]{err_msg}[/red]")
                         evaluation_errors.append(err_msg)
 
@@ -1198,7 +1202,7 @@ class BenchmarkRunner:
             return task_result
         
         except Exception as e:
-            logger.error(f"[red]Unexpected error in run_opt for {dataset_name}/{optimizer_name} (task: {task_id}): {e}[/red]")
+            logger.error(f"[red]Unexpected error in run_opt for {dataset_name}/{actual_optimizer_class_name_display} (task: {task_id}): {e}[/red]")
             logger.exception("Traceback:")
             task_result["error_message"] = f"Outer exception in run_optimization: {str(e)} - Traceback: {traceback.format_exc()}"
             task_result["status"] = "failure"
@@ -1248,7 +1252,7 @@ class BenchmarkRunner:
             pass # Initializing successful_tasks and failed_tasks to 0 is correct for a new run/retry session.
 
         completed_results_display = []
-        active_tasks_status = {} # {future: {"desc": str, "optimizer": str, "model": str}}
+        active_tasks_status = {} # {future: {"desc": str, "optimizer_key": str, "model": str}}
 
         # Setup Live display components
         progress = Progress(*PROGRESS_COLUMNS, console=console, transient=False, expand=True)
@@ -1328,18 +1332,19 @@ class BenchmarkRunner:
             active_list = []
             for status_info in active_tasks_status.values():
                 desc = status_info.get("desc", "Unknown Task") 
-                opt = status_info.get("optimizer", "?") 
+                opt_key = status_info.get("optimizer_key", "?") # Use optimizer_key
                 model_original = status_info.get("model", "?") # Use the original model name stored in status_info["model"]
                 # Extract dataset from desc (first part before '/')
                 # TODO: Move this to a function
                 try:
                     dataset_part = desc.split('/')[0].replace("Running: ", "").strip()
+                    # Use opt_key (config name) in display
                     display_text = f" • {dataset_part} + {model_original}" 
                 except Exception:
                     display_text = f" • {desc}" # Fallback to full desc
-                opt_short = opt.replace("Optimizer", "") # Less aggressive shortening
+                
                 active_list.append(
-                     Text.assemble((display_text, "yellow"), (f" [{opt_short}]", "dim"))
+                     Text.assemble((display_text, "yellow"), (f" [{opt_key}]", "dim")) # Use opt_key
                  )
                 
             if not active_list:
@@ -1457,13 +1462,13 @@ class BenchmarkRunner:
                         "dataset_key": dataset_key, 
                         "optimizer_key": optimizer_key, 
                         "desc": task_desc_short,
-                        "optimizer_name": type(optimizer_instance).__name__,
+                        "optimizer_name": type(optimizer_instance).__name__, # Keep actual class name if needed elsewhere
                         "model_name": model_name,
                         "sanitized_model_name": sanitized_model_name_for_ids
                     }
                     active_tasks_status[current_future] = {
                         "desc": f"Running: {task_desc_short}",
-                        "optimizer": type(optimizer_instance).__name__,
+                        "optimizer_key": optimizer_key, # Store optimizer_key (config name)
                         "model": model_name
                     }
                     summary_line.plain = f"Run: {self.current_run_id} | Tasks: {successful_tasks+failed_tasks}/{num_tasks_for_progress_bar} | Success: {successful_tasks} | Failed: {failed_tasks} | Active: {len(active_tasks_status)}"
@@ -1596,15 +1601,15 @@ class BenchmarkRunner:
                             final_eval_data = result_data.get("final_evaluation")
                             final_eval_metrics = final_eval_data.get("metrics", []) if final_eval_data is not None else []
                             
-                            initial_scores_panel = {m.get("metric_name", "unk"): m.get("score") for m in initial_metrics if isinstance(m, dict)} 
-                            final_scores_panel = {f"Final {m.get('metric_name', 'unk')}": m.get("score") for m in final_eval_metrics if isinstance(m, dict)}
-                            metrics_to_display = {**initial_scores_panel, **final_scores_panel}
+                            initial_scores_panel_data = {m.get("metric_name", "unk"): m.get("score") for m in initial_metrics if isinstance(m, dict)} 
+                            final_scores_panel_data = {f"Final {m.get('metric_name', 'unk')}": m.get("score") for m in final_eval_metrics if isinstance(m, dict)}
+                            metrics_to_display = {**initial_scores_panel_data, **final_scores_panel_data}
                             time_taken_display = result_data.get("duration_seconds_task", 0)
                             # panel_creation_data is already result_data
 
                         result_panel = create_result_panel(
                             display_dataset_name,
-                            display_optimizer_name,
+                            o_key, # Pass the optimizer_key (config name)
                             # Pass the full result_data which create_result_panel will parse
                             # This replaces metrics, time_taken, optimization_details, run_status as separate args
                             task_detail_data=panel_creation_data 
@@ -1783,7 +1788,7 @@ class BenchmarkRunner:
 # TODO: Move this to a separate benchmark_utils.py file
 def create_result_panel(
         dataset_name: str,
-        optimizer_name: str,
+        optimizer_config_key: str, # Changed parameter name for clarity
         task_detail_data: Dict[str, Any]
     ) -> Panel:
     """Create a consistent panel for displaying optimization results, including the final prompt."""
@@ -1810,7 +1815,7 @@ def create_result_panel(
     table.add_column()
 
     table.add_row("Dataset:", f"[bold]{dataset_name}[/bold]")
-    table.add_row("Optimizer:", f"[bold]{optimizer_name}[/bold]")
+    table.add_row("Optimizer:", f"[bold]{optimizer_config_key}[/bold]")
     table.add_row("Time Taken:", f"{time_taken:.2f}s" if isinstance(time_taken, (float, int)) else "[dim]N/A[/dim]")
 
     temp_val_panel = config_data.get("optimizer_params", {}).get("temperature")
@@ -1981,7 +1986,7 @@ def create_result_panel(
         else:
              status_text_styled = Text(f"{escaped_status_text} ({run_status.lower()})", style=color_fallback_str)
 
-    panel_title_text = Text.assemble(status_text_styled, f" {optimizer_name} on {dataset_name}")
+    panel_title_text = Text.assemble(status_text_styled, f" {optimizer_config_key} on {dataset_name}") # Use optimizer_config_key
     return Panel(main_content_group, title=panel_title_text, border_style=border_style_obj, padding=(1, 2), expand=True)
 
 # TODO: Move this to a separate benchmark_utils.py file
