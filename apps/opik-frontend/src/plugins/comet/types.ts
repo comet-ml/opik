@@ -62,3 +62,9 @@ export interface Workspace {
   collaborationFeaturesDisabled: boolean;
   default: boolean;
 }
+
+export interface OrganizationMember {
+  userName: string;
+  email: string;
+  role: ORGANIZATION_ROLE_TYPE;
+}
