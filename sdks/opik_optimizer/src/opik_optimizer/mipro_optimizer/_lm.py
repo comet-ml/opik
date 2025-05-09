@@ -22,11 +22,11 @@ from dspy.dsp.utils.settings import settings
 from dspy.utils.callback import BaseCallback, with_callbacks
 from dspy.clients.base_lm import BaseLM
 
-from .._throttle import RateLimiter, rate_limited
+from .._throttle import RateLimiter, rate_limited, get_rate_limiter_for_current_opik_installation
 
 logger = logging.getLogger(__name__)
 # Limit how fast an LLM can be called:
-limiter = RateLimiter(max_calls_per_second=15)
+limiter = get_rate_limiter_for_current_opik_installation()
 
 class LM(BaseLM):
     """
