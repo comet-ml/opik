@@ -402,6 +402,11 @@ class MiproOptimizer(BaseOptimizer):
         )
 
         mipro_history_processed = []
+        # self.num_candidates is set in prepare_optimize_prompt, defaults to 10
+        # If self.num_candidates is 0 or None, this logic might break or be odd.
+        # Add a safeguard for num_candidates_per_round if self.num_candidates is not usable.
+        num_candidates_per_round = self.num_candidates if hasattr(self, 'num_candidates') and self.num_candidates and self.num_candidates > 0 else 1
+
         for i, candidate_data in enumerate(self.results.candidate_programs):
             program_module = candidate_data.get("program")
             instruction = "N/A"
@@ -412,22 +417,42 @@ class MiproOptimizer(BaseOptimizer):
             elif hasattr(program_module, 'predictor') and hasattr(program_module.predictor, 'signature') and hasattr(program_module.predictor.signature, 'instructions'):
                 instruction = program_module.predictor.signature.instructions
 
+            # Remove R and C calculation for Mipro as its history is flat
+            # current_round_number = (i // num_candidates_per_round) + 1
+            # current_candidate_in_round = (i % num_candidates_per_round) + 1
+
             iter_detail = {
                 "iteration": i + 1,
+                # "round_number": current_round_number, # Remove round_number
+                # "candidate_in_round": current_candidate_in_round, # Remove candidate_in_round
                 "timestamp": datetime.now().isoformat(),
                 "prompt_candidate": instruction,
                 "parameters_used": {
                     "program_summary": str(program_module)[:500]
                 },
-                "scores": [{
-                    "metric_name": self.opik_metric.name if hasattr(self, 'opik_metric') and self.opik_metric else "unknown_metric",
-                    "score": candidate_data.get("score"),
-                    "opik_evaluation_id": None # TODO: add opik_evaluation_id
-                }],
+                "scores": [], # Initialize scores list
                 "tokens_used": None, # TODO: add tokens_used
                 "cost": None, # TODO: add cost
                 "duration_seconds": None, # TODO: add duration_seconds
             }
+
+            current_score = candidate_data.get("score")
+            metric_name_for_history = self.opik_metric.name if hasattr(self, 'opik_metric') and self.opik_metric else "unknown_metric"
+
+            # Unscale if it's a known 0-1 metric that MIPRO might scale to 0-100
+            # For now, specifically targeting Levenshtein-like metrics
+            if isinstance(current_score, (float, int)) and \
+               ("levenshtein" in metric_name_for_history.lower() or "similarity" in metric_name_for_history.lower()):
+                # Assuming scores like 32.4 are 0-1 scores scaled by 100
+                if abs(current_score) > 1.0: # A simple check to see if it looks scaled
+                    logger.debug(f"Mipro history: Unscaling score {current_score} for metric {metric_name_for_history} by dividing by 100.")
+                    current_score /= 100.0
+            
+            iter_detail["scores"].append({
+                "metric_name": metric_name_for_history,
+                "score": current_score,
+                "opik_evaluation_id": None # TODO: add opik_evaluation_id
+            })
             mipro_history_processed.append(iter_detail)
 
         if not self.best_programs:
@@ -445,12 +470,22 @@ class MiproOptimizer(BaseOptimizer):
         self.module = self.get_best().details["program"]
         best_program_details = self.get_best()
         
+        # Unscale the main score if necessary, similar to history scores
+        final_best_score = best_program_details.score
+        final_metric_name = best_program_details.metric_name
+        if isinstance(final_best_score, (float, int)) and \
+           final_metric_name and \
+           ("levenshtein" in final_metric_name.lower() or "similarity" in final_metric_name.lower()):
+            if abs(final_best_score) > 1.0: # A simple check to see if it looks scaled
+                logger.debug(f"Mipro main result: Unscaling score {final_best_score} for metric {final_metric_name} by dividing by 100.")
+                final_best_score /= 100.0
+
         return OptimizationResult(
             optimizer="MiproOptimizer",
             prompt=best_program_details.prompt,
             tool_prompts=best_program_details.tool_prompts,
-            score=best_program_details.score,
-            metric_name=best_program_details.metric_name,
+            score=final_best_score, # Use the potentially unscaled score
+            metric_name=final_metric_name,
             demonstrations=best_program_details.demonstrations,
             details=best_program_details.details,
             history=mipro_history_processed,
