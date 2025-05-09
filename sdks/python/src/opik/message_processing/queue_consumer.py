@@ -1,3 +1,4 @@
+import logging
 import time
 import threading
 from typing import Optional
@@ -5,6 +6,10 @@ from queue import Empty
 
 from . import message_processors, message_queue, messages
 from .. import exceptions
+
+
+LOGGER = logging.getLogger(__name__)
+
 
 SLEEP_BETWEEN_LOOP_ITERATIONS = 0.1
 
@@ -59,8 +64,10 @@ class QueueConsumer(threading.Thread):
                 message.delivery_time = self.next_message_time
                 # put back to keep an order in the queue
                 self._message_queue.put_back(message)
-        except Exception:
-            # TODO
+        except Exception as ex:
+            LOGGER.error(
+                "Failed to process message, unexpected error: %s", ex, exc_info=ex
+            )
             pass
 
     def close(self) -> None:

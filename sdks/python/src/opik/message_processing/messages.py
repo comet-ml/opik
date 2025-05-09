@@ -7,7 +7,7 @@ from ..types import SpanType, ErrorInfoDict, LLMProvider, AttachmentEntityType
 
 @dataclasses.dataclass
 class BaseMessage:
-    delivery_time: float = field(init=False, compare=False)
+    delivery_time: float = field(init=False, default=0.0)
 
     def as_payload_dict(self) -> Dict[str, Any]:
         # we are not using dataclasses.as_dict() here
@@ -116,7 +116,7 @@ class UpdateSpanMessage(BaseMessage):
 @dataclasses.dataclass
 class FeedbackScoreMessage(BaseMessage):
     """
-    There is no handler for that in message processor, it exists
+    There is no handler for that in the message processor, it exists
     only as an item of BatchMessage
     """
 

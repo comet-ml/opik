@@ -1,5 +1,4 @@
 import collections
-import time
 from queue import Empty
 import threading
 from typing import TypeVar, Optional, Generic
@@ -46,12 +45,7 @@ class MessageQueue(Generic[T]):
             if timeout is None or timeout < 0:
                 raise ValueError("'timeout' must be a non-negative number")
 
-            endtime = time.monotonic() + timeout
-            while len(self._deque) == 0:
-                remaining = endtime - time.monotonic()
-                if remaining <= 0.0:
-                    raise Empty
-                self._not_empty.wait(remaining)
+            self._not_empty.wait_for(lambda: len(self._deque) > 0, timeout=timeout)
 
             try:
                 return self._deque.pop()
