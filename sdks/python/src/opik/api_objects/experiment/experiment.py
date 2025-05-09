@@ -85,7 +85,7 @@ class Experiment:
 
     def get_items(
         self,
-        max_results: int = 1000,
+        max_results: Optional[int] = None,
         truncate: bool = True,
     ) -> List[experiment_item.ExperimentItemContent]:
         """
@@ -98,7 +98,7 @@ class Experiment:
         from the backend. If truncation is enabled, the backend may return truncated details for each item.
 
         Args:
-            max_results: Maximum number of experiment items to retrieve. Defaults to 1000.
+            max_results: Maximum number of experiment items to retrieve. Defaults to None (unlimited).
             truncate: Whether to truncate the items returned by the backend. Defaults to True.
 
         """
@@ -107,9 +107,13 @@ class Experiment:
         # this is the constant for the maximum number of objects sent from the backend side
         max_endpoint_batch_size = 2_000
 
-        while len(result) < max_results:
-            items_amount_left = max_results - len(result)
-            current_batch_size = min(items_amount_left, max_endpoint_batch_size)
+        while True:
+            if max_results is None:
+                current_batch_size = max_endpoint_batch_size
+            else:
+                current_batch_size = min(
+                    max_results - len(result), max_endpoint_batch_size
+                )
 
             items_stream = self._rest_client.experiments.stream_experiment_items(
                 experiment_name=self.name,
