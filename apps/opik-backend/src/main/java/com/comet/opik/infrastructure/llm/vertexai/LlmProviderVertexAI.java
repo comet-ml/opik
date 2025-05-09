@@ -1,7 +1,8 @@
-package com.comet.opik.infrastructure.llm.gemini;
+package com.comet.opik.infrastructure.llm.vertexai;
 
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.llm.gemini.GeminiErrorObject;
 import com.comet.opik.utils.JsonUtils;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
@@ -15,44 +16,37 @@ import java.io.UncheckedIOException;
 import java.util.Optional;
 import java.util.function.Consumer;
 
-@Slf4j
 @RequiredArgsConstructor
-public class LlmProviderGemini implements LlmProviderService {
-    private final @NonNull GeminiClientGenerator llmProviderClientGenerator;
+@Slf4j
+public class LlmProviderVertexAI implements LlmProviderService {
+
+    private final @NonNull VertexAIClientGenerator llmProviderClientGenerator;
     private final @NonNull String apiKey;
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        var mapper = LlmProviderGeminiMapper.INSTANCE;
         var response = llmProviderClientGenerator.generate(apiKey, request)
-                .generate(request.messages().stream().map(mapper::toChatMessage).toList());
+                .generate(request.messages().stream().map(VertexAIMapper.INSTANCE::toChatMessage).toList());
 
-        return mapper.toChatCompletionResponse(request, response);
+        return VertexAIMapper.INSTANCE.toChatCompletionResponse(request, response);
     }
 
     @Override
     public void generateStream(@NonNull ChatCompletionRequest request, @NonNull String workspaceId,
             @NonNull Consumer<ChatCompletionResponse> handleMessage, @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-        Schedulers.boundedElastic().schedule(() -> llmProviderClientGenerator.newGeminiStreamingClient(apiKey, request)
-                .generate(request.messages().stream().map(LlmProviderGeminiMapper.INSTANCE::toChatMessage).toList(),
-                        new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model())));
+
+        Schedulers.boundedElastic()
+                .schedule(() -> llmProviderClientGenerator.newVertexAIStreamingClient(apiKey, request)
+                        .generate(request.messages().stream().map(VertexAIMapper.INSTANCE::toChatMessage).toList(),
+                                new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model())));
     }
 
     @Override
     public void validateRequest(@NonNull ChatCompletionRequest request) {
+
     }
 
-    /// gemini throws RuntimeExceptions with message structure as follows:
-    /// ```
-    /// java.lang.RuntimeException: HTTP error (429): {
-    ///   "error": {
-    ///     "code": 429,
-    ///     "message": "Resource has been exhausted (e.g. check quota).",
-    ///     "status": "RESOURCE_EXHAUSTED"
-    ///   }
-    /// }
-    ///  ```
     @Override
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
         String message = throwable.getMessage();
