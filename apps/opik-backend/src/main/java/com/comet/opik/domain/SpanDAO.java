@@ -819,9 +819,9 @@ class SpanDAO {
                                  AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                              (dateDiff('microsecond', start_time, end_time) / 1000.0),
                              NULL) AS duration,
-                     notEmpty(input) as input_count,
-                     notEmpty(output) as output_count,
-                     notEmpty(metadata) as metadata_count,
+                     if(input_length > 0, 1, 0) as input_count,
+                     if(output_length > 0, 1, 0) as output_count,
+                     if(metadata_length > 0, 1, 0) as metadata_count,
                      length(tags) as tags_count,
                      usage,
                      total_estimated_cost
