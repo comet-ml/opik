@@ -20,7 +20,23 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         event_starts_to_ignore: Optional[List[llama_index_schema.CBEventType]] = None,
         event_ends_to_ignore: Optional[List[llama_index_schema.CBEventType]] = None,
         project_name: Optional[str] = None,
+        skip_index_construction_trace: bool = False,
     ):
+        """
+        Initialize the instance with optional customization to define event filters and project-
+        specific data handling. The constructor sets up the necessary client and data mappings
+        for operational processing.
+
+        Parameters:
+            event_starts_to_ignore: Optional list of event start types to be ignored during
+                processing.
+            event_ends_to_ignore: Optional list of event end types to be ignored during
+                processing.
+            project_name: Optional string representing the project name to establish context in
+                client operations.
+            skip_index_construction_trace: A boolean value determining whether to skip creation of trace/spans of index
+                construction.
+        """
         event_starts_to_ignore = (
             event_starts_to_ignore if event_starts_to_ignore else []
         )
@@ -30,6 +46,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             event_ends_to_ignore=event_ends_to_ignore,
         )
 
+        self._skip_index_construction_trace = skip_index_construction_trace
         self._project_name = project_name
         self._opik_client = opik_client.Opik(
             _use_batching=True,
@@ -79,7 +96,10 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         last_event_output = self._map_event_id_to_output.get(last_event, None)
 
         # And then end the trace with the optional output
-        if self._opik_trace_data:
+        if self._opik_trace_data and (
+            self._skip_index_construction_trace is False
+            or self._opik_trace_data.name != "index_construction"
+        ):
             self._opik_trace_data.init_end_time().update(output=last_event_output)
             self._opik_client.trace(**self._opik_trace_data.__dict__)
             self._opik_trace_data = None
@@ -105,6 +125,12 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         # Unclear what the best behavior is here, so for now we'll just create a new trace when
         if self._opik_trace_data is None:
             self._opik_trace_data = self._create_trace_data(trace_name=parent_id)
+
+        if (
+            self._skip_index_construction_trace
+            and self._opik_trace_data.name == "index_construction"
+        ):
+            return event_id
 
         # Get parent span Id if it exists
         if parent_id and parent_id in self._map_event_id_to_span_data:
