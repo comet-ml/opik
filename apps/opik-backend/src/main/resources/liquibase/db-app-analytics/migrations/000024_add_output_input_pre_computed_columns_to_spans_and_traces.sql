@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiagohora:add_output_input_pre_computed_columns_to_spans_and_traces
+--changeset thiagohora:000024_add_output_input_pre_computed_columns_to_spans_and_traces
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}'
     ADD COLUMN IF NOT EXISTS has_input BOOL MATERIALIZED notEmpty(input),
