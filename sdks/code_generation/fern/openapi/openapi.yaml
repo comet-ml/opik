@@ -71,14 +71,6 @@ tags:
 - name: Redirect
   description: Redirects for SDK generated links
 paths:
-  /v1/internal/test:
-    get:
-      operationId: get
-      responses:
-        default:
-          description: default response
-          content:
-            application/json: {}
   /v1/internal/usage/bi-datasets:
     get:
       tags:
@@ -3667,15 +3659,15 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -3820,15 +3812,15 @@ components:
         sampling_rate:
           type: number
           format: float
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -3971,15 +3963,15 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -4125,15 +4117,15 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -4197,15 +4189,15 @@ components:
         project_id:
           type: string
           format: uuid
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:

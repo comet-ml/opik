@@ -116,27 +116,6 @@ class OpikApi:
         """
         return self._raw_client
 
-    def get(self, *, request_options: typing.Optional[RequestOptions] = None) -> typing.Optional[typing.Any]:
-        """
-        Parameters
-        ----------
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        typing.Optional[typing.Any]
-            default response
-
-        Examples
-        --------
-        from Opik import OpikApi
-        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.get()
-        """
-        _response = self._raw_client.get(request_options=request_options)
-        return _response.data
-
     def is_alive(self, *, request_options: typing.Optional[RequestOptions] = None) -> typing.Optional[typing.Any]:
         """
         Parameters
@@ -268,30 +247,6 @@ class AsyncOpikApi:
         AsyncRawOpikApi
         """
         return self._raw_client
-
-    async def get(self, *, request_options: typing.Optional[RequestOptions] = None) -> typing.Optional[typing.Any]:
-        """
-        Parameters
-        ----------
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        typing.Optional[typing.Any]
-            default response
-
-        Examples
-        --------
-        from Opik import AsyncOpikApi
-        import asyncio
-        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        async def main() -> None:
-            await client.get()
-        asyncio.run(main())
-        """
-        _response = await self._raw_client.get(request_options=request_options)
-        return _response.data
 
     async def is_alive(self, *, request_options: typing.Optional[RequestOptions] = None) -> typing.Optional[typing.Any]:
         """
