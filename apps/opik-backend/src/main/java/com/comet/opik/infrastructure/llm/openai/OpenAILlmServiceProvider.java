@@ -4,9 +4,11 @@ import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import jakarta.inject.Named;
+import lombok.NonNull;
 
 class OpenAILlmServiceProvider implements LlmServiceProvider {
 
@@ -19,13 +21,13 @@ class OpenAILlmServiceProvider implements LlmServiceProvider {
     }
 
     @Override
-    public LlmProviderService getService(String apiKey) {
+    public LlmProviderService getService(@NonNull LlmProviderClientApiConfig apiKey) {
         return new LlmProviderOpenAi(clientGenerator.newOpenAiClient(apiKey));
     }
 
     @Override
-    public ChatLanguageModel getLanguageModel(String apiKey,
+    public ChatLanguageModel getLanguageModel(@NonNull LlmProviderClientApiConfig config,
             AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters) {
-        return clientGenerator.newOpenAiChatLanguageModel(apiKey, modelParameters);
+        return clientGenerator.newOpenAiChatLanguageModel(config, modelParameters);
     }
 }
