@@ -1,8 +1,8 @@
 import random
-from typing import Any, Dict, List, Tuple, Union, Optional, Callable, Literal
-import openai
+from typing import Any, Dict, List, Tuple, Union, Optional, Literal
 import opik
 import optuna
+import optuna.samplers
 import logging
 import json
 
@@ -21,7 +21,7 @@ import litellm
 
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
-limiter = RateLimiter(max_calls_per_second=15)
+limiter = RateLimiter(max_calls_per_second=10)
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self.n_threads = n_threads
         self.n_initial_prompts = n_initial_prompts
         self.n_iterations = n_iterations
-
         self._opik_client = opik.Opik()
         logger.debug(f"Initialized FewShotBayesianOptimizer with model: {model}")
 
@@ -240,7 +239,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         except Exception as e:
             logger.warning(f"Could not configure Optuna logging within optimizer: {e}")
 
-        study = optuna.create_study(direction="maximize")
+        sampler = optuna.samplers.TPESampler(seed=self.seed)
+        study = optuna.create_study(direction="maximize", sampler=sampler)
         study.optimize(optimization_objective, n_trials=n_trials)
         logger.info("Optuna study finished.")
 

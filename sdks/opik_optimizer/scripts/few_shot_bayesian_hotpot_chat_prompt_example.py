@@ -22,7 +22,7 @@ optimizer = FewShotBayesianOptimizer(
     project_name=project_name,
     min_examples=3,
     max_examples=8,
-    n_threads=16,
+    n_threads=32,
     seed=42,
 )
 
