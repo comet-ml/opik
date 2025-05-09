@@ -1419,72 +1419,47 @@ class BenchmarkRunner:
                         display_optimizer_name = o_key
                         metrics_to_display = {}
                         time_taken_display = 0
-                        opt_details_summary = {}
+                        # opt_details_summary is now the full result_data for the task
+                        # so create_result_panel can access everything it needs.
+                        panel_creation_data = result_data 
 
-                        # Check if result_data exists before accessing it
-                        if result_data: # Check if the future completed and returned data
-                            # print("\n=== DEBUG: Result Panel Creation ===")
-                            # print(f"Result Data Keys: {list(result_data.keys())}")
-                            # Safely get status, default to failure if key missing
-                            task_status = result_data.get("status", "failure") 
-                            # print(f"Task Status: {task_status}")
+                        # No specific opt_details_summary dict needed if passing full result_data
+                        # However, create_result_panel expects an 'optimization_details' like structure
+                        # Let's ensure what we pass to create_result_panel is consistent or adapt create_result_panel
+                        # For now, we pass the whole result_data, create_result_panel will need to be adapted.
+
+                        if not result_data: # If future errored and result_data is None
+                            panel_creation_data = {
+                                "config": {"dataset_config_name": d_key, "optimizer_config_name": o_key},
+                                "duration_seconds_task": 0,
+                                "optimization_process": {"error": f"Task failed during execution (check logs for {d_key}/{o_key})"},
+                                "status": run_status_flag # which is failure here
+                            }
+                            # Ensure metrics_to_display, time_taken_display are appropriate for failure
+                            metrics_to_display = {}
+                            time_taken_display = 0
+                        else:
+                            # This block is for successful task completion where result_data is present
+                            initial_eval_data = result_data.get("initial_evaluation") 
+                            initial_metrics = initial_eval_data.get("metrics", []) if initial_eval_data is not None else []
+                            final_eval_data = result_data.get("final_evaluation")
+                            final_eval_metrics = final_eval_data.get("metrics", []) if final_eval_data is not None else []
                             
-                            if task_status == "success":
-                                # Populate for success case (safe access needed here too)
-                                initial_eval_data = result_data.get("initial_evaluation") 
-                                initial_metrics = initial_eval_data.get("metrics", []) if initial_eval_data is not None else []
-                                final_eval_data = result_data.get("final_evaluation")
-                                final_eval_metrics = final_eval_data.get("metrics", []) if final_eval_data is not None else []
-                                
-                                # Get raw optimizer result data
-                                raw_result = result_data.get("raw_optimizer_result", {})
-                                initial_scores_panel = {m.get("metric_name", "unk"): m.get("score") for m in initial_metrics if isinstance(m, dict)} 
-                                final_scores_panel = {f"Final {m.get('metric_name', 'unk')}": m.get("score") for m in final_eval_metrics if isinstance(m, dict)}
-                                metrics_to_display = {**initial_scores_panel, **final_scores_panel}
-                                # Set time_taken_display for success case
-                                time_taken_display = result_data.get("duration_seconds_task", 0)
-                                opt_proc = result_data.get("optimization_process", {})
-                                temp_val_panel = None
-                                
-                                panel_task_config_data = result_data.get("config", {})
+                            initial_scores_panel = {m.get("metric_name", "unk"): m.get("score") for m in initial_metrics if isinstance(m, dict)} 
+                            final_scores_panel = {f"Final {m.get('metric_name', 'unk')}": m.get("score") for m in final_eval_metrics if isinstance(m, dict)}
+                            metrics_to_display = {**initial_scores_panel, **final_scores_panel}
+                            time_taken_display = result_data.get("duration_seconds_task", 0)
+                            # panel_creation_data is already result_data
 
-                                if panel_task_config_data.get("optimizer_class") == "FewShotBayesianOptimizer":
-                                    raw_opt_res = result_data.get("raw_optimizer_result", {})
-                                    temp_val_panel = raw_opt_res.get("details", {}).get("temperature")
-                                else:
-                                    exp_params = panel_task_config_data.get("parameters", {})
-                                    if not exp_params: 
-                                         exp_params = panel_task_config_data.get("optimizer_params", {})
-                                    temp_val_panel = exp_params.get("temperature")
-                                
-                                # Fetch llm_calls_total_optimization from opt_proc for the panel
-                                llm_calls_for_panel = opt_proc.get("llm_calls_total_optimization")
-
-                                opt_details_summary = {
-                                    "num_iterations": len(opt_proc.get("history", [])),
-                                    "best_score": opt_proc.get("best_score_achieved"),
-                                    "optimization_history": opt_proc.get("history", []),
-                                    "temperature": temp_val_panel,
-                                    "llm_calls_total_optimization": llm_calls_for_panel # Add it here
-                                }
-                        
-                        else: # result_data is None (exception occurred during future processing)
-                             opt_details_summary = {"error": f"Task failed during execution (check logs for {d_key}/{o_key})"}
-                             run_status_flag = "failure" # Ensure panel shows failure
-
-                        # Call create_result_panel with potentially empty/error data
                         result_panel = create_result_panel(
                             display_dataset_name,
                             display_optimizer_name,
-                            metrics_to_display, # Will be {} if failed or no data
-                            time_taken_display, # Will be 0 if no data
-                            opt_details_summary, # Will contain error if failed or no data
-                            run_status_flag # Should correctly be failure if needed
+                            # Pass the full result_data which create_result_panel will parse
+                            # This replaces metrics, time_taken, optimization_details, run_status as separate args
+                            task_detail_data=panel_creation_data 
                         )
-                        # Append panel, handle potential None result_data if needed later (e.g. for final prompt)
-                        completed_results_display.append((result_panel, result_data)) 
+                        completed_results_display.append(result_panel) 
                         
-                        # Update progress etc.
                         progress.update(overall_progress_task, advance=1)
                         # Use num_tasks_for_progress_bar for the total in the summary line
                         summary_line.plain = f"Run: {self.current_run_id} | Tasks: {successful_tasks+failed_tasks}/{num_tasks_for_progress_bar} | Success: {successful_tasks} | Failed: {failed_tasks} | Active: {len(active_tasks_status)}"
@@ -1658,77 +1633,80 @@ class BenchmarkRunner:
         # but if called directly, it should behave like print_benchmark_footer.
         print_benchmark_footer(self.results)
 
-def create_result_panel(dataset_name: str, optimizer_name: str, metrics: dict, time_taken: float, optimization_details: dict, run_status: str) -> Panel:
-    """Create a consistent panel for displaying optimization results."""
+def create_result_panel(dataset_name: str, optimizer_name: str, task_detail_data: Dict[str, Any]) -> Panel:
+    """Create a consistent panel for displaying optimization results, including the final prompt."""
+    
+    # Extract details from task_detail_data
+    metrics_dict = {}
+    time_taken = task_detail_data.get("duration_seconds_task", 0.0)
+    optimization_details = task_detail_data.get("optimization_process", {})
+    run_status = task_detail_data.get("status", "failure")
+    config_data = task_detail_data.get("config", {})
+
+    # Populate metrics_dict for scores display (similar to how it was done before)
+    initial_eval_data = task_detail_data.get("initial_evaluation") 
+    initial_metrics = initial_eval_data.get("metrics", []) if initial_eval_data is not None else []
+    final_eval_data = task_detail_data.get("final_evaluation")
+    final_eval_metrics = final_eval_data.get("metrics", []) if final_eval_data is not None else []
+    
+    initial_scores_panel_data = {m.get("metric_name", "unk"): m.get("score") for m in initial_metrics if isinstance(m, dict)} 
+    final_scores_panel_data = {f"Final {m.get('metric_name', 'unk')}": m.get("score") for m in final_eval_metrics if isinstance(m, dict)}
+    metrics_dict = {**initial_scores_panel_data, **final_scores_panel_data}
+
     table = Table.grid(padding=(0, 2), expand=True)
-    table.add_column(style="dim", width=18)
+    table.add_column(style="dim", width=20) # Increased width slightly for longer labels
     table.add_column()
 
     table.add_row("Dataset:", f"[bold]{dataset_name}[/bold]")
     table.add_row("Optimizer:", f"[bold]{optimizer_name}[/bold]")
-    # Ensure time_taken is displayed correctly
-    table.add_row("Time Taken:", f"{time_taken:.2f}s" if isinstance(time_taken, (int, float)) else "[dim]N/A[/dim]")
+    table.add_row("Time Taken:", f"{time_taken:.2f}s" if isinstance(time_taken, (float, int)) else "[dim]N/A[/dim]")
 
-    # Add Temperature display
-    temp_val_panel = optimization_details.get("temperature") # Fetch temperature
-    temp_str_panel = f"{temp_val_panel:.1f}" if isinstance(temp_val_panel, (int, float)) else "[dim]N/A[/dim]"
+    temp_val_panel = config_data.get("optimizer_params", {}).get("temperature") # Get temp from config
+    if temp_val_panel is None: # Fallback for FewShot from raw_optimizer_result if needed
+        if config_data.get("optimizer_class") == "FewShotBayesianOptimizer":
+            raw_opt_res = task_detail_data.get("raw_optimizer_result", {})
+            temp_val_panel = raw_opt_res.get("details", {}).get("temperature")
+    temp_str_panel = f"{temp_val_panel:.1f}" if isinstance(temp_val_panel, (float, int)) else "[dim]N/A[/dim]"
     table.add_row("Temperature (🔥):", temp_str_panel)
 
-    # Add LLM Calls display to panel
     llm_calls_count = optimization_details.get("llm_calls_total_optimization")
-    llm_calls_str = str(llm_calls_count) if llm_calls_count is not None else "[dim]N/A[/dim]"
+    llm_calls_str = f"[bold cyan]{llm_calls_count}[/bold cyan]" if isinstance(llm_calls_count, int) else "[dim]N/A[/dim]"
     table.add_row("LLM Calls (Opt):", llm_calls_str)
 
-    # --- Scores --- 
     score_rows = []
     initial_scores_grp = []
     final_scores_grp = []
     percent_changes_grp = []
-
     initial_score_values = {}
-    final_score_values = {}
-    metric_names_ordered = []
 
-    # Function to clean metric name representation
-    def clean_metric_name(metric_key_str: str) -> str:
-        # Extracts 'LevenshteinRatio' from '<...LevenshteinRatio object at ...>'
-        # Or handles already clean names
-        if '<' in metric_key_str and 'object at' in metric_key_str:
-             # Extract the class name part more robustly
-             parts = metric_key_str.split('.')
-             if len(parts) > 1:
-                 name = parts[-1]
-                 if ' object at' in name:
-                     name = name.split(' object at')[0]
-                 return name
-             else: # Fallback if format is unexpected
-                 return metric_key_str.strip('<> ') 
-        return metric_key_str # Return as is if not matching the object format
+    metric_keys_ordered = [] # To maintain a consistent order for display
+    for key_str, value in metrics_dict.items():
+        if not str(key_str).startswith("Final "):
+            clean_name = clean_metric_name(str(key_str))
+            if clean_name not in initial_score_values:
+                 metric_keys_ordered.append(clean_name)
+            initial_score_values[clean_name] = value
+    
+    for name_key in metric_keys_ordered:
+        value = initial_score_values[name_key]
+        style = STYLES["success"] if isinstance(value, (float, int)) else STYLES["warning"]
+        value_str = f"{value:.4f}" if isinstance(value, (float, int)) else ("[dim]N/A[/dim]" if value is None else str(value))
+        initial_scores_grp.append(Text.assemble(f" • {name_key}: ", (value_str, style)))
 
-    # Process initial first to establish order and values
-    for metric_key, value in metrics.items():
-        if not str(metric_key).startswith("Final "):
-            metric_name_str = clean_metric_name(str(metric_key)) # Use cleaner function
-            if metric_name_str not in initial_score_values:
-                metric_names_ordered.append(metric_name_str)
-            initial_score_values[metric_name_str] = value
-            style = STYLES["success"] if isinstance(value, (int, float)) else STYLES["warning"]
-            value_str = f"{value:.4f}" if isinstance(value, (int,float)) else ("[dim]N/A[/dim]" if value is None else str(value))
-            initial_scores_grp.append(Text.assemble(f" • {metric_name_str}: ", (value_str, style)))
-
-    # Process final, calculating percentage change if possible
-    for metric_key, value in metrics.items():
-        if str(metric_key).startswith("Final "):
-            base_metric_name = clean_metric_name(str(metric_key).replace("Final ", "", 1)) # Use cleaner function
-            if base_metric_name not in metric_names_ordered: metric_names_ordered.append(base_metric_name) # Add if only final exists
-            final_score_values[base_metric_name] = value
-            style = STYLES["success"] if isinstance(value, (int, float)) else STYLES["warning"]
-            value_str = f"{value:.4f}" if isinstance(value, (int,float)) else ("[dim]N/A[/dim]" if value is None else str(value))
-            final_scores_grp.append(Text.assemble(f" • {base_metric_name}: ", (value_str, style)))
-            # Calculate percentage change
-            initial_val = initial_score_values.get(base_metric_name)
-            percent_change_text = calculate_percentage_change(initial_val, value, base_metric_name)
-            percent_changes_grp.append(Text.assemble(f" • {base_metric_name}: ", percent_change_text))
+        final_key_str = f"Final {name_key}" # Construct the potential final key
+        # Search for final key flexibly (e.g. could be "Final <metric object str>")
+        final_value = None
+        for mk, mv in metrics_dict.items():
+            if clean_metric_name(str(mk).replace("Final ", "")) == name_key and str(mk).startswith("Final "):
+                final_value = mv
+                break
+        
+        final_style = STYLES["success"] if isinstance(final_value, (float, int)) else STYLES["warning"]
+        final_value_str = f"{final_value:.4f}" if isinstance(final_value, (float, int)) else ("[dim]N/A[/dim]" if final_value is None else str(final_value))
+        final_scores_grp.append(Text.assemble(f" • {name_key}: ", (final_value_str, final_style)))
+        
+        percent_change_text = calculate_percentage_change(value, final_value, name_key)
+        percent_changes_grp.append(Text.assemble(f" • {name_key}: ", percent_change_text))
 
     if initial_scores_grp:
         score_rows.append(Text("Initial Scores:", style="underline"))
@@ -1745,74 +1723,130 @@ def create_result_panel(dataset_name: str, optimizer_name: str, metrics: dict, t
     else:
         table.add_row("Scores:", Text("[dim]N/A[/dim]"))
         
-    # --- Optimization Details --- 
-    # Handle potentially missing or non-numeric iterations
-    iter_val = optimization_details.get("num_iterations") # Could be None, N/A, or number
-    iter_str = "[dim]N/A[/dim]"
-    if isinstance(iter_val, int):
-        iter_str = str(iter_val)
-    elif iter_val is not None: # Handle "N/A" string or other non-numeric values
-        iter_str = str(iter_val) 
-
-    best_score_val = optimization_details.get("best_score") # Could be None
-    best_score_str = f"{best_score_val:.4f}" if isinstance(best_score_val, (int, float)) else "[dim]N/A[/dim]"
-
+    # iter_val = optimization_details.get("num_iterations")
+    # Calculate iterations from the length of the history array
+    history_for_iter_count = optimization_details.get("history", []) # Use .get("history", []) not .get("optimization_history")
+    iter_val = len(history_for_iter_count) if isinstance(history_for_iter_count, list) else 0
+    iter_str = f"[bold cyan]{iter_val}[/bold cyan]" if iter_val > 0 else "[dim]N/A[/dim]" # Show N/A if 0 iterations
     table.add_row("Iterations:", iter_str)
-    table.add_row("Best Score (Opt):", best_score_str)
 
-    # --- History Summary --- 
-    # Check if optimization_details contains an error message first
+    best_score_val = optimization_details.get("best_score_achieved")
+    best_score_str = f"[bold cyan]{best_score_val:.4f}[/bold cyan]" if isinstance(best_score_val, (float, int)) else "[dim]N/A[/dim]"
+    table.add_row("Best Score (Opt):", best_score_str)
+    table.add_row() # Add an empty row for spacing before Score History
+
     if "error" in optimization_details:
         table.add_row("Opt. Details:", Text(f"[red]Error: {optimization_details['error'][:100]}...[/red]", overflow="ellipsis"))
     else:
-        history = optimization_details.get("optimization_history", [])
+        # Use "history" key directly, as "optimization_history" might not be what's populated in optimization_details
+        history = optimization_details.get("history", []) 
         if history and isinstance(history, list):
             history_summary_parts = []
-            limit = 4 # Show first 2 and last 2 if > limit
+            limit = 4 
 
-            # Determine which iterations to show
             indices_to_show = []
             if len(history) > limit:
-                indices_to_show.extend(range(limit // 2)) # First few
-                indices_to_show.append(-1) # Placeholder for ellipsis
-                indices_to_show.extend(range(len(history) - limit // 2, len(history))) # Last few
+                indices_to_show.extend(range(limit // 2))
+                indices_to_show.append(-1) 
+                indices_to_show.extend(range(len(history) - limit // 2, len(history)))
             else:
-                indices_to_show.extend(range(len(history))) # All items
+                indices_to_show.extend(range(len(history)))
 
             for history_idx, original_idx in enumerate(indices_to_show):
                 if original_idx == -1:
                     history_summary_parts.append("  ...")
                     continue
-
                 round_data = history[original_idx]
                 if isinstance(round_data, dict):
                     score_val = "N/A"
-                    # Attempt to get score from the new structure: round_data['scores'][0]['score']
                     scores_list = round_data.get('scores')
                     if isinstance(scores_list, list) and len(scores_list) > 0 and isinstance(scores_list[0], dict):
                         score_val = scores_list[0].get('score')
                     
-                    score_hist_str = f"{score_val:.4f}" if isinstance(score_val, (int, float)) else str(score_val)
-                    round_num_display = round_data.get('round_number', original_idx + 1) # Use actual index if round_number not present
-                    cand_num_display = round_data.get('candidate_in_round', '')
-                    iteration_num_display = round_data.get('iteration', original_idx + 1)
+                    # Style score green if numeric
+                    score_text_styled: Text
+                    if isinstance(score_val, (float, int)):
+                        score_text_styled = Text.from_markup(f"[green]{score_val:.4f}[/green]")
+                    else:
+                        score_text_styled = Text(str(score_val), style="dim")
                     
-                    # Display Iteration number, and optionally Round/Candidate if available
-                    prefix = f"  Iter {iteration_num_display}"
-                    if round_num_display and cand_num_display:
-                        prefix += f" (R{round_num_display}.C{cand_num_display})"
-                    elif round_num_display:
-                        prefix += f" (R{round_num_display})"
-                    history_summary_parts.append(f"{prefix}: {score_hist_str}")
+                    iteration_num_display = round_data.get('iteration', original_idx + 1)
+                    round_num_display = round_data.get('round_number') 
+                    cand_num_display = round_data.get('candidate_in_round')
+                    
+                    # Add bullet point and style prefix
+                    prefix_base = f"  • Iter {iteration_num_display}"
+                    suffix_markup = ""
+                    if round_num_display is not None and cand_num_display is not None:
+                        suffix_markup = f" [dim](R{round_num_display}.C{cand_num_display})[/dim]"
+                    elif round_num_display is not None:
+                        suffix_markup = f" [dim](R{round_num_display})[/dim]"
+                    
+                    prefix_styled = Text.from_markup(prefix_base + suffix_markup)
+                    history_summary_parts.append(Text.assemble(prefix_styled, Text(": "), score_text_styled))
             
             if history_summary_parts:
                 table.add_row("Score History:", Group(*history_summary_parts))
 
-    border_color = "green" if run_status == "success" else ("red" if run_status == "failure" else "yellow")
-    title_status = f"[{border_color.upper()}]"
-    panel_title = Text.assemble(title_status, f" {optimizer_name} on {dataset_name}")
+    # --- Final Prompt Section --- 
+    final_prompt_data = task_detail_data.get("final_prompt", task_detail_data.get("optimization_process", {}).get("final_prompt"))
+    prompt_content_display: Any
+    if final_prompt_data is not None:
+        if isinstance(final_prompt_data, list): # Handle chat format
+            prompt_elements = []
+            for msg in final_prompt_data:
+                if not isinstance(msg, dict): continue 
+                role = msg.get('role', 'unk').capitalize()
+                content = msg.get('content', '')
+                style = Style()
+                if msg.get('role') == 'system': style = Style(color='blue', bold=True)
+                elif msg.get('role') == 'user': style = Style(color='green', bold=True)
+                elif msg.get('role') == 'assistant': style = Style(color='magenta', bold=True)
+                else: style = Style(dim=True)
+                prompt_elements.append(Text(f"{role}: ", style=style))
+                prompt_elements.append(Text(content))
+                prompt_elements.append(Text("")) 
+            if prompt_elements: prompt_elements.pop()
+            prompt_content_display = Group(*prompt_elements) if prompt_elements else Text("[dim](Empty chat list)[/dim]")
+        elif isinstance(final_prompt_data, str):
+            prompt_content_display = Text(final_prompt_data)
+        else:
+            prompt_content_display = Text("[dim](Final prompt is not a recognized string or chat list)[/dim]")
+    else:
+        prompt_content_display = Text("[dim]Final prompt not available.[/dim]")
     
-    return Panel( table, title=panel_title, border_style=border_color, padding=(1, 2), expand=False)
+    final_prompt_panel = Panel(prompt_content_display, title="Final Prompt", border_style="dim", padding=1, expand=True)
+
+    # Combine main table and final prompt panel into a single Group for the main panel
+    # Add an extra newline Text object for spacing if desired between table and prompt panel
+    main_content_group = Group(table, Text("\n"), final_prompt_panel)
+
+    # Corrected panel title and border style handling
+    border_style_obj = STYLES.get(run_status.lower(), STYLES.get("default", Style(color="yellow"))) 
+    
+    # color_tag_str = border_style_obj.color if border_style_obj.color else "yellow"
+    
+    status_text_upper = run_status.upper() 
+    escaped_status_text = Text(status_text_upper).plain
+
+    # title_status_markup = f"[{color_tag_str}]{escaped_status_text}[/]"
+    
+    status_text_styled: Text
+    try:
+        # Pass the entire Style object for styling the status text
+        status_text_styled = Text(escaped_status_text, style=border_style_obj)
+    except Exception as e_style_apply: 
+        logger.error(f"[red]Error applying style object '{border_style_obj}' to status '{escaped_status_text}': {e_style_apply}. Using plain text fallback.[/red]")
+        # Fallback: try to get a color string, or default to plain
+        color_fallback_str = border_style_obj.color if border_style_obj.color and isinstance(border_style_obj.color, str) else "default"
+        if color_fallback_str == "default": # Further fallback if color wasn't a string
+             status_text_styled = Text(f"{escaped_status_text} ({run_status.lower()})") 
+        else:
+             status_text_styled = Text(f"{escaped_status_text} ({run_status.lower()})", style=color_fallback_str)
+
+    panel_title_text = Text.assemble(status_text_styled, f" {optimizer_name} on {dataset_name}")
+    
+    return Panel(main_content_group, title=panel_title_text, border_style=border_style_obj, padding=(1, 2), expand=True)
 
 def print_benchmark_header(datasets: List[str], optimizers: List[str], test_mode: bool):
     """Print a clean header for the benchmark run."""
@@ -1826,7 +1860,7 @@ def print_benchmark_header(datasets: List[str], optimizers: List[str], test_mode
     console.print(Panel(table, border_style="blue", padding=(1, 2)))
     console.print()
 
-def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_tasks: int, total_duration: float, completed_display_items: List[Tuple[Panel, Dict]]):
+def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_tasks: int, total_duration: float, completed_display_items: List[Panel]):
     """Print footer with stats, pivoted results table, and individual panels+prompts."""
     console.print(Rule("[bold blue]Benchmark Run Complete[/bold blue]", style="blue"))
     
@@ -1839,17 +1873,16 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
     console.print(Panel(summary_table, title="Overall Statistics", border_style="blue", padding=(1,2), expand=False))
 
     # --- Detailed Pivoted Results Table --- 
-    # The `results` argument here is `self.results` from BenchmarkRunner, which is a list of task summary dicts.
     if results: 
         logger.info("Generating detailed pivoted results table for footer...")
         results_table = Table(box=box.SIMPLE_HEAVY, show_header=True, header_style=STYLES["header"], title="Detailed Results Summary", title_style="dim", show_lines=True, padding=(0,1,0,1))
         results_table.add_column("Dataset", style=STYLES["dim"], max_width=25, overflow="ellipsis", no_wrap=True)
         results_table.add_column("Optimizer", no_wrap=True)
-        results_table.add_column("Model", no_wrap=True, max_width=20, overflow="ellipsis") # Added Model column
-        results_table.add_column("🔥", justify="center", no_wrap=True) # Temperature column
-        results_table.add_column("LLM Calls", justify="right", no_wrap=True) # New column for LLM Calls
+        results_table.add_column("Model", no_wrap=True, max_width=20, overflow="ellipsis")
+        results_table.add_column("🔥", justify="center", no_wrap=True)
+        results_table.add_column("☎️", justify="right", no_wrap=True) # Changed header for clarity
         results_table.add_column("Metric", no_wrap=True)
-        results_table.add_column("Time (s)", justify="right", no_wrap=True)
+        results_table.add_column("Run (s)", justify="right", no_wrap=True)
         results_table.add_column("Initial", justify="right", no_wrap=True)
         results_table.add_column("Final", justify="right", no_wrap=True)
         results_table.add_column("% Change", justify="right", no_wrap=True)
@@ -1990,44 +2023,8 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
     # --- Individual Task Panels + Final Prompts --- 
     console.print(Rule("Individual Task Results & Final Prompts", style="dim blue"))
     if completed_display_items:
-        for panel, result_data in completed_display_items:
+        for panel in completed_display_items: # Now only contains the panel
             console.print(panel)
-            
-            if result_data and result_data.get("final_prompt") is not None:
-                final_prompt = result_data["final_prompt"]
-                prompt_content_display: Any = "[dim]N/A[/dim]"
-                
-                if isinstance(final_prompt, list): # Handle chat format
-                    prompt_elements = []
-                    for msg in final_prompt:
-                        if not isinstance(msg, dict): continue # Skip invalid entries
-                        role = msg.get('role', 'unk').capitalize()
-                        content = msg.get('content', '')
-                        # Define style based on role
-                        style = Style()
-                        if msg.get('role') == 'system': style = Style(color='blue', bold=True)
-                        elif msg.get('role') == 'user': style = Style(color='green', bold=True)
-                        elif msg.get('role') == 'assistant': style = Style(color='magenta', bold=True)
-                        else: style = Style(dim=True)
-                        
-                        prompt_elements.append(Text(f"{role}: ", style=style))
-                        prompt_elements.append(Text(content)) # Let Panel handle wrapping
-                        prompt_elements.append(Text("")) # Add a blank line for separation
-                        
-                    if prompt_elements: 
-                        # Remove last blank line
-                        prompt_elements.pop()
-                        prompt_content_display = Group(*prompt_elements)
-                    else:
-                        prompt_content_display = Text("[dim](Empty chat list)[/dim]")
-                        
-                elif isinstance(final_prompt, str):
-                    prompt_content_display = Text(final_prompt) # Let Panel handle wrapping
-                
-                prompt_panel = Panel(prompt_content_display, title="Final Prompt", border_style="dim", padding=1)
-                console.print(prompt_panel)
-            else:
-                console.print(Panel("[dim]Final prompt not available for this task.[/dim]", title="Final Prompt", border_style="dim"))
             console.print() # Add space between task outputs
     else:
         console.print("[yellow]No individual task panels were generated.[/yellow]")
