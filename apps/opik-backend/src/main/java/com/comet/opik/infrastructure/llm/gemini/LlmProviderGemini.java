@@ -9,10 +9,10 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.UncheckedIOException;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 @Slf4j
@@ -34,7 +34,7 @@ public class LlmProviderGemini implements LlmProviderService {
     public void generateStream(@NonNull ChatCompletionRequest request, @NonNull String workspaceId,
             @NonNull Consumer<ChatCompletionResponse> handleMessage, @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-        CompletableFuture.runAsync(() -> llmProviderClientGenerator.newGeminiStreamingClient(apiKey, request)
+        Schedulers.boundedElastic().schedule(() -> llmProviderClientGenerator.newGeminiStreamingClient(apiKey, request)
                 .generate(request.messages().stream().map(LlmProviderGeminiMapper.INSTANCE::toChatMessage).toList(),
                         new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model())));
     }

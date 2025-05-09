@@ -3,8 +3,6 @@ package com.comet.opik.infrastructure.llm.vertexai;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
-import com.comet.opik.infrastructure.llm.gemini.GeminiClientGenerator;
-import com.comet.opik.infrastructure.llm.gemini.GeminiLlmServiceProvider;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
 import com.google.inject.Singleton;
@@ -16,15 +14,16 @@ public class VertexAIModule extends AbstractModule {
 
     @Provides
     @Singleton
-    public VertexAIGenerator clientGenerator(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
-        return new VertexAIGenerator(config);
+    public VertexAIClientGenerator clientGenerator(
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
+        return new VertexAIClientGenerator(config);
     }
 
     @Provides
     @Singleton
-    @Named("gemini")
+    @Named("vertexAi")
     public LlmServiceProvider llmServiceProvider(@NonNull LlmProviderFactory llmProviderFactory,
-            @NonNull VertexAIGenerator clientGenerator) {
+            @NonNull VertexAIClientGenerator clientGenerator) {
         return new VertextAILlmServiceProvider(clientGenerator, llmProviderFactory);
     }
 }

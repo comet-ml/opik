@@ -9,8 +9,13 @@ import com.google.cloud.vertexai.generativeai.GenerativeModel;
 import com.google.common.base.Preconditions;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.StreamingChatLanguageModel;
 import dev.langchain4j.model.vertexai.VertexAiGeminiChatModel;
+import dev.langchain4j.model.vertexai.VertexAiGeminiStreamingChatModel;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -21,25 +26,16 @@ import java.util.Optional;
 
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters;
 
-public class VertexAIGenerator implements LlmProviderClientGenerator<ChatLanguageModel> {
+@RequiredArgsConstructor
+@Slf4j
+public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatLanguageModel> {
 
-    private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    private final @NonNull LlmProviderClientConfig clientConfig;
 
-    public VertexAIGenerator(@NonNull LlmProviderClientConfig llmProviderClientConfig) {
-        this.llmProviderClientConfig = llmProviderClientConfig;
-    }
-    public ChatLanguageModel newVertexAIClient(@NonNull String apiKey, @NonNull ChatCompletionRequest request) {
+    private ChatLanguageModel newVertexAIClient(@NonNull String apiKey, @NonNull ChatCompletionRequest request) {
 
         try {
-            ServiceAccountCredentials credentials = ServiceAccountCredentials.fromStream(new ByteArrayInputStream(
-                apiKey.getBytes(StandardCharsets.UTF_8)
-            ));
-
-            VertexAI vertexAI = new VertexAI.Builder()
-                    .setProjectId(credentials.getProjectId())
-                    .setLocation("us-central1") // Set the location as needed
-                    .setCredentials(credentials.createScoped("https://www.googleapis.com/auth/cloud-platform"))
-                    .build();
+            VertexAI vertexAI = getVertexAI(apiKey);
 
             var generationConfig = GenerationConfig.newBuilder();
 
@@ -50,7 +46,6 @@ public class VertexAIGenerator implements LlmProviderClientGenerator<ChatLanguag
             Optional.ofNullable(request.maxTokens())
                     .ifPresent(generationConfig::setMaxOutputTokens);
 
-
             GenerativeModel generativeModel = new GenerativeModel(request.model(), vertexAI)
                     .withGenerationConfig(generationConfig.build());
 
@@ -59,6 +54,42 @@ public class VertexAIGenerator implements LlmProviderClientGenerator<ChatLanguag
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to create GoogleCredentials", e);
         }
+    }
+
+    public StreamingChatLanguageModel newVertexAIStreamingClient(@NonNull String apiKey,
+            @NonNull ChatCompletionRequest request) {
+
+        try {
+            VertexAI vertexAI = getVertexAI(apiKey);
+
+            var generationConfig = GenerationConfig.newBuilder();
+
+            Optional.ofNullable(request.temperature())
+                    .map(Double::floatValue)
+                    .ifPresent(generationConfig::setTemperature);
+
+            Optional.ofNullable(request.maxTokens())
+                    .ifPresent(generationConfig::setMaxOutputTokens);
+
+            GenerativeModel generativeModel = new GenerativeModel(request.model(), vertexAI)
+                    .withGenerationConfig(generationConfig.build());
+
+            return new VertexAiGeminiStreamingChatModel(generativeModel, generationConfig.build());
+
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to create GoogleCredentials", e);
+        }
+    }
+
+    private VertexAI getVertexAI(@NotNull String apiKey) throws IOException {
+        var credentials = ServiceAccountCredentials.fromStream(
+                new ByteArrayInputStream(apiKey.getBytes(StandardCharsets.UTF_8)));
+
+        return new VertexAI.Builder()
+                .setProjectId(credentials.getProjectId())
+                .setLocation("us-central1") // Set the location as needed
+                .setCredentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
+                .build();
     }
 
     @Override

@@ -12,25 +12,24 @@ import lombok.extern.slf4j.Slf4j;
 
 @RequiredArgsConstructor
 @Slf4j
-public class VertextAILlmServiceProvider implements LlmServiceProvider {
+class VertextAILlmServiceProvider implements LlmServiceProvider {
 
-    private final VertexAIGenerator clientGenerator;
+    private final VertexAIClientGenerator clientGenerator;
 
     VertextAILlmServiceProvider(
-            @Named("vertexAiGenerator") VertexAIGenerator clientGenerator, LlmProviderFactory factory) {
+            @Named("vertexAiGenerator") VertexAIClientGenerator clientGenerator, LlmProviderFactory factory) {
         this.clientGenerator = clientGenerator;
         factory.register(LlmProvider.VERTEX_AI, this);
     }
 
     @Override
     public LlmProviderService getService(String apiKey) {
-        return new LlmProviderVertexAI();
+        return new LlmProviderVertexAI(clientGenerator, apiKey);
     }
 
     @Override
     public ChatLanguageModel getLanguageModel(String apiKey,
-                                              AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters) {
+            AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters) {
         return clientGenerator.generateChat(apiKey, modelParameters);
     }
 }
-
