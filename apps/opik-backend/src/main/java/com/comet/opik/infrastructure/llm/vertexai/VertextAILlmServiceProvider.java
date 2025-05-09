@@ -1,0 +1,36 @@
+package com.comet.opik.infrastructure.llm.vertexai;
+
+import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
+import com.comet.opik.api.LlmProvider;
+import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.llm.LlmServiceProvider;
+import dev.langchain4j.model.chat.ChatLanguageModel;
+import jakarta.inject.Named;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+@RequiredArgsConstructor
+@Slf4j
+public class VertextAILlmServiceProvider implements LlmServiceProvider {
+
+    private final VertexAIGenerator clientGenerator;
+
+    VertextAILlmServiceProvider(
+            @Named("vertexAiGenerator") VertexAIGenerator clientGenerator, LlmProviderFactory factory) {
+        this.clientGenerator = clientGenerator;
+        factory.register(LlmProvider.VERTEX_AI, this);
+    }
+
+    @Override
+    public LlmProviderService getService(String apiKey) {
+        return new LlmProviderVertexAI();
+    }
+
+    @Override
+    public ChatLanguageModel getLanguageModel(String apiKey,
+                                              AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters) {
+        return clientGenerator.generateChat(apiKey, modelParameters);
+    }
+}
+

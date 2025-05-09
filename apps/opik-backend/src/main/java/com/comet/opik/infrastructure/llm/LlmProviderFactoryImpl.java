@@ -71,6 +71,10 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
             return LlmProvider.OPEN_ROUTER;
         }
 
+        if (isModelBelongToProvider(model, LlmProvider.class, LlmProvider::getValue)) {
+            return LlmProvider.VERTEX_AI;
+        }
+
         throw new BadRequestException(ERROR_MODEL_NOT_SUPPORTED.formatted(model));
     }
 
