@@ -14,18 +14,18 @@ from opik_optimizer import base_optimizer
 
 from . import prompt_parameter
 from . import prompt_templates
-from .._throttle import RateLimiter, rate_limited
+from .. import _throttle
 from .. import optimization_result, task_evaluator
 
 import litellm
 
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
-limiter = RateLimiter(max_calls_per_second=10)
+_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 logger = logging.getLogger(__name__)
 
-@rate_limited(limiter)
+@_throttle.rate_limited(_limiter)
 def _call_model(model, messages, seed, model_kwargs):
     model_kwargs = opik_litellm_monitor.try_add_opik_monitoring_to_params(model_kwargs)
 

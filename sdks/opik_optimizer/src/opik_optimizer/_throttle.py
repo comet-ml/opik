@@ -1,6 +1,7 @@
 import functools
 import pyrate_limiter
 import time
+import opik.config
 
 from typing import Callable, Any
 
@@ -31,3 +32,12 @@ def rate_limited(limiter: RateLimiter) -> Callable[[Callable], Callable]:
         return wrapper
     return decorator
 
+
+def get_rate_limiter_for_current_opik_installation() -> RateLimiter:
+    opik_config = opik.config.OpikConfig()
+    max_calls_per_second = (
+        10
+        if opik_config.is_cloud_installation
+        else 50
+    )
+    return RateLimiter(max_calls_per_second=max_calls_per_second)

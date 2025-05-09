@@ -27,7 +27,7 @@ litellm.cache = Cache(type="disk", disk_cache_dir=disk_cache_dir)
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
 
-_rate_limiter = _throttle.RateLimiter(max_calls_per_second=10)
+_rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 class MetaPromptOptimizer(BaseOptimizer):
     """Optimizer that uses meta-prompting to improve prompts based on examples and performance."""
