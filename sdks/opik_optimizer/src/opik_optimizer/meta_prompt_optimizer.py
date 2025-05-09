@@ -131,6 +131,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.dataset = None
         self.task_config = None
         self._opik_client = opik_client.get_client_cached()
+        self.llm_call_counter = 0
         logger.debug(
             f"Initialized MetaPromptOptimizer with model={model}, reasoning_model={self.reasoning_model}"
         )
@@ -189,6 +190,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         optimization_id: Optional[str] = None,
     ) -> str:
         """Call the model with the given prompt and return the response."""
+        self.llm_call_counter += 1
         # Note: Basic retry logic could be added here using tenacity
         try:
             # Basic LLM parameters (e.g., temperature, max_tokens)
@@ -533,6 +535,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.auto_continue = auto_continue
         self.dataset = dataset
         self.task_config = task_config
+        self.llm_call_counter = 0 # Reset counter for run
 
         current_prompt = task_config.instruction_prompt
         experiment_config = experiment_config or {}
@@ -896,6 +899,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             score=best_score,
             metric_name=metric_config.metric.name,
             details=details,
+            llm_calls=self.llm_call_counter
         )
 
     def _get_task_context(self, metric_config: MetricConfig) -> str:
