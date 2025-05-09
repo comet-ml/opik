@@ -33,7 +33,7 @@ from your LLMs. You can use a variety of algorithms, including:
 
 3. Install the package:
    ```bash
-   pip install git+https://github.com/comet-ml/opik#subdirectory=sdks/opik_optimizer
+   pip install opik-optimizer
    ```
 
 You'll need:
@@ -55,11 +55,10 @@ You can see how to use those below:
 
 ```python
 from opik.evaluation.metrics import LevenshteinRatio
-from opik_optimizer.few_shot_bayesian_optimizer import FewShotBayesianOptimizer
+from opik_optimizer import FewShotBayesianOptimizer
 from opik_optimizer.demo import get_or_create_dataset
 
 from opik_optimizer import (
-    OptimizationConfig,
     MetricConfig,
     TaskConfig,
     from_dataset_field,
@@ -72,40 +71,41 @@ hot_pot_dataset = get_or_create_dataset("hotpot-300")
 prompt_instruction = """
 Answer the question.
 """
-
-initial_prompt_no_examples = [
-    {"role": "system", "content": prompt_instruction},
-    {"role": "user", "content": "{{question}}"},
-]
+project_name = "optimize-few-shot-bayesian-hotpot"
 
 optimizer = FewShotBayesianOptimizer(
     model="gpt-4o-mini",
-    project_name="optimize-few-shot-bayesian-hotpot",
+    project_name=project_name,
     min_examples=3,
     max_examples=8,
     n_threads=16,
     seed=42,
 )
 
-optimization_config = OptimizationConfig(
-    dataset=hot_pot_dataset,
-    objective=MetricConfig(
-        metric=LevenshteinRatio(),
-        inputs={
-            "output": from_llm_response_text(),
-            "reference": from_dataset_field(name="answer"),
-        },
-    ),
-    task=TaskConfig(
-        instruction_prompt=prompt_instruction,
-        input_dataset_fields=["question"],
-        output_dataset_field="answer",
-        use_chat_prompt=True,
-    ),
+metric_config = MetricConfig(
+    metric=LevenshteinRatio(project_name=project_name),
+    inputs={
+        "output": from_llm_response_text(),
+        "reference": from_dataset_field(name="answer"),
+    },
 )
 
-result = optimizer.optimize_prompt(optimization_config, n_trials=10)
-print(result)
+task_config = TaskConfig(
+    instruction_prompt=prompt_instruction,
+    input_dataset_fields=["question"],
+    output_dataset_field="answer",
+    use_chat_prompt=True,
+)
+
+result = optimizer.optimize_prompt(
+    dataset=hot_pot_dataset,
+    metric_config=metric_config,
+    task_config=task_config,
+    n_trials=10,
+    n_samples=150,
+)
+
+result.display()
 ```
 
 More examples can be found in the `scripts` folder.
@@ -113,7 +113,7 @@ More examples can be found in the `scripts` folder.
 ## Installation
 
 ```bash
-pip install git+https://github.com/comet-ml/opik#subdirectory=sdks/opik_optimizer
+pip install opik-optimizer
 ```
 
 ## Development
@@ -128,6 +128,6 @@ pip install -e .
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.10+ < 3.13
 - Opik API key
 - OpenAI API key (or other LLM provider)

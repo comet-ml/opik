@@ -2,14 +2,16 @@ from setuptools import setup, find_packages
 
 setup(
     name="opik_optimizer",
-    version="0.7.0",
+    version="0.7.2",
     description="Agent optimization with Opik",
     author="Comet ML",
-    author_email="info@comet.ml",
+    author_email="support@comet.com",
+    long_description=open("README.md", encoding="utf-8").read(),
+    long_description_content_type='text/markdown',
     url="https://github.com/comet-ml/opik",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
-    python_requires=">=3.9",
+    python_requires=">=3.9,<3.13",
     install_requires=[
         "opik>=1.7.17",
         "dspy>=2.6.18,<3",
