@@ -178,6 +178,11 @@ INITIAL_PROMPTS = {
 def get_experiment_config(dataset_name: str, optimizer_name: str, model_name: str, test_mode: bool = False) -> Dict:
     """Get experiment configuration with metadata."""
     version_info = sys.version_info
+    
+    # Get base optimizer params and add model_name
+    optimizer_params = OPTIMIZER_CONFIGS.get(optimizer_name, {}).get("params", {})
+    current_params = optimizer_params.copy()
+    current_params["model"] = model_name
     return {
         "dataset": dataset_name,
         "optimizer": optimizer_name,
