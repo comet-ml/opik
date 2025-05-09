@@ -358,6 +358,9 @@ class MiproOptimizer(BaseOptimizer):
         """
         Continue to look for optimizations
         """
+        if not hasattr(self, 'optimizer') or not self.optimizer:
+            raise RuntimeError("MiproOptimizer not prepared. Call prepare_optimize_prompt first.")
+
         self.results = self.optimizer.compile(
             student=self.module,
             trainset=self.trainset,
