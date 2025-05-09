@@ -2,6 +2,4 @@
 
 import typing
 
-DeltaRole = typing.Union[
-    typing.Literal["system", "user", "assistant", "tool", "function"], typing.Any
-]
+DeltaRole = typing.Union[typing.Literal["system", "user", "assistant", "tool", "function"], typing.Any]

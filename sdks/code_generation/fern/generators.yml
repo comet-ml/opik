@@ -6,12 +6,12 @@ groups:
   local:
     generators:
       - name: fernapi/fern-python-sdk
-        version: 4.3.21
+        version: 4.18.3
         output:
           location: local-file-system
           path: ../../python/src/opik/rest_api
       - name: fernapi/fern-typescript-node-sdk
-        version: 0.49.3
+        version: 0.51.5
         output:
           location: local-file-system
           path: ../../typescript/src/opik/rest_api

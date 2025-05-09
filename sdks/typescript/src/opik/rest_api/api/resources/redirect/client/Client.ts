@@ -56,10 +56,17 @@ export class Redirect {
      *         path: "path"
      *     })
      */
-    public async datasetsRedirect(
+    public datasetsRedirect(
         request: OpikApi.DatasetsRedirectRequest,
         requestOptions?: Redirect.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__datasetsRedirect(request, requestOptions));
+    }
+
+    private async __datasetsRedirect(
+        request: OpikApi.DatasetsRedirectRequest,
+        requestOptions?: Redirect.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const { datasetId, workspaceName, path } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         _queryParams["dataset_id"] = datasetId;
@@ -96,19 +103,20 @@ export class Redirect {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body);
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -118,6 +126,7 @@ export class Redirect {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -126,6 +135,7 @@ export class Redirect {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -146,10 +156,17 @@ export class Redirect {
      *         path: "path"
      *     })
      */
-    public async experimentsRedirect(
+    public experimentsRedirect(
         request: OpikApi.ExperimentsRedirectRequest,
         requestOptions?: Redirect.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__experimentsRedirect(request, requestOptions));
+    }
+
+    private async __experimentsRedirect(
+        request: OpikApi.ExperimentsRedirectRequest,
+        requestOptions?: Redirect.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const { datasetId, experimentId, workspaceName, path } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         _queryParams["dataset_id"] = datasetId;
@@ -187,19 +204,20 @@ export class Redirect {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body);
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -209,6 +227,7 @@ export class Redirect {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -217,6 +236,7 @@ export class Redirect {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -236,10 +256,17 @@ export class Redirect {
      *         path: "path"
      *     })
      */
-    public async projectsRedirect(
+    public projectsRedirect(
         request: OpikApi.ProjectsRedirectRequest,
         requestOptions?: Redirect.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__projectsRedirect(request, requestOptions));
+    }
+
+    private async __projectsRedirect(
+        request: OpikApi.ProjectsRedirectRequest,
+        requestOptions?: Redirect.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const { traceId, workspaceName, path } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         _queryParams["trace_id"] = traceId;
@@ -276,19 +303,20 @@ export class Redirect {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body);
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -298,6 +326,7 @@ export class Redirect {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -306,6 +335,7 @@ export class Redirect {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }

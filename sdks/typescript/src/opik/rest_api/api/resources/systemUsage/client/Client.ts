@@ -50,7 +50,15 @@ export class SystemUsage {
      * @example
      *     await client.systemUsage.getDatasetBiInfo()
      */
-    public async getDatasetBiInfo(requestOptions?: SystemUsage.RequestOptions): Promise<OpikApi.BiInformationResponse> {
+    public getDatasetBiInfo(
+        requestOptions?: SystemUsage.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.BiInformationResponse> {
+        return core.HttpResponsePromise.fromPromise(this.__getDatasetBiInfo(requestOptions));
+    }
+
+    private async __getDatasetBiInfo(
+        requestOptions?: SystemUsage.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.BiInformationResponse>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -78,18 +86,22 @@ export class SystemUsage {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.BiInformationResponse.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.BiInformationResponse.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -98,6 +110,7 @@ export class SystemUsage {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -106,6 +119,7 @@ export class SystemUsage {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -118,9 +132,15 @@ export class SystemUsage {
      * @example
      *     await client.systemUsage.getExperimentBiInfo()
      */
-    public async getExperimentBiInfo(
+    public getExperimentBiInfo(
         requestOptions?: SystemUsage.RequestOptions,
-    ): Promise<OpikApi.BiInformationResponse> {
+    ): core.HttpResponsePromise<OpikApi.BiInformationResponse> {
+        return core.HttpResponsePromise.fromPromise(this.__getExperimentBiInfo(requestOptions));
+    }
+
+    private async __getExperimentBiInfo(
+        requestOptions?: SystemUsage.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.BiInformationResponse>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -148,18 +168,22 @@ export class SystemUsage {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.BiInformationResponse.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.BiInformationResponse.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -168,6 +192,7 @@ export class SystemUsage {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -176,6 +201,7 @@ export class SystemUsage {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -188,9 +214,15 @@ export class SystemUsage {
      * @example
      *     await client.systemUsage.getSpansCountForWorkspaces()
      */
-    public async getSpansCountForWorkspaces(
+    public getSpansCountForWorkspaces(
         requestOptions?: SystemUsage.RequestOptions,
-    ): Promise<OpikApi.SpansCountResponse> {
+    ): core.HttpResponsePromise<OpikApi.SpansCountResponse> {
+        return core.HttpResponsePromise.fromPromise(this.__getSpansCountForWorkspaces(requestOptions));
+    }
+
+    private async __getSpansCountForWorkspaces(
+        requestOptions?: SystemUsage.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.SpansCountResponse>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -218,18 +250,22 @@ export class SystemUsage {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.SpansCountResponse.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.SpansCountResponse.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -238,6 +274,7 @@ export class SystemUsage {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -246,6 +283,7 @@ export class SystemUsage {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -258,7 +296,15 @@ export class SystemUsage {
      * @example
      *     await client.systemUsage.getTracesBiInfo()
      */
-    public async getTracesBiInfo(requestOptions?: SystemUsage.RequestOptions): Promise<OpikApi.BiInformationResponse> {
+    public getTracesBiInfo(
+        requestOptions?: SystemUsage.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.BiInformationResponse> {
+        return core.HttpResponsePromise.fromPromise(this.__getTracesBiInfo(requestOptions));
+    }
+
+    private async __getTracesBiInfo(
+        requestOptions?: SystemUsage.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.BiInformationResponse>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -286,18 +332,22 @@ export class SystemUsage {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.BiInformationResponse.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.BiInformationResponse.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -306,12 +356,14 @@ export class SystemUsage {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/internal/usage/bi-traces.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -324,9 +376,15 @@ export class SystemUsage {
      * @example
      *     await client.systemUsage.getTracesCountForWorkspaces()
      */
-    public async getTracesCountForWorkspaces(
+    public getTracesCountForWorkspaces(
         requestOptions?: SystemUsage.RequestOptions,
-    ): Promise<OpikApi.TraceCountResponse> {
+    ): core.HttpResponsePromise<OpikApi.TraceCountResponse> {
+        return core.HttpResponsePromise.fromPromise(this.__getTracesCountForWorkspaces(requestOptions));
+    }
+
+    private async __getTracesCountForWorkspaces(
+        requestOptions?: SystemUsage.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.TraceCountResponse>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -354,18 +412,22 @@ export class SystemUsage {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.TraceCountResponse.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.TraceCountResponse.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -374,6 +436,7 @@ export class SystemUsage {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -382,6 +445,7 @@ export class SystemUsage {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
