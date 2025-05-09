@@ -471,21 +471,23 @@ class BenchmarkRunner:
         original_root_level = root_logger.level
 
         # Target specific loggers for temporary un-suppression
-        opik_logger = logging.getLogger("opik") # Covers opik_optimizer
-        tqdm_logger = logging.getLogger("tqdm")
-        optuna_logger = logging.getLogger("optuna")
-        lite_logger = logging.getLogger("LiteLLM")
+        opik_logger = logging.getLogger("opik") # Covers opik_optimizer top-level
+        # Explicitly target known optimizer module loggers
+        # Assuming __name__ is used in those modules, their names would be:
+        fsbo_logger_name = "opik_optimizer.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer"
+        mpo_logger_name = "opik_optimizer.meta_prompt_optimizer"
+        fsbo_logger = logging.getLogger(fsbo_logger_name)
+        mpo_logger = logging.getLogger(mpo_logger_name)
 
-        # Add other noisy libraries that might output too much DEBUG if not controlled
-        # Ensure this list is consistent with the one in main() or expanded
-        noisy_libs_for_task_log_control = ["urllib3", "requests", "httpx", "dspy", "datasets", "filelock", "httpcore", "openai"] 
+        tqdm_logger = logging.getLogger("tqdm")
+        noisy_libs_for_task_log_control = ["LiteLLM", "urllib3", "requests", "httpx", "dspy", "datasets", "optuna", "filelock", "httpcore", "openai"] 
         controlled_noisy_loggers = {name: logging.getLogger(name) for name in noisy_libs_for_task_log_control}
 
         original_levels_and_propagate = {
             "opik": (opik_logger.level, opik_logger.propagate),
+            fsbo_logger_name: (fsbo_logger.level, fsbo_logger.propagate),
+            mpo_logger_name: (mpo_logger.level, mpo_logger.propagate),
             "tqdm": (tqdm_logger.level, tqdm_logger.propagate),
-            "optuna": (optuna_logger.level, optuna_logger.propagate),
-            "LiteLLM": (lite_logger.level, lite_logger.propagate),
         }
         for name, logger_instance in controlled_noisy_loggers.items():
             original_levels_and_propagate[name] = (logger_instance.level, logger_instance.propagate)
@@ -504,6 +506,11 @@ class BenchmarkRunner:
                 # Temporarily adjust specific loggers for file output
                 opik_logger.propagate = True
                 opik_logger.setLevel(logging.INFO) 
+                fsbo_logger.propagate = True # Ensure propagation
+                fsbo_logger.setLevel(logging.INFO) # Set desired level
+                mpo_logger.propagate = True
+                mpo_logger.setLevel(logging.INFO)
+
                 tqdm_logger.propagate = True
                 tqdm_logger.setLevel(logging.INFO) 
                 
@@ -758,6 +765,14 @@ class BenchmarkRunner:
                 opik_level_orig, opik_prop_orig = original_levels_and_propagate["opik"]
                 opik_logger.setLevel(opik_level_orig)
                 opik_logger.propagate = opik_prop_orig
+                
+                fsbo_level_orig, fsbo_prop_orig = original_levels_and_propagate[fsbo_logger_name]
+                fsbo_logger.setLevel(fsbo_level_orig)
+                fsbo_logger.propagate = fsbo_prop_orig
+
+                mpo_level_orig, mpo_prop_orig = original_levels_and_propagate[mpo_logger_name]
+                mpo_logger.setLevel(mpo_level_orig)
+                mpo_logger.propagate = mpo_prop_orig
                 
                 tqdm_level_orig, tqdm_prop_orig = original_levels_and_propagate["tqdm"]
                 tqdm_logger.setLevel(tqdm_level_orig)
