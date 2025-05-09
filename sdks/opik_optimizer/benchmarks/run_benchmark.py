@@ -567,11 +567,9 @@ class BenchmarkRunner:
                         logger.warning(f"Applied Anthropic eval hack: Added dummy user message to initial system prompt.")
 
                     # Conditional evaluate_prompt call
-                    if isinstance(optimizer, MetaPromptOptimizer):
+                    if isinstance(optimizer, (MetaPromptOptimizer, MiproOptimizer)):
+                        # Both MetaPrompt and Mipro need task_config now
                         future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_eval, task_config=config.task, prompt=prompt_for_eval, experiment_config=experiment_config)
-                    elif isinstance(optimizer, MiproOptimizer):
-                        # MiproOptimizer.evaluate_prompt does not take task_config
-                        future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_eval, prompt=prompt_for_eval, experiment_config=experiment_config)
                     else: # Default for FewShotBayesianOptimizer and others that might be added
                         future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_eval, prompt=prompt_for_eval, experiment_config=experiment_config)
                     future_to_metric[future] = metric
@@ -819,10 +817,9 @@ class BenchmarkRunner:
                             logger.debug(f"Using default metric config for {metric_final_obj} for final eval")
 
                         # Conditional evaluate_prompt call for final evaluation
-                        if isinstance(optimizer, MetaPromptOptimizer):
+                        if isinstance(optimizer, (MetaPromptOptimizer, MiproOptimizer)):
+                             # Both MetaPrompt and Mipro need task_config now
                             future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_final_eval, task_config=config.task, prompt=prompt_for_final_eval, experiment_config=experiment_config)
-                        elif isinstance(optimizer, MiproOptimizer):
-                            future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_final_eval, prompt=prompt_for_final_eval, experiment_config=experiment_config)
                         else: # Default for FewShotBayesianOptimizer and others
                             future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_final_eval, prompt=prompt_for_final_eval, experiment_config=experiment_config)
                         future_to_metric_final[future] = metric_final_obj
