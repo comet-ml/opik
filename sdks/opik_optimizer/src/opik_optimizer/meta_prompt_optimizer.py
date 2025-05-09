@@ -192,9 +192,17 @@ class MetaPromptOptimizer(BaseOptimizer):
         # Note: Basic retry logic could be added here using tenacity
         try:
             # Basic LLM parameters (e.g., temperature, max_tokens)
+            base_temperature = getattr(self, "temperature", 0.3)
+            base_max_tokens = getattr(self, "max_tokens", 1000)
+
+            # Use potentially different settings for reasoning calls
+            reasoning_temperature = base_temperature # Keep same temp unless specified otherwise
+            # Increase max_tokens for reasoning to ensure JSON fits, unless already high
+            reasoning_max_tokens = max(base_max_tokens, 3000) if is_reasoning else base_max_tokens 
+
             llm_config_params = {
-                "temperature": getattr(self, "temperature", 0.3),
-                "max_tokens": getattr(self, "max_tokens", 1000),
+                "temperature": reasoning_temperature if is_reasoning else base_temperature,
+                "max_tokens": reasoning_max_tokens,
                 "top_p": getattr(self, "top_p", 1.0),
                 "frequency_penalty": getattr(self, "frequency_penalty", 0.0),
                 "presence_penalty": getattr(self, "presence_penalty", 0.0),

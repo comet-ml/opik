@@ -1366,22 +1366,26 @@ class BenchmarkRunner:
                 
                 # Optimization process details
                 opt_process = detail_data.get("optimization_process", {})
-                item_data["opt_num_iterations"] = len(opt_process.get("history", [])) if config_data.get("optimizer_class") != "FewShotBayesianOptimizer" else opt_process.get("num_trials_configured")
+                # Correctly source num_iterations using detail_data['config']
+                optimizer_class_from_detail = detail_data.get("config", {}).get("optimizer_class")
+                if optimizer_class_from_detail == "FewShotBayesianOptimizer":
+                    item_data["opt_num_iterations"] = opt_process.get("num_trials_configured")
+                else:
+                    item_data["opt_num_iterations"] = len(opt_process.get("history", [])) # Default for round-based
+                
                 item_data["opt_best_score_achieved"] = opt_process.get("best_score_achieved")
                 item_data["opt_duration_seconds"] = opt_process.get("duration_seconds")
                 
                 # Add Temperature to CSV
-                # For FewShot, temperature is in raw_optimizer_result.details
-                # For others, it should be in config.optimizer_params (via experiment_config.parameters)
                 temp_val = None
-                if config_data.get("optimizer_class") == "FewShotBayesianOptimizer":
+                # Use optimizer_class_from_detail here too
+                if optimizer_class_from_detail == "FewShotBayesianOptimizer":
                     raw_opt_res = detail_data.get("raw_optimizer_result", {})
                     temp_val = raw_opt_res.get("details", {}).get("temperature")
                 else:
-                    # General case: get from parameters stored in experiment_config
                     exp_params = detail_data.get("config", {}).get("parameters", {})
-                    if not exp_params: # Fallback if parameters not in config block (older format?)
-                         exp_params = config_data.get("optimizer_params", {})
+                    if not exp_params: 
+                         exp_params = detail_data.get("config", {}).get("optimizer_params", {})
                     temp_val = exp_params.get("temperature")
                 item_data["temperature"] = temp_val
 
