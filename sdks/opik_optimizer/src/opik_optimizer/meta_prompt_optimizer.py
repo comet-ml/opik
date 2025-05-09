@@ -101,6 +101,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         num_threads: int = 12,
         project_name: Optional[str] = None,
         verbose: int = 1,
+        enable_context: bool = True,
         **model_kwargs,
     ):
         """
@@ -118,6 +119,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             num_threads: Number of threads for parallel evaluation
             project_name: Optional project name for tracking
             verbose: Controls internal logging/progress bars (0=off, 1=on).
+            enable_context: Whether to include task-specific context (metrics, examples) in the reasoning prompt.
             **model_kwargs: Additional model parameters
         """
         super().__init__(model=model, project_name=project_name, **model_kwargs)
@@ -134,6 +136,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.task_config = None
         self._opik_client = opik_client.get_client_cached()
         self.llm_call_counter = 0
+        self.enable_context = enable_context
         logger.debug(
             f"Initialized MetaPromptOptimizer with model={model}, reasoning_model={self.reasoning_model}"
         )
@@ -976,20 +979,35 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         # Pass single metric_config
         history_context = self._build_history_context(previous_rounds)
-        task_context = self._get_task_context(metric_config=metric_config)
+        task_context_str = ""
+        analysis_instruction = ""
+        metric_focus_instruction = ""
+        improvement_point_1 = ""
+
+        if self.enable_context:
+            task_context_str = self._get_task_context(metric_config=metric_config)
+            analysis_instruction = "Analyze the example provided (if any), the metric description (if any), and the history of scores."
+            metric_focus_instruction = f"Focus on improving the score for the metric: {metric_config.metric.name}."
+            improvement_point_1 = "1. Be more specific and clear about expectations based on the metric and task."
+            logger.debug("Task context and metric-specific instructions enabled for reasoning prompt.")
+        else:
+            analysis_instruction = "Analyze the history of scores and the current prompt\'s performance."
+            metric_focus_instruction = "Focus on generating diverse and effective prompt variations based on the history."
+            improvement_point_1 = "1. Be more specific and clear about expectations based on the task."
+            logger.debug("Task context and metric-specific instructions disabled for reasoning prompt.")
 
         user_prompt = f"""Current prompt: {current_prompt}
         Current score: {best_score}
         {history_context}
-        {task_context}
+        {task_context_str}
 
-        Analyze the example provided, the metric description, and the history of scores.
+        {analysis_instruction}
         Generate {self.num_prompts_per_round} improved versions of this prompt.
-        Focus on improving the score for the metric: {metric_config.metric.name}.
+        {metric_focus_instruction}
         Each version should aim to:
-        1. Be more specific and clear about expectations based on the metric and task.
-        2. Provide necessary context and constraints.
-        3. Guide the model to produce the desired output format suitable for the metric.
+        {improvement_point_1}
+        2. Provide necessary context and constraints (if applicable, without relying on disabled external context).
+        3. Guide the model to produce the desired output format suitable for the task.
         4. Remove ambiguity and unnecessary elements.
         5. Maintain conciseness while being complete.
 
