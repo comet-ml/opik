@@ -1801,12 +1801,12 @@ def create_result_panel(dataset_name: str, optimizer_name: str, task_detail_data
                 elif msg.get('role') == 'assistant': style = Style(color='magenta', bold=True)
                 else: style = Style(dim=True)
                 prompt_elements.append(Text(f"{role}: ", style=style))
-                prompt_elements.append(Text(content))
+                prompt_elements.append(Text(content, overflow="fold")) # Add overflow="fold"
                 prompt_elements.append(Text("")) 
             if prompt_elements: prompt_elements.pop()
             prompt_content_display = Group(*prompt_elements) if prompt_elements else Text("[dim](Empty chat list)[/dim]")
         elif isinstance(final_prompt_data, str):
-            prompt_content_display = Text(final_prompt_data)
+            prompt_content_display = Text(final_prompt_data, overflow="fold") # Add overflow="fold"
         else:
             prompt_content_display = Text("[dim](Final prompt is not a recognized string or chat list)[/dim]")
     else:
