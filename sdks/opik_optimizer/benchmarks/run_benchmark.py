@@ -413,33 +413,39 @@ class BenchmarkRunner:
             logger.exception(f"Traceback for error loading dataset [bold]{dataset_name}[/bold]:")
             return None
 
-    def create_optimizer(self, optimizer_config: Dict, project_name: str) -> Any:
+    def create_optimizer(self, optimizer_config: Dict, model_name: str, project_name: str) -> Any:
         """Create optimizer instance based on configuration."""
         try:
-            # Handle external optimizers
-            if optimizer_config["class"] == "ExternalDspyMiproOptimizer":
-                params = optimizer_config["params"].copy()
-                params["seed"] = self.seed
-                params["project_name"] = self.project_name  # Pass project name
-                # Remove workspace as it's not supported
-                params.pop("workspace", None)
-                return ExternalDspyMiproOptimizer(**params)
-            elif optimizer_config["class"] == "ExternalAdalFlowOptimizer":
-                params = optimizer_config["params"].copy()
-                params["seed"] = self.seed
-                params["project_name"] = self.project_name
-                params.pop("workspace", None)
-                return ExternalAdalFlowOptimizer(**params)
-            
-            # Handle internal optimizers
-            optimizer_class = globals()[optimizer_config["class"]]
+            optimizer_class_name = optimizer_config["class"]
             params = optimizer_config["params"].copy()
-            params["project_name"] = self.project_name
+            params["model"] = model_name # Ensure model is set correctly
+            params["project_name"] = project_name
             params.pop("workspace", None)
             params["seed"] = self.seed
+            # Ensure verbose is set from config, default to 1 if missing
+            params.setdefault("verbose", 1)
+            
+            # Adjust params for OpenAI reasoning models BEFORE init
+            if model_name.startswith("openai/o"):            
+                logger.info(f"Adjusting params for OpenAI reasoning model ({model_name}) before init...")
+                params["temperature"] = 1.0
+                params["max_tokens"] = max(params.get("max_tokens", 0), 20000)
+                logger.info(f"  Using temp={params['temperature']}, max_tokens={params['max_tokens']}")
+            else:
+                # Ensure defaults for non-reasoning models if not set
+                params.setdefault("temperature", 0.1)
+                params.setdefault("max_tokens", 5000)
+
+            # Handle external optimizers (if any were defined)
+            # if optimizer_class_name == "ExternalDspyMiproOptimizer": ...
+            # elif optimizer_class_name == "ExternalAdalFlowOptimizer": ...
+            
+            # Handle internal optimizers
+            optimizer_class = globals()[optimizer_class_name]
+            # Pass the potentially modified params
             return optimizer_class(**params)
         except Exception as e:
-            logger.error(f"[red]Error creating optimizer {optimizer_config['class']}: {e}[/red]")
+            logger.error(f"[red]Error creating optimizer {optimizer_config['class']} for model {model_name}: {e}[/red]")
             logger.exception(f"Traceback for error creating optimizer [bold]{optimizer_config['class']}[/bold]:")
             return None
 
@@ -560,9 +566,13 @@ class BenchmarkRunner:
                         prompt_for_eval = prompt_for_eval + [{"role": "user", "content": "(Proceed based on system instructions)"}]
                         logger.warning(f"Applied Anthropic eval hack: Added dummy user message to initial system prompt.")
 
+                    # Conditional evaluate_prompt call
                     if isinstance(optimizer, MetaPromptOptimizer):
                         future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_eval, task_config=config.task, prompt=prompt_for_eval, experiment_config=experiment_config)
-                    else:
+                    elif isinstance(optimizer, MiproOptimizer):
+                        # MiproOptimizer.evaluate_prompt does not take task_config
+                        future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_eval, prompt=prompt_for_eval, experiment_config=experiment_config)
+                    else: # Default for FewShotBayesianOptimizer and others that might be added
                         future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_eval, prompt=prompt_for_eval, experiment_config=experiment_config)
                     future_to_metric[future] = metric
 
@@ -603,7 +613,13 @@ class BenchmarkRunner:
 
             try:
                 if isinstance(optimizer, (MetaPromptOptimizer, MiproOptimizer)):
-                    results_obj = optimizer.optimize_prompt(config=config)
+                    # Unpack config object for MetaPromptOptimizer/MiproOptimizer
+                    results_obj = optimizer.optimize_prompt(
+                        dataset=config.dataset,
+                        metric_config=config.objective,
+                        task_config=config.task,
+                        experiment_config=experiment_config # Pass experiment_config too
+                    )
                 elif isinstance(optimizer, FewShotBayesianOptimizer):
                     processed_dataset = get_or_create_dataset(dataset_config["huggingface_path"], test_mode=self.test_mode)
                     processed_items = []
@@ -802,12 +818,12 @@ class BenchmarkRunner:
                             )
                             logger.debug(f"Using default metric config for {metric_final_obj} for final eval")
 
-                        # Submit final evaluation job using the correctly formatted prompt_for_final_eval
+                        # Conditional evaluate_prompt call for final evaluation
                         if isinstance(optimizer, MetaPromptOptimizer):
-                             # MetaPromptOptimizer needs task_config passed to evaluate_prompt
                             future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_final_eval, task_config=config.task, prompt=prompt_for_final_eval, experiment_config=experiment_config)
-                        else:
-                            # Other optimizers (like FewShot) take prompt directly
+                        elif isinstance(optimizer, MiproOptimizer):
+                            future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_final_eval, prompt=prompt_for_final_eval, experiment_config=experiment_config)
+                        else: # Default for FewShotBayesianOptimizer and others
                             future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_final_eval, prompt=prompt_for_final_eval, experiment_config=experiment_config)
                         future_to_metric_final[future] = metric_final_obj
                         
@@ -975,7 +991,7 @@ class BenchmarkRunner:
                 # Extract dataset from desc (first part before '/')
                 try:
                     dataset_part = desc.split('/')[0].replace("Running: ", "").strip()
-                    display_text = f" • {dataset_part}/{model_original}" 
+                    display_text = f" • {dataset_part} + {model_original}" 
                 except Exception:
                     display_text = f" • {desc}" # Fallback to full desc
                 opt_short = opt.replace("Optimizer", "") # Less aggressive shortening
@@ -1048,7 +1064,7 @@ class BenchmarkRunner:
                     task_desc_short = f"{dataset_key}/{optimizer_key}/{sanitized_model_name_for_ids}"
                     dataset_obj = self.dataset_cache[f"{dataset_key}_{self.test_mode}"]
                     project_name_opik = f"benchmark-{self.current_run_id}-{dataset_key}-{optimizer_key}-{sanitized_model_name_for_ids}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                    optimizer_instance = self.create_optimizer(optimizer_config_for_current_task, project_name_opik)
+                    optimizer_instance = self.create_optimizer(optimizer_config_for_current_task, model_name, project_name_opik)
                     if optimizer_instance is None:
                         logger.error(f"[red]✗ Failed create optimizer {optimizer_key}/{dataset_key} for model {model_name}. Skip.[/red]")
                         failed_tasks += 1
@@ -1058,6 +1074,7 @@ class BenchmarkRunner:
                         continue # <<< Indent this to be PART of the if block
                         
                     exp_config = get_experiment_config(dataset_key, optimizer_key, model_name, test_mode=self.test_mode)
+                                        
                     current_future = executor.submit( 
                         self.run_optimization, 
                         dataset=dataset_obj, 
@@ -1217,10 +1234,21 @@ class BenchmarkRunner:
                                 # Set time_taken_display for success case
                                 time_taken_display = result_data.get("duration_seconds_task", 0)
                                 opt_proc = result_data.get("optimization_process", {})
+                                temp_val_panel = None
+                                if config_data.get("optimizer_class") == "FewShotBayesianOptimizer":
+                                    raw_opt_res = detail_data.get("raw_optimizer_result", {})
+                                    temp_val_panel = raw_opt_res.get("details", {}).get("temperature")
+                                else:
+                                    # General case: get from parameters stored in experiment_config
+                                    exp_params = detail_data.get("config", {}).get("parameters", {})
+                                    if not exp_params: # Fallback if parameters not in config block (older format?)
+                                         exp_params = config_data.get("optimizer_params", {})
+                                    temp_val_panel = exp_params.get("temperature")
                                 opt_details_summary = {
                                     "num_iterations": len(opt_proc.get("history", [])),
                                     "best_score": opt_proc.get("best_score_achieved"),
-                                    "optimization_history": opt_proc.get("history", [])
+                                    "optimization_history": opt_proc.get("history", []),
+                                    "temperature": temp_val_panel # Store temperature here
                                 }
                         
                         else: # result_data is None (exception occurred during future processing)
@@ -1341,13 +1369,34 @@ class BenchmarkRunner:
                 
                 # Optimization process details
                 opt_process = detail_data.get("optimization_process", {})
-                # Correctly source num_iterations for FewShotBayesianOptimizer
-                if config_data.get("optimizer_class") == "FewShotBayesianOptimizer":
-                    item_data["opt_num_iterations"] = opt_process.get("num_trials_configured")
-                else:
-                    item_data["opt_num_iterations"] = len(opt_process.get("history", [])) # Default for round-based
+                item_data["opt_num_iterations"] = len(opt_process.get("history", [])) if config_data.get("optimizer_class") != "FewShotBayesianOptimizer" else opt_process.get("num_trials_configured")
                 item_data["opt_best_score_achieved"] = opt_process.get("best_score_achieved")
                 item_data["opt_duration_seconds"] = opt_process.get("duration_seconds")
+                
+                # Add Temperature to CSV
+                # For FewShot, temperature is in raw_optimizer_result.details
+                # For others, it should be in config.optimizer_params (via experiment_config.parameters)
+                temp_val = None
+                if config_data.get("optimizer_class") == "FewShotBayesianOptimizer":
+                    raw_opt_res = detail_data.get("raw_optimizer_result", {})
+                    temp_val = raw_opt_res.get("details", {}).get("temperature")
+                else:
+                    # General case: get from parameters stored in experiment_config
+                    exp_params = detail_data.get("config", {}).get("parameters", {})
+                    if not exp_params: # Fallback if parameters not in config block (older format?)
+                         exp_params = config_data.get("optimizer_params", {})
+                    temp_val = exp_params.get("temperature")
+                item_data["temperature"] = temp_val
+
+                # Add Final Prompt (serialize if it's a list/dict)
+                final_prompt_data = opt_process.get("final_prompt")
+                if isinstance(final_prompt_data, (list, dict)):
+                     try:
+                         item_data["final_prompt"] = json.dumps(final_prompt_data) # Store complex prompt as JSON string
+                     except Exception:
+                         item_data["final_prompt"] = str(final_prompt_data) # Fallback to string
+                else:
+                    item_data["final_prompt"] = final_prompt_data # Store simple string prompt as is
 
                 flat_data_for_csv.append(item_data)
 
@@ -1398,6 +1447,11 @@ def create_result_panel(dataset_name: str, optimizer_name: str, metrics: dict, t
     table.add_row("Optimizer:", f"[bold]{optimizer_name}[/bold]")
     # Ensure time_taken is displayed correctly
     table.add_row("Time Taken:", f"{time_taken:.2f}s" if isinstance(time_taken, (int, float)) else "[dim]N/A[/dim]")
+
+    # Add Temperature display
+    temp_val_panel = optimization_details.get("temperature") # Fetch temperature
+    temp_str_panel = f"{temp_val_panel:.1f}" if isinstance(temp_val_panel, (int, float)) else "[dim]N/A[/dim]"
+    table.add_row("Temperature (🔥):", temp_str_panel)
 
     # --- Scores --- 
     score_rows = []
@@ -1548,6 +1602,7 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
         results_table.add_column("Dataset", style=STYLES["dim"], max_width=25, overflow="ellipsis", no_wrap=True)
         results_table.add_column("Optimizer", no_wrap=True)
         results_table.add_column("Model", no_wrap=True, max_width=20, overflow="ellipsis") # Added Model column
+        results_table.add_column("🔥", justify="center", no_wrap=True) # Temperature column
         results_table.add_column("Metric", no_wrap=True)
         results_table.add_column("Time (s)", justify="right", no_wrap=True)
         results_table.add_column("Initial", justify="right", no_wrap=True)
@@ -1580,11 +1635,24 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
                         "initial": {},
                         "final": {},
                         "time": time_taken,
-                        "task_id": task_id # Store task_id for reference if needed
+                        "task_id": task_id, 
+                        "temperature": None # Initialize temperature
                     }
-                else: # Should not happen if task_ids are unique per config, but handle defensively
+                else: 
                     processed_data_for_table[table_key]["time"] = time_taken 
                 
+                # Fetch and store temperature for this entry
+                temp_val_table = None
+                if config.get("optimizer_class") == "FewShotBayesianOptimizer":
+                    raw_opt_res_table = detail_data.get("raw_optimizer_result", {})
+                    temp_val_table = raw_opt_res_table.get("details", {}).get("temperature")
+                else:
+                    exp_params_table = detail_data.get("config", {}).get("parameters", {})
+                    if not exp_params_table: 
+                         exp_params_table = config.get("optimizer_params", {})
+                    temp_val_table = exp_params_table.get("temperature")
+                processed_data_for_table[table_key]["temperature"] = temp_val_table
+
                 initial_eval_metrics = detail_data.get("initial_evaluation", {}).get("metrics", [])
                 for metric_entry in initial_eval_metrics:
                     metric_display_name = str(metric_entry.get("metric_name", "Unknown")).split(" object at")[0].split('.')[-1]
@@ -1612,6 +1680,7 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
             dataset, optimizer, model = key_tuple
             data_for_run_key = processed_data_for_table[key_tuple]
             time_taken_for_run = data_for_run_key.get("time", 0)
+            temperature_for_run = data_for_run_key.get("temperature") # Get temperature
             scores_by_metric = {"initial": data_for_run_key["initial"], "final": data_for_run_key["final"]}
             
             is_new_block = (last_dataset_optimizer_model != key_tuple)
@@ -1627,15 +1696,15 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
                     
                     dataset_text = Text(dataset, overflow="ellipsis")
                     dataset_text.truncate(25)
-                    # Split model name by '/' and join with newline
                     model_parts = model.split('/')
                     model_text = Text('\n'.join(model_parts), overflow="ellipsis")
                     model_text.truncate(20)
                     
-                    # Display dataset, optimizer, model, and time only for the first metric of a block
+                    # Display dataset, optimizer, model, temp, and time only for the first metric of a block
                     display_dataset = dataset_text if metric_i == 0 else ""
                     display_optimizer = optimizer if metric_i == 0 else ""
                     display_model = model_text if metric_i == 0 else ""
+                    display_temp = f"{temperature_for_run:.1f}" if isinstance(temperature_for_run, (int, float)) else "[dim]-[/dim]" if metric_i == 0 else ""
                     display_time = f"{time_taken_for_run:.2f}" if metric_i == 0 else ""
                     
                     # Add a line (end_section) before a new block, but not for the very first block
@@ -1644,7 +1713,8 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
                     results_table.add_row(
                         display_dataset,
                         display_optimizer,
-                        display_model, # Added model display
+                        display_model, 
+                        display_temp, # Add temperature display
                         metric_name_to_display,
                         display_time,
                         initial_str,
@@ -1669,24 +1739,36 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
             
             if result_data and result_data.get("final_prompt") is not None:
                 final_prompt = result_data["final_prompt"]
-                prompt_content: Any = "[dim]N/A[/dim]"
-                if isinstance(final_prompt, list): # Handle chat format
-                    prompt_content = Group(*[
-                        Text.assemble(
-                            # Select color based on role - Use Style(color=...) for better control
-                            (f"{msg.get('role', 'unk').capitalize()}: ", 
-                             Style(color='blue' if msg.get('role') == 'system' else ('green' if msg.get('role') == 'user' else 'magenta'), bold=True)), 
-                            # Add Text object for content (removed soft_wrap)
-                            Text(f"{msg.get('content', '')}") 
-                        )
-                        for msg in final_prompt if isinstance(msg, dict) # Ensure msg is a dict
-                    ])
-                elif isinstance(final_prompt, str):
-                    # Use Text object for string prompts as well for wrapping (removed soft_wrap)
-                    prompt_content = Text(final_prompt)
+                prompt_content_display: Any = "[dim]N/A[/dim]"
                 
-                # Ensure the panel itself doesn't prevent wrapping (default should be ok)
-                prompt_panel = Panel(prompt_content, title="Final Prompt", border_style="dim", padding=1)
+                if isinstance(final_prompt, list): # Handle chat format
+                    prompt_elements = []
+                    for msg in final_prompt:
+                        if not isinstance(msg, dict): continue # Skip invalid entries
+                        role = msg.get('role', 'unk').capitalize()
+                        content = msg.get('content', '')
+                        # Define style based on role
+                        style = Style()
+                        if msg.get('role') == 'system': style = Style(color='blue', bold=True)
+                        elif msg.get('role') == 'user': style = Style(color='green', bold=True)
+                        elif msg.get('role') == 'assistant': style = Style(color='magenta', bold=True)
+                        else: style = Style(dim=True)
+                        
+                        prompt_elements.append(Text(f"{role}: ", style=style))
+                        prompt_elements.append(Text(content)) # Let Panel handle wrapping
+                        prompt_elements.append(Text("")) # Add a blank line for separation
+                        
+                    if prompt_elements: 
+                        # Remove last blank line
+                        prompt_elements.pop()
+                        prompt_content_display = Group(*prompt_elements)
+                    else:
+                        prompt_content_display = Text("[dim](Empty chat list)[/dim]")
+                        
+                elif isinstance(final_prompt, str):
+                    prompt_content_display = Text(final_prompt) # Let Panel handle wrapping
+                
+                prompt_panel = Panel(prompt_content_display, title="Final Prompt", border_style="dim", padding=1)
                 console.print(prompt_panel)
             else:
                 console.print(Panel("[dim]Final prompt not available for this task.[/dim]", title="Final Prompt", border_style="dim"))
