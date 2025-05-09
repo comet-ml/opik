@@ -51,7 +51,7 @@ result = optimizer.optimize_prompt(
     metric_config=metric_config,
     task_config=task_config,
     auto_continue=False,
-    n_samples=100,  # Explicitly set to 10 samples
+    n_samples=100,  # Explicitly set to 100 samples
     use_subsample=True,  # Force using subsample for evaluation rounds
 )
 
