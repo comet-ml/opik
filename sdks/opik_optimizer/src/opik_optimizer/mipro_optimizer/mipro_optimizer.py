@@ -278,7 +278,7 @@ class MiproOptimizer(BaseOptimizer):
         output_key = task_config.output_dataset_field
         self.tools = task_config.tools
         self.num_candidates = num_candidates
-        self.seed = 9
+        self.seed = 42
         self.input_key = input_key
         self.output_key = output_key
         self.prompt = prompt
