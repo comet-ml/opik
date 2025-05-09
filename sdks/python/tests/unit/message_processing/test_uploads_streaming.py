@@ -24,6 +24,7 @@ def test_streamer__attachment_uploads__flush__ok(temp_file_15mb):
             n_consumers=1,
             use_batching=True,
             file_upload_manager=file_upload_manager,
+            max_queue_size=None,
         )
 
         attachment = messages.CreateAttachmentMessage(
@@ -63,6 +64,7 @@ def test_streamer__attachment_uploads__flush__timeout(temp_file_15mb):
             n_consumers=1,
             use_batching=True,
             file_upload_manager=file_upload_manager,
+            max_queue_size=None,
         )
 
         attachment = messages.CreateAttachmentMessage(

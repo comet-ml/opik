@@ -56,6 +56,7 @@ def batched_streamer_and_mock_message_processor():
             n_consumers=1,
             use_batching=True,
             file_upload_manager=mock.Mock(),
+            max_queue_size=None,
         )
 
         yield tested, mock_message_processor
@@ -67,12 +68,14 @@ def batched_streamer_and_mock_message_processor():
 def test_streamer__happy_flow(batched_streamer_and_mock_message_processor):
     tested, mock_message_processor = batched_streamer_and_mock_message_processor
 
-    tested.put("message-1")
-    tested.put("message-2")
-    assert tested.flush(timeout=0.1) is True
+    test_messages = [messages.BaseMessage(), messages.BaseMessage]
+
+    tested.put(test_messages[0])
+    tested.put(test_messages[1])
+    assert tested.flush(timeout=0.0001) is True
 
     mock_message_processor.process.assert_has_calls(
-        [mock.call("message-1"), mock.call("message-2")]
+        [mock.call(test_messages[0]), mock.call(test_messages[1])]
     )
 
 
@@ -94,6 +97,7 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
             n_consumers=1,
             use_batching=False,
             file_upload_manager=mock.Mock(),
+            max_queue_size=None,
         )
 
         CREATE_MESSAGE = obj

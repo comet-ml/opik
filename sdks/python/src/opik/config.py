@@ -201,6 +201,15 @@ class OpikConfig(pydantic_settings.BaseSettings):
     Timeout for guardrail.validate calls in seconds. If response takes more than this, it will be considered failed and raises an Exception.
     """
 
+    maximal_queue_size: int = 10000
+    """
+    Specifies the maximum number of messages that can be queued for delivery when a connection error occurs or rate limiting is in effect.
+    """
+    maximal_queue_size_batch_factor: int = 10
+    """
+    Defines the factor applied to the `maximal_queue_size` to reduce the maximal message queue size when batching is enabled.
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)

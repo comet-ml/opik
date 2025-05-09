@@ -42,6 +42,7 @@ def patch_streamer():
             n_consumers=1,
             use_batching=True,
             file_upload_manager=fake_upload_manager,
+            max_queue_size=None,
         )
 
         yield streamer, fake_message_processor_
@@ -63,6 +64,7 @@ def patch_streamer_without_batching():
             n_consumers=1,
             use_batching=False,
             file_upload_manager=fake_upload_manager,
+            max_queue_size=None,
         )
 
         yield streamer, fake_message_processor_

@@ -1,10 +1,9 @@
-import queue
 import threading
 import logging
 import time
-from typing import Any, List, Optional
+from typing import List, Optional
 
-from . import messages, queue_consumer
+from . import messages, message_queue, queue_consumer
 from .. import synchronization
 from .batching import batch_manager
 from ..file_upload import base_upload_manager
@@ -15,13 +14,13 @@ LOGGER = logging.getLogger(__name__)
 class Streamer:
     def __init__(
         self,
-        message_queue: "queue.Queue[Any]",
+        queue: message_queue.MessageQueue[messages.BaseMessage],
         queue_consumers: List[queue_consumer.QueueConsumer],
         batch_manager: Optional[batch_manager.BatchManager],
         file_upload_manager: base_upload_manager.BaseFileUploadManager,
     ) -> None:
         self._lock = threading.RLock()
-        self._message_queue = message_queue
+        self._message_queue = queue
         self._queue_consumers = queue_consumers
         self._batch_manager = batch_manager
         self._file_upload_manager = file_upload_manager
@@ -47,6 +46,11 @@ class Streamer:
                 self._file_upload_manager.upload(message)
             else:
                 self._message_queue.put(message)
+                if LOGGER.isEnabledFor(logging.DEBUG):
+                    if self._message_queue.accept_put_without_discarding() is False:
+                        LOGGER.debug(
+                            "Message queue size limit reached. The new message added to the queue but old will be discarded."
+                        )
 
     def close(self, timeout: Optional[int]) -> bool:
         """
@@ -97,6 +101,9 @@ class Streamer:
 
     def workers_waiting(self) -> bool:
         return all([consumer.waiting for consumer in self._queue_consumers])
+
+    def queue_size(self) -> int:
+        return self._message_queue.size()
 
     def _start_queue_consumers(self) -> None:
         for consumer in self._queue_consumers:
