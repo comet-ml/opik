@@ -43,6 +43,7 @@ class MiproOptimizer(BaseOptimizer):
         self.tools = []
         self.num_threads = self.model_kwargs.pop("num_threads", 6)
         self.model_kwargs["model"] = self.model
+        self.llm_call_counter = 0
         lm = LM(**self.model_kwargs)
         opik_callback = OpikCallback(project_name=self.project_name, log_graph=True)
         dspy.configure(lm=lm, callbacks=[opik_callback])
@@ -79,6 +80,7 @@ class MiproOptimizer(BaseOptimizer):
         """
         # FIMXE: call super when it is ready
         # FIXME: Intermediate values:
+        self.llm_call_counter += 1
         metric = metric_config.metric
         input_key = task_config.input_dataset_fields[0]  # FIXME: allow all inputs
         output_key = task_config.output_dataset_field
@@ -273,6 +275,7 @@ class MiproOptimizer(BaseOptimizer):
         **kwargs,
     ) -> None:
         # FIXME: Intermediate values:
+        self.llm_call_counter = 0
         metric = metric_config.metric
         prompt = task_config.instruction_prompt
         input_key = task_config.input_dataset_fields[0]  # FIXME: allow all
@@ -427,6 +430,7 @@ class MiproOptimizer(BaseOptimizer):
             demonstrations=best_program_details.demonstrations,
             details=best_program_details.details,
             history=mipro_history_processed,
+            llm_calls=self.llm_call_counter
         )
 
     def get_best(self, position: int = 0) -> OptimizationResult:
@@ -465,4 +469,5 @@ class MiproOptimizer(BaseOptimizer):
             metric_name=self.opik_metric.name,
             demonstrations=demos,
             details={"program": program_module},
+            llm_calls=self.llm_call_counter
         )
