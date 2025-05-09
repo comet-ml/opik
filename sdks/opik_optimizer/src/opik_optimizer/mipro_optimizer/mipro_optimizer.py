@@ -85,6 +85,9 @@ class MiproOptimizer(BaseOptimizer):
         input_key = task_config.input_dataset_fields[0]  # FIXME: allow all inputs
         output_key = task_config.output_dataset_field
 
+        # Kwargs might contain n_samples, passed from run_benchmark.py
+        n_samples = kwargs.pop("n_samples", None) # Get n_samples from kwargs if present
+
         if isinstance(dataset, str):
             opik_client = opik.Opik(project_name=self.project_name)
             dataset = opik_client.get_dataset(dataset)
@@ -149,12 +152,32 @@ class MiproOptimizer(BaseOptimizer):
 
             return result
 
-        if n_samples is not None:
-            if dataset_item_ids is not None:
-                raise Exception("Can't use n_samples and dataset_item_ids")
+        # Robust n_samples handling for selecting dataset_item_ids
+        dataset_items_for_eval = dataset.get_items()
+        num_total_items = len(dataset_items_for_eval)
+        dataset_item_ids_to_use = dataset_item_ids # Use provided IDs if any
 
-            all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
-            dataset_item_ids = random.sample(all_ids, n_samples)
+        if n_samples is not None: # If n_samples is specified by the caller (run_benchmark.py)
+            if dataset_item_ids is not None:
+                # This case should ideally be an error or a clear precedence rule.
+                # For now, let's assume if dataset_item_ids is provided, it takes precedence over n_samples.
+                logger.warning("MiproOptimizer.evaluate_prompt: Both n_samples and dataset_item_ids provided. Using provided dataset_item_ids.")
+                # dataset_item_ids_to_use is already dataset_item_ids
+            elif n_samples > num_total_items:
+                logger.warning(f"MiproOptimizer.evaluate_prompt: n_samples ({n_samples}) > total items ({num_total_items}). Using all {num_total_items} items.")
+                dataset_item_ids_to_use = None # opik.evaluation.evaluate handles None as all items
+            elif n_samples <= 0:
+                logger.warning(f"MiproOptimizer.evaluate_prompt: n_samples ({n_samples}) is <= 0. Using all {num_total_items} items.")
+                dataset_item_ids_to_use = None
+            else:
+                # n_samples is valid and dataset_item_ids was not provided, so sample now.
+                all_ids = [item["id"] for item in dataset_items_for_eval]
+                dataset_item_ids_to_use = random.sample(all_ids, n_samples)
+                logger.info(f"MiproOptimizer.evaluate_prompt: Sampled {n_samples} items for evaluation.")
+        else: # n_samples is None
+            if dataset_item_ids is None:
+                logger.info(f"MiproOptimizer.evaluate_prompt: n_samples is None and dataset_item_ids is None. Using all {num_total_items} items.")
+            # dataset_item_ids_to_use is already dataset_item_ids (which could be None)
 
         experiment_config = experiment_config or {}
         experiment_config = {
@@ -176,7 +199,7 @@ class MiproOptimizer(BaseOptimizer):
             # "reference" needs to match metric
             scoring_key_mapping={"reference": output_key},
             task_threads=self.num_threads,
-            dataset_item_ids=dataset_item_ids,
+            dataset_item_ids=dataset_item_ids_to_use,
             project_name=self.project_name,
             experiment_config=experiment_config,
             verbose=verbose,
