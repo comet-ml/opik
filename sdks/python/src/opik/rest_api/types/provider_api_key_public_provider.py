@@ -2,6 +2,4 @@
 
 import typing
 
-ProviderApiKeyPublicProvider = typing.Union[
-    typing.Literal["openai", "anthropic", "gemini", "openrouter"], typing.Any
-]
+ProviderApiKeyPublicProvider = typing.Union[typing.Literal["openai", "anthropic", "gemini", "openrouter"], typing.Any]

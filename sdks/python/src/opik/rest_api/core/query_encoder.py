@@ -6,9 +6,7 @@ import pydantic
 
 
 # Flattens dicts to be of the form {"key[subkey][subkey2]": value} where value is not a dict
-def traverse_query_dict(
-    dict_flat: Dict[str, Any], key_prefix: Optional[str] = None
-) -> List[Tuple[str, Any]]:
+def traverse_query_dict(dict_flat: Dict[str, Any], key_prefix: Optional[str] = None) -> List[Tuple[str, Any]]:
     result = []
     for k, v in dict_flat.items():
         key = f"{key_prefix}[{k}]" if key_prefix is not None else k

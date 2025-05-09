@@ -4,13 +4,15 @@
 
 import * as errors from "../../errors/index";
 import * as OpikApi from "../index";
+import * as core from "../../core";
 
 export class ForbiddenError extends errors.OpikApiError {
-    constructor(body: OpikApi.ErrorMessage) {
+    constructor(body: OpikApi.ErrorMessage, rawResponse?: core.RawResponse) {
         super({
             message: "ForbiddenError",
             statusCode: 403,
             body: body,
+            rawResponse: rawResponse,
         });
         Object.setPrototypeOf(this, ForbiddenError.prototype);
     }

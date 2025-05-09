@@ -60,10 +60,17 @@ export class Attachments {
      *         path: "path"
      *     })
      */
-    public async attachmentList(
+    public attachmentList(
         request: OpikApi.AttachmentListRequest,
         requestOptions?: Attachments.RequestOptions,
-    ): Promise<OpikApi.AttachmentPage> {
+    ): core.HttpResponsePromise<OpikApi.AttachmentPage> {
+        return core.HttpResponsePromise.fromPromise(this.__attachmentList(request, requestOptions));
+    }
+
+    private async __attachmentList(
+        request: OpikApi.AttachmentListRequest,
+        requestOptions?: Attachments.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.AttachmentPage>> {
         const { page, size, projectId, entityType, entityId, path } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
@@ -108,18 +115,21 @@ export class Attachments {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.AttachmentPage.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.AttachmentPage.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 401:
-                    throw new OpikApi.UnauthorizedError(_response.error.body);
+                    throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 403:
                     throw new OpikApi.ForbiddenError(
                         serializers.ErrorMessage.parseOrThrow(_response.error.body, {
@@ -128,11 +138,13 @@ export class Attachments {
                             allowUnrecognizedEnumValues: true,
                             breadcrumbsPrefix: ["response"],
                         }),
+                        _response.rawResponse,
                     );
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -142,12 +154,14 @@ export class Attachments {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/attachment/list.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -174,10 +188,17 @@ export class Attachments {
      *             }]
      *     })
      */
-    public async completeMultiPartUpload(
+    public completeMultiPartUpload(
         request: OpikApi.CompleteMultipartUploadRequest,
         requestOptions?: Attachments.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__completeMultiPartUpload(request, requestOptions));
+    }
+
+    private async __completeMultiPartUpload(
+        request: OpikApi.CompleteMultipartUploadRequest,
+        requestOptions?: Attachments.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -206,13 +227,13 @@ export class Attachments {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 401:
-                    throw new OpikApi.UnauthorizedError(_response.error.body);
+                    throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 403:
                     throw new OpikApi.ForbiddenError(
                         serializers.ErrorMessage.parseOrThrow(_response.error.body, {
@@ -221,11 +242,13 @@ export class Attachments {
                             allowUnrecognizedEnumValues: true,
                             breadcrumbsPrefix: ["response"],
                         }),
+                        _response.rawResponse,
                     );
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -235,6 +258,7 @@ export class Attachments {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -243,6 +267,7 @@ export class Attachments {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -269,10 +294,17 @@ export class Attachments {
      *             }]
      *     })
      */
-    public async deleteAttachments(
+    public deleteAttachments(
         request: OpikApi.CompleteMultipartUploadRequest,
         requestOptions?: Attachments.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteAttachments(request, requestOptions));
+    }
+
+    private async __deleteAttachments(
+        request: OpikApi.CompleteMultipartUploadRequest,
+        requestOptions?: Attachments.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -301,13 +333,13 @@ export class Attachments {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 401:
-                    throw new OpikApi.UnauthorizedError(_response.error.body);
+                    throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 403:
                     throw new OpikApi.ForbiddenError(
                         serializers.ErrorMessage.parseOrThrow(_response.error.body, {
@@ -316,11 +348,13 @@ export class Attachments {
                             allowUnrecognizedEnumValues: true,
                             breadcrumbsPrefix: ["response"],
                         }),
+                        _response.rawResponse,
                     );
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -330,6 +364,7 @@ export class Attachments {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -338,6 +373,7 @@ export class Attachments {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -347,10 +383,17 @@ export class Attachments {
      * @throws {@link OpikApi.UnauthorizedError}
      * @throws {@link OpikApi.ForbiddenError}
      */
-    public async downloadAttachment(
+    public downloadAttachment(
         request: OpikApi.DownloadAttachmentRequest,
         requestOptions?: Attachments.RequestOptions,
-    ): Promise<stream.Readable> {
+    ): core.HttpResponsePromise<stream.Readable> {
+        return core.HttpResponsePromise.fromPromise(this.__downloadAttachment(request, requestOptions));
+    }
+
+    private async __downloadAttachment(
+        request: OpikApi.DownloadAttachmentRequest,
+        requestOptions?: Attachments.RequestOptions,
+    ): Promise<core.WithRawResponse<stream.Readable>> {
         const { workspaceName, containerId, entityType, entityId, fileName, mimeType } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (workspaceName != null) {
@@ -393,13 +436,13 @@ export class Attachments {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return _response.body;
+            return { data: _response.body, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 401:
-                    throw new OpikApi.UnauthorizedError(_response.error.body);
+                    throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 403:
                     throw new OpikApi.ForbiddenError(
                         serializers.ErrorMessage.parseOrThrow(_response.error.body, {
@@ -408,11 +451,13 @@ export class Attachments {
                             allowUnrecognizedEnumValues: true,
                             breadcrumbsPrefix: ["response"],
                         }),
+                        _response.rawResponse,
                     );
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -422,6 +467,7 @@ export class Attachments {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -430,6 +476,7 @@ export class Attachments {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -452,10 +499,17 @@ export class Attachments {
      *         path: "path"
      *     })
      */
-    public async startMultiPartUpload(
+    public startMultiPartUpload(
         request: OpikApi.StartMultipartUploadRequest,
         requestOptions?: Attachments.RequestOptions,
-    ): Promise<OpikApi.StartMultipartUploadResponse> {
+    ): core.HttpResponsePromise<OpikApi.StartMultipartUploadResponse> {
+        return core.HttpResponsePromise.fromPromise(this.__startMultiPartUpload(request, requestOptions));
+    }
+
+    private async __startMultiPartUpload(
+        request: OpikApi.StartMultipartUploadRequest,
+        requestOptions?: Attachments.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.StartMultipartUploadResponse>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -484,18 +538,21 @@ export class Attachments {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.StartMultipartUploadResponse.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.StartMultipartUploadResponse.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 401:
-                    throw new OpikApi.UnauthorizedError(_response.error.body);
+                    throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 403:
                     throw new OpikApi.ForbiddenError(
                         serializers.ErrorMessage.parseOrThrow(_response.error.body, {
@@ -504,11 +561,13 @@ export class Attachments {
                             allowUnrecognizedEnumValues: true,
                             breadcrumbsPrefix: ["response"],
                         }),
+                        _response.rawResponse,
                     );
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -518,6 +577,7 @@ export class Attachments {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -526,6 +586,7 @@ export class Attachments {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -549,10 +610,17 @@ export class Attachments {
      *         }
      *     })
      */
-    public async uploadAttachment(
+    public uploadAttachment(
         request: OpikApi.UploadAttachmentRequest,
         requestOptions?: Attachments.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__uploadAttachment(request, requestOptions));
+    }
+
+    private async __uploadAttachment(
+        request: OpikApi.UploadAttachmentRequest,
+        requestOptions?: Attachments.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const { fileName, projectName, mimeType, entityType, entityId, body: _body } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         _queryParams["file_name"] = fileName;
@@ -599,13 +667,13 @@ export class Attachments {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 401:
-                    throw new OpikApi.UnauthorizedError(_response.error.body);
+                    throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 403:
                     throw new OpikApi.ForbiddenError(
                         serializers.ErrorMessage.parseOrThrow(_response.error.body, {
@@ -614,11 +682,13 @@ export class Attachments {
                             allowUnrecognizedEnumValues: true,
                             breadcrumbsPrefix: ["response"],
                         }),
+                        _response.rawResponse,
                     );
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -628,6 +698,7 @@ export class Attachments {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -636,6 +707,7 @@ export class Attachments {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }

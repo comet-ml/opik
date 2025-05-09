@@ -1,7 +1,7 @@
 import opik
 
 from typing import Any, Callable, Dict, List, Optional
-from opik_optimizer.optimization_dsl import MetricConfig
+from opik_optimizer.optimization_config.configs import MetricConfig
 from opik.evaluation.metrics import score_result
 
 from opik.evaluation import evaluator as opik_evaluator

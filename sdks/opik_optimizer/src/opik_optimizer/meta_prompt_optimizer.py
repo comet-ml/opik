@@ -1,6 +1,5 @@
 from typing import List, Dict, Any, Optional, Union
 import opik
-from opik.evaluation import metrics
 from opik import Dataset
 import litellm
 from litellm.caching import Cache
@@ -13,27 +12,19 @@ from .optimization_config import mappers
 from .optimization_config.configs import MetricConfig, TaskConfig
 from .base_optimizer import BaseOptimizer, OptimizationRound
 from .optimization_result import OptimizationResult
-from .utils import get_tqdm
 from opik_optimizer import task_evaluator
 from opik.api_objects import opik_client
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
-tqdm = get_tqdm()
+from opik.environment import get_tqdm_for_current_environment
+
+tqdm = get_tqdm_for_current_environment()
 
 # Using disk cache for LLM calls
 disk_cache_dir = os.path.expanduser("~/.litellm_cache")
 litellm.cache = Cache(type="disk", disk_cache_dir=disk_cache_dir)
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Configure LiteLLM logging
-litellm_logger = logging.getLogger("LiteLLM")
-litellm_logger.setLevel(logging.WARNING)  # Only show warnings and errors from LiteLLM
-
-# Configure HTTPX logging
-httpx_logger = logging.getLogger("httpx")
-httpx_logger.setLevel(logging.WARNING)  # Only show warnings and errors from HTTPX
+logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
 
 
 class MetaPromptOptimizer(BaseOptimizer):
@@ -45,7 +36,7 @@ class MetaPromptOptimizer(BaseOptimizer):
     DEFAULT_IMPROVEMENT_THRESHOLD = 0.05
     DEFAULT_INITIAL_TRIALS = 3
     DEFAULT_MAX_TRIALS = 6
-    DEFAULT_ADAPTIVE_THRESHOLD = 0.8 # Set to None to disable adaptive trials
+    DEFAULT_ADAPTIVE_THRESHOLD = 0.8  # Set to None to disable adaptive trials
 
     # --- Reasoning System Prompt ---
     _REASONING_SYSTEM_PROMPT = """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
@@ -67,6 +58,33 @@ class MetaPromptOptimizer(BaseOptimizer):
             ]
         }"""
 
+    # --- Constants for Default Configuration ---
+    DEFAULT_MAX_ROUNDS = 3
+    DEFAULT_PROMPTS_PER_ROUND = 4
+    DEFAULT_IMPROVEMENT_THRESHOLD = 0.05
+    DEFAULT_INITIAL_TRIALS = 3
+    DEFAULT_MAX_TRIALS = 6
+    DEFAULT_ADAPTIVE_THRESHOLD = 0.8  # Set to None to disable adaptive trials
+
+    # --- Reasoning System Prompt ---
+    _REASONING_SYSTEM_PROMPT = """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
+        Focus on making the prompt more effective by:
+        1. Being clear and specific about what is expected
+        2. Providing necessary context and constraints
+        3. Guiding the model to produce the desired output format
+        4. Removing ambiguity and unnecessary elements
+        5. Maintaining conciseness while being complete
+
+        Return a JSON array of prompts with the following structure:
+        {
+            "prompts": [
+                {
+                    "prompt": "the improved prompt text",
+                    "improvement_focus": "what aspect this prompt improves",
+                    "reasoning": "why this improvement should help"
+                }
+            ]
+        }"""
 
     def __init__(
         self,
@@ -110,11 +128,15 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.dataset = None
         self.task_config = None
         self._opik_client = opik_client.get_client_cached()
-        logger.info(
+        logger.debug(
             f"Initialized MetaPromptOptimizer with model={model}, reasoning_model={self.reasoning_model}"
         )
-        logger.info(f"Optimization rounds: {max_rounds}, Prompts/round: {num_prompts_per_round}")
-        logger.info(f"Trials config: Initial={self.initial_trials}, Max={self.max_trials}, Adaptive Threshold={self.adaptive_threshold}")
+        logger.debug(
+            f"Optimization rounds: {max_rounds}, Prompts/round: {num_prompts_per_round}"
+        )
+        logger.debug(
+            f"Trials config: Initial={self.initial_trials}, Max={self.max_trials}, Adaptive Threshold={self.adaptive_threshold}"
+        )
 
     def evaluate_prompt(
         self,
@@ -159,50 +181,80 @@ class MetaPromptOptimizer(BaseOptimizer):
         prompt: str,
         system_prompt: Optional[str] = None,
         is_reasoning: bool = False,
+        optimization_id: Optional[str] = None,
     ) -> str:
         """Call the model with the given prompt and return the response."""
         # Note: Basic retry logic could be added here using tenacity
         try:
-            model_params = {
-                "temperature": getattr(self, "temperature", 0.7),
+            # Basic LLM parameters (e.g., temperature, max_tokens)
+            llm_config_params = {
+                "temperature": getattr(self, "temperature", 0.3),
                 "max_tokens": getattr(self, "max_tokens", 1000),
                 "top_p": getattr(self, "top_p", 1.0),
                 "frequency_penalty": getattr(self, "frequency_penalty", 0.0),
                 "presence_penalty": getattr(self, "presence_penalty", 0.0),
             }
 
+            # Prepare metadata that we want to be part of the LLM call context.
+            metadata_for_opik = {}
+            if self.project_name:
+                metadata_for_opik["project_name"] = (
+                    self.project_name
+                )  # Top-level for general use
+                metadata_for_opik["opik"] = {"project_name": self.project_name}
+
+            if optimization_id:
+                # Also add to opik-specific structure if project_name was added
+                if "opik" in metadata_for_opik:
+                    metadata_for_opik["opik"]["optimization_id"] = optimization_id
+
+            metadata_for_opik["optimizer_name"] = self.__class__.__name__
+            metadata_for_opik["opik_call_type"] = (
+                "reasoning" if is_reasoning else "evaluation_llm_task_direct"
+            )
+
+            if metadata_for_opik:
+                llm_config_params["metadata"] = metadata_for_opik
+
             messages = []
-            # Use system prompt only if provided *and* it's a reasoning call or chat is configured
-            if system_prompt and (is_reasoning or getattr(self.task_config, 'use_chat_prompt', False)):
-                 messages.append({"role": "system", "content": system_prompt})
-            
-            # Add the main prompt/user message
+            if system_prompt and (
+                is_reasoning or getattr(self.task_config, "use_chat_prompt", False)
+            ):
+                messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
 
-            # Determine which model to use
             model_to_use = self.reasoning_model if is_reasoning else self.model
 
-            logger.debug(f"Calling model '{model_to_use}' with messages: {messages}")
-            
-            model_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(model_params)
+            # Pass llm_config_params (which now includes our metadata) to the Opik monitor.
+            # The monitor is expected to return a dictionary suitable for spreading into litellm.completion,
+            # having handled our metadata and added any Opik-specific configurations.
+            final_call_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(
+                llm_config_params.copy()
+            )
+
+            logger.debug(
+                f"Calling model '{model_to_use}' with messages: {messages}, "
+                f"final params for litellm (from monitor): {final_call_params}"
+            )
+
             response = litellm.completion(
-                model=model_to_use,
-                messages=messages,
-                **model_params
+                model=model_to_use, messages=messages, **final_call_params
             )
             return response.choices[0].message.content
         except litellm.exceptions.RateLimitError as e:
-             logger.error(f"LiteLLM Rate Limit Error: {e}")
-             raise
+            logger.error(f"LiteLLM Rate Limit Error: {e}")
+            raise
         except litellm.exceptions.APIConnectionError as e:
-             logger.error(f"LiteLLM API Connection Error: {e}")
-             raise
+            logger.error(f"LiteLLM API Connection Error: {e}")
+            raise
         except litellm.exceptions.ContextWindowExceededError as e:
-             logger.error(f"LiteLLM Context Window Exceeded Error: {e}")
-             # Log prompt length if possible? Needs access to prompt_for_llm here.
-             raise
+            logger.error(f"LiteLLM Context Window Exceeded Error: {e}")
+            # Log prompt length if possible? Needs access to prompt_for_llm here.
+            raise
         except Exception as e:
-            logger.error(f"Error calling model '{model_to_use}': {type(e).__name__} - {e}")
+            logger.error(
+                f"Error calling model '{model_to_use}': {type(e).__name__} - {e}"
+            )
             raise
 
     def _evaluate_prompt(
@@ -221,19 +273,22 @@ class MetaPromptOptimizer(BaseOptimizer):
             total_items = len(dataset.get_items())
             if n_samples is not None:
                 if n_samples > total_items:
-                    logger.warning(f"Requested n_samples ({n_samples}) is larger than dataset size ({total_items}). Using full dataset.")
+                    logger.warning(
+                        f"Requested n_samples ({n_samples}) is larger than dataset size ({total_items}). Using full dataset."
+                    )
                     subset_size = None
                 else:
                     subset_size = n_samples
-                    logger.info(f"Using specified n_samples: {subset_size} items")
+                    logger.debug(f"Using specified n_samples: {subset_size} items")
             else:
                 # Calculate 20% of total, but no more than 20 items and no more than total items
                 subset_size = min(total_items, min(20, max(10, int(total_items * 0.2))))
-                logger.info(f"Using automatic subset size calculation: {subset_size} items (20% of {total_items} total items)")
+                logger.debug(
+                    f"Using automatic subset size calculation: {subset_size} items (20% of {total_items} total items)"
+                )
         else:
             subset_size = None  # Use all items for final checks
-            logger.info("Using full dataset for evaluation")
-
+            logger.debug("Using full dataset for evaluation")
         experiment_config = experiment_config or {}
         experiment_config = {
             **experiment_config,
@@ -257,12 +312,16 @@ class MetaPromptOptimizer(BaseOptimizer):
             # Validate that input and output fields are in the dataset_item
             for input_key in task_config.input_dataset_fields:
                 if input_key not in dataset_item:
-                    logger.error(f"Input field '{input_key}' not found in dataset sample: {dataset_item}")
+                    logger.error(
+                        f"Input field '{input_key}' not found in dataset sample: {dataset_item}"
+                    )
                     raise ValueError(
                         f"Input field '{input_key}' not found in dataset sample"
                     )
             if task_config.output_dataset_field not in dataset_item:
-                logger.error(f"Output field '{task_config.output_dataset_field}' not found in dataset sample: {dataset_item}")
+                logger.error(
+                    f"Output field '{task_config.output_dataset_field}' not found in dataset sample: {dataset_item}"
+                )
                 raise ValueError(
                     f"Output field '{task_config.output_dataset_field}' not found in dataset sample"
                 )
@@ -270,10 +329,12 @@ class MetaPromptOptimizer(BaseOptimizer):
             # --- Step 1: Prepare the prompt for the LLM ---
             prompt_for_llm: str
             field_mapping = {
-                field: dataset_item[field] for field in task_config.input_dataset_fields if field in dataset_item
+                field: dataset_item[field]
+                for field in task_config.input_dataset_fields
+                if field in dataset_item
             }
 
-            if getattr(task_config, 'use_chat_prompt', False):
+            if getattr(task_config, "use_chat_prompt", False):
                 # For chat prompts, the candidate prompt `prompt` is expected to be a template for the user message.
                 # We assume it contains placeholders like {question} or {text}.
                 candidate_template = Template(prompt)
@@ -284,7 +345,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                 input_clauses = []
                 for field_name in task_config.input_dataset_fields:
                     if field_name in dataset_item:
-                        input_clauses.append(f"{field_name.capitalize()}: {dataset_item[field_name]}")
+                        input_clauses.append(
+                            f"{field_name.capitalize()}: {dataset_item[field_name]}"
+                        )
                 item_specific_inputs_str = "\n".join(input_clauses)
                 prompt_for_llm = f"{prompt}\n\n{item_specific_inputs_str}"
 
@@ -293,9 +356,14 @@ class MetaPromptOptimizer(BaseOptimizer):
 
             # --- Step 2: Call the model ---
             try:
-                logger.info(f"Calling LLM with prompt length: {len(prompt_for_llm)}")
-                raw_model_output = self._call_model(prompt=prompt_for_llm, system_prompt=None, is_reasoning=False)
-                logger.info(f"LLM raw response length: {len(raw_model_output)}")
+                logger.debug(f"Calling LLM with prompt length: {len(prompt_for_llm)}")
+                raw_model_output = self._call_model(
+                    prompt=prompt_for_llm,
+                    system_prompt=None,
+                    is_reasoning=False,
+                    optimization_id=optimization_id,
+                )
+                logger.debug(f"LLM raw response length: {len(raw_model_output)}")
                 logger.debug(f"LLM raw output: {raw_model_output}")
             except Exception as e:
                 logger.error(f"Error calling model with prompt: {e}")
@@ -305,20 +373,20 @@ class MetaPromptOptimizer(BaseOptimizer):
 
             # --- Step 3: Clean the model's output before metric evaluation ---
             cleaned_model_output = raw_model_output.strip()
-            original_cleaned_output = cleaned_model_output # For logging if changed
+            original_cleaned_output = cleaned_model_output  # For logging if changed
 
             # Dynamically generate prefixes based on the output field name
-            output_field = task_config.output_dataset_field # e.g., "answer" or "label"
+            output_field = task_config.output_dataset_field  # e.g., "answer" or "label"
             dynamic_prefixes = [
-                f"{output_field.capitalize()}:", 
+                f"{output_field.capitalize()}:",
                 f"{output_field.capitalize()} :",
-                f"{output_field}:", # Also check lowercase field name
+                f"{output_field}:",  # Also check lowercase field name
                 f"{output_field} :",
             ]
-            
+
             # Add common generic prefixes
             generic_prefixes = ["Answer:", "Answer :", "A:"]
-            
+
             # Combine and remove duplicates (if any)
             prefixes_to_strip = list(set(dynamic_prefixes + generic_prefixes))
             logger.debug(f"Prefixes to strip: {prefixes_to_strip}")
@@ -327,21 +395,28 @@ class MetaPromptOptimizer(BaseOptimizer):
                 # Perform case-insensitive check for robustness
                 if cleaned_model_output.lower().startswith(prefix_to_check.lower()):
                     # Strip based on the actual length of the found prefix
-                    cleaned_model_output = cleaned_model_output[len(prefix_to_check):].strip()
-                    logger.debug(f"Stripped prefix '{prefix_to_check}', new output for metric: {cleaned_model_output}")
-                    break # Stop after stripping the first found prefix
-            
-            if original_cleaned_output != cleaned_model_output:
-                 logger.info(f"Raw model output: '{original_cleaned_output}' -> Cleaned for metric: '{cleaned_model_output}'")
+                    cleaned_model_output = cleaned_model_output[
+                        len(prefix_to_check) :
+                    ].strip()
+                    logger.debug(
+                        f"Stripped prefix '{prefix_to_check}', new output for metric: {cleaned_model_output}"
+                    )
+                    break  # Stop after stripping the first found prefix
 
+            if original_cleaned_output != cleaned_model_output:
+                logger.debug(
+                    f"Raw model output: '{original_cleaned_output}' -> Cleaned for metric: '{cleaned_model_output}'"
+                )
             result = {
                 mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
             }
             return result
 
         # Use dataset's get_items with limit for sampling
-        logger.info(f"Starting evaluation with {subset_size if subset_size else 'all'} samples for metric: {metric_config.metric.name}")
-        return task_evaluator.evaluate(
+        logger.info(
+            f"Starting evaluation with {subset_size if subset_size else 'all'} samples for metric: {metric_config.metric.name}"
+        )
+        score = task_evaluator.evaluate(
             dataset=dataset,
             metric_config=metric_config,
             evaluated_task=llm_task,
@@ -351,6 +426,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             experiment_config=experiment_config,
             optimization_id=optimization_id,
         )
+        logger.debug(f"Evaluation score: {score:.4f}")
+        return score
 
     def optimize_prompt(
         self,
@@ -379,18 +456,21 @@ class MetaPromptOptimizer(BaseOptimizer):
         """
         total_items = len(dataset.get_items())
         if n_samples is not None and n_samples > total_items:
-            logger.warning(f"Requested n_samples ({n_samples}) is larger than dataset size ({total_items}). Using full dataset.")
+            logger.warning(
+                f"Requested n_samples ({n_samples}) is larger than dataset size ({total_items}). Using full dataset."
+            )
             n_samples = None
 
-        logger.info(f"Starting optimization with n_samples={n_samples}, auto_continue={auto_continue}")
+        logger.info(
+            f"Starting optimization with n_samples={n_samples}, auto_continue={auto_continue}"
+        )
         logger.info(f"Dataset size: {total_items} items")
         logger.info(f"Initial prompt: {task_config.instruction_prompt}")
 
         optimization = None
         try:
             optimization = self._opik_client.create_optimization(
-                dataset_name=dataset.name,
-                objective_name=metric_config.metric.name,
+                dataset_name=dataset.name, objective_name=metric_config.metric.name
             )
             logger.info(f"Created optimization with ID: {optimization.id}")
         except Exception as e:
@@ -411,13 +491,13 @@ class MetaPromptOptimizer(BaseOptimizer):
                 **kwargs,
             )
             if optimization:
-                optimization.update(status="completed")
+                self.update_optimization(optimization, status="completed")
                 logger.info("Optimization completed successfully")
             return result
         except Exception as e:
             logger.error(f"Optimization failed: {e}")
             if optimization:
-                optimization.update(status="cancelled")
+                self.update_optimization(optimization, status="cancelled")
                 logger.info("Optimization marked as cancelled")
             raise e
 
@@ -474,12 +554,18 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         logger.info(f"Initial score: {initial_score:.4f}")
 
+        # Initialize TQDM with postfix placeholder
         pbar = tqdm(
             total=self.max_rounds,
             desc="Optimizing Prompt",
-            bar_format="{l_bar}{bar:20}{r_bar}",
+            unit="round",
+            bar_format="{l_bar}{bar:20}{r_bar} | {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]",
             position=0,
             leave=True,
+            postfix={
+                "best_score": f"{initial_score:.4f}",
+                "llm_calls": self.llm_call_counter,
+            },
         )
 
         for round_num in range(self.max_rounds):
@@ -497,6 +583,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     round_num=round_num,
                     previous_rounds=rounds,
                     metric_config=metric_config,
+                    optimization_id=optimization_id,
                 )
                 logger.info(f"Generated {len(candidate_prompts)} candidate prompts")
             except Exception as e:
@@ -505,17 +592,19 @@ class MetaPromptOptimizer(BaseOptimizer):
 
             prompt_scores = []
             for candidate_count, prompt in enumerate(candidate_prompts):
-                logger.info(f"\nEvaluating candidate {candidate_count + 1}/{len(candidate_prompts)}")
+                logger.info(
+                    f"\nEvaluating candidate {candidate_count + 1}/{len(candidate_prompts)}"
+                )
                 logger.info(f"Prompt: {prompt}")
-                
+
                 scores = []
                 should_run_max_trials = True
 
                 # Initial trials
-                logger.info(f"Running initial {self.initial_trials} trials...")
+                logger.debug(f"Running initial {self.initial_trials} trials...")
                 for trial in range(self.initial_trials):
                     try:
-                        logger.info(f"Trial {trial + 1}/{self.initial_trials}")
+                        logger.debug(f"Trial {trial + 1}/{self.initial_trials}")
                         score = self.evaluate_prompt(
                             dataset=dataset,
                             metric_config=metric_config,
@@ -526,29 +615,38 @@ class MetaPromptOptimizer(BaseOptimizer):
                             experiment_config=experiment_config,
                         )
                         scores.append(score)
+                        logger.debug(f"Trial {trial+1} score: {score:.4f}")
                     except Exception as e:
                         logger.error(f"Error in trial {trial + 1}: {e}")
                         continue
 
                 if not scores:
-                    logger.warning("All initial trials failed for this prompt, skipping")
+                    logger.warning(
+                        "All initial trials failed for this prompt, skipping"
+                    )
                     continue
 
                 # Adaptive trials logic
                 avg_score_initial = sum(scores) / len(scores)
-                if (self.adaptive_threshold is not None and
-                    self.max_trials > self.initial_trials and
-                    avg_score_initial < best_score * self.adaptive_threshold):
+                if (
+                    self.adaptive_threshold is not None
+                    and self.max_trials > self.initial_trials
+                    and avg_score_initial < best_score * self.adaptive_threshold
+                ):
                     should_run_max_trials = False
-                    logger.info(f"Skipping additional trials - score ({avg_score_initial:.4f}) below threshold ({best_score * self.adaptive_threshold:.4f})")
+                    logger.debug("Skipping additional trials...")
 
                 # Run additional trials
                 if should_run_max_trials and self.max_trials > self.initial_trials:
                     num_additional_trials = self.max_trials - self.initial_trials
-                    logger.info(f"Running {num_additional_trials} additional trials (up to {self.max_trials} total)...")
+                    logger.debug(
+                        f"Running {num_additional_trials} additional trials..."
+                    )
                     for trial in range(self.initial_trials, self.max_trials):
                         try:
-                            logger.info(f"Additional trial {trial + 1}/{self.max_trials}")
+                            logger.debug(
+                                f"Additional trial {trial + 1}/{self.max_trials}"
+                            )
                             score = self.evaluate_prompt(
                                 dataset=dataset,
                                 metric_config=metric_config,
@@ -559,6 +657,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                                 experiment_config=experiment_config,
                             )
                             scores.append(score)
+                            logger.debug(
+                                f"Additional trial {trial+1} score: {score:.4f}"
+                            )
                         except Exception as e:
                             logger.error(f"Error in additional trial {trial + 1}: {e}")
                             continue
@@ -569,11 +670,12 @@ class MetaPromptOptimizer(BaseOptimizer):
                     prompt_scores.append((prompt, final_avg_score, scores))
                     logger.info(f"Completed {len(scores)} trials for prompt.")
                     logger.info(f"Final average score: {final_avg_score:.4f}")
-                    logger.info(f"Individual trial scores: {[f'{s:.4f}' for s in scores]}")
+                    logger.debug(
+                        f"Individual trial scores: {[f'{s:.4f}' for s in scores]}"
+                    )
                 else:
                     # This case should be rare now due to the initial check, but good practice
                     logger.warning("No successful trials completed for this prompt.")
-
 
             if not prompt_scores:
                 logger.warning("No prompts were successfully evaluated in this round")
@@ -581,9 +683,13 @@ class MetaPromptOptimizer(BaseOptimizer):
 
             # Sort by float score
             prompt_scores.sort(key=lambda x: x[1], reverse=True)
-            best_candidate_this_round, best_cand_score_avg, best_cand_trials = prompt_scores[0]
+            best_candidate_this_round, best_cand_score_avg, best_cand_trials = (
+                prompt_scores[0]
+            )
 
-            logger.info(f"\nBest candidate from this round (avg score {metric_config.metric.name}): {best_cand_score_avg:.4f}")
+            logger.info(
+                f"\nBest candidate from this round (avg score {metric_config.metric.name}): {best_cand_score_avg:.4f}"
+            )
             logger.info(f"Prompt: {best_candidate_this_round}")
 
             # Re-evaluate the best candidate from the round using the full dataset (if n_samples is None)
@@ -601,16 +707,22 @@ class MetaPromptOptimizer(BaseOptimizer):
                     n_samples=n_samples,
                     use_full_dataset=n_samples is None,
                 )
-                logger.info(f"Final evaluation score for best candidate: {final_score_best_cand:.4f}")
+                logger.info(
+                    f"Final evaluation score for best candidate: {final_score_best_cand:.4f}"
+                )
 
                 if final_score_best_cand > best_score:
                     logger.info(f"New best prompt found!")
                     best_score = final_score_best_cand
                     best_prompt = best_candidate_this_round
                     logger.info(f"New Best Prompt: {best_prompt}")
-                    logger.info(f"New Best Score ({metric_config.metric.name}): {best_score:.4f}")
+                    logger.info(
+                        f"New Best Score ({metric_config.metric.name}): {best_score:.4f}"
+                    )
                 else:
-                     logger.info("Best candidate score did not improve upon final evaluation.")
+                    logger.info(
+                        "Best candidate score did not improve upon final evaluation."
+                    )
             # Decide what prompt to carry to the next round's generation step.
             # Option 1: Carry the best scoring prompt overall (best_prompt)
             # Option 2: Carry the best candidate from this round (best_candidate_this_round) even if it didn't beat the overall best after final eval.
@@ -618,8 +730,10 @@ class MetaPromptOptimizer(BaseOptimizer):
             # current_prompt = best_prompt # Implicitly done as best_prompt is updated
 
             improvement = self._calculate_improvement(best_score, previous_best_score)
-            logger.info(f"Improvement in score ({metric_config.metric.name}) this round: {improvement:.2%}")
-            
+            logger.info(
+                f"Improvement in score ({metric_config.metric.name}) this round: {improvement:.2%}"
+            )
+
             # Create round data
             round_data = self._create_round_data(
                 round_num,
@@ -633,18 +747,24 @@ class MetaPromptOptimizer(BaseOptimizer):
             rounds.append(round_data)
             self._add_to_history(round_data.dict())
 
-            if improvement < self.improvement_threshold and round_num > 0: # Avoid stopping after first round if threshold is low
+            if (
+                improvement < self.improvement_threshold and round_num > 0
+            ):  # Avoid stopping after first round if threshold is low
                 logger.info(
                     f"Improvement below threshold ({improvement:.2%} < {self.improvement_threshold:.2%}), stopping early"
                 )
                 stopped_early = True
                 break
 
-
-            pbar.update(1)
+            # Update TQDM postfix
             pbar.set_postfix(
-                {"best_score": f"{best_score:.4f}", "improvement": f"{improvement:.2%}"}
+                {
+                    "best_score": f"{best_score:.4f}",
+                    "improvement": f"{improvement:.2%}",
+                    "llm_calls": self.llm_call_counter,
+                }
             )
+            pbar.update(1)
 
         pbar.close()
 
@@ -653,13 +773,15 @@ class MetaPromptOptimizer(BaseOptimizer):
         logger.info("=" * 80)
         logger.info(f"Initial score: {initial_score:.4f}")
         logger.info(f"Final best score: {best_score:.4f}")
-        if initial_score != 0: # Avoid division by zero if initial score was 0
-             total_improvement_pct = (best_score - initial_score) / abs(initial_score) # Use abs for safety
-             logger.info(f"Total improvement: {total_improvement_pct:.2%}")
+        if initial_score != 0:  # Avoid division by zero if initial score was 0
+            total_improvement_pct = (best_score - initial_score) / abs(
+                initial_score
+            )  # Use abs for safety
+            logger.info(f"Total improvement: {total_improvement_pct:.2%}")
         elif best_score > 0:
-             logger.info("Total improvement: infinite (initial score was 0)")
+            logger.info("Total improvement: infinite (initial score was 0)")
         else:
-             logger.info("Total improvement: 0.00% (scores did not improve from 0)")
+            logger.info("Total improvement: 0.00% (scores did not improve from 0)")
         logger.info("\nFINAL OPTIMIZED PROMPT:")
         logger.info("-" * 80)
         logger.info(best_prompt)
@@ -699,13 +821,17 @@ class MetaPromptOptimizer(BaseOptimizer):
         """Create an OptimizationRound object with the current round's data."""
         generated_prompts_log = []
         for prompt, avg_score, trial_scores in evaluated_candidates:
-             improvement_vs_prev = self._calculate_improvement(avg_score, previous_best_score)
-             generated_prompts_log.append({
-                 "prompt": prompt,
-                 "score": avg_score,
-                 "trial_scores": trial_scores,
-                 "improvement": improvement_vs_prev,
-             })
+            improvement_vs_prev = self._calculate_improvement(
+                avg_score, previous_best_score
+            )
+            generated_prompts_log.append(
+                {
+                    "prompt": prompt,
+                    "score": avg_score,
+                    "trial_scores": trial_scores,
+                    "improvement": improvement_vs_prev,
+                }
+            )
 
         return OptimizationRound(
             round_number=round_num + 1,
@@ -729,6 +855,7 @@ class MetaPromptOptimizer(BaseOptimizer):
     ) -> OptimizationResult:
         """Create the final OptimizationResult object."""
         details = {
+            "prompt_type": "chat" if task_config.use_chat_prompt else "non-chat",
             "initial_prompt": task_config.instruction_prompt,
             "initial_score": initial_score,
             "final_prompt": best_prompt,
@@ -738,8 +865,10 @@ class MetaPromptOptimizer(BaseOptimizer):
             "stopped_early": stopped_early,
             "metric_config": metric_config.dict(),
             "task_config": task_config.dict(),
+            "model": self.model,
+            "temperature": self.model_kwargs.get("temperature"),
         }
-        
+
         return OptimizationResult(
             prompt=best_prompt,
             score=best_score,
@@ -757,8 +886,14 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         # Describe Single Metric
         metric_name = metric_config.metric.name
-        description = getattr(metric_config.metric, 'description', 'No description available.')
-        goal = "higher is better" if getattr(metric_config.metric, 'higher_is_better', True) else "lower is better"
+        description = getattr(
+            metric_config.metric, "description", "No description available."
+        )
+        goal = (
+            "higher is better"
+            if getattr(metric_config.metric, "higher_is_better", True)
+            else "lower is better"
+        )
         metrics_str = f"- {metric_name}: {description} ({goal})"
 
         context = "\nTask Context:\n"
@@ -801,13 +936,14 @@ class MetaPromptOptimizer(BaseOptimizer):
         best_score: float,
         round_num: int,
         previous_rounds: List[OptimizationRound],
-        metric_config: MetricConfig
+        metric_config: MetricConfig,
+        optimization_id: Optional[str] = None,
     ) -> List[str]:
         """Generate candidate prompts using meta-prompting."""
-        
-        logger.info(f"\nGenerating candidate prompts for round {round_num + 1}")
-        logger.info(f"Generating from prompt: {current_prompt}")
-        logger.info(f"Current best score: {best_score:.4f}")
+
+        logger.debug(f"\nGenerating candidate prompts for round {round_num + 1}")
+        logger.debug(f"Generating from prompt: {current_prompt}")
+        logger.debug(f"Current best score: {best_score:.4f}")
 
         # Pass single metric_config
         history_context = self._build_history_context(previous_rounds)
@@ -829,13 +965,14 @@ class MetaPromptOptimizer(BaseOptimizer):
         5. Maintain conciseness while being complete.
 
         Return a valid JSON array as specified."""
-        
+
         try:
             # Use _call_model which handles selecting reasoning_model
             content = self._call_model(
                 prompt=user_prompt,
                 system_prompt=self._REASONING_SYSTEM_PROMPT,
                 is_reasoning=True,
+                optimization_id=optimization_id,
             )
             logger.debug(f"Raw response from reasoning model: {content}")
 
@@ -846,48 +983,61 @@ class MetaPromptOptimizer(BaseOptimizer):
                 json_result = json.loads(content)
             except json.JSONDecodeError:
                 # If direct fails, try regex extraction
-                logger.warning("Direct JSON parsing failed, attempting regex extraction.")
+                logger.warning(
+                    "Direct JSON parsing failed, attempting regex extraction."
+                )
                 import re
-                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+
+                json_match = re.search(r"\{.*\}", content, re.DOTALL)
                 if json_match:
                     try:
                         json_result = json.loads(json_match.group())
                     except json.JSONDecodeError as e:
                         logger.error(f"Could not parse JSON extracted via regex: {e}")
-                        return [current_prompt] # Fallback
+                        return [current_prompt]  # Fallback
                 else:
                     logger.error("No JSON object found in response via regex.")
-                    return [current_prompt] # Fallback
+                    return [current_prompt]  # Fallback
 
             # Validate the parsed JSON structure
             if not isinstance(json_result, dict) or "prompts" not in json_result:
-                logger.error("Parsed JSON is not a dictionary or missing 'prompts' key.")
+                logger.error(
+                    "Parsed JSON is not a dictionary or missing 'prompts' key."
+                )
                 logger.debug(f"Parsed JSON content: {json_result}")
-                return [current_prompt] # Fallback
+                return [current_prompt]  # Fallback
 
             if not isinstance(json_result["prompts"], list):
                 logger.error("'prompts' key does not contain a list.")
                 logger.debug(f"Content of 'prompts': {json_result.get('prompts')}")
-                return [current_prompt] # Fallback
+                return [current_prompt]  # Fallback
 
             # Extract and log valid prompts
             valid_prompts = []
             for item in json_result["prompts"]:
-                if isinstance(item, dict) and "prompt" in item and isinstance(item["prompt"], str):
-                     prompt_text = item["prompt"]
-                     valid_prompts.append(prompt_text)
-                     # Log details
-                     focus = item.get("improvement_focus", "N/A")
-                     reasoning = item.get("reasoning", "N/A")
-                     logger.info(f"Generated prompt: {prompt_text}")
-                     logger.info(f"  Improvement focus: {focus}")
-                     logger.info(f"  Reasoning: {reasoning}")
+                if (
+                    isinstance(item, dict)
+                    and "prompt" in item
+                    and isinstance(item["prompt"], str)
+                ):
+                    prompt_text = item["prompt"]
+                    valid_prompts.append(prompt_text)
+                    # Log details
+                    focus = item.get("improvement_focus", "N/A")
+                    reasoning = item.get("reasoning", "N/A")
+                    logger.info(f"Generated prompt: {prompt_text}")
+                    logger.info(f"  Improvement focus: {focus}")
+                    logger.info(f"  Reasoning: {reasoning}")
                 else:
-                    logger.warning(f"Skipping invalid prompt item structure in JSON response: {item}")
-            
+                    logger.warning(
+                        f"Skipping invalid prompt item structure in JSON response: {item}"
+                    )
+
             if not valid_prompts:
-                 logger.warning("No valid prompts found in the parsed JSON response after validation.")
-                 return [current_prompt] # Fallback
+                logger.warning(
+                    "No valid prompts found in the parsed JSON response after validation."
+                )
+                return [current_prompt]  # Fallback
 
             return valid_prompts
             # --- End Robust Parsing ---
@@ -908,16 +1058,16 @@ class MetaPromptOptimizer(BaseOptimizer):
             context += f"\nRound {round_data.round_number}:\n"
             context += f"Best score this round: {round_data.best_score:.4f}\n"
             context += "Generated prompts this round (best first):\n"
-            
+
             sorted_generated = sorted(
                 round_data.generated_prompts,
-                key=lambda p: p.get('score', -float('inf')),
-                reverse=True
+                key=lambda p: p.get("score", -float("inf")),
+                reverse=True,
             )
 
             for p in sorted_generated[:3]:
-                prompt_text = p.get('prompt', 'N/A')
-                score = p.get('score', float('nan'))
+                prompt_text = p.get("prompt", "N/A")
+                score = p.get("score", float("nan"))
                 context += f"- Prompt: {prompt_text[:150]}...\n"
                 context += f"  Avg Score: {score:.4f}\n"
         return context
