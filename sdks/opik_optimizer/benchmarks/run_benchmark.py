@@ -920,8 +920,14 @@ class BenchmarkRunner:
 
             # Calculate num_iter_log and print console message *after* task_result["optimization_process"] is populated
             num_iter_log = len(task_result.get("optimization_process", {}).get("history", []))
-            best_score_log = getattr(results_obj, "best_score", getattr(results_obj, "score", "N/A")) 
-            best_score_log_str = f"{best_score_log:.4f}" if isinstance(best_score_log, (int,float)) else str(best_score_log)
+            
+            best_score_val_for_log = None
+            if results_obj: 
+                best_score_val_for_log = getattr(results_obj, "score", None) 
+                if best_score_val_for_log is None: 
+                    best_score_val_for_log = getattr(results_obj, "best_score", None)
+            
+            best_score_log_str = f"{best_score_val_for_log:.4f}" if isinstance(best_score_val_for_log, (int, float)) else "[dim]N/A[/dim]" # Changed to N/A for None
             console.print(f"  Optimization done ({task_id}): Iterations={num_iter_log}, Best Internal Score (from optimizer)={best_score_log_str} ({opt_time:.2f}s)")
 
                         # --- Final Prompt Evaluation --- 
@@ -943,7 +949,7 @@ class BenchmarkRunner:
                 # Setup prompt_for_actual_eval and final_prompt_to_eval based on optimizer type
                 if optimizer_name == "MiproOptimizer":
                     logger.critical("<<<<< CRITICAL_DEBUG: INSIDE MiproOptimizer FINAL EVAL LOGIC (Top Level) >>>>>")
-                    print(f"PRINT_DEBUG: Entered MiproOptimizer block. Optimizer name: {optimizer_name}")
+                    # print(f"PRINT_DEBUG: Entered MiproOptimizer block. Optimizer name: {optimizer_name}") 
                     try:
                         if hasattr(results_obj, 'details') and \
                            isinstance(results_obj.details, dict) and \
@@ -956,25 +962,26 @@ class BenchmarkRunner:
                             logger.info(f"MIPRO FINAL EVAL: Successfully set prompt_for_actual_eval to DSPy module: {type(prompt_for_actual_eval)}")
                         else:
                             logger.error("[red]MiproOptimizer: Could not get valid DSPy program from results_obj.details for final eval. Setting prompt_for_actual_eval to None.[/red]")
-                            evaluation_errors.append("MiproOptimizer: No valid DSPy program for final eval.")
+                            # evaluation_errors.append("MiproOptimizer: No valid DSPy program for final eval.") # Already handled by prompt_for_actual_eval is None check
                             final_prompt_to_eval = [{"role": "system", "content": "Error: Mipro program not found for final eval."}]
                             prompt_for_actual_eval = None 
                     except Exception as e_mipro_setup:
                         logger.error(f"[red]CRITICAL ERROR during Mipro final eval prompt setup: {e_mipro_setup}[/red]")
                         logger.exception("Traceback for Mipro final eval prompt setup error:")
-                        evaluation_errors.append(f"Mipro setup error: {str(e_mipro_setup)}")
+                        evaluation_errors.append(f"Mipro setup error: {str(e_mipro_setup)}") # Ensure this error is added
                         prompt_for_actual_eval = None 
-                        final_prompt_to_eval = [{"role": "system", "content": "Error during Mipro final eval prompt setup."}]
+                        final_prompt_to_eval = [{"role": "system", "content": "Error during Mipro final eval setup."}]
 
                 elif optimizer_name == "FewShotBayesianOptimizer": 
                     logger.critical("<<<<< CRITICAL_DEBUG: INSIDE FewShotBayesianOptimizer FINAL EVAL LOGIC >>>>>")
-                    print(f"PRINT_DEBUG: Entered FewShotBayesianOptimizer block. Optimizer name: {optimizer_name}")
+                    # print(f"PRINT_DEBUG: Entered FewShotBayesianOptimizer block. Optimizer name: {optimizer_name}")
+                    # RESTORED ORIGINAL LOGIC
                     try:
                         details = getattr(results_obj, 'details', None)
                         if results_obj and details: 
                             prompt_for_actual_eval = details.get("chat_messages")
                             final_prompt_to_eval = prompt_for_actual_eval 
-                            if not prompt_for_actual_eval and details.get("prompt_parameter") and hasattr(details.get("prompt_parameter"), "as_template"): 
+                            if not prompt_for_actual_eval and details.get("prompt_parameter") and hasattr(details.get("prompt_parameter"), "as_template") :
                                  prompt_for_actual_eval = details.get("prompt_parameter").as_template().format()
                                  final_prompt_to_eval = prompt_for_actual_eval
                             
@@ -983,7 +990,7 @@ class BenchmarkRunner:
                             else:
                                 logger.warning("FewShotBayesianOptimizer: chat_messages and formatted prompt_parameter were None. Setting prompt_for_actual_eval to None.")
                                 final_prompt_to_eval = [{"role": "system", "content": "Error: FewShot prompt data missing for final eval."}]
-                                # prompt_for_actual_eval remains None
+                                # prompt_for_actual_eval is already None or will be if the above were None
                         else:
                             logger.warning(f"FewShotBayesianOptimizer: results_obj or results_obj.details is None. Cannot get chat_messages. results_obj is None: {results_obj is None}. Setting prompt_for_actual_eval to None.")
                             prompt_for_actual_eval = None 
@@ -991,12 +998,14 @@ class BenchmarkRunner:
                     except Exception as e_fsbo_setup:
                         logger.error(f"[red]CRITICAL ERROR during FewShot final eval prompt setup: {e_fsbo_setup}[/red]")
                         logger.exception("Traceback for FewShot final eval prompt setup error:")
+                        evaluation_errors.append(f"FewShotBayesianOptimizer setup error: {str(e_fsbo_setup)}") # Ensure this error is added
                         prompt_for_actual_eval = None
                         final_prompt_to_eval = [{"role": "system", "content": "Error during FewShot final eval prompt setup."}]
                 
                 else: # MetaPromptOptimizer and other fallbacks
                     logger.critical(f"<<<<< CRITICAL_DEBUG: INSIDE ELSE (MetaPrompt/Fallback) FINAL EVAL LOGIC for {optimizer_name} >>>>>")
-                    print(f"PRINT_DEBUG: Entered MetaPrompt/Fallback block. Optimizer name: {optimizer_name}")
+                    # print(f"PRINT_DEBUG: Entered MetaPrompt/Fallback block. Optimizer name: {optimizer_name}")
+                    # RESTORED ORIGINAL LOGIC
                     try:
                         string_prompt = getattr(results_obj, 'prompt', None)
                         prompt_for_actual_eval = string_prompt 
@@ -1007,12 +1016,13 @@ class BenchmarkRunner:
                             final_prompt_to_eval = [{"role": "system", "content": "Error: Prompt was None for final eval."}]
                             logger.warning(f"MetaPrompt/Fallback: results_obj.prompt was None for {optimizer_name}. Setting prompt_for_actual_eval to None.")
                             prompt_for_actual_eval = None 
-                        else: # It was already a list or some other type
+                        else: 
                             final_prompt_to_eval = string_prompt 
                             logger.info(f"MetaPrompt/Fallback: results_obj.prompt is type {type(string_prompt)} for {optimizer_name}. Using as is for actual eval if not None.")
                     except Exception as e_meta_setup:
                         logger.error(f"[red]CRITICAL ERROR during MetaPrompt/Fallback final eval prompt setup: {e_meta_setup}[/red]")
                         logger.exception("Traceback for MetaPrompt/Fallback final eval prompt setup error:")
+                        evaluation_errors.append(f"MetaPrompt/Fallback setup error: {str(e_meta_setup)}") # Ensure this error is added
                         prompt_for_actual_eval = None
                         final_prompt_to_eval = [{"role": "system", "content": "Error during MetaPrompt/Fallback final eval prompt setup."}]
                 
