@@ -11,6 +11,7 @@ import argparse
 import logging
 import io # For SuppressOutput
 import os # For SuppressOutput
+import dspy
 
 import pandas as pd
 # from datasets import load_dataset # No longer directly used here, handled by opik_optimizer.demo
@@ -923,99 +924,242 @@ class BenchmarkRunner:
             best_score_log_str = f"{best_score_log:.4f}" if isinstance(best_score_log, (int,float)) else str(best_score_log)
             console.print(f"  Optimization done ({task_id}): Iterations={num_iter_log}, Best Internal Score (from optimizer)={best_score_log_str} ({opt_time:.2f}s)")
 
-            # --- Final Prompt Evaluation --- 
-            logger.info("--> Evaluating final prompt...")
+                        # --- Final Prompt Evaluation --- 
+            logger.info("--> Entering Final Prompt Evaluation Stage...") 
+            logger.critical(f"CRITICAL_DEBUG: At Final Eval Setup. Optimizer is '{optimizer_name}'. results_obj type is {type(results_obj)}.")
+
             final_scores = {}
             start_time_eval_final = time.time()
-            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            final_eval_time = 0.0 # Initialize here
+
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor_final_eval:
                 future_to_metric_final = {}
                 
-                # Determine the correct prompt format for final evaluation
-                final_prompt_to_eval = None
-                if optimizer_name == "FewShotBayesianOptimizer" and hasattr(results_obj, 'details'):
-                    final_prompt_to_eval = results_obj.details.get("chat_messages")
-                    if not final_prompt_to_eval: # Fallback if chat_messages isn't there for some reason
-                         final_prompt_to_eval = results_obj.details.get("prompt_parameter").as_template().format() # Reconstruct
-                    logger.info(f"Using FewShot chat messages for final eval.")
+                final_prompt_to_eval = None # For logging/storage
+                prompt_for_actual_eval = None # For actual evaluation call
+
+                logger.critical(f"CRITICAL_DEBUG: About to check optimizer_name ('{optimizer_name}') for specific final eval logic.")
+
+                # Setup prompt_for_actual_eval and final_prompt_to_eval based on optimizer type
+                if optimizer_name == "MiproOptimizer":
+                    logger.critical("<<<<< CRITICAL_DEBUG: INSIDE MiproOptimizer FINAL EVAL LOGIC (Top Level) >>>>>")
+                    print(f"PRINT_DEBUG: Entered MiproOptimizer block. Optimizer name: {optimizer_name}")
+                    try:
+                        if hasattr(results_obj, 'details') and \
+                           isinstance(results_obj.details, dict) and \
+                           "program" in results_obj.details and \
+                           results_obj.details["program"] is not None and \
+                           isinstance(results_obj.details["program"], dspy.Module): # type: ignore
+                            prompt_for_actual_eval = results_obj.details["program"]
+                            instr_prompt = getattr(results_obj, 'prompt', "[MIPRO Program - Instruction N/A]")
+                            final_prompt_to_eval = [{"role": "system", "content": str(instr_prompt)}]
+                            logger.info(f"MIPRO FINAL EVAL: Successfully set prompt_for_actual_eval to DSPy module: {type(prompt_for_actual_eval)}")
+                        else:
+                            logger.error("[red]MiproOptimizer: Could not get valid DSPy program from results_obj.details for final eval. Setting prompt_for_actual_eval to None.[/red]")
+                            evaluation_errors.append("MiproOptimizer: No valid DSPy program for final eval.")
+                            final_prompt_to_eval = [{"role": "system", "content": "Error: Mipro program not found for final eval."}]
+                            prompt_for_actual_eval = None 
+                    except Exception as e_mipro_setup:
+                        logger.error(f"[red]CRITICAL ERROR during Mipro final eval prompt setup: {e_mipro_setup}[/red]")
+                        logger.exception("Traceback for Mipro final eval prompt setup error:")
+                        evaluation_errors.append(f"Mipro setup error: {str(e_mipro_setup)}")
+                        prompt_for_actual_eval = None 
+                        final_prompt_to_eval = [{"role": "system", "content": "Error during Mipro final eval prompt setup."}]
+
+                elif optimizer_name == "FewShotBayesianOptimizer": 
+                    logger.critical("<<<<< CRITICAL_DEBUG: INSIDE FewShotBayesianOptimizer FINAL EVAL LOGIC >>>>>")
+                    print(f"PRINT_DEBUG: Entered FewShotBayesianOptimizer block. Optimizer name: {optimizer_name}")
+                    try:
+                        details = getattr(results_obj, 'details', None)
+                        if results_obj and details: 
+                            prompt_for_actual_eval = details.get("chat_messages")
+                            final_prompt_to_eval = prompt_for_actual_eval 
+                            if not prompt_for_actual_eval and details.get("prompt_parameter") and hasattr(details.get("prompt_parameter"), "as_template"): 
+                                 prompt_for_actual_eval = details.get("prompt_parameter").as_template().format()
+                                 final_prompt_to_eval = prompt_for_actual_eval
+                            
+                            if prompt_for_actual_eval is not None:
+                                logger.info(f"Using FewShot chat messages for final eval. Type: {type(prompt_for_actual_eval)}")
+                            else:
+                                logger.warning("FewShotBayesianOptimizer: chat_messages and formatted prompt_parameter were None. Setting prompt_for_actual_eval to None.")
+                                final_prompt_to_eval = [{"role": "system", "content": "Error: FewShot prompt data missing for final eval."}]
+                                # prompt_for_actual_eval remains None
+                        else:
+                            logger.warning(f"FewShotBayesianOptimizer: results_obj or results_obj.details is None. Cannot get chat_messages. results_obj is None: {results_obj is None}. Setting prompt_for_actual_eval to None.")
+                            prompt_for_actual_eval = None 
+                            final_prompt_to_eval = [{"role": "system", "content": "Error: FewShot details missing for final eval."}]
+                    except Exception as e_fsbo_setup:
+                        logger.error(f"[red]CRITICAL ERROR during FewShot final eval prompt setup: {e_fsbo_setup}[/red]")
+                        logger.exception("Traceback for FewShot final eval prompt setup error:")
+                        prompt_for_actual_eval = None
+                        final_prompt_to_eval = [{"role": "system", "content": "Error during FewShot final eval prompt setup."}]
+                
+                else: # MetaPromptOptimizer and other fallbacks
+                    logger.critical(f"<<<<< CRITICAL_DEBUG: INSIDE ELSE (MetaPrompt/Fallback) FINAL EVAL LOGIC for {optimizer_name} >>>>>")
+                    print(f"PRINT_DEBUG: Entered MetaPrompt/Fallback block. Optimizer name: {optimizer_name}")
+                    try:
+                        string_prompt = getattr(results_obj, 'prompt', None)
+                        prompt_for_actual_eval = string_prompt 
+                        if isinstance(string_prompt, str):
+                            final_prompt_to_eval = [{"role": "system", "content": string_prompt}]
+                            logger.info(f"Using string prompt (wrapped as system for logging) for final eval for {optimizer_name}.")
+                        elif string_prompt is None: 
+                            final_prompt_to_eval = [{"role": "system", "content": "Error: Prompt was None for final eval."}]
+                            logger.warning(f"MetaPrompt/Fallback: results_obj.prompt was None for {optimizer_name}. Setting prompt_for_actual_eval to None.")
+                            prompt_for_actual_eval = None 
+                        else: # It was already a list or some other type
+                            final_prompt_to_eval = string_prompt 
+                            logger.info(f"MetaPrompt/Fallback: results_obj.prompt is type {type(string_prompt)} for {optimizer_name}. Using as is for actual eval if not None.")
+                    except Exception as e_meta_setup:
+                        logger.error(f"[red]CRITICAL ERROR during MetaPrompt/Fallback final eval prompt setup: {e_meta_setup}[/red]")
+                        logger.exception("Traceback for MetaPrompt/Fallback final eval prompt setup error:")
+                        prompt_for_actual_eval = None
+                        final_prompt_to_eval = [{"role": "system", "content": "Error during MetaPrompt/Fallback final eval prompt setup."}]
+                
+                logger.debug(f"FINAL EVAL: About to submit. optimizer_name='{optimizer_name}', type(prompt_for_actual_eval)='{type(prompt_for_actual_eval)}', prompt_for_actual_eval is None: {prompt_for_actual_eval is None}")
+
+                if prompt_for_actual_eval is None:
+                    logger.error("[red]No final prompt structure or program found for actual evaluation after setup. Skipping submission of final eval tasks.[/red]")
+                    if not evaluation_errors: 
+                        evaluation_errors.append(f"{optimizer_name}: No valid prompt/program for final evaluation after setup attempts.")
                 else:
-                    final_prompt_to_eval = getattr(results_obj, 'prompt', None) # Use base prompt for others
-                    if isinstance(final_prompt_to_eval, str): # Ensure it's in list format if needed
-                        final_prompt_to_eval = [{"role": "system", "content": final_prompt_to_eval}]
-                        logger.info(f"Using string prompt (wrapped as system) for final eval.")
+                    actual_prompt_for_submission = prompt_for_actual_eval 
+                    current_prompt_for_anthropic_hack = prompt_for_actual_eval
+                    if optimizer_name == "MiproOptimizer": 
+                        current_prompt_for_anthropic_hack = final_prompt_to_eval 
                     
-                if final_prompt_to_eval is None:
-                    logger.error("[red]No final prompt structure found for evaluation.[/red]")
-                else:
-                    # Apply Anthropic hack if necessary (check if final_prompt_to_eval is a list)
-                    prompt_for_final_eval = final_prompt_to_eval
-                    model_is_anthropic = "anthropic" in optimizer.model.lower()
-                    if model_is_anthropic and isinstance(prompt_for_final_eval, list) and len(prompt_for_final_eval) == 1 and prompt_for_final_eval[0].get("role") == "system":
-                        prompt_for_final_eval = prompt_for_final_eval + [{"role": "user", "content": "(Proceed based on system instructions)"}]
-                        logger.warning(f"Applied Anthropic eval hack: Added dummy user message to final system prompt.")
-                    elif model_is_anthropic and isinstance(prompt_for_final_eval, list) and len(prompt_for_final_eval) > 1 and prompt_for_final_eval[-1].get("role") == "assistant":
-                         # If the last message is assistant (common in few-shot), add a dummy user msg
-                         prompt_for_final_eval = prompt_for_final_eval + [{"role": "user", "content": "(Proceed based on provided examples and system instructions)"}]
-                         logger.warning(f"Applied Anthropic eval hack: Added dummy user message after final assistant message in few-shot prompt.")
+                    if isinstance(current_prompt_for_anthropic_hack, list):
+                        prompt_to_submit_anthropic_hacked = list(current_prompt_for_anthropic_hack)
+                        model_is_anthropic = "anthropic" in optimizer.model.lower()
+                        if model_is_anthropic and len(prompt_to_submit_anthropic_hacked) == 1 and prompt_to_submit_anthropic_hacked[0].get("role") == "system":
+                            if prompt_for_actual_eval is current_prompt_for_anthropic_hack: # Apply to actual if it was the list
+                                actual_prompt_for_submission = prompt_to_submit_anthropic_hacked + [{"role": "user", "content": "(Proceed based on system instructions)"}]
+                            logger.warning(f"Applied Anthropic eval hack to final prompt for {optimizer_name}.")
+                        elif model_is_anthropic and len(prompt_to_submit_anthropic_hacked) > 1 and prompt_to_submit_anthropic_hacked[-1].get("role") == "assistant":
+                            if prompt_for_actual_eval is current_prompt_for_anthropic_hack:
+                                actual_prompt_for_submission = prompt_to_submit_anthropic_hacked + [{"role": "user", "content": "(Proceed based on provided examples and system instructions)"}]
+                            logger.warning(f"Applied Anthropic eval hack (few-shot case) to final prompt for {optimizer_name}.")
+                    
+                    logger.debug(f"FINAL EVAL: Submitting tasks to executor. Prompt type for submission: {type(actual_prompt_for_submission)}")
+                    
+                    if not metrics: 
+                        logger.warning(f"FINAL EVAL ({optimizer_name}): Metrics list is empty. No final evaluation tasks to submit.")
+                    else:
+                        for metric_idx, metric_final_obj in enumerate(metrics):
+                            metric_config_final_eval = None 
+                            if isinstance(metric_final_obj, ContextPrecision):
+                                metric_config_final_eval = MetricConfig(
+                                    metric=metric_final_obj,
+                                    inputs={"input": from_dataset_field(name=input_key), "output": from_llm_response_text(), "expected_output": from_dataset_field(name="answer"), "context": from_dataset_field(name="context")}
+                                )
+                            else: 
+                                metric_config_final_eval = MetricConfig(
+                                    metric=metric_final_obj,
+                                    inputs={"input": from_dataset_field(name=input_key), "output": from_llm_response_text(), "reference": from_dataset_field(name=output_key)}
+                                )
+                            
+                            logger.debug(f"FINAL EVAL: Value of metric_config_final_eval before submit: {metric_config_final_eval}")
+                            eval_n_samples_final = 5 if self.test_mode else None
 
+                            logger.debug("--- ARGS FOR FINAL EVAL SUBMIT ---")
+                            logger.debug(f"  optimizer.evaluate_prompt func: {optimizer.evaluate_prompt}")
+                            logger.debug(f"  dataset is None: {dataset is None}, type: {type(dataset)}")
+                            logger.debug(f"  metric_config_final_eval is None: {metric_config_final_eval is None}, type: {type(metric_config_final_eval)}")
+                            logger.debug(f"  metric_config_final_eval value: {metric_config_final_eval}")
+                            logger.debug(f"  config.task is None: {config.task is None}, type: {type(config.task)}")
+                            logger.debug(f"  actual_prompt_for_submission type: {type(actual_prompt_for_submission)}")
+                            logger.debug(f"  experiment_config is None: {experiment_config is None}, type: {type(experiment_config)}")
+                            logger.debug(f"  n_samples_final value: {eval_n_samples_final}")
+                            logger.debug("--- END ARGS ---")
+                            
+                            try:
+                                arg_optimizer_evaluate_prompt = optimizer.evaluate_prompt
+                                arg_dataset = dataset
+                                arg_metric_config = metric_config_final_eval 
+                                arg_task_config = config.task 
+                                arg_prompt = actual_prompt_for_submission
+                                arg_experiment_config = experiment_config
+                                arg_n_samples = eval_n_samples_final
 
-                    for metric_final_obj in metrics:
-                        # Create metric-specific config for final eval - Handles ContextPrecision
-                        if isinstance(metric_final_obj, ContextPrecision):
-                            metric_config_final_eval = MetricConfig(
-                                metric=metric_final_obj,
-                                inputs={
-                                    "input": from_dataset_field(name=input_key),
-                                    "output": from_llm_response_text(),
-                                    "expected_output": from_dataset_field(name="answer"), # Map to 'answer' field
-                                    "context": from_dataset_field(name="context")
-                                }
-                            )
-                            logger.debug(f"Using ContextPrecision config mapping expected_output->answer for final eval")
-                        else: # Default config
-                            metric_config_final_eval = MetricConfig(
-                                metric=metric_final_obj,
-                                inputs={
-                                    "input": from_dataset_field(name=input_key),
-                                    "output": from_llm_response_text(),
-                                    "reference": from_dataset_field(name=output_key),
-                                }
-                            )
-                            logger.debug(f"Using default metric config for {metric_final_obj} for final eval")
+                                if arg_task_config is None:
+                                    logger.error("[bold red]CRITICAL ERROR: arg_task_config is None before submit for final eval. Skipping this metric.[/bold red]")
+                                    evaluation_errors.append(f"Task config was None for final eval of metric {metric_final_obj}")
+                                    continue
 
-                        # Conditional evaluate_prompt call for final evaluation
-                        if isinstance(optimizer, (MetaPromptOptimizer, MiproOptimizer)):
-                             # Both MetaPrompt and Mipro need task_config now
-                            future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_final_eval, task_config=config.task, prompt=prompt_for_final_eval, experiment_config=experiment_config)
-                        else: # Default for FewShotBayesianOptimizer and others
-                            future = executor.submit(optimizer.evaluate_prompt, dataset=dataset, metric_config=metric_config_final_eval, prompt=prompt_for_final_eval, experiment_config=experiment_config)
-                        future_to_metric_final[future] = metric_final_obj
-                        
+                                if None in [arg_dataset, arg_metric_config, arg_prompt, arg_experiment_config]: 
+                                    error_detail_submit = f"Core argument None for final eval of metric {metric_final_obj}: dataset={arg_dataset is None}, mc={arg_metric_config is None}, task_config_was_problem=False, p={arg_prompt is None}, exp_conf={arg_experiment_config is None}"
+                                    logger.error(f"[bold red]CRITICAL ERROR: One or more core arguments for final eval submit is None. {error_detail_submit} Skipping submit.[/bold red]")
+                                    evaluation_errors.append(error_detail_submit)
+                                    continue 
+                                
+                                future = executor_final_eval.submit(
+                                    arg_optimizer_evaluate_prompt, 
+                                    dataset=arg_dataset, 
+                                    metric_config=arg_metric_config, 
+                                    task_config=arg_task_config, 
+                                    prompt=arg_prompt, 
+                                    experiment_config=arg_experiment_config, 
+                                    n_samples=arg_n_samples
+                                )
+                                future_to_metric_final[future] = metric_final_obj
+                                logger.debug(f"FINAL EVAL: Submitted future for metric {metric_final_obj}")
+                            except Exception as e_submit:
+                                submit_err_msg = f"Error submitting final eval for {metric_final_obj}: {e_submit}"
+                                logger.error(f"[bold red]CRITICAL ERROR DURING FINAL EVAL SUBMIT: {submit_err_msg}[/bold red]")
+                                logger.exception("Traceback for submission error (e_submit):") 
+                                evaluation_errors.append(submit_err_msg)
+                    
+                logger.debug(f"FINAL EVAL ({optimizer_name}): All {len(future_to_metric_final)} final eval futures submitted. Now processing results.")
                 for future in as_completed(future_to_metric_final):
                     metric_obj_final = future_to_metric_final[future]
                     try:
                         final_scores[str(metric_obj_final)] = future.result()
-                    except Exception as e:
+                    except Exception as e_final_eval: 
                         final_scores[str(metric_obj_final)] = None
-                        err_msg = f"Final eval err ({metric_obj_final}): {e}"
+                        logger.critical(f"CRITICAL_DEBUG: Exception during final_scores future.result() for {metric_obj_final} ({optimizer_name})")
+                        logger.critical(f"  Exception type: {type(e_final_eval)}")
+                        logger.critical(f"  Exception args: {e_final_eval.args}")
+                        logger.critical(f"  Exception str: {str(e_final_eval)}")
+                        tb_str_final_eval = traceback.format_exc()
+                        console.print(f"[bold red]RAW TRACEBACK from future.result() in final eval ({metric_obj_final} for {optimizer_name}):[/bold red]\n{tb_str_final_eval}")
+                        logger.exception("  Full Traceback for final eval future.result() error (logged):") 
+
+                        exc_type_name = type(e_final_eval).__name__
+                        exc_str = str(e_final_eval)
+                        exc_args_str = ""
+                        try: exc_args_str = str(e_final_eval.args)
+                        except Exception: exc_args_str = "(unable to stringify args)"
+                        err_msg_detail = exc_str
+                        if not exc_str or exc_str.strip().lower() == "none": 
+                            err_msg_detail = f"Exception of type {exc_type_name} occurred"
+                            if e_final_eval.args: err_msg_detail += f" with args: {exc_args_str}"
+                        err_msg = f"Final eval err ({metric_obj_final} for {optimizer_name}): {err_msg_detail}"
                         logger.error(f"[red]{err_msg}[/red]")
                         evaluation_errors.append(err_msg)
+
+            # final_eval_time calculation moved here, after the ThreadPoolExecutor block
+            if future_to_metric_final or (not metrics and prompt_for_actual_eval is not None) : 
+                final_eval_time = time.time() - start_time_eval_final
+            # If prompt_for_actual_eval was None and no futures were submitted, final_eval_time remains 0.0
             
-            final_eval_time = time.time() - start_time_eval_final
-            final_scores_str = ", ".join([f"{k}: {v:.4f}" if isinstance(v, (int, float)) else f"{k}: N/A" for k, v in final_scores.items()])
+            final_scores_str = ", ".join([f"{k}: {v:.4f}" if isinstance(v, (int, float)) else f"{k}: N/A" for k, v in final_scores.items()]) 
             logger.info(f"  Final eval ({task_id}): {final_scores_str} ({final_eval_time:.2f}s)")
+            
+            # This is where task_result["final_evaluation"] will be set
+            # Ensure final_prompt_to_eval is used for "prompt_used"
 
             # Store final evaluation results properly
             task_result["final_evaluation"] = {
                 "metrics": [
                     {
-                        "metric_name": str(metric),
-                        "score": score,
+                        "metric_name": str(metric_key), 
+                        "score": score_val,
                         "timestamp": datetime.now().isoformat()
                     }
-                    for metric, score in final_scores.items()
+                    for metric_key, score_val in final_scores.items() 
                 ],
-                "duration_seconds": final_eval_time,
-                "prompt_used": prompt_for_final_eval # Log the actual prompt used
+                "duration_seconds": final_eval_time, 
+                "prompt_used": final_prompt_to_eval # Use the consistently defined final_prompt_to_eval
             }
 
             # Store the final prompt representation in the top-level results (this is somewhat redundant now)
