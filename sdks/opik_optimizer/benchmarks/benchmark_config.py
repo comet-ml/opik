@@ -101,18 +101,18 @@ DATASET_CONFIGS = {
 
 # Optimizer configurations
 OPTIMIZER_CONFIGS = {
-    "few_shot": {
-        "class": "FewShotBayesianOptimizer",
-        "params": {
-            "min_examples": 3,
-            "max_examples": 8,
-            "n_threads": 4,
-            "seed": 42,
-            "n_trials": 10,
-            "n_samples": 100,
-            "verbose": 0,
-        },
-    },
+    # "few_shot": {
+    #     "class": "FewShotBayesianOptimizer",
+    #     "params": {
+    #         "min_examples": 3,
+    #         "max_examples": 8,
+    #         "n_threads": 4,
+    #         "seed": 42,
+    #         "n_trials": 10,
+    #         "n_samples": 100,
+    #         "verbose": 0,
+    #     },
+    # },
     # "meta_prompt": {
     #     "class": "MetaPromptOptimizer",
     #     "params": {
@@ -121,17 +121,20 @@ OPTIMIZER_CONFIGS = {
     #         "improvement_threshold": 0.01,
     #         "temperature": 0.1,
     #         "max_completion_tokens": 5000,
-    #         "num_threads": 4,
+    #         "num_threads": 5,
+    #         "subsample_size": 10,
+    #         "verbose": 0,
     #     },
     # },
-    # "mipro": {
-    #     "class": "MiproOptimizer",
-    #     "params": {
-    #         "temperature": 0.1,
-    #         "max_tokens": 5000,
-    #         "num_threads": 4,
-    #     },
-    # },
+    "mipro": {
+        "class": "MiproOptimizer",
+        "params": {
+            "temperature": 0.1,
+            "max_tokens": 5000,
+            "num_threads": 10,
+            "verbose": 0,
+        },
+    },
     # "external_dspy_mipro": {
     #     "class": "ExternalDspyMiproOptimizer",
     #     "params": {
