@@ -56,6 +56,7 @@ def batched_streamer_and_mock_message_processor():
             n_consumers=1,
             use_batching=True,
             file_upload_manager=mock.Mock(),
+            max_queue_size=None,
         )
 
         yield tested, mock_message_processor
@@ -96,6 +97,7 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
             n_consumers=1,
             use_batching=False,
             file_upload_manager=mock.Mock(),
+            max_queue_size=None,
         )
 
         CREATE_MESSAGE = obj

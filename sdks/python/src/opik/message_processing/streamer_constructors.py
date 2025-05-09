@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import httpx
 
@@ -14,6 +14,7 @@ def construct_online_streamer(
     use_batching: bool,
     file_upload_worker_count: int,
     n_consumers: int,
+    max_queue_size: int,
 ) -> streamer.Streamer:
     message_processor = message_processors.MessageSender(rest_client=rest_client)
 
@@ -28,6 +29,7 @@ def construct_online_streamer(
         file_upload_manager=file_uploader,
         n_consumers=n_consumers,
         use_batching=use_batching,
+        max_queue_size=max_queue_size,
     )
 
 
@@ -36,9 +38,10 @@ def construct_streamer(
     file_upload_manager: base_upload_manager.BaseFileUploadManager,
     n_consumers: int,
     use_batching: bool,
+    max_queue_size: Optional[int],
 ) -> streamer.Streamer:
     message_queue_: message_queue.MessageQueue[messages.BaseMessage] = (
-        message_queue.MessageQueue()
+        message_queue.MessageQueue(max_length=max_queue_size)
     )
 
     queue_consumers: List[queue_consumer.QueueConsumer] = [

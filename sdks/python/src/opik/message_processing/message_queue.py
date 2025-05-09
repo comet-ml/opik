@@ -29,6 +29,7 @@ class MessageQueue(Generic[T]):
     def __init__(self, max_length: Optional[int] = None):
         self._deque: collections.deque[T] = collections.deque(maxlen=max_length)
         self._not_empty = threading.Condition()
+        self.max_size = max_length
 
     def put(self, message: T) -> None:
         with self._not_empty:
@@ -55,5 +56,24 @@ class MessageQueue(Generic[T]):
     def empty(self) -> bool:
         return len(self._deque) == 0
 
+    def accept_put_without_discarding(self) -> bool:
+        if self.max_size is None:
+            return True
+
+        return len(self._deque) + 1 < self.max_size
+
+    def size(self) -> int:
+        return len(self._deque)
+
     def __len__(self) -> int:
         return len(self._deque)
+
+
+def calculate_max_queue_size(
+    maximal_queue_size: int,
+    batch_factor: int,
+) -> int:
+    if batch_factor > 0:
+        return int(maximal_queue_size / batch_factor)
+    else:
+        return maximal_queue_size

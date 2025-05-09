@@ -46,6 +46,11 @@ class Streamer:
                 self._file_upload_manager.upload(message)
             else:
                 self._message_queue.put(message)
+                if LOGGER.isEnabledFor(logging.DEBUG):
+                    if self._message_queue.accept_put_without_discarding() is False:
+                        LOGGER.debug(
+                            "Message queue size limit reached. The new message added to the queue but old will be discarded."
+                        )
 
     def close(self, timeout: Optional[int]) -> bool:
         """
@@ -96,6 +101,9 @@ class Streamer:
 
     def workers_waiting(self) -> bool:
         return all([consumer.waiting for consumer in self._queue_consumers])
+
+    def queue_size(self) -> int:
+        return self._message_queue.size()
 
     def _start_queue_consumers(self) -> None:
         for consumer in self._queue_consumers:

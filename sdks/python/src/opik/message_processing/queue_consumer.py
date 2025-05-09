@@ -58,6 +58,11 @@ class QueueConsumer(threading.Thread):
         except Empty:
             time.sleep(SLEEP_BETWEEN_LOOP_ITERATIONS)
         except exceptions.OpikCloudRequestsRateLimited as limit_exception:
+            LOGGER.debug(
+                "Rate limited, retrying in %s seconds, details: %s",
+                limit_exception.retry_after,
+                limit_exception.headers,
+            )
             # set the next iteration time to avoid rate limiting
             self.next_message_time = now + limit_exception.retry_after
             if message is not None:

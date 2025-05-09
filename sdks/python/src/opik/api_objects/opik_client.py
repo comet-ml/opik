@@ -16,7 +16,7 @@ from .. import (
     rest_client_configurator,
     url_helpers,
 )
-from ..message_processing import messages, streamer_constructors
+from ..message_processing import messages, streamer_constructors, message_queue
 from ..message_processing.batching import sequence_splitter
 from ..rest_api import client as rest_api_client
 from ..rest_api.core.api_error import ApiError
@@ -135,12 +135,19 @@ class Opik:
             httpx.USE_CLIENT_DEFAULT
         )  # See https://github.com/fern-api/fern/issues/5321
         rest_client_configurator.configure(self._rest_client)
+
+        max_queue_size = message_queue.calculate_max_queue_size(
+            maximal_queue_size=self._config.maximal_queue_size,
+            batch_factor=self._config.maximal_queue_size_batch_factor,
+        )
+
         self._streamer = streamer_constructors.construct_online_streamer(
             n_consumers=workers,
             rest_client=self._rest_client,
             httpx_client=httpx_client_,
             use_batching=use_batching,
             file_upload_worker_count=file_upload_worker_count,
+            max_queue_size=max_queue_size,
         )
 
     def _display_trace_url(self, trace_id: str, project_name: str) -> None:
