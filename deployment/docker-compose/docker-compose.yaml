@@ -235,8 +235,6 @@ services:
     hostname: frontend
     ports:
       - "5173:5173" # Frontend server port
-    extra_hosts:
-      - "apihost:host-gateway"
     volumes:
       - ./nginx_${OPIK_FRONTEND_FLAVOR:-default}_local.conf:/etc/nginx/conf.d/default.conf
     depends_on:

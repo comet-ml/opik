@@ -130,7 +130,7 @@ jobs:
           OPIK_USAGE_REPORT_ENABLED: false
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose up --build
+          docker compose up -d --build
           
       - name: Check Docker pods are up (Local)
         run: |
