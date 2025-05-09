@@ -4,17 +4,15 @@ import logging
 import time
 
 import litellm
-from opik.evaluation import metrics
-from opik.opik_context import get_current_span_data
+import . _throttle
 from opik.rest_api.core import ApiError
 
 from pydantic import BaseModel
-from ._throttle import RateLimiter, rate_limited
 from .cache_config import initialize_cache
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from .optimization_config.configs import TaskConfig, MetricConfig
 
-limiter = RateLimiter(max_calls_per_second=15)
+_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 # Don't use unsupported params:
 litellm.drop_params = True
@@ -145,7 +143,7 @@ class BaseOptimizer:
         """
         self._history.append(round_data)
 
-    @rate_limited(limiter)
+    @_throttle.rate_limited(_limiter)
     def _call_model(
         self,
         prompt: str,
@@ -227,6 +225,7 @@ class BaseOptimizer:
             )
             raise
 
+            
     def update_optimization(self, optimization, status: str) -> None:
         """
         Update the optimization status
