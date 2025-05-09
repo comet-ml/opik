@@ -101,6 +101,52 @@ DATASET_CONFIGS = {
 
 # Optimizer configurations
 OPTIMIZER_CONFIGS = {
+    ##############
+    # TEST configs
+    ##############
+
+    "few_shot": {
+        "class": "FewShotBayesianOptimizer",
+        "params": {
+            "min_examples": 2,
+            "max_examples": 3,
+            "n_threads": 6,
+            "n_trials": 3,
+            "n_samples": 100,
+            "seed": 42,
+            "verbose": 0,
+        },
+    },
+    "meta_prompt": {
+        "class": "MetaPromptOptimizer",
+        "params": {
+            "max_rounds": 2,
+            "num_prompts_per_round": 2,
+            "improvement_threshold": 0.01,
+            "temperature": 0.1,
+            "max_completion_tokens": 9000,
+            "num_threads": 5,
+            "subsample_size": 5,
+            "seed": 42,
+            "verbose": 0,
+        },
+    },
+    "mipro": {
+        "class": "MiproOptimizer",
+        "params": {
+            "temperature": 0.1,
+            "max_tokens": 5000,
+            "num_threads": 10,
+            "seed": 42,
+            "verbose": 0,
+        },
+    },
+
+
+    ##############
+    # Live Benchmark configs
+    ##############
+
     # "few_shot": {
     #     "class": "FewShotBayesianOptimizer",
     #     "params": {
@@ -113,19 +159,19 @@ OPTIMIZER_CONFIGS = {
     #         "verbose": 0,
     #     },
     # },
-    "meta_prompt": {
-        "class": "MetaPromptOptimizer",
-        "params": {
-            "max_rounds": 2,
-            "num_prompts_per_round": 2,
-            "improvement_threshold": 0.01,
-            "temperature": 0.1,
-            "max_completion_tokens": 9000,
-            "num_threads": 5,
-            "subsample_size": 5,
-            "verbose": 0,
-        },
-    },
+    # "meta_prompt": {
+    #     "class": "MetaPromptOptimizer",
+    #     "params": {
+    #         "max_rounds": 3,
+    #         "num_prompts_per_round": 4,
+    #         "improvement_threshold": 0.01,
+    #         "temperature": 0.1,
+    #         "max_completion_tokens": 9000,
+    #         "num_threads": 5,
+    #         "subsample_size": 10,
+    #         "verbose": 0,
+    #     },
+    # },
     # "mipro": {
     #     "class": "MiproOptimizer",
     #     "params": {
