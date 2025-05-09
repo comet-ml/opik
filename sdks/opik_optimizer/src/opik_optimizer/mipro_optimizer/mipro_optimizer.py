@@ -44,6 +44,7 @@ class MiproOptimizer(BaseOptimizer):
         self.num_threads = self.model_kwargs.pop("num_threads", 6)
         self.model_kwargs["model"] = self.model
         self.llm_call_counter = 0
+        # FIXME: add mipro_optimizer=True - It does not count the LLM calls made internally by DSPy during MiproOptimizer.optimizer.compile().
         lm = LM(**self.model_kwargs)
         opik_callback = OpikCallback(project_name=self.project_name, log_graph=True)
         dspy.configure(lm=lm, callbacks=[opik_callback])
