@@ -85,7 +85,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         split_idx = int(len(dataset) * train_ratio)
         return dataset[:split_idx], dataset[split_idx:]
 
-    def _optimize_prompt(
+    def _optimize_prompt(   
         self,
         dataset: Union[str, Dataset],
         metric_config: MetricConfig,
@@ -171,8 +171,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             n_examples = trial.suggest_int(
                 "n_examples", self.min_examples, self.max_examples
             )
-            available_indices = list(range(len(dataset_items)))
-            example_indices = random.sample(available_indices, n_examples)
+            example_indices = [
+                trial.suggest_categorical(f"example_{i}", list(range(len(dataset_items))))
+                for i in range(n_examples)
+            ]
             trial.set_user_attr("example_indices", example_indices)
 
             instruction = task_config.instruction_prompt

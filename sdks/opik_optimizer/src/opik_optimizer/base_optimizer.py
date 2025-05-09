@@ -4,8 +4,6 @@ import logging
 import time
 
 import litellm
-from opik.evaluation import metrics
-from opik.opik_context import get_current_span_data
 from opik.rest_api.core import ApiError
 
 from pydantic import BaseModel
