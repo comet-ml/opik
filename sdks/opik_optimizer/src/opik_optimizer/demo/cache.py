@@ -9,6 +9,7 @@ import requests
 NAMED_CACHES = {
     "test": "https://drive.google.com/file/d/1RifNtpN-pl0DW49daRaAMJwW7MCsOh6y/view?usp=sharing",
     "test2": "https://drive.google.com/uc?id=1RifNtpN-pl0DW49daRaAMJwW7MCsOh6y&export=download",
+    "opik-workshop": "https://drive.google.com/file/d/1l0aK6KhDPs2bFsQTkfzvOvfacJlhdmHr/view?usp=sharing",
 }
 CACHE_DIR = os.path.expanduser("~/.litellm_cache")
 
