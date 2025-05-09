@@ -1757,24 +1757,42 @@ def create_result_panel(dataset_name: str, optimizer_name: str, metrics: dict, t
         if history and isinstance(history, list):
             history_summary_parts = []
             limit = 4 # Show first 2 and last 2 if > limit
+
+            # Determine which iterations to show
+            indices_to_show = []
             if len(history) > limit:
-                for i, round_data in enumerate(history[:limit//2]):
-                    if isinstance(round_data, dict):
-                        score_hist = round_data.get('score', round_data.get('current_score', 'N/A'))
-                        score_hist_str = f"{score_hist:.4f}" if isinstance(score_hist, (int, float)) else str(score_hist)
-                        history_summary_parts.append(f"  R{round_data.get('round_number', i)}: {score_hist_str}")
-                history_summary_parts.append("  ...")
-                for i, round_data in enumerate(history[-limit//2:], start=len(history)-limit//2):
-                    if isinstance(round_data, dict):
-                        score_hist = round_data.get('score', round_data.get('current_score', 'N/A'))
-                        score_hist_str = f"{score_hist:.4f}" if isinstance(score_hist, (int, float)) else str(score_hist)
-                        history_summary_parts.append(f"  R{round_data.get('round_number', i)}: {score_hist_str}")
+                indices_to_show.extend(range(limit // 2)) # First few
+                indices_to_show.append(-1) # Placeholder for ellipsis
+                indices_to_show.extend(range(len(history) - limit // 2, len(history))) # Last few
             else:
-                for i, round_data in enumerate(history):
-                    if isinstance(round_data, dict):
-                        score_hist = round_data.get('score', round_data.get('current_score', 'N/A'))
-                        score_hist_str = f"{score_hist:.4f}" if isinstance(score_hist, (int, float)) else str(score_hist)
-                        history_summary_parts.append(f"  R{round_data.get('round_number', i)}: {score_hist_str}")
+                indices_to_show.extend(range(len(history))) # All items
+
+            for history_idx, original_idx in enumerate(indices_to_show):
+                if original_idx == -1:
+                    history_summary_parts.append("  ...")
+                    continue
+
+                round_data = history[original_idx]
+                if isinstance(round_data, dict):
+                    score_val = "N/A"
+                    # Attempt to get score from the new structure: round_data['scores'][0]['score']
+                    scores_list = round_data.get('scores')
+                    if isinstance(scores_list, list) and len(scores_list) > 0 and isinstance(scores_list[0], dict):
+                        score_val = scores_list[0].get('score')
+                    
+                    score_hist_str = f"{score_val:.4f}" if isinstance(score_val, (int, float)) else str(score_val)
+                    round_num_display = round_data.get('round_number', original_idx + 1) # Use actual index if round_number not present
+                    cand_num_display = round_data.get('candidate_in_round', '')
+                    iteration_num_display = round_data.get('iteration', original_idx + 1)
+                    
+                    # Display Iteration number, and optionally Round/Candidate if available
+                    prefix = f"  Iter {iteration_num_display}"
+                    if round_num_display and cand_num_display:
+                        prefix += f" (R{round_num_display}.C{cand_num_display})"
+                    elif round_num_display:
+                        prefix += f" (R{round_num_display})"
+                    history_summary_parts.append(f"{prefix}: {score_hist_str}")
+            
             if history_summary_parts:
                 table.add_row("Score History:", Group(*history_summary_parts))
 
