@@ -151,6 +151,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         experiment_config: Optional[Dict] = None,
         n_samples: Optional[int] = None,
         optimization_id: Optional[str] = None,
+        verbose: int = 1,
     ) -> float:
         """
         Evaluate a prompt using the given dataset and metric configuration.
@@ -177,6 +178,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             experiment_config=experiment_config,
             n_samples=n_samples,
             optimization_id=optimization_id,
+            verbose=self.verbose,
         )
 
     def _call_model(
@@ -273,6 +275,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         experiment_config: Optional[Dict],
         n_samples: Optional[int],
         optimization_id: Optional[str] = None,
+        verbose: int = 1,
     ) -> float:
         # Calculate subset size for trials
         if not use_full_dataset:
