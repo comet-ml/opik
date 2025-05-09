@@ -809,7 +809,7 @@ class BenchmarkRunner:
             opt_history_processed = []
             global_iteration_count = 0 
             try:
-                if optimizer_name in ["MetaPromptOptimizer", "MiproOptimizer"]:
+                if optimizer_name == "MetaPromptOptimizer": # Specific handling for MetaPromptOptimizer
                     if hasattr(results_obj, 'details') and isinstance(results_obj.details, dict) and \
                        'rounds' in results_obj.details and results_obj.details['rounds'] and \
                        isinstance(results_obj.details['rounds'], list):
@@ -854,19 +854,41 @@ class BenchmarkRunner:
                             rounds_info_msg = f"'rounds' key in details: {'rounds' in results_obj.details}. Value of details['rounds']: {results_obj.details.get('rounds')}"
                         logger.warning(f"Condition failed for processing MetaPromptOptimizer/MiproOptimizer history for task {task_id}. {details_type_msg}. {rounds_info_msg}")
                 
-                elif isinstance(optimizer, FewShotBayesianOptimizer):
-                    logger.debug(f"Using pre-processed history from FewShotBayesianOptimizer for task {task_id}")
-                    if hasattr(results_obj, "history") and isinstance(results_obj.history, list):
-                        opt_history_processed = results_obj.history # Directly use the history from the optimizer
-                        # Ensure global_iteration_count is updated based on this pre-processed history if needed elsewhere,
-                        # though for FewShot, each item in results_obj.history should already have its own 'iteration' number.
-                        # If run_benchmark.py's global_iteration_count was meant to be a cross-optimizer counter,
-                        # this direct assignment means it won't be incremented here for FewShot.
-                        # However, the items in results_obj.history from FewShot already have "iteration".
+                elif optimizer_name == "MiproOptimizer": # NEW DEDICATED BLOCK FOR MIPRO
+                    print(f"PRINT_DEBUG_HISTORY ({optimizer_name}, {task_id}): Entered DEDICATED MiproOptimizer history processing block.")
+                    logger.debug(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): Entered DEDICATED MiproOptimizer history processing block.")
+                    if hasattr(results_obj, "history") and results_obj.history is not None:
+                        logger.debug(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): results_obj.history exists and is not None. Type: {type(results_obj.history)}.")
+                        if isinstance(results_obj.history, list):
+                            logger.debug(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): results_obj.history IS a list. Length: {len(results_obj.history)}.")
+                            if results_obj.history:
+                                opt_history_processed = results_obj.history
+                                logger.debug(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): Assigned results_obj.history to opt_history_processed. Length now: {len(opt_history_processed)}.")
+                                if opt_history_processed and isinstance(opt_history_processed[0], dict):
+                                    logger.debug(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): First item of opt_history_processed: {list(opt_history_processed[0].keys())}")
+                                elif not opt_history_processed:
+                                    logger.warning(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): opt_history_processed is EMPTY after assignment. THIS IS UNEXPECTED.")
+                            else:
+                                logger.warning(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): results_obj.history IS AN EMPTY list. opt_history_processed will be empty.")
+                                opt_history_processed = []
+                        else:
+                            logger.warning(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): results_obj.history is NOT a list. Type: {type(results_obj.history)}. opt_history_processed will be empty.")
+                            opt_history_processed = []
                     else:
-                        logger.warning(f"results_obj.history not found or not a list for {optimizer_name} task {task_id}")
-                        opt_history_processed = [] # Fallback to empty
-                
+                        logger.warning(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): results_obj has NO 'history' attribute or it is None. opt_history_processed will be empty.")
+                        opt_history_processed = []
+
+                elif optimizer_name == "FewShotBayesianOptimizer": # Existing block for FewShot, slightly adjusted
+                    print(f"PRINT_DEBUG_HISTORY ({optimizer_name}, {task_id}): Entered FewShotBayesianOptimizer history processing block.")
+                    logger.debug(f"HISTORY_DEBUG ({optimizer_name}, {task_id}): Entered FewShotBayesianOptimizer history processing block.")
+                    if hasattr(results_obj, "history") and results_obj.history is not None:
+                        if isinstance(results_obj.history, list):
+                            if results_obj.history:
+                                opt_history_processed = results_obj.history
+                            else: opt_history_processed = []
+                        else: opt_history_processed = []
+                    else: opt_history_processed = [] # Simplified for brevity, but should be the detailed logging
+
                 else: # Fallback for other or unknown optimizer types
                     logger.debug(f"Processing history with fallback logic for {optimizer_name} task {task_id}")
                     raw_history_fallback = []
@@ -1866,39 +1888,39 @@ def create_result_panel(
         history = optimization_details.get("history", []) 
         if history and isinstance(history, list):
             history_summary_parts = []
-            limit = 4 
+            # Remove or comment out the limit to show all history items
+            # limit = 4 
+            # indices_to_show = []
+            # if len(history) > limit:
+            #     indices_to_show.extend(range(limit // 2))
+            #     indices_to_show.append(-1) 
+            #     indices_to_show.extend(range(len(history) - limit // 2, len(history)))
+            # else:
+            #     indices_to_show.extend(range(len(history)))
 
-            indices_to_show = []
-            if len(history) > limit:
-                indices_to_show.extend(range(limit // 2))
-                indices_to_show.append(-1) 
-                indices_to_show.extend(range(len(history) - limit // 2, len(history)))
-            else:
-                indices_to_show.extend(range(len(history)))
-
-            for history_idx, original_idx in enumerate(indices_to_show):
-                if original_idx == -1:
-                    history_summary_parts.append("  ...")
-                    continue
-                round_data = history[original_idx]
+            # Directly iterate over all history items
+            for idx, round_data in enumerate(history):
+                # if original_idx == -1: # No longer needed with direct iteration
+                #     history_summary_parts.append("  ...")
+                #     continue
+                # round_data = history[original_idx] # No longer needed
+                
                 if isinstance(round_data, dict):
                     score_val = "N/A"
                     scores_list = round_data.get('scores')
                     if isinstance(scores_list, list) and len(scores_list) > 0 and isinstance(scores_list[0], dict):
                         score_val = scores_list[0].get('score')
                     
-                    # Style score green if numeric
                     score_text_styled: Text
                     if isinstance(score_val, (float, int)):
                         score_text_styled = Text.from_markup(f"[green]{score_val:.4f}[/green]")
                     else:
                         score_text_styled = Text(str(score_val), style="dim")
                     
-                    iteration_num_display = round_data.get('iteration', original_idx + 1)
+                    iteration_num_display = round_data.get('iteration', idx + 1) # Use enumerate index as fallback
                     round_num_display = round_data.get('round_number') 
                     cand_num_display = round_data.get('candidate_in_round')
                     
-                    # Add bullet point and style prefix
                     prefix_base = f"  • Iter {iteration_num_display}"
                     suffix_markup = ""
                     if round_num_display is not None and cand_num_display is not None:
