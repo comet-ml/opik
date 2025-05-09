@@ -19,11 +19,14 @@ FILE_SIZE = 2 * 1024 * 1024
 
 @pytest.fixture
 def data_file():
-    with tempfile.NamedTemporaryFile(delete=True) as file:
-        file.write(np.random.bytes(FILE_SIZE))
-        file.seek(0)
-
-        yield file
+    temp_file = tempfile.NamedTemporaryFile(delete=False)
+    try:
+        temp_file.write(np.random.bytes(FILE_SIZE))
+        temp_file.seek(0)
+        yield temp_file
+    finally:
+        temp_file.close()
+        os.unlink(temp_file.name)
 
 
 @pytest.mark.parametrize(
@@ -103,7 +106,7 @@ def test_tracked_function__happyflow(opik_client, project_name):
     )
 
 
-def test_tracked_function__error_inside_inner_function__caugth_in_top_level_span__inner_span_has_error_info(
+def test_tracked_function__error_inside_inner_function__caught_in_top_level_span__inner_span_has_error_info(
     opik_client,
 ):
     # Setup
