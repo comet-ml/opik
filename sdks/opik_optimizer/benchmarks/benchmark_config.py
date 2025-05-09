@@ -116,13 +116,13 @@ OPTIMIZER_CONFIGS = {
     "meta_prompt": {
         "class": "MetaPromptOptimizer",
         "params": {
-            "max_rounds": 3,
-            "num_prompts_per_round": 4,
+            "max_rounds": 2,
+            "num_prompts_per_round": 2,
             "improvement_threshold": 0.01,
             "temperature": 0.1,
             "max_completion_tokens": 9000,
             "num_threads": 5,
-            "subsample_size": 10,
+            "subsample_size": 5,
             "verbose": 0,
         },
     },
@@ -155,13 +155,14 @@ OPTIMIZER_CONFIGS = {
 
 MODELS_TO_RUN = [
     # Standard models
-    "openai/gpt-4.1-2025-04-14",
-    "anthropic/claude-3-5-sonnet-20241022",
-    "openrouter/google/gemini-2.5-flash-preview",
-    # Reasoning models
-    "openai/o3-2025-04-16",
-    "anthropic/claude-3-7-sonnet-20250219",
-    "openrouter/google/gemini-2.5-pro-preview",
+    # "openai/gpt-4.1-2025-04-14",
+    "openai/gpt-4o-mini",
+    # "anthropic/claude-3-5-sonnet-20241022",
+    # "openrouter/google/gemini-2.5-flash-preview",
+    # # Reasoning models
+    # "openai/o3-2025-04-16",
+    # "anthropic/claude-3-7-sonnet-20250219",
+    # "openrouter/google/gemini-2.5-pro-preview",
 ]
 
 # Initial prompts for each dataset

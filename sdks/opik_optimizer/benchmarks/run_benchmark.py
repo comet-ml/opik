@@ -455,8 +455,64 @@ class BenchmarkRunner:
             return None
         
         start_time_run_opt = time.time()
-        run_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.urandom(4).hex()}" # Unique ID for the overall benchmark execution
-        task_id = f"{experiment_config['dataset']}-{experiment_config['optimizer']}-{optimizer.model if hasattr(optimizer, 'model') else 'unknown_model'}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        # run_id should be self.current_run_id, which is set at the start of BenchmarkRunner.run_benchmark
+        # task_id generation needs to be robust here if called outside the main loop context (though it typically isn't)
+        # Ensure task_id is unique and well-formed
+        model_name_for_task_id = "unknown_model"
+        if hasattr(optimizer, 'model') and optimizer.model:
+            model_name_for_task_id = optimizer.model.replace("/", "-") # Sanitize
+        timestamp_for_task_id = datetime.now().strftime('%Y%m%d%H%M%S%f') # Added microseconds for more uniqueness
+        task_id = f"{experiment_config['dataset']}-{experiment_config['optimizer']}-{model_name_for_task_id}-{timestamp_for_task_id}"
+
+        # --- Task-specific File Logging Setup ---
+        task_log_file_path = None
+        file_handler = None
+        root_logger = logging.getLogger() # Get the root logger
+        original_root_level = root_logger.level
+
+        # Target specific loggers for temporary un-suppression
+        opik_logger = logging.getLogger("opik") # Covers opik_optimizer
+        tqdm_logger = logging.getLogger("tqdm")
+        # Add other noisy libraries that might output too much DEBUG if not controlled
+        # Ensure this list is consistent with the one in main() or expanded
+        noisy_libs_for_task_log_control = ["LiteLLM", "urllib3", "requests", "httpx", "dspy", "datasets", "optuna", "filelock", "httpcore", "openai"] 
+        controlled_noisy_loggers = {name: logging.getLogger(name) for name in noisy_libs_for_task_log_control}
+
+        original_levels_and_propagate = {
+            "opik": (opik_logger.level, opik_logger.propagate),
+            "tqdm": (tqdm_logger.level, tqdm_logger.propagate),
+        }
+        for name, logger_instance in controlled_noisy_loggers.items():
+            original_levels_and_propagate[name] = (logger_instance.level, logger_instance.propagate)
+
+        if hasattr(self, 'task_results_dir') and self.task_results_dir:
+            self.task_results_dir.mkdir(parents=True, exist_ok=True)
+            task_log_file_path = self.task_results_dir / f"{task_id}.log"
+            try:
+                file_handler = logging.FileHandler(task_log_file_path, mode='w')
+                formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(processName)s - %(threadName)s - %(message)s')
+                file_handler.setFormatter(formatter)
+                
+                root_logger.addHandler(file_handler)
+                root_logger.setLevel(logging.DEBUG) # Root logger at DEBUG to catch everything for the file
+
+                # Temporarily adjust specific loggers for file output
+                opik_logger.propagate = True
+                opik_logger.setLevel(logging.INFO) 
+                tqdm_logger.propagate = True
+                tqdm_logger.setLevel(logging.INFO) 
+                
+                for name, logger_instance in controlled_noisy_loggers.items():
+                    logger_instance.propagate = True # Ensure they can reach the root handler
+                    logger_instance.setLevel(logging.WARNING) # Set them to WARNING for task file
+                
+                logger.info(f"Task-specific logging for {task_id} directed to: {task_log_file_path} (opik/tqdm at INFO; noisy libs at WARNING for this file)")
+            except Exception as e_log_setup:
+                logger.error(f"[red]Failed to set up task-specific file logging for {task_id}: {e_log_setup}[/red]")
+                file_handler = None
+        else:
+            logger.warning(f"[yellow]task_results_dir not available, skipping task-specific file logging for {task_id}[/yellow]")
+        # -----------------------------------------------------------------
 
         dataset_name = experiment_config["dataset"]
         optimizer_name = type(optimizer).__name__
@@ -465,7 +521,7 @@ class BenchmarkRunner:
 
         # Initialize comprehensive result structure
         task_result = {
-            "run_id": run_id, # This should ideally be passed in or set at a higher level for a single benchmark run
+            "run_id": self.current_run_id, # This should ideally be passed in or set at a higher level for a single benchmark run
             "task_id": task_id,
             "timestamp_start_task": datetime.now().isoformat(),
             "timestamp_end_task": None,
@@ -685,6 +741,30 @@ class BenchmarkRunner:
                 task_result["timestamp_end_task"] = datetime.now().isoformat()
                 task_result["duration_seconds_task"] = time.time() - start_time_run_opt
                 return task_result
+            finally:
+                # --- Task-specific File Logging Teardown ---
+                if file_handler:
+                    root_logger.removeHandler(file_handler)
+                    file_handler.close()
+                    logger.info(f"Closed task-specific log file: {task_log_file_path}")
+                
+                root_logger.setLevel(original_root_level)
+                
+                opik_level_orig, opik_prop_orig = original_levels_and_propagate["opik"]
+                opik_logger.setLevel(opik_level_orig)
+                opik_logger.propagate = opik_prop_orig
+                
+                tqdm_level_orig, tqdm_prop_orig = original_levels_and_propagate["tqdm"]
+                tqdm_logger.setLevel(tqdm_level_orig)
+                tqdm_logger.propagate = tqdm_prop_orig
+
+                for name, logger_instance in controlled_noisy_loggers.items():
+                    level_orig, prop_orig = original_levels_and_propagate[name]
+                    logger_instance.setLevel(level_orig)
+                    logger_instance.propagate = prop_orig
+                
+                logger.debug("Restored original logging levels/propagation for root and controlled loggers.")
+                # ------------------------------------------
 
             opt_time = time.time() - start_time_opt
             if results_obj is None:
@@ -692,70 +772,158 @@ class BenchmarkRunner:
                 task_result["error_message"] = f"Optimization failed for {optimizer_name}, results_obj is None."
                 task_result["timestamp_end_task"] = datetime.now().isoformat()
                 task_result["duration_seconds_task"] = time.time() - start_time_run_opt
+                # No finally block here, as it's for run_optimization's own setup/teardown
                 return task_result
                 
-            num_iter_log = getattr(results_obj, "num_iterations", len(getattr(results_obj, "history", [])))
-            best_score_log = getattr(results_obj, "best_score", getattr(results_obj, "score", "N/A"))
-            best_score_log_str = f"{best_score_log:.4f}" if isinstance(best_score_log, (int,float)) else str(best_score_log)
-            console.print(f"  Optimization done ({task_id}): Iterations={num_iter_log}, Best Internal Score={best_score_log_str} ({opt_time:.2f}s)")
-
             # Process optimization history for structured logging
             opt_history_processed = []
-            raw_history = []
-            if hasattr(results_obj, "history") and results_obj.history and isinstance(results_obj.history, list):
-                raw_history = results_obj.history
-            elif isinstance(results_obj, dict) and "history" in results_obj and isinstance(results_obj["history"], list):
-                raw_history = results_obj["history"]
+            global_iteration_count = 0 
+            try:
+                if optimizer_name in ["MetaPromptOptimizer", "MiproOptimizer"]:
+                    if hasattr(results_obj, 'details') and isinstance(results_obj.details, dict) and \
+                       'rounds' in results_obj.details and results_obj.details['rounds'] and \
+                       isinstance(results_obj.details['rounds'], list):
+                        logger.debug(f"Processing {optimizer_name} history from results_obj.details['rounds'] for task {task_id}")
+                        for round_obj in results_obj.details['rounds']:
+                            round_number_val = getattr(round_obj, "round_number", "N/A")
+                            generated_prompts_list = getattr(round_obj, "generated_prompts", [])
+                            
+                            if isinstance(generated_prompts_list, list):
+                                for i, candidate_prompt_data_dict in enumerate(generated_prompts_list):
+                                    global_iteration_count += 1
+                                    prompt_text = candidate_prompt_data_dict.get("prompt")
+                                    score_value = candidate_prompt_data_dict.get("score")
+                                    objective_metric_name = getattr(results_obj, 'metric_name', 'objective_score')
+                                    if not objective_metric_name: objective_metric_name = "objective_score"
+
+                                    iter_detail = {
+                                        "iteration": global_iteration_count,
+                                        "round_number": round_number_val,
+                                        "candidate_in_round": i + 1,
+                                        "timestamp": datetime.now().isoformat(),
+                                        "prompt_candidate": prompt_text,
+                                        "parameters_used": None,
+                                        "scores": [],
+                                        "tokens_used": None, # TODO
+                                        "cost": None, # TODO
+                                        "duration_seconds": None, # TODO
+                                    }
+                                    if score_value is not None:
+                                        iter_detail["scores"].append({
+                                            "metric_name": str(objective_metric_name),
+                                            "score": score_value,
+                                            "opik_evaluation_id": None # TODO
+                                        })
+                                    opt_history_processed.append(iter_detail)
+                            else:
+                                logger.warning(f"'generated_prompts' attribute in round_obj for {optimizer_name} task {task_id} is not a list. Found: {type(generated_prompts_list)}")
+                    else:
+                        details_type_msg = f"results_obj.details type: {type(results_obj.details)}" if hasattr(results_obj, 'details') else "results_obj has no 'details' attribute"
+                        rounds_info_msg = ""
+                        if hasattr(results_obj, 'details') and isinstance(results_obj.details, dict):
+                            rounds_info_msg = f"'rounds' key in details: {'rounds' in results_obj.details}. Value of details['rounds']: {results_obj.details.get('rounds')}"
+                        logger.warning(f"Condition failed for processing MetaPromptOptimizer/MiproOptimizer history for task {task_id}. {details_type_msg}. {rounds_info_msg}")
+                
+                elif isinstance(optimizer, FewShotBayesianOptimizer):
+                    logger.debug(f"Processing {optimizer_name} history from results_obj.history for task {task_id}")
+                    raw_history_fsb = []
+                    if hasattr(results_obj, "history") and results_obj.history and isinstance(results_obj.history, list):
+                        raw_history_fsb = results_obj.history
+                    else:
+                        logger.warning(f"No 'history' list found in results_obj for {optimizer_name} task {task_id}")
+
+                    for i, hist_item in enumerate(raw_history_fsb):
+                        global_iteration_count += 1
+                        prompt_cand = getattr(hist_item, "prompt", None)
+                        if isinstance(prompt_cand, list):
+                            try: prompt_cand = json.dumps(prompt_cand)
+                            except TypeError: prompt_cand = str(prompt_cand)
+
+                        iter_detail = {
+                            "iteration": global_iteration_count,
+                            "timestamp": getattr(hist_item, "timestamp", datetime.now().isoformat()),
+                            "prompt_candidate": prompt_cand,
+                            "parameters_used": getattr(hist_item, "parameters", None),
+                            "scores": [],
+                            "tokens_used": getattr(hist_item, "input_tokens", 0) + getattr(hist_item, "output_tokens", 0) if hasattr(hist_item, "input_tokens") else None, # TODO
+                            "cost": getattr(hist_item, "cost", None), # TODO
+                            "duration_seconds": getattr(hist_item, "latency_seconds", None), # TODO
+                        }
+                        current_score_val = getattr(hist_item, 'score', None)
+                        
+                        if hasattr(hist_item, 'scores_per_metric') and isinstance(hist_item.scores_per_metric, dict) and hist_item.scores_per_metric:
+                            for m_name, m_score in hist_item.scores_per_metric.items():
+                                iter_detail["scores"].append({"metric_name": str(m_name), "score": m_score, "opik_evaluation_id": getattr(hist_item, "opik_evaluation_id", None)}) # TODO
+                        elif current_score_val is not None:
+                            metric_name_fs = getattr(hist_item, 'metric_name', 'objective_score')
+                            if not metric_name_fs: metric_name_fs = "objective_score"
+                            iter_detail["scores"].append({"metric_name": str(metric_name_fs), "score": current_score_val, "opik_evaluation_id": getattr(hist_item, "opik_evaluation_id", None)}) # TODO
+                        opt_history_processed.append(iter_detail)
+                
+                else: # Fallback for other or unknown optimizer types
+                    logger.debug(f"Processing history with fallback logic for {optimizer_name} task {task_id}")
+                    raw_history_fallback = []
+                    if hasattr(results_obj, "history") and results_obj.history and isinstance(results_obj.history, list):
+                        raw_history_fallback = results_obj.history
+                    elif isinstance(results_obj, dict) and "history" in results_obj and isinstance(results_obj["history"], list):
+                        raw_history_fallback = results_obj["history"]
+                    else:
+                        logger.warning(f"No 'history' list found in results_obj for fallback processing of {optimizer_name} task {task_id}")
+
+                    for i, hist_item_fallback in enumerate(raw_history_fallback):
+                        global_iteration_count += 1
+                        iter_detail = {
+                            "iteration": global_iteration_count,
+                            "timestamp": getattr(hist_item_fallback, "timestamp", datetime.now().isoformat()),
+                            "prompt_candidate": getattr(hist_item_fallback, "prompt", None),
+                            "parameters_used": getattr(hist_item_fallback, "parameters", None),
+                            "scores": [],
+                            "tokens_used": None, # TODO
+                            "cost": None, # TODO
+                            "duration_seconds": None, # TODO
+                        }
+                        current_score_val_fb = None
+                        if isinstance(hist_item_fallback, dict):
+                            current_score_val_fb = hist_item_fallback.get('score', hist_item_fallback.get('current_score'))
+                            nested_scores_fb = hist_item_fallback.get("scores_per_metric", hist_item_fallback.get("metric_scores"))
+                            if isinstance(nested_scores_fb, dict):
+                                for m_name, m_score in nested_scores_fb.items():
+                                    iter_detail["scores"].append({"metric_name": str(m_name), "score": m_score, "opik_evaluation_id": None}) # TODO
+                            elif current_score_val_fb is not None:
+                                iter_detail["scores"].append({"metric_name": "objective_score", "score": current_score_val_fb, "opik_evaluation_id": None}) # TODO
+                        elif hasattr(hist_item_fallback, 'score'):
+                            current_score_val_fb = hist_item_fallback.score
+                            if hasattr(hist_item_fallback, 'scores_per_metric') and isinstance(hist_item_fallback.scores_per_metric, dict):
+                                for m_name, m_score in hist_item_fallback.scores_per_metric.items():
+                                    iter_detail["scores"].append({"metric_name": str(m_name), "score": m_score, "opik_evaluation_id": None}) # TODO
+                            elif current_score_val_fb is not None:
+                                iter_detail["scores"].append({"metric_name": "objective_score", "score": current_score_val_fb, "opik_evaluation_id": None}) # TODO
+                        
+                        if not iter_detail["scores"] and current_score_val_fb is not None:
+                            iter_detail["scores"].append({"metric_name": "objective_score", "score": current_score_val_fb, "opik_evaluation_id": None}) # TODO
+                        opt_history_processed.append(iter_detail)
             
-            for i, hist_item in enumerate(raw_history):
-                # hist_item could be a dict, an object, or an OptimizationResult object from opik_optimizer
-                iter_detail = {
-                    "iteration": i + 1,
-                    "timestamp": getattr(hist_item, "timestamp", datetime.now().isoformat()), # TODO: ensure timestamp is from actual event
-                    "prompt_candidate": getattr(hist_item, "prompt", None),
-                    "parameters_used": getattr(hist_item, "parameters", None), # e.g. for FewShotBayesianOptimizer
-                    "scores": [], # list of {metric_name, score, opik_eval_id, ...}
-                    "tokens_used": None, # TODO: Populate tokens
-                    "cost": None, # TODO: Populate cost
-                    "duration_seconds": None, # TODO: Capture duration of this specific iteration if possible
-                }
-                current_score_val = None
-                if isinstance(hist_item, dict):
-                    current_score_val = hist_item.get('score', hist_item.get('current_score'))
-                    # If scores are nested, extract them
-                    # This part is a guess and needs validation based on actual hist_item structure
-                    nested_scores = hist_item.get("scores_per_metric", hist_item.get("metric_scores"))
-                    if isinstance(nested_scores, dict):
-                        for m_name, m_score in nested_scores.items():
-                            iter_detail["scores"].append({"metric_name": m_name, "score": m_score, "opik_evaluation_id": None})
-                    elif current_score_val is not None:
-                         iter_detail["scores"].append({"metric_name": "objective_score", "score": current_score_val, "opik_evaluation_id": None})
-                elif hasattr(hist_item, 'score'): # For Pydantic models or simple objects
-                    current_score_val = hist_item.score
-                    # Similar logic for nested scores if applicable for these objects
-                    if hasattr(hist_item, 'scores_per_metric') and isinstance(hist_item.scores_per_metric, dict):
-                        for m_name, m_score in hist_item.scores_per_metric.items():
-                            iter_detail["scores"].append({"metric_name": m_name, "score": m_score, "opik_evaluation_id": None})
-                    elif current_score_val is not None:
-                        iter_detail["scores"].append({"metric_name": "objective_score", "score": current_score_val, "opik_evaluation_id": None})
-                
-                if not iter_detail["scores"] and current_score_val is not None: # Fallback if no detailed scores found but a general score exists
-                     iter_detail["scores"].append({"metric_name": "objective_score", "score": current_score_val, "opik_evaluation_id": None})
-                
-                opt_history_processed.append(iter_detail)
+            except Exception as e_hist_proc:
+                logger.error(f"[red]Error processing optimization history for task {task_id} (optimizer: {optimizer_name}): {e_hist_proc}[/red]")
+                logger.exception("Traceback for history processing error:")
 
             task_result["optimization_process"] = {
                 "timestamp_start": datetime.fromtimestamp(start_time_opt).isoformat(),
-                "timestamp_end": datetime.now().isoformat(), # End of optimization block
+                "timestamp_end": datetime.now().isoformat(),
                 "duration_seconds": opt_time,
                 "optimizer_type": optimizer_name,
-                # Fetch configured trials/samples from optimizer instance attributes
-                "num_trials_configured": getattr(optimizer, 'n_trials', getattr(optimizer, 'n_iterations', None)), # Use n_iterations as fallback for FewShot
+                "num_trials_configured": getattr(optimizer, 'n_trials', getattr(optimizer, 'n_iterations', None)),
                 "num_samples_configured": getattr(optimizer, 'n_samples', None),
                 "best_score_achieved": getattr(results_obj, 'score', None), 
                 "final_prompt": results_obj.details.get("chat_messages") if optimizer_name == "FewShotBayesianOptimizer" and hasattr(results_obj, 'details') else getattr(results_obj, 'prompt', None), 
                 "history": opt_history_processed,
             }
+
+            # Calculate num_iter_log and print console message *after* task_result["optimization_process"] is populated
+            num_iter_log = len(task_result.get("optimization_process", {}).get("history", []))
+            best_score_log = getattr(results_obj, "best_score", getattr(results_obj, "score", "N/A")) 
+            best_score_log_str = f"{best_score_log:.4f}" if isinstance(best_score_log, (int,float)) else str(best_score_log)
+            console.print(f"  Optimization done ({task_id}): Iterations={num_iter_log}, Best Internal Score (from optimizer)={best_score_log_str} ({opt_time:.2f}s)")
 
             # --- Final Prompt Evaluation --- 
             logger.info("--> Evaluating final prompt...")
@@ -934,32 +1102,54 @@ class BenchmarkRunner:
         for ds_key_prog in active_datasets_to_run:
             for opt_key_prog in optimizers:
                 for model_name_prog in MODELS_TO_RUN: # Added model loop
-                    # opt_config_prog = OPTIMIZER_CONFIGS[opt_key_prog] # Not needed here, only model name for key
-                    # mdl_name_prog = opt_config_prog.get("params", {}).get("model", "N/A")
                     tasks_to_plan_for_progress.append((ds_key_prog, opt_key_prog, model_name_prog))
         
         num_tasks_for_progress_bar = 0
-        if self.retry_failed_run_id and self.resuming_run_active and self.results:
-            # Count only those in retry_set that are not already completed
-            # tasks_to_explicitly_retry_keys was built above, let's re-use a similar build here for clarity before loop
-            retry_candidates = set()
-            completed_keys_in_retry_run = set()
-            for res_summary_prog in self.results:
-                if res_summary_prog.get("run_id") == self.retry_failed_run_id: # Must be from the target run
-                    task_key_prog_sum = (res_summary_prog["dataset"], res_summary_prog["optimizer"], res_summary_prog["model_name_used"])
-                    if res_summary_prog.get("status") != "success":
-                        retry_candidates.add(task_key_prog_sum)
-                    else:
-                        completed_keys_in_retry_run.add(task_key_prog_sum)
-            num_tasks_for_progress_bar = len(retry_candidates - completed_keys_in_retry_run)
-            logger.info(f"Retry mode: Progress bar total set to {num_tasks_for_progress_bar} (tasks from run '{self.retry_failed_run_id}' to retry).")
-        elif self.resuming_run_active and self.results:
+        # For resume/retry, we need to use current_run_id_for_resume_logic to check results from the *correct* previous run.
+        run_id_to_check_for_resume = self.current_run_id_for_resume_logic if hasattr(self, 'current_run_id_for_resume_logic') and self.resuming_run_active else None
+
+        if self.retry_failed_run_id and self.resuming_run_active and self.results and run_id_to_check_for_resume:
+            logger.info(f"Retry mode: Filtering tasks based on previous run_id: {run_id_to_check_for_resume}")
+            tasks_to_actually_retry_count = 0
+            for task_to_plan_tuple in tasks_to_plan_for_progress:
+                # Check if this task (dataset, optimizer, model) failed in the specific run_id we are retrying
+                found_in_results = False
+                failed_in_target_run = False
+                for res_summary_prog in self.results:
+                    if res_summary_prog.get("run_id") == run_id_to_check_for_resume: 
+                        task_key_prog_sum = (res_summary_prog.get("dataset"), res_summary_prog.get("optimizer"), res_summary_prog.get("model_name_used"))
+                        if task_key_prog_sum == task_to_plan_tuple:
+                            found_in_results = True
+                            if res_summary_prog.get("status") != "success":
+                                failed_in_target_run = True
+                            break # Found the task in the target run results
+                if not found_in_results: # Task wasn't in the specified run_id's results at all (e.g. new combo added)
+                    logger.info(f"  Task {task_to_plan_tuple} not found in results of run {run_id_to_check_for_resume}, will run as new.")
+                    tasks_to_actually_retry_count += 1
+                elif failed_in_target_run:
+                    logger.info(f"  Task {task_to_plan_tuple} FAILED in run {run_id_to_check_for_resume}, will be retried.")
+                    tasks_to_actually_retry_count += 1
+                else: # Successfully completed in target run
+                    logger.info(f"  Task {task_to_plan_tuple} was SUCCESSFUL in run {run_id_to_check_for_resume}, will be skipped.")
+            num_tasks_for_progress_bar = tasks_to_actually_retry_count
+            logger.info(f"Retry mode: Progress bar total set to {num_tasks_for_progress_bar} (tasks from run '{run_id_to_check_for_resume}' to retry or run as new).")
+        
+        elif self.resuming_run_active and self.results and run_id_to_check_for_resume:
+            logger.info(f"Resume mode: Filtering tasks based on previous run_id: {run_id_to_check_for_resume}")
             completed_keys_for_resume_prog = set()
             for res_summary_prog in self.results:
-                if res_summary_prog.get("status") == "success":
-                    completed_keys_for_resume_prog.add((res_summary_prog["dataset"], res_summary_prog["optimizer"], res_summary_prog["model_name_used"]))
-            num_tasks_for_progress_bar = len(tasks_to_plan_for_progress) - len(completed_keys_for_resume_prog)
-            logger.info(f"Resume mode: Progress bar total set to {num_tasks_for_progress_bar} (total tasks - previously successful).")
+                # Only consider results from the specific run_id we are resuming from
+                if res_summary_prog.get("run_id") == run_id_to_check_for_resume and res_summary_prog.get("status") == "success":
+                    completed_keys_for_resume_prog.add((res_summary_prog.get("dataset"), res_summary_prog.get("optimizer"), res_summary_prog.get("model_name_used")))
+            
+            num_tasks_to_run_after_skipping = 0
+            for task_to_plan_tuple in tasks_to_plan_for_progress:
+                if task_to_plan_tuple not in completed_keys_for_resume_prog:
+                    num_tasks_to_run_after_skipping +=1
+                else:
+                    logger.info(f"  Task {task_to_plan_tuple} was SUCCESSFUL in run {run_id_to_check_for_resume}, will be skipped.")
+            num_tasks_for_progress_bar = num_tasks_to_run_after_skipping
+            logger.info(f"Resume mode: Progress bar total set to {num_tasks_for_progress_bar} (total tasks planned - previously successful in run '{run_id_to_check_for_resume}').")
         else: # Fresh run
             num_tasks_for_progress_bar = len(tasks_to_plan_for_progress)
             logger.info(f"Fresh run: Progress bar total set to {num_tasks_for_progress_bar}.")
@@ -1031,9 +1221,17 @@ class BenchmarkRunner:
                 completed_task_keys_from_checkpoint = set()
                 # Also, if retrying a specific failed run, identify tasks that actually failed in that run
                 tasks_to_explicitly_retry_keys = set() 
+                run_id_to_use_for_skipping_logic = None # Initialize here
 
                 if self.resuming_run_active and self.results: # self.results loaded from a checkpoint
+                    run_id_to_use_for_skipping_logic = self.current_run_id_for_resume_logic if hasattr(self, 'current_run_id_for_resume_logic') else None
+                    logger.info(f"Resume/Retry active. Using run_id '{run_id_to_use_for_skipping_logic}' for task skipping/retrying logic.")
+
                     for res_summary in self.results:
+                        # Only consider results from the specific run_id we are resuming/retrying from
+                        if res_summary.get("run_id") != run_id_to_use_for_skipping_logic:
+                            continue
+
                         if res_summary.get("dataset") and res_summary.get("optimizer") and res_summary.get("model_name_used"):
                             task_key_from_sum = (
                                 res_summary["dataset"],
@@ -1042,22 +1240,37 @@ class BenchmarkRunner:
                             )
                             if res_summary.get("status") == "success":
                                 completed_task_keys_from_checkpoint.add(task_key_from_sum)
+                            elif self.retry_failed_run_id: # If retrying, add failed tasks to the retry set
+                                tasks_to_explicitly_retry_keys.add(task_key_from_sum)
+                
+                logger.info(f"Tasks marked as successfully completed in prior run ({run_id_to_use_for_skipping_logic}): {len(completed_task_keys_from_checkpoint)}")
+                if self.retry_failed_run_id:
+                    logger.info(f"Tasks marked for explicit retry from prior run ({run_id_to_use_for_skipping_logic}): {len(tasks_to_explicitly_retry_keys)}")
 
                 for dataset_key, optimizer_key, model_name, sanitized_model_name_for_ids, optimizer_config_for_current_task in tasks_to_plan:
                     task_config_tuple_for_check = (dataset_key, optimizer_key, model_name)
 
-                    if self.resuming_run_active and task_config_tuple_for_check in completed_task_keys_from_checkpoint:
-                        logger.info(f"Skipping already successfully completed task: {task_config_tuple_for_check}")
-                        progress.update(overall_progress_task, advance=1)
-                        # Need to count this as a "successful" task for the summary line if it was previously successful
-                        # The 'successful_tasks' counter is for tasks completed *in this current execution*.
-                        # The summary line might need to reflect tasks from checkpoint vs new tasks.
-                        # For now, just advancing overall progress.
-                        # To make the live summary accurate, we might need to initialize successful_tasks from checkpoint.
-                        # Let's adjust successful_tasks based on checkpoint if resuming.
-                        # This will be handled when initializing successful_tasks/failed_tasks before the loop.
-                        continue # Skip to the next task configuration
+                    # Resume/Retry Logic:
+                    if self.resuming_run_active: 
+                        if self.retry_failed_run_id:
+                            # If retrying a specific run, we ONLY run tasks that FAILED in that run OR were not present.
+                            # A task is skipped if it was successful in that specific run.
+                            if task_config_tuple_for_check in completed_task_keys_from_checkpoint:
+                                logger.info(f"RETRY MODE: Skipping already successfully completed task from run '{run_id_to_use_for_skipping_logic}': {task_config_tuple_for_check}")
+                                # Don't advance progress here if it wasn't counted in num_tasks_for_progress_bar
+                                # The num_tasks_for_progress_bar logic for retry should already exclude these.
+                                continue
+                            # If it's in tasks_to_explicitly_retry_keys, it failed, so we run it.
+                            # If it's not in completed_task_keys_from_checkpoint AND not in tasks_to_explicitly_retry_keys,
+                            # it means it wasn't in the target run at all, so we run it as a new task.
+                            logger.info(f"RETRY MODE: Task {task_config_tuple_for_check} will be run (either failed previously or is new).")
+                        else: # Normal resume (not a specific retry_failed_run_id)
+                            if task_config_tuple_for_check in completed_task_keys_from_checkpoint:
+                                logger.info(f"RESUME MODE: Skipping already successfully completed task from run '{run_id_to_use_for_skipping_logic}': {task_config_tuple_for_check}")
+                                # Don't advance progress here if it wasn't counted for the progress bar
+                                continue
 
+                    # If not resuming/retrying or if the task needs to be run based on above logic:
                     task_desc_short = f"{dataset_key}/{optimizer_key}/{sanitized_model_name_for_ids}"
                     dataset_obj = self.dataset_cache[f"{dataset_key}_{self.test_mode}"]
                     project_name_opik = f"benchmark-{self.current_run_id}-{dataset_key}-{optimizer_key}-{sanitized_model_name_for_ids}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -1106,26 +1319,25 @@ class BenchmarkRunner:
                 for future_item in as_completed(future_to_meta.keys()):
                     meta = future_to_meta[future_item]
                     d_key, o_key = meta["dataset_key"], meta["optimizer_key"]
-                    # Use sanitized model name for constructing IDs/filenames
                     sanitized_model_name_for_ids = meta["sanitized_model_name"]
-                    model_name_original = meta["model_name"] # Original for logging/display if needed
+                    model_name_original = meta["model_name"]
                     task_desc_short = meta["desc"]
-                    run_status_flag = "failure" # Default to failure
+                    run_status_flag = "failure" 
                     result_data = None
-                    task_id_for_log = "unknown_task"
+                    task_id_for_log = "unknown_task" # Will be updated if result_data is valid
 
-                    active_tasks_status.pop(future_item, None)
+                    logger.debug(f"Future {id(future_item)} (Meta: {meta}) completed. Attempting to remove from active_tasks_status (current size: {len(active_tasks_status)}). Keys: {list(active_tasks_status.keys())}")
+                    if future_item in active_tasks_status:
+                        popped_status_info = active_tasks_status.pop(future_item, None)
+                        logger.debug(f"Popped {id(future_item)} (Meta: {meta}) from active_tasks_status. New size: {len(active_tasks_status)}. Popped info was valid: {popped_status_info is not None}")
+                    else:
+                        logger.warning(f"Future {id(future_item)} (Meta: {meta}) was NOT in active_tasks_status when trying to pop. active_tasks_status keys: {list(active_tasks_status.keys())}")
                     
                     try:
-                        result_data = future_item.result() # This is the detailed dict from run_optimization
+                        result_data = future_item.result() 
                         if result_data and isinstance(result_data, dict):
-                            # Construct task ID and filename using the SANITIZED model name
-                            # Ensure sanitized name is consistently used for ID generation
-                            timestamp_str = datetime.now().strftime('%Y%m%d%H%M%S%f') 
-                            # Use the sanitized name passed via meta dictionary
-                            task_id_for_log = f"{d_key}-{o_key}-{sanitized_model_name_for_ids}-{timestamp_str}" 
-                            result_data["task_id"] = task_id_for_log # Update result data with the final ID
-                            task_json_filename = f"{task_id_for_log}.json" # Use the consistent ID for filename
+                            task_id_for_log = result_data.get("task_id", f"{d_key}-{o_key}-{sanitized_model_name_for_ids}-no_task_id_in_res")
+                            task_json_filename = f"{task_id_for_log}.json"
                             task_json_path = self.task_results_dir / task_json_filename
                             logger.debug(f"Constructed task JSON path: {task_json_path}") # Log the path
                             try:
@@ -1232,14 +1444,17 @@ class BenchmarkRunner:
                                 time_taken_display = result_data.get("duration_seconds_task", 0)
                                 opt_proc = result_data.get("optimization_process", {})
                                 temp_val_panel = None
-                                if config_data.get("optimizer_class") == "FewShotBayesianOptimizer":
-                                    raw_opt_res = detail_data.get("raw_optimizer_result", {})
+                                
+                                # Ensure detail_data and its config are accessed correctly for panel creation
+                                panel_task_config_data = result_data.get("config", {}) # result_data is detail_data here
+
+                                if panel_task_config_data.get("optimizer_class") == "FewShotBayesianOptimizer":
+                                    raw_opt_res = result_data.get("raw_optimizer_result", {})
                                     temp_val_panel = raw_opt_res.get("details", {}).get("temperature")
                                 else:
-                                    # General case: get from parameters stored in experiment_config
-                                    exp_params = detail_data.get("config", {}).get("parameters", {})
-                                    if not exp_params: # Fallback if parameters not in config block (older format?)
-                                         exp_params = config_data.get("optimizer_params", {})
+                                    exp_params = panel_task_config_data.get("parameters", {})
+                                    if not exp_params: 
+                                         exp_params = panel_task_config_data.get("optimizer_params", {})
                                     temp_val_panel = exp_params.get("temperature")
                                 opt_details_summary = {
                                     "num_iterations": len(opt_proc.get("history", [])),
@@ -1330,23 +1545,24 @@ class BenchmarkRunner:
                 with open(json_path, "r") as f_detail:
                     detail_data = json.load(f_detail)
                 
+                # Define current_task_config_data from detail_data for this task
+                current_task_config_data = detail_data.get("config", {})
+
                 # Update basic info just in case summary was incomplete
-                config_data = detail_data.get("config", {})
-                optimizer_params = config_data.get("optimizer_params", {})
+                # Use current_task_config_data here and throughout this block
+                optimizer_params = current_task_config_data.get("optimizer_params", {})
                 item_data["run_id"] = detail_data.get("run_id", item_data["run_id"])
                 item_data["task_id"] = detail_data.get("task_id", item_data["task_id"])
-                item_data["dataset"] = config_data.get("dataset_config_name", item_data["dataset"])
-                item_data["optimizer"] = config_data.get("optimizer_config_name", item_data["optimizer"])
-                # Prioritize model_name from the new config field
-                item_data["model_name"] = config_data.get("model_name", item_data["model_name"])
-                if not item_data["model_name"] or item_data["model_name"] == "N/A": # Fallback
+                item_data["dataset"] = current_task_config_data.get("dataset_config_name", item_data["dataset"])
+                item_data["optimizer"] = current_task_config_data.get("optimizer_config_name", item_data["optimizer"])
+                item_data["model_name"] = current_task_config_data.get("model_name", item_data["model_name"])
+                if not item_data["model_name"] or item_data["model_name"] == "N/A": 
                     item_data["model_name"] = optimizer_params.get("model", "N/A")
                 item_data["status"] = detail_data.get("status", item_data["status"])
                 item_data["duration_seconds_task"] = detail_data.get("duration_seconds_task", item_data["duration_seconds_task"])
-                item_data["initial_prompt_template"] = config_data.get("initial_prompt")
-                item_data["dataset_size"] = None # Placeholder - needs better source
+                item_data["initial_prompt_template"] = current_task_config_data.get("initial_prompt")
+                item_data["dataset_size"] = None # Placeholder
 
-                # Flatten initial scores
                 initial_eval = detail_data.get("initial_evaluation", {})
                 if initial_eval and isinstance(initial_eval.get("metrics"), list):
                     for metric_res in initial_eval["metrics"]:
@@ -1355,7 +1571,6 @@ class BenchmarkRunner:
                         metric_name_for_header = metric_name_cleaned.replace(" ", "_").replace(".", "_") 
                         item_data[f"initial_{metric_name_for_header}_score"] = metric_res.get("score")
 
-                # Flatten final scores
                 final_eval = detail_data.get("final_evaluation", {})
                 if final_eval and isinstance(final_eval.get("metrics"), list):
                     for metric_res in final_eval["metrics"]:
@@ -1366,26 +1581,24 @@ class BenchmarkRunner:
                 
                 # Optimization process details
                 opt_process = detail_data.get("optimization_process", {})
-                # Correctly source num_iterations using detail_data['config']
-                optimizer_class_from_detail = detail_data.get("config", {}).get("optimizer_class")
+                optimizer_class_from_detail = current_task_config_data.get("optimizer_class")
                 if optimizer_class_from_detail == "FewShotBayesianOptimizer":
                     item_data["opt_num_iterations"] = opt_process.get("num_trials_configured")
                 else:
-                    item_data["opt_num_iterations"] = len(opt_process.get("history", [])) # Default for round-based
+                    # For MetaPromptOptimizer and others, use length of its processed history
+                    item_data["opt_num_iterations"] = len(opt_process.get("history", [])) 
                 
                 item_data["opt_best_score_achieved"] = opt_process.get("best_score_achieved")
                 item_data["opt_duration_seconds"] = opt_process.get("duration_seconds")
                 
-                # Add Temperature to CSV
                 temp_val = None
-                # Use optimizer_class_from_detail here too
                 if optimizer_class_from_detail == "FewShotBayesianOptimizer":
                     raw_opt_res = detail_data.get("raw_optimizer_result", {})
                     temp_val = raw_opt_res.get("details", {}).get("temperature")
                 else:
-                    exp_params = detail_data.get("config", {}).get("parameters", {})
+                    exp_params = current_task_config_data.get("parameters", {})
                     if not exp_params: 
-                         exp_params = detail_data.get("config", {}).get("optimizer_params", {})
+                         exp_params = current_task_config_data.get("optimizer_params", {})
                     temp_val = exp_params.get("temperature")
                 item_data["temperature"] = temp_val
 
@@ -1630,6 +1843,9 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
                 time_taken = detail_data.get("duration_seconds_task", 0)
                 task_id = detail_data.get("task_id", "N/A")
 
+                # Ensure 'config' dictionary is fetched from detail_data, this is the correct scope
+                current_task_config_data = detail_data.get("config", {})
+
                 table_key = (dataset_name, optimizer_name, model_name)
                 if table_key not in processed_data_for_table:
                     processed_data_for_table[table_key] = {
@@ -1637,20 +1853,20 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
                         "final": {},
                         "time": time_taken,
                         "task_id": task_id, 
-                        "temperature": None # Initialize temperature
+                        "temperature": None 
                     }
                 else: 
                     processed_data_for_table[table_key]["time"] = time_taken 
                 
-                # Fetch and store temperature for this entry
                 temp_val_table = None
-                if config.get("optimizer_class") == "FewShotBayesianOptimizer":
+                # Use current_task_config_data here
+                if current_task_config_data.get("optimizer_class") == "FewShotBayesianOptimizer":
                     raw_opt_res_table = detail_data.get("raw_optimizer_result", {})
                     temp_val_table = raw_opt_res_table.get("details", {}).get("temperature")
                 else:
-                    exp_params_table = detail_data.get("config", {}).get("parameters", {})
+                    exp_params_table = current_task_config_data.get("parameters", {})
                     if not exp_params_table: 
-                         exp_params_table = config.get("optimizer_params", {})
+                         exp_params_table = current_task_config_data.get("optimizer_params", {})
                     temp_val_table = exp_params_table.get("temperature")
                 processed_data_for_table[table_key]["temperature"] = temp_val_table
 
@@ -1802,7 +2018,7 @@ def calculate_percentage_change(initial: Optional[float], final: Optional[float]
 def main():
     """Main function to run benchmarks with improved output formatting."""
     t_start = time.perf_counter()
-    setup_logging(level=logging.INFO, force=True)
+    setup_logging(level=logging.DEBUG, force=True) # Temporarily set to DEBUG for console
     t_log_setup = time.perf_counter()
     logger.info(f"Initial logging setup took {t_log_setup - t_start:.4f}s")
     
