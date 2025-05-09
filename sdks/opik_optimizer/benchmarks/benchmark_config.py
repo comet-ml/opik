@@ -190,16 +190,8 @@ def get_experiment_config(dataset_name: str, optimizer_name: str, model_name: st
             ),
             "opik_version": opik_optimizer.__version__,
         },
-        "parameters": {
-            "model": model_name,
-            "temperature": OPTIMIZER_CONFIGS[optimizer_name]["params"].get(
-                "temperature", 0.1
-            ),
-            "max_tokens": OPTIMIZER_CONFIGS[optimizer_name]["params"].get(
-                "max_tokens", 5000
-            ),
-            **{k: v for k, v in OPTIMIZER_CONFIGS[optimizer_name]["params"].items() if k != 'model'}
-        },
+        # Store the specific parameters used for this optimizer run
+        "parameters": current_params, 
         "metrics": [str(m) for m in DATASET_CONFIGS[dataset_name]["metrics"]],
     }
 
