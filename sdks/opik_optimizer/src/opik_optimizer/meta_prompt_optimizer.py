@@ -16,6 +16,7 @@ from opik_optimizer import task_evaluator
 from opik.api_objects import opik_client
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from opik.environment import get_tqdm_for_current_environment
+from . import _throttle
 
 tqdm = get_tqdm_for_current_environment()
 
@@ -26,6 +27,7 @@ litellm.cache = Cache(type="disk", disk_cache_dir=disk_cache_dir)
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
 
+_rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 class MetaPromptOptimizer(BaseOptimizer):
     """Optimizer that uses meta-prompting to improve prompts based on examples and performance."""
@@ -176,6 +178,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             optimization_id=optimization_id,
         )
 
+    @_throttle.rate_limited(_rate_limiter)
     def _call_model(
         self,
         prompt: str,

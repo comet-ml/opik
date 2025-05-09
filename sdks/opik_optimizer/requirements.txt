@@ -10,3 +10,4 @@ dspy==2.6.17
 pytest==8.1.1
 pytest-cov==4.1.0
 litellm>=1.67.2
+pyrate-limiter>=3.7.0

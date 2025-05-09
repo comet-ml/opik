@@ -22,6 +22,7 @@ setup(
         "pydantic",
         "pandas",
         "hf_xet",
+        "pyrate-limiter",
     ],
     # dev requirements
     extras_require={

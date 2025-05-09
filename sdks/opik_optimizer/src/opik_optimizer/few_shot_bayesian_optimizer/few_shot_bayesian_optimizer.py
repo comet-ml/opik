@@ -1,8 +1,8 @@
 import random
-from typing import Any, Dict, List, Tuple, Union, Optional, Callable, Literal
-import openai
+from typing import Any, Dict, List, Tuple, Union, Optional, Literal
 import opik
 import optuna
+import optuna.samplers
 import logging
 import json
 
@@ -14,18 +14,18 @@ from opik_optimizer import base_optimizer
 
 from . import prompt_parameter
 from . import prompt_templates
-from .._throttle import RateLimiter, rate_limited
+from .. import _throttle
 from .. import optimization_result, task_evaluator
 
 import litellm
 
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
-limiter = RateLimiter(max_calls_per_second=15)
+_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 logger = logging.getLogger(__name__)
 
-@rate_limited(limiter)
+@_throttle.rate_limited(_limiter)
 def _call_model(model, messages, seed, model_kwargs):
     model_kwargs = opik_litellm_monitor.try_add_opik_monitoring_to_params(model_kwargs)
 
@@ -59,7 +59,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self.n_threads = n_threads
         self.n_initial_prompts = n_initial_prompts
         self.n_iterations = n_iterations
-
         self._opik_client = opik.Opik()
         logger.debug(f"Initialized FewShotBayesianOptimizer with model: {model}")
 
@@ -240,7 +239,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         except Exception as e:
             logger.warning(f"Could not configure Optuna logging within optimizer: {e}")
 
-        study = optuna.create_study(direction="maximize")
+        sampler = optuna.samplers.TPESampler(seed=self.seed)
+        study = optuna.create_study(direction="maximize", sampler=sampler)
         study.optimize(optimization_objective, n_trials=n_trials)
         logger.info("Optuna study finished.")
 
