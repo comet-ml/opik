@@ -473,14 +473,19 @@ class BenchmarkRunner:
         # Target specific loggers for temporary un-suppression
         opik_logger = logging.getLogger("opik") # Covers opik_optimizer
         tqdm_logger = logging.getLogger("tqdm")
+        optuna_logger = logging.getLogger("optuna")
+        lite_logger = logging.getLogger("LiteLLM")
+
         # Add other noisy libraries that might output too much DEBUG if not controlled
         # Ensure this list is consistent with the one in main() or expanded
-        noisy_libs_for_task_log_control = ["LiteLLM", "urllib3", "requests", "httpx", "dspy", "datasets", "optuna", "filelock", "httpcore", "openai"] 
+        noisy_libs_for_task_log_control = ["urllib3", "requests", "httpx", "dspy", "datasets", "filelock", "httpcore", "openai"] 
         controlled_noisy_loggers = {name: logging.getLogger(name) for name in noisy_libs_for_task_log_control}
 
         original_levels_and_propagate = {
             "opik": (opik_logger.level, opik_logger.propagate),
             "tqdm": (tqdm_logger.level, tqdm_logger.propagate),
+            "optuna": (optuna_logger.level, optuna_logger.propagate),
+            "LiteLLM": (lite_logger.level, lite_logger.propagate),
         }
         for name, logger_instance in controlled_noisy_loggers.items():
             original_levels_and_propagate[name] = (logger_instance.level, logger_instance.propagate)
@@ -825,40 +830,17 @@ class BenchmarkRunner:
                         logger.warning(f"Condition failed for processing MetaPromptOptimizer/MiproOptimizer history for task {task_id}. {details_type_msg}. {rounds_info_msg}")
                 
                 elif isinstance(optimizer, FewShotBayesianOptimizer):
-                    logger.debug(f"Processing {optimizer_name} history from results_obj.history for task {task_id}")
-                    raw_history_fsb = []
-                    if hasattr(results_obj, "history") and results_obj.history and isinstance(results_obj.history, list):
-                        raw_history_fsb = results_obj.history
+                    logger.debug(f"Using pre-processed history from FewShotBayesianOptimizer for task {task_id}")
+                    if hasattr(results_obj, "history") and isinstance(results_obj.history, list):
+                        opt_history_processed = results_obj.history # Directly use the history from the optimizer
+                        # Ensure global_iteration_count is updated based on this pre-processed history if needed elsewhere,
+                        # though for FewShot, each item in results_obj.history should already have its own 'iteration' number.
+                        # If run_benchmark.py's global_iteration_count was meant to be a cross-optimizer counter,
+                        # this direct assignment means it won't be incremented here for FewShot.
+                        # However, the items in results_obj.history from FewShot already have "iteration".
                     else:
-                        logger.warning(f"No 'history' list found in results_obj for {optimizer_name} task {task_id}")
-
-                    for i, hist_item in enumerate(raw_history_fsb):
-                        global_iteration_count += 1
-                        prompt_cand = getattr(hist_item, "prompt", None)
-                        if isinstance(prompt_cand, list):
-                            try: prompt_cand = json.dumps(prompt_cand)
-                            except TypeError: prompt_cand = str(prompt_cand)
-
-                        iter_detail = {
-                            "iteration": global_iteration_count,
-                            "timestamp": getattr(hist_item, "timestamp", datetime.now().isoformat()),
-                            "prompt_candidate": prompt_cand,
-                            "parameters_used": getattr(hist_item, "parameters", None),
-                            "scores": [],
-                            "tokens_used": getattr(hist_item, "input_tokens", 0) + getattr(hist_item, "output_tokens", 0) if hasattr(hist_item, "input_tokens") else None, # TODO
-                            "cost": getattr(hist_item, "cost", None), # TODO
-                            "duration_seconds": getattr(hist_item, "latency_seconds", None), # TODO
-                        }
-                        current_score_val = getattr(hist_item, 'score', None)
-                        
-                        if hasattr(hist_item, 'scores_per_metric') and isinstance(hist_item.scores_per_metric, dict) and hist_item.scores_per_metric:
-                            for m_name, m_score in hist_item.scores_per_metric.items():
-                                iter_detail["scores"].append({"metric_name": str(m_name), "score": m_score, "opik_evaluation_id": getattr(hist_item, "opik_evaluation_id", None)}) # TODO
-                        elif current_score_val is not None:
-                            metric_name_fs = getattr(hist_item, 'metric_name', 'objective_score')
-                            if not metric_name_fs: metric_name_fs = "objective_score"
-                            iter_detail["scores"].append({"metric_name": str(metric_name_fs), "score": current_score_val, "opik_evaluation_id": getattr(hist_item, "opik_evaluation_id", None)}) # TODO
-                        opt_history_processed.append(iter_detail)
+                        logger.warning(f"results_obj.history not found or not a list for {optimizer_name} task {task_id}")
+                        opt_history_processed = [] # Fallback to empty
                 
                 else: # Fallback for other or unknown optimizer types
                     logger.debug(f"Processing history with fallback logic for {optimizer_name} task {task_id}")
