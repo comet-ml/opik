@@ -667,7 +667,7 @@ class DatasetsResourceTest {
         @MethodSource("getDatasetPublicCredentials")
         @DisplayName("Stream dataset items: when api key is present, then return proper response")
         void streamDatasetItems__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, Visibility visibility,
-                                                                               int expectedCode) {
+                int expectedCode) {
             String name = UUID.randomUUID().toString();
 
             var datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
@@ -1154,8 +1154,8 @@ class DatasetsResourceTest {
         @MethodSource("getDatasetPublicCredentials")
         @DisplayName("Stream dataset items: when session token is present, then return proper response")
         void getDatasetItemsStream__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
-                                                                                        Visibility visibility,
-                                                                                        String workspaceName, int expectedCode) {
+                Visibility visibility,
+                String workspaceName, int expectedCode) {
             String name = UUID.randomUUID().toString();
 
             var datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
