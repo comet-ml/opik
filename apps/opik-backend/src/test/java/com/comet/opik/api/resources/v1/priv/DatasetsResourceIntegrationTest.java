@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemStreamRequest;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.domain.DatasetItemService;
@@ -76,7 +77,7 @@ class DatasetsResourceIntegrationTest {
 
         var request = DatasetItemStreamRequest.builder().datasetName(datasetName).steamLimit(500).build();
 
-        when(itemService.getItems(workspaceId, request))
+        when(itemService.getItems(workspaceId, request, Visibility.PRIVATE))
                 .thenReturn(Flux.defer(() -> itemFlux));
 
         try (var response = EXT.target("/v1/private/datasets/items/stream")
