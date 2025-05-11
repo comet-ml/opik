@@ -13,6 +13,7 @@ import io
 import os
 import dspy
 import pandas as pd
+import copy
 
 # Rich imports
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, ProgressColumn, TaskProgressColumn
@@ -677,7 +678,7 @@ class BenchmarkRunner:
                             optimizer.evaluate_prompt,
                             dataset=dataset,
                             metric_config=metric_config_eval,
-                            task_config=config.task, # FIXME: This is a hack to work around the fact that MetaPrompt and Mipro need task_config now.
+                            task_config=config.task, 
                             prompt=prompt_for_eval,
                             experiment_config=experiment_config
                         )
@@ -687,6 +688,7 @@ class BenchmarkRunner:
                             optimizer.evaluate_prompt,
                             dataset=dataset,
                             metric_config=metric_config_eval,
+                            task_config=config.task,
                             prompt=prompt_for_eval,
                             experiment_config=experiment_config
                         )
@@ -979,7 +981,7 @@ class BenchmarkRunner:
                 "num_trials_configured": getattr(optimizer, 'n_trials', getattr(optimizer, 'n_iterations', None)),
                 "num_samples_configured": getattr(optimizer, 'n_samples', None),
                 "best_score_achieved": getattr(results_obj, 'score', None), 
-                "final_prompt": results_obj.details.get("chat_messages") if actual_optimizer_class_name_display == "FewShotBayesianOptimizer" and hasattr(results_obj, 'details') else getattr(results_obj, 'prompt', None), 
+                "final_prompt": results_obj.details.get("chat_messages") if actual_optimizer_class_name_display == "fewshotbayesianoptimizer" and hasattr(results_obj, 'details') and isinstance(results_obj.details, dict) and "chat_messages" in results_obj.details else getattr(results_obj, 'prompt', None), 
                 "history": opt_history_processed,
                 "llm_calls_total_optimization": getattr(results_obj, 'llm_calls', None) # Extract llm_calls
             }
@@ -1004,25 +1006,60 @@ class BenchmarkRunner:
             evaluation_errors = []
             start_time_eval_final = time.time()
             
-            # Determine final_prompt_to_eval (representation of what the optimizer produced)
+            # Determine final_prompt_to_eval (representation of what the optimizer produced for logging)
+            # Also determine actual_prompt_for_submission (what is actually sent to optimizer.evaluate_prompt)
+
             opt_details_for_final_prompt = getattr(results_obj, 'details', {}) if results_obj else {}
-            if actual_optimizer_class_name_display == "MiproOptimizer":
+            actual_prompt_for_submission = None
+            final_prompt_to_eval = None # Initialize
+
+            # Initialize task_debug_notes in optimization_process dict
+            if "optimization_process" not in task_result or task_result["optimization_process"] is None:
+                task_result["optimization_process"] = {}
+            task_result["optimization_process"]["task_debug_notes"] = None
+
+            if actual_optimizer_class_name_display == "miprooptimizer":
                 instr_mipro = getattr(results_obj, 'prompt', "[MIPRO Program - Instruction N/A]")
                 final_prompt_to_eval = [{"role": "system", "content": str(instr_mipro)}]
-            elif actual_optimizer_class_name_display == "FewShotBayesianOptimizer":
-                final_prompt_to_eval = opt_details_for_final_prompt.get("chat_messages")
-                if not final_prompt_to_eval: 
-                    final_prompt_to_eval = [{"role": "system", "content": "Error: FewShot chat_messages missing for final eval logging."}]
-            else: 
-                string_prompt_val = getattr(results_obj, 'prompt', None)
+                actual_prompt_for_submission = opt_details_for_final_prompt.get("program") 
+                if actual_prompt_for_submission is None:
+                     logger.error("[red]MiproOptimizer: DSPy program object not found for final evaluation. Cannot evaluate.[/red]")
+                     evaluation_errors.append("MiproOptimizer: DSPy program not found for final eval.")
+            elif actual_optimizer_class_name_display == "fewshotbayesianoptimizer":
+                chat_messages_for_final_eval = None 
+                
+                if results_obj and hasattr(results_obj, 'details') and isinstance(results_obj.details, dict):
+                    opt_details = results_obj.details
+                    try:
+                        retrieved_chat_messages = opt_details.get("chat_messages") 
+                        if isinstance(retrieved_chat_messages, list) and len(retrieved_chat_messages) > 0:
+                            chat_messages_for_final_eval = retrieved_chat_messages
+                    except Exception as e_detail_access:
+                        pass # Keep silent on error, fallback will handle
+
+                if chat_messages_for_final_eval: 
+                    final_prompt_to_eval = copy.deepcopy(chat_messages_for_final_eval)
+                    actual_prompt_for_submission = copy.deepcopy(chat_messages_for_final_eval)
+                else:
+                    base_instr_fsbo = str(results_obj.prompt if hasattr(results_obj, 'prompt') else "Error: FSBO base instruction missing")
+                    final_prompt_to_eval = [{"role": "system", "content": base_instr_fsbo}]
+                    actual_prompt_for_submission = final_prompt_to_eval 
+                    evaluation_errors.append("FSBO: Optimized chat_messages not retrieved for final eval; used base prompt.")
+                
+            else: # MetaPromptOptimizer and other fallbacks
+                string_prompt_val = getattr(results_obj, 'prompt', None) 
+                actual_prompt_for_submission = string_prompt_val
                 if isinstance(string_prompt_val, str):
                     final_prompt_to_eval = [{"role": "system", "content": string_prompt_val}]
                 elif string_prompt_val is not None: 
                     final_prompt_to_eval = string_prompt_val
                 else:
                     final_prompt_to_eval = [{"role": "system", "content": "Error: Optimizer prompt was None for final eval logging."}]
+                    if actual_prompt_for_submission is None: # Only log error if submission also fails
+                        logger.error(f"[red]{actual_optimizer_class_name_display}: Prompt not found in results_obj for final evaluation. Cannot evaluate.[/red]")
+                        evaluation_errors.append(f"{actual_optimizer_class_name_display}: Prompt not found for final eval.")
             
-            task_result["final_prompt"] = final_prompt_to_eval # For overall results JSON
+            task_result["final_prompt"] = final_prompt_to_eval
 
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor_final_eval:
                 future_to_metric_final = {}
@@ -1032,7 +1069,7 @@ class BenchmarkRunner:
                 if actual_optimizer_class_name_display == "MiproOptimizer":
                     actual_prompt_for_submission = opt_details_for_final_prompt.get("program") # DSPy program
                     if actual_prompt_for_submission is None:
-                         logger.error("[red]MiproOptimizer: DSPy program object not found in results_obj.details for final evaluation. Cannot evaluate.[/red]")
+                         logger.error("[red]MiproOptimizer: DSPy program object not found for final evaluation. Cannot evaluate.[/red]")
                          evaluation_errors.append("MiproOptimizer: DSPy program not found for final eval.")
                 elif actual_optimizer_class_name_display == "FewShotBayesianOptimizer":
                     actual_prompt_for_submission = opt_details_for_final_prompt.get("chat_messages") # List of chat messages
@@ -1891,6 +1928,18 @@ def create_result_panel(
     table.add_row("Best Score (Opt):", best_score_str)
     table.add_row()
 
+    # Display FSBO debug info if present
+    fsbo_debug_info_str = optimization_details.get("fsbo_final_prompt_debug_info")
+    if fsbo_debug_info_str:
+        table.add_row("FSBO Debug:", Text(fsbo_debug_info_str, style="dim orange_red1"))
+        table.add_row()
+
+    # Display generic task debug notes if present
+    task_debug_notes_str = optimization_details.get("task_debug_notes")
+    if task_debug_notes_str:
+        table.add_row("Debug Notes:", Text(task_debug_notes_str, style="dim orange_red1"))
+        table.add_row()
+
     if "error" in optimization_details:
         table.add_row("Opt. Details:", Text(f"[red]Error: {optimization_details['error'][:100]}...[/red]", overflow="ellipsis"))
     else:
@@ -1946,9 +1995,9 @@ def create_result_panel(
                 table.add_row("Score History:", Group(*history_summary_parts))
 
     # Final Prompt Section 
-    # Ensure optimization_process key exists in safe_task_detail_data before trying to get final_prompt from it
-    final_prompt_from_opt_process = optimization_details.get("final_prompt_generated_by_optimizer")
-    final_prompt_data = safe_task_detail_data.get("final_prompt", final_prompt_from_opt_process)
+    # final_prompt_data is what create_result_panel uses for its display.
+    # It should ONLY come from task_result["final_prompt"]
+    final_prompt_data = safe_task_detail_data.get("final_prompt") # No fallback needed if task_result["final_prompt"] is always set
 
     prompt_content_display: Any
     if final_prompt_data is not None:
