@@ -14,7 +14,8 @@ import java.util.Optional;
 @Accessors(fluent = true)
 public enum VertexAIModelName {
 
-    GEMINI_2_5_PRO_PREVIEW("vertex_ai/gemini-2.5-pro-preview-05-06", "gemini-2.5-pro-preview-05-06"),
+    GEMINI_2_5_PRO_PREVIEW_04_17("vertex_ai/gemini-2.5-flash-preview-04-17", "gemini-2.5-flash-preview-04-17"),
+    GEMINI_2_5_PRO_PREVIEW_05_06("vertex_ai/gemini-2.5-pro-preview-05-06", "gemini-2.5-pro-preview-05-06"),
     GEMINI_2_5_FLASH_PREVIEW("vertex_ai/gemini-2.5-flash-preview-05-06", "gemini-2.5-flash-preview-05-06"),
     GEMINI_2_5_PRO("vertex_ai/gemini-2.5-pro-001", "gemini-2.5-pro-001"),
     GEMINI_2_5_FLASH("vertex_ai/gemini-2.5-flash-001", "gemini-2.5-flash-001"),
