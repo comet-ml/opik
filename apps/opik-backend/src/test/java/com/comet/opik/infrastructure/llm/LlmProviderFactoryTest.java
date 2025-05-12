@@ -18,6 +18,9 @@ import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
+import com.comet.opik.infrastructure.llm.vertexai.VertexAIClientGenerator;
+import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
+import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.dropwizard.configuration.ConfigurationException;
 import io.dropwizard.configuration.FileConfigurationSourceProvider;
@@ -87,6 +90,7 @@ class LlmProviderFactoryTest {
         GeminiModule geminiModule = new GeminiModule();
         OpenAIModule openAIModule = new OpenAIModule();
         OpenRouterModule openRouterModule = new OpenRouterModule();
+        VertexAIModule vertexAIModule = new VertexAIModule();
 
         AnthropicClientGenerator anthropicClientGenerator = anthropicModule.clientGenerator(llmProviderClientConfig);
         anthropicModule.llmServiceProvider(llmProviderFactory, anthropicClientGenerator);
@@ -99,6 +103,9 @@ class LlmProviderFactoryTest {
 
         OpenAIClientGenerator openRouterClientGenerator = openRouterModule.clientGenerator(llmProviderClientConfig);
         openRouterModule.llmServiceProvider(llmProviderFactory, openRouterClientGenerator);
+
+        VertexAIClientGenerator vertexAIClientGenerator = vertexAIModule.clientGenerator(llmProviderClientConfig);
+        vertexAIModule.llmServiceProvider(llmProviderFactory, vertexAIClientGenerator);
 
         LlmProviderService actual = llmProviderFactory.getService(workspaceId, model);
 
@@ -115,7 +122,10 @@ class LlmProviderFactoryTest {
                 .map(model -> arguments(model.toString(), LlmProvider.GEMINI, "LlmProviderGemini"));
         var openRouterModels = EnumUtils.getEnumList(OpenRouterModelName.class).stream()
                 .map(model -> arguments(model.toString(), LlmProvider.OPEN_ROUTER, "LlmProviderOpenAi"));
+        var vertexAiModels = EnumUtils.getEnumList(VertexAIModelName.class).stream()
+                .map(model -> arguments(model.qualifiedName(), LlmProvider.VERTEX_AI, "LlmProviderVertexAI"));
 
-        return Stream.of(openAiModels, anthropicModels, geminiModels, openRouterModels).flatMap(Function.identity());
+        return Stream.of(openAiModels, anthropicModels, geminiModels, openRouterModels, vertexAiModels)
+                .flatMap(Function.identity());
     }
 }

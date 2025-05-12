@@ -14,6 +14,7 @@ public enum LlmProvider {
     ANTHROPIC("anthropic"),
     GEMINI("gemini"),
     OPEN_ROUTER("openrouter"),
+    VERTEX_AI("vertex-ai"),
     ;
 
     @JsonValue
