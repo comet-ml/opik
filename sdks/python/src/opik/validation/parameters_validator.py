@@ -126,7 +126,7 @@ class MethodParametersTypeValidator(validator.Validator):
 
     def validate(self) -> result.ValidationResult:
         try:
-            failures = []
+            failures: List[str] = []
             for param in self.parameters:
                 valid, msg = validator_helpers.validate_parameter(param)
                 if not valid:
