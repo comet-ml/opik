@@ -20,7 +20,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.Optional;
@@ -40,13 +39,17 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
 
         GenerationConfig generationConfig = getGenerationConfig(request);
 
+        GenerativeModel generativeModel = getGenerativeModel(request, vertexAI, generationConfig);
+
+        return new VertexAiGeminiChatModel(generativeModel, generationConfig);
+    }
+
+    private GenerativeModel getGenerativeModel(@NotNull ChatCompletionRequest request, VertexAI vertexAI, GenerationConfig generationConfig) {
         var vertexAIModelName = VertexAIModelName.byQualifiedName(request.model())
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported model: " + request.model()));
 
-        GenerativeModel generativeModel = new GenerativeModel(vertexAIModelName.toString(), vertexAI)
+        return new GenerativeModel(vertexAIModelName.toString(), vertexAI)
                 .withGenerationConfig(generationConfig);
-
-        return new VertexAiGeminiChatModel(generativeModel, generationConfig);
     }
 
     public StreamingChatLanguageModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
@@ -56,16 +59,12 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
 
         GenerationConfig generationConfig = getGenerationConfig(request);
 
-        var vertexAIModelName = VertexAIModelName.byQualifiedName(request.model())
-                .orElseThrow(() -> new IllegalArgumentException("Unsupported model: " + request.model()));
-
-        GenerativeModel generativeModel = new GenerativeModel(vertexAIModelName.toString(), vertexAI)
-                .withGenerationConfig(generationConfig);
+        GenerativeModel generativeModel = getGenerativeModel(request, vertexAI, generationConfig);
 
         return new VertexAiGeminiStreamingChatModel(generativeModel, generationConfig);
     }
 
-    private InternalServerErrorException failWithError(IOException e) {
+    private InternalServerErrorException failWithError(Exception e) {
         return new InternalServerErrorException("Failed to create GoogleCredentials", e);
     }
 
@@ -93,7 +92,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
                     .setCredentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
                     .build();
 
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw failWithError(e);
         }
     }

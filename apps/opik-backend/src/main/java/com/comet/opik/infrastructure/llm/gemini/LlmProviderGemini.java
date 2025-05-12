@@ -35,9 +35,22 @@ public class LlmProviderGemini implements LlmProviderService {
             @NonNull Consumer<Throwable> handleError) {
 
         Schedulers.boundedElastic()
-                .schedule(() -> llmProviderClientGenerator.newGeminiStreamingClient(config.apiKey(), request)
-                        .generate(LlmProviderLangChainMapper.INSTANCE.mapMessages(request),
-                                new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model())));
+                .schedule(() -> {
+                    try {
+                        var streamingChatLanguageModel = llmProviderClientGenerator.newGeminiStreamingClient(
+                                config.apiKey(),
+                                request);
+
+                        streamingChatLanguageModel
+                                .generate(
+                                        LlmProviderLangChainMapper.INSTANCE.mapMessages(request),
+                                        new ChunkedResponseHandler(handleMessage, handleClose, handleError,
+                                                request.model()));
+                    } catch (Exception e) {
+                        handleError.accept(e);
+                        handleClose.run();
+                    }
+                });
     }
 
     @Override
