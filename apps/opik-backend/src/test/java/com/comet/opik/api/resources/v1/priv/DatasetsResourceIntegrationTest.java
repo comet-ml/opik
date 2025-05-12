@@ -67,6 +67,9 @@ class DatasetsResourceIntegrationTest {
         when(requestContext.getWorkspaceId())
                 .thenReturn(workspaceId);
 
+        when(requestContext.getVisibility())
+                .thenReturn(Visibility.PRIVATE);
+
         var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
         Flux<DatasetItem> itemFlux = Flux.create(sink -> {
