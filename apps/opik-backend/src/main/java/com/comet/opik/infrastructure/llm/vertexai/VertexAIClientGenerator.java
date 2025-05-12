@@ -12,6 +12,7 @@ import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.chat.StreamingChatLanguageModel;
 import dev.langchain4j.model.vertexai.VertexAiGeminiChatModel;
 import dev.langchain4j.model.vertexai.VertexAiGeminiStreamingChatModel;
+import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,7 +20,6 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.Optional;
@@ -37,22 +37,15 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
         try {
             VertexAI vertexAI = getVertexAI(apiKey);
 
-            var generationConfig = GenerationConfig.newBuilder();
-
-            Optional.ofNullable(request.temperature())
-                    .map(Double::floatValue)
-                    .ifPresent(generationConfig::setTemperature);
-
-            Optional.ofNullable(request.maxTokens())
-                    .ifPresent(generationConfig::setMaxOutputTokens);
+            GenerationConfig generationConfig = getGenerationConfig(request);
 
             GenerativeModel generativeModel = new GenerativeModel(request.model(), vertexAI)
-                    .withGenerationConfig(generationConfig.build());
+                    .withGenerationConfig(generationConfig);
 
-            return new VertexAiGeminiChatModel(generativeModel, generationConfig.build());
+            return new VertexAiGeminiChatModel(generativeModel, generationConfig);
 
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to create GoogleCredentials", e);
+            throw failWithError(e);
         }
     }
 
@@ -62,23 +55,33 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
         try {
             VertexAI vertexAI = getVertexAI(apiKey);
 
-            var generationConfig = GenerationConfig.newBuilder();
-
-            Optional.ofNullable(request.temperature())
-                    .map(Double::floatValue)
-                    .ifPresent(generationConfig::setTemperature);
-
-            Optional.ofNullable(request.maxTokens())
-                    .ifPresent(generationConfig::setMaxOutputTokens);
+            GenerationConfig generationConfig = getGenerationConfig(request);
 
             GenerativeModel generativeModel = new GenerativeModel(request.model(), vertexAI)
-                    .withGenerationConfig(generationConfig.build());
+                    .withGenerationConfig(generationConfig);
 
-            return new VertexAiGeminiStreamingChatModel(generativeModel, generationConfig.build());
+            return new VertexAiGeminiStreamingChatModel(generativeModel, generationConfig);
 
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to create GoogleCredentials", e);
+            throw failWithError(e);
         }
+    }
+
+    private InternalServerErrorException failWithError(IOException e) {
+        return new InternalServerErrorException("Failed to create GoogleCredentials", e);
+    }
+
+    private GenerationConfig getGenerationConfig(@NotNull ChatCompletionRequest request) {
+        var generationConfig = GenerationConfig.newBuilder();
+
+        Optional.ofNullable(request.temperature())
+                .map(Double::floatValue)
+                .ifPresent(generationConfig::setTemperature);
+
+        Optional.ofNullable(request.maxTokens())
+                .ifPresent(generationConfig::setMaxOutputTokens);
+
+        return generationConfig.build();
     }
 
     private VertexAI getVertexAI(@NotNull String apiKey) throws IOException {
