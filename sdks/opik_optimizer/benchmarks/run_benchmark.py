@@ -438,8 +438,6 @@ class BenchmarkRunner:
                 # Ensure defaults for non-reasoning models if not set
                 params.setdefault("temperature", 0.1)
                 params.setdefault("max_tokens", 5000)
-
-            # No special parameters needed for GeneticOptimizer - config is in benchmark_config.py
             
             # Try direct optimizer class resolution first
             try:
@@ -2231,10 +2229,10 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
         logger.info("Generating detailed pivoted results table for footer...")
         results_table = Table(box=box.SIMPLE_HEAVY, show_header=True, header_style=STYLES["header"], title="Detailed Results Summary", title_style="dim", show_lines=True, padding=(0,1,0,1))
         results_table.add_column("Dataset", style=STYLES["dim"], max_width=25, overflow="ellipsis", no_wrap=True)
-        results_table.add_column("Optimizer", max_width=25, overflow="fold", no_wrap=False) # Modified to allow text wrapping
+        results_table.add_column("Optimizer", max_width=25, overflow="fold", no_wrap=False)
         results_table.add_column("Model", no_wrap=True, max_width=20, overflow="ellipsis")
         results_table.add_column("🔥", justify="center", no_wrap=True)
-        results_table.add_column("☎️", justify="right", no_wrap=True) # Changed header for clarity
+        results_table.add_column("☎️", justify="right", no_wrap=True)
         results_table.add_column("Metric", no_wrap=True)
         results_table.add_column("Run (s)", justify="right", no_wrap=True)
         results_table.add_column("Initial", justify="right", no_wrap=True)
