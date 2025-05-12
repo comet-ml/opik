@@ -4,6 +4,7 @@ import logging
 import random
 import json
 from string import Template
+import os
 
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
 from opik_optimizer.optimization_config.configs import TaskConfig, MetricConfig
@@ -14,6 +15,7 @@ from opik.api_objects import opik_client
 from opik.environment import get_tqdm_for_current_environment
 from opik_optimizer import _throttle
 import litellm
+from litellm.caching import Cache
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
 # DEAP imports
@@ -23,6 +25,9 @@ logger = logging.getLogger(__name__)
 tqdm = get_tqdm_for_current_environment()
 _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
+# Using disk cache for LLM calls
+disk_cache_dir = os.path.expanduser("~/.litellm_cache")
+litellm.cache = Cache(type="disk", disk_cache_dir=disk_cache_dir)
 
 class GeneticOptimizer(BaseOptimizer):
     """
@@ -1058,31 +1063,66 @@ Ensure a good mix of variations, all targeting the specified output style from t
         prompt: str,
         system_prompt: Optional[str] = None,
         is_reasoning: bool = False,
+        optimization_id: Optional[str] = None,
     ) -> str:
-        """Enhanced model calling with caching and optimization."""
-        
-        # Create cache key
-        cache_key = f"{prompt}|{system_prompt}|{is_reasoning}"
-        
-        # Check cache first
-        if cache_key in self._llm_cache:
-            return self._llm_cache[cache_key]
-        
-        # If cache is full, remove oldest entries
-        if len(self._llm_cache) >= self.DEFAULT_CACHE_SIZE:
-            # Remove 20% of oldest entries
-            # TODO: Make into a universal method
-            # TODO: Make this a class attribute
-            num_to_remove = int(self.DEFAULT_CACHE_SIZE * 0.2)
-            for _ in range(num_to_remove):
-                self._llm_cache.pop(next(iter(self._llm_cache)))
-        
-        # Call the model
-        response = super()._call_model(prompt, system_prompt, is_reasoning)
-        
-        # Cache the response
-        self._llm_cache[cache_key] = response
-        return response
+        """Call the model with the given prompt and return the response."""
+        try:
+            # Basic LLM parameters
+            llm_config_params = {
+                "temperature": getattr(self, "temperature", 0.3),
+                "max_tokens": getattr(self, "max_tokens", 1000),
+                "top_p": getattr(self, "top_p", 1.0),
+                "frequency_penalty": getattr(self, "frequency_penalty", 0.0),
+                "presence_penalty": getattr(self, "presence_penalty", 0.0),
+            }
+
+            # Prepare metadata for opik
+            metadata_for_opik = {}
+            if self.project_name:
+                metadata_for_opik["project_name"] = self.project_name
+                metadata_for_opik["opik"] = {"project_name": self.project_name}
+
+            if optimization_id:
+                if "opik" in metadata_for_opik:
+                    metadata_for_opik["opik"]["optimization_id"] = optimization_id
+
+            metadata_for_opik["optimizer_name"] = self.__class__.__name__
+            metadata_for_opik["opik_call_type"] = "reasoning" if is_reasoning else "evaluation_llm_task_direct"
+
+            if metadata_for_opik:
+                llm_config_params["metadata"] = metadata_for_opik
+
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+
+            # Pass llm_config_params to the Opik monitor
+            final_call_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(
+                llm_config_params.copy()
+            )
+
+            logger.debug(
+                f"Calling model '{self.model}' with messages: {messages}, "
+                f"final params for litellm (from monitor): {final_call_params}"
+            )
+
+            response = litellm.completion(
+                model=self.model, messages=messages, **final_call_params
+            )
+            return response.choices[0].message.content
+        except litellm.exceptions.RateLimitError as e:
+            logger.error(f"LiteLLM Rate Limit Error: {e}")
+            raise
+        except litellm.exceptions.APIConnectionError as e:
+            logger.error(f"LiteLLM API Connection Error: {e}")
+            raise
+        except litellm.exceptions.ContextWindowExceededError as e:
+            logger.error(f"LiteLLM Context Window Exceeded Error: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Error calling model '{self.model}': {type(e).__name__} - {e}")
+            raise
 
     def evaluate_prompt(
         self,
