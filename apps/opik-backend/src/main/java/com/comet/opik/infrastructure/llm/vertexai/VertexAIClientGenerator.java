@@ -20,7 +20,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.Optional;
@@ -65,7 +64,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
         return new VertexAiGeminiStreamingChatModel(generativeModel, generationConfig);
     }
 
-    private InternalServerErrorException failWithError(IOException e) {
+    private InternalServerErrorException failWithError(Exception e) {
         return new InternalServerErrorException("Failed to create GoogleCredentials", e);
     }
 
@@ -93,7 +92,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
                     .setCredentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
                     .build();
 
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw failWithError(e);
         }
     }

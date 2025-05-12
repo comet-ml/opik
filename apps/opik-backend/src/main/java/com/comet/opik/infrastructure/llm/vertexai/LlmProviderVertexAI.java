@@ -38,9 +38,22 @@ public class LlmProviderVertexAI implements LlmProviderService {
             @NonNull Consumer<Throwable> handleError) {
 
         Schedulers.boundedElastic()
-                .schedule(() -> llmProviderClientGenerator.newVertexAIStreamingClient(config, request)
-                        .generate(request.messages().stream().map(VertexAIMapper.INSTANCE::toChatMessage).toList(),
-                                new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model())));
+                .schedule(() -> {
+                    try {
+                        var streamingChatLanguageModel = llmProviderClientGenerator.newVertexAIStreamingClient(config,
+                                request);
+
+                        streamingChatLanguageModel
+                                .generate(
+                                        request.messages().stream().map(VertexAIMapper.INSTANCE::toChatMessage)
+                                                .toList(),
+                                        new ChunkedResponseHandler(handleMessage, handleClose, handleError,
+                                                request.model()));
+                    } catch (Exception e) {
+                        handleError.accept(e);
+                        handleClose.run();
+                    }
+                });
     }
 
     @Override
