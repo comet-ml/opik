@@ -314,7 +314,7 @@ llmProviderClient:
 
   vertexAIClient:
     # Default: https://www.googleapis.com/auth/cloud-platform
-    # Description: Vertex AI  SCOPE API URL
+    # Description: Vertex AI SCOPE API URL
     scope: ${LLM_PROVIDER_VERTEXAI_SCOPE:-https://www.googleapis.com/auth/cloud-platform}
 
 # Configuration for cache manager
