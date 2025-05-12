@@ -1,5 +1,8 @@
 import md5 from "md5";
 import get from "lodash/get";
+import last from "lodash/last";
+import findLast from "lodash/findLast";
+import isArray from "lodash/isArray";
 import isNumber from "lodash/isNumber";
 import isObject from "lodash/isObject";
 import isString from "lodash/isString";
@@ -37,6 +40,60 @@ export const prettifyMessage = (
     type: "input",
   },
 ) => {
+  if (
+    config.type === "input" &&
+    isObject(message) &&
+    "messages" in message &&
+    isArray(message.messages)
+  ) {
+    const lastMessage = last(message.messages);
+    if (lastMessage && "content" in lastMessage) {
+      if (isString(lastMessage.content) && lastMessage.content.length > 0) {
+        return {
+          message: lastMessage.content,
+          prettified: true,
+        } as PrettifyMessageResponse;
+      } else if (isArray(lastMessage.content)) {
+        const lastTextContent = findLast(
+          lastMessage.content,
+          (c) => c.type === "text",
+        );
+
+        if (
+          lastTextContent &&
+          "text" in lastTextContent &&
+          isString(lastTextContent.text) &&
+          lastTextContent.text.length > 0
+        ) {
+          return {
+            message: lastTextContent.text,
+            prettified: true,
+          };
+        }
+      }
+    }
+  } else if (
+    config.type === "output" &&
+    isObject(message) &&
+    "choices" in message &&
+    isArray(message.choices)
+  ) {
+    const lastChoice = last(message.choices);
+    if (
+      lastChoice &&
+      "message" in lastChoice &&
+      isObject(lastChoice.message) &&
+      "content" in lastChoice.message &&
+      isString(lastChoice.message.content) &&
+      lastChoice.message.content.length > 0
+    ) {
+      return {
+        message: lastChoice.message.content,
+        prettified: true,
+      } as PrettifyMessageResponse;
+    }
+  }
+
   const PREDEFINED_KEYS_MAP = {
     input: ["question", "messages", "user_input", "query", "input_prompt"],
     output: ["answer", "output", "response"],
