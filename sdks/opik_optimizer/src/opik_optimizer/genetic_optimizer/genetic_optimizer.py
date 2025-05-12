@@ -75,6 +75,7 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
     def __init__(
         self,
         model: str,
+        project_name: Optional[str] = None,
         population_size: int = DEFAULT_POPULATION_SIZE,
         num_generations: int = DEFAULT_NUM_GENERATIONS,
         mutation_rate: float = DEFAULT_MUTATION_RATE,
@@ -88,7 +89,6 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
         seed: Optional[int] = DEFAULT_SEED,
         output_style_guidance: Optional[str] = None,
         infer_output_style: bool = False,
-        project_name: Optional[str] = None,
         verbose: int = 1,
         **model_kwargs,
     ):
