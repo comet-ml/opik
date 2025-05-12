@@ -92,7 +92,11 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
         verbose: int = 1,
         **model_kwargs,
     ):
-        super().__init__(model, project_name, verbose=verbose, **model_kwargs)
+        # FIXME: Hack for verbose till its merged
+        self.verbose = 1
+
+        # Initialize base class first
+        super().__init__(model=model, project_name=project_name, **model_kwargs)
         self.population_size = population_size
         self.num_generations = num_generations
         self.mutation_rate = mutation_rate
