@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.gemini;
 
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.google.common.base.Preconditions;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
@@ -34,18 +35,19 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
     }
 
     @Override
-    public GoogleAiGeminiChatModel generate(String apiKey, Object... params) {
+    public GoogleAiGeminiChatModel generate(LlmProviderClientApiConfig config, Object... params) {
         Preconditions.checkArgument(params.length >= 1, "Expected at least 1 parameter, got " + params.length);
         ChatCompletionRequest request = (ChatCompletionRequest) Objects.requireNonNull(params[0],
                 "ChatCompletionRequest is required");
-        return newGeminiClient(apiKey, request);
+        return newGeminiClient(config.apiKey(), request);
     }
 
     @Override
-    public ChatLanguageModel generateChat(String apiKey, LlmAsJudgeModelParameters modelParameters) {
+    public ChatLanguageModel generateChat(LlmProviderClientApiConfig config,
+            LlmAsJudgeModelParameters modelParameters) {
         GoogleAiGeminiChatModelBuilder modelBuilder = GoogleAiGeminiChatModel.builder()
                 .modelName(modelParameters.name())
-                .apiKey(apiKey);
+                .apiKey(config.apiKey());
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> modelBuilder.timeout(connectTimeout.toJavaDuration()));
