@@ -1,9 +1,9 @@
 import abc
 
-from .result import ValidationResult
+from . import result
 
 
 class Validator(abc.ABC):
     @abc.abstractmethod
-    def validate(self) -> ValidationResult:
+    def validate(self) -> result.ValidationResult:
         pass
