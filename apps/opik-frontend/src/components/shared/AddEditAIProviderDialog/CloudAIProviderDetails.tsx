@@ -13,7 +13,7 @@ import {
   FormItem,
   FormMessage,
 } from "@/components/ui/form";
-import { cn } from "@/lib/utils";
+import { buildDocsUrl, cn } from "@/lib/utils";
 
 type CloudAIProviderDetailsProps = {
   provider: PROVIDER_TYPE | "";
@@ -54,13 +54,13 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
           );
         }}
       />
-      {provider && (
+      {(PROVIDERS[provider] as CLOUD_PROVIDER_OPTION_TYPE)?.apiKeyURL && (
         <span className="comet-body-s mt-1 text-light-slate">
           Get your {providerName} API key{" "}
           <Button variant="link" size="sm" asChild className="px-0">
             <a
               href={
-                (PROVIDERS[provider] as CLOUD_PROVIDER_OPTION_TYPE)?.apiKeyURL
+                (PROVIDERS[provider] as CLOUD_PROVIDER_OPTION_TYPE).apiKeyURL
               }
               target="_blank"
               rel="noreferrer"
@@ -69,6 +69,22 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
             </a>
           </Button>
           .
+        </span>
+      )}
+
+      {provider === PROVIDER_TYPE.VERTEX_AI && (
+        <span className="comet-body-s mt-1 text-light-slate">
+          <Button variant="link" size="sm" asChild className="px-0">
+            <a
+              href={buildDocsUrl("/tracing/integrations/vertexAi")}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Click here
+            </a>
+          </Button>{" "}
+          for instructions on how to create a service account and assign the
+          correct permissions.
         </span>
       )}
     </div>
