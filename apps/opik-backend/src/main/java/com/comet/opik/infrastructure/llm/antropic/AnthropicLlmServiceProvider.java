@@ -4,6 +4,7 @@ import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParam
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import lombok.NonNull;
@@ -21,14 +22,14 @@ class AnthropicLlmServiceProvider implements LlmServiceProvider {
     }
 
     @Override
-    public LlmProviderService getService(String apiKey) {
-        return new LlmProviderAnthropic(clientGenerator.generate(apiKey));
+    public LlmProviderService getService(LlmProviderClientApiConfig config) {
+        return new LlmProviderAnthropic(clientGenerator.generate(config));
     }
 
     @Override
-    public ChatLanguageModel getLanguageModel(@NonNull String apiKey,
+    public ChatLanguageModel getLanguageModel(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
-        return clientGenerator.generateChat(apiKey, modelParameters);
+        return clientGenerator.generateChat(config, modelParameters);
     }
 
 }
