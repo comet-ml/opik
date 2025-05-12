@@ -44,7 +44,8 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
         return new VertexAiGeminiChatModel(generativeModel, generationConfig);
     }
 
-    private GenerativeModel getGenerativeModel(@NotNull ChatCompletionRequest request, VertexAI vertexAI, GenerationConfig generationConfig) {
+    private GenerativeModel getGenerativeModel(@NotNull ChatCompletionRequest request, VertexAI vertexAI,
+            GenerationConfig generationConfig) {
         var vertexAIModelName = VertexAIModelName.byQualifiedName(request.model())
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported model: " + request.model()));
 
