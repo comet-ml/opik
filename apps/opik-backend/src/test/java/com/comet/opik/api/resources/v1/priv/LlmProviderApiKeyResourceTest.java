@@ -60,7 +60,8 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class LlmProviderApiKeyResourceTest {
     private static final String USER = UUID.randomUUID().toString();
-    public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt", "apiKey"};
+    public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
+            "apiKey"};
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -366,7 +367,6 @@ class LlmProviderApiKeyResourceTest {
         assertThat(actual.page()).isZero();
         assertThat(actual.total()).isEqualTo(expected.size());
         assertThat(actual.size()).isEqualTo(expected.size());
-
 
         assertThat(actual.content())
                 .usingRecursiveComparison()

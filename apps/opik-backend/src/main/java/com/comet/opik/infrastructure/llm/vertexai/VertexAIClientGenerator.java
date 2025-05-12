@@ -36,40 +36,30 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
     private ChatLanguageModel newVertexAIClient(@NonNull LlmProviderClientApiConfig apiKey,
             @NonNull ChatCompletionRequest request) {
 
-        try {
-            VertexAI vertexAI = getVertexAI(apiKey);
+        VertexAI vertexAI = getVertexAI(apiKey);
 
-            GenerationConfig generationConfig = getGenerationConfig(request);
+        GenerationConfig generationConfig = getGenerationConfig(request);
 
-            GenerativeModel generativeModel = new GenerativeModel(request.model(), vertexAI)
-                    .withGenerationConfig(generationConfig);
+        GenerativeModel generativeModel = new GenerativeModel(request.model(), vertexAI)
+                .withGenerationConfig(generationConfig);
 
-            return new VertexAiGeminiChatModel(generativeModel, generationConfig);
-
-        } catch (IOException e) {
-            throw failWithError(e);
-        }
+        return new VertexAiGeminiChatModel(generativeModel, generationConfig);
     }
 
     public StreamingChatLanguageModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
             @NonNull ChatCompletionRequest request) {
 
-        try {
-            VertexAI vertexAI = getVertexAI(apiKey);
+        VertexAI vertexAI = getVertexAI(apiKey);
 
-            GenerationConfig generationConfig = getGenerationConfig(request);
+        GenerationConfig generationConfig = getGenerationConfig(request);
 
-            var vertexAIModelName = VertexAIModelName.byQualifiedName(request.model())
-                    .orElseThrow(() -> new IllegalArgumentException("Unsupported model: " + request.model()));
+        var vertexAIModelName = VertexAIModelName.byQualifiedName(request.model())
+                .orElseThrow(() -> new IllegalArgumentException("Unsupported model: " + request.model()));
 
-            GenerativeModel generativeModel = new GenerativeModel(vertexAIModelName.toString(), vertexAI)
-                    .withGenerationConfig(generationConfig);
+        GenerativeModel generativeModel = new GenerativeModel(vertexAIModelName.toString(), vertexAI)
+                .withGenerationConfig(generationConfig);
 
-            return new VertexAiGeminiStreamingChatModel(generativeModel, generationConfig);
-
-        } catch (IOException e) {
-            throw failWithError(e);
-        }
+        return new VertexAiGeminiStreamingChatModel(generativeModel, generationConfig);
     }
 
     private InternalServerErrorException failWithError(IOException e) {
@@ -89,15 +79,20 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
         return generationConfig.build();
     }
 
-    private VertexAI getVertexAI(@NotNull LlmProviderClientApiConfig config) throws IOException {
-        var credentials = ServiceAccountCredentials.fromStream(
-                new ByteArrayInputStream(config.apiKey().getBytes(StandardCharsets.UTF_8)));
+    private VertexAI getVertexAI(@NotNull LlmProviderClientApiConfig config) {
+        try {
+            var credentials = ServiceAccountCredentials.fromStream(
+                    new ByteArrayInputStream(config.apiKey().getBytes(StandardCharsets.UTF_8)));
 
-        return new VertexAI.Builder()
-                .setProjectId(credentials.getProjectId())
-                .setLocation(config.configuration().get("location"))
-                .setCredentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
-                .build();
+            return new VertexAI.Builder()
+                    .setProjectId(credentials.getProjectId())
+                    .setLocation(config.configuration().get("location"))
+                    .setCredentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
+                    .build();
+
+        } catch (IOException e) {
+            throw failWithError(e);
+        }
     }
 
     @Override
@@ -106,11 +101,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
         ChatCompletionRequest request = (ChatCompletionRequest) Objects.requireNonNull(params[0],
                 "ChatCompletionRequest is required");
 
-        if (request.model().contains("gemini")) {
-            return newVertexAIClient(config, request);
-        }
-
-        throw new IllegalArgumentException("Unsupported model: " + request.model());
+        return newVertexAIClient(config, request);
     }
 
     @Override
