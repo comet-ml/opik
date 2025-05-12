@@ -1,5 +1,4 @@
 import allure
-import pytest
 import logging
 
 from page_objects.ProjectsPage import ProjectsPage
@@ -11,7 +10,9 @@ logger = logging.getLogger(__name__)
 
 class TestTraceSpans:
     @allure.title("Attachments in traces - log_trace_attachment_low_level")
-    def test_attachments_low_level(self, page, create_project_api, log_trace_attachment_low_level):
+    def test_attachments_low_level(
+        self, page, create_project_api, log_trace_attachment_low_level
+    ):
         """Test attachment visibility.
 
         Steps:
@@ -39,7 +40,7 @@ class TestTraceSpans:
                 f"Project name: {project_name}\n"
                 f"Error: {str(e)}"
             ) from e
-        
+
         # Wait for traces to appear on UI
         traces_page = TracesPage(page)
         traces_page.wait_for_traces_to_be_visible()
@@ -55,7 +56,7 @@ class TestTraceSpans:
                 f"Project name: {project_name}\n"
                 f"Error: {str(e)}"
             ) from e
-        
+
         # Verify attachment for trace
         attachment_name = log_trace_attachment_low_level
         for trace in trace_names:
@@ -70,9 +71,11 @@ class TestTraceSpans:
                     f"Expected attachment: {attachment_name}\n"
                     f"Error: {str(e)}"
                 ) from e
-            
+
     @allure.title("Attachments in traces - log_trace_attachment_decorator")
-    def test_attachments_decorator(self, page, create_project_api, log_trace_attachment_decorator):
+    def test_attachments_decorator(
+        self, page, create_project_api, log_trace_attachment_decorator
+    ):
         """Test attachment visibility.
 
         Steps:
@@ -100,7 +103,7 @@ class TestTraceSpans:
                 f"Project name: {project_name}\n"
                 f"Error: {str(e)}"
             ) from e
-        
+
         # Wait for traces to appear on UI
         traces_page = TracesPage(page)
         traces_page.wait_for_traces_to_be_visible()
@@ -116,7 +119,7 @@ class TestTraceSpans:
                 f"Project name: {project_name}\n"
                 f"Error: {str(e)}"
             ) from e
-        
+
         # Verify attachment for trace
         attachment_name = log_trace_attachment_decorator
         for trace in trace_names:
@@ -131,9 +134,11 @@ class TestTraceSpans:
                     f"Expected attachment: {attachment_name}\n"
                     f"Error: {str(e)}"
                 ) from e
-            
+
     @allure.title("Attachments in traces - log_trace_attachment_decorator")
-    def test_attachments_span(self, page, create_project_api, log_trace_attachment_in_span):
+    def test_attachments_span(
+        self, page, create_project_api, log_trace_attachment_in_span
+    ):
         """Test attachment visibility.
 
         Steps:
@@ -160,7 +165,7 @@ class TestTraceSpans:
                 f"Project name: {project_name}\n"
                 f"Error: {str(e)}"
             ) from e
-        
+
         # Wait for traces to appear on UI
         traces_page = TracesPage(page)
         traces_page.wait_for_traces_to_be_visible()
@@ -176,7 +181,7 @@ class TestTraceSpans:
                 f"Project name: {project_name}\n"
                 f"Error: {str(e)}"
             ) from e
-        
+
         # Verify attachment for span
         attachment_name, span_name = log_trace_attachment_in_span
         for trace in trace_names:
@@ -195,6 +200,5 @@ class TestTraceSpans:
                     f"Expected attachment: {attachment_name}\n"
                     f"Error: {str(e)}"
                 ) from e
-        
+
         page.pause()
-            
