@@ -7,6 +7,11 @@ class TracesPageSpansMenu:
         self.input_output_tab = "Input/Output"
         self.feedback_scores_tab = "Feedback scores"
         self.metadata_tab = "Metadata"
+        self.span_title = self.page.get_by_test_id("data-viewer-title")
+        self.attachments_submenu_button = self.page.get_by_role(
+            "button", name="Attachments"
+        )
+        self.attachment_container = self.page.get_by_label("Attachments")
 
     def get_first_trace_by_name(self, name):
         return self.page.get_by_role("button", name=name).first
@@ -28,3 +33,13 @@ class TracesPageSpansMenu:
 
     def get_metadata_tab(self):
         return self.page.get_by_role("tab", name="Metadata")
+
+    def open_span_content(self, span_name):
+        self.page.get_by_role("button", name=span_name).click()
+        expect(self.span_title.filter(has_text=span_name)).to_be_visible()
+
+    def check_span_attachment(self, attachment_name):
+        expect(self.attachments_submenu_button).to_be_visible()
+        expect(
+            self.attachment_container.filter(has_text=attachment_name)
+        ).to_be_visible()
