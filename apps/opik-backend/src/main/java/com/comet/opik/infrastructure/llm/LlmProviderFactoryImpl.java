@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
+import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
@@ -38,10 +39,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         var llmProvider = getLlmProvider(model);
         var providerConfig = getProviderApiKey(workspaceId, llmProvider);
 
-        var config = new LlmProviderClientApiConfig(
-                EncryptionUtils.decrypt(providerConfig.apiKey()),
-                providerConfig.headers(),
-                providerConfig.baseUrl());
+        var config = buildConfig(providerConfig);
 
         return Optional.ofNullable(services.get(llmProvider))
                 .map(provider -> provider.getService(config))
@@ -49,15 +47,20 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                         "LLM provider not supported: %s".formatted(llmProvider)));
     }
 
+    private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig) {
+        return new LlmProviderClientApiConfig(
+                EncryptionUtils.decrypt(providerConfig.apiKey()),
+                providerConfig.headers(),
+                providerConfig.baseUrl(),
+                providerConfig.configuration());
+    }
+
     public ChatLanguageModel getLanguageModel(@NonNull String workspaceId,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         var llmProvider = getLlmProvider(modelParameters.name());
         var providerConfig = getProviderApiKey(workspaceId, llmProvider);
 
-        var config = new LlmProviderClientApiConfig(
-                EncryptionUtils.decrypt(providerConfig.apiKey()),
-                providerConfig.headers(),
-                providerConfig.baseUrl());
+        var config = buildConfig(providerConfig);
 
         return Optional.ofNullable(services.get(llmProvider))
                 .map(provider -> provider.getLanguageModel(config, modelParameters))
@@ -82,7 +85,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
             return LlmProvider.OPEN_ROUTER;
         }
 
-        if (isModelBelongToProvider(model, LlmProvider.class, LlmProvider::getValue)) {
+        if (isModelBelongToProvider(model, VertexAIModelName.class, VertexAIModelName::qualifiedName)) {
             return LlmProvider.VERTEX_AI;
         }
 

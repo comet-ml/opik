@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.vertexai;
 
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.cloud.vertexai.VertexAI;
@@ -32,7 +33,8 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
 
     private final @NonNull LlmProviderClientConfig clientConfig;
 
-    private ChatLanguageModel newVertexAIClient(@NonNull String apiKey, @NonNull ChatCompletionRequest request) {
+    private ChatLanguageModel newVertexAIClient(@NonNull LlmProviderClientApiConfig apiKey,
+            @NonNull ChatCompletionRequest request) {
 
         try {
             VertexAI vertexAI = getVertexAI(apiKey);
@@ -49,7 +51,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
         }
     }
 
-    public StreamingChatLanguageModel newVertexAIStreamingClient(@NonNull String apiKey,
+    public StreamingChatLanguageModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
             @NonNull ChatCompletionRequest request) {
 
         try {
@@ -57,7 +59,10 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
 
             GenerationConfig generationConfig = getGenerationConfig(request);
 
-            GenerativeModel generativeModel = new GenerativeModel(request.model(), vertexAI)
+            var vertexAIModelName = VertexAIModelName.byQualifiedName(request.model())
+                    .orElseThrow(() -> new IllegalArgumentException("Unsupported model: " + request.model()));
+
+            GenerativeModel generativeModel = new GenerativeModel(vertexAIModelName.toString(), vertexAI)
                     .withGenerationConfig(generationConfig);
 
             return new VertexAiGeminiStreamingChatModel(generativeModel, generationConfig);
@@ -84,32 +89,33 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
         return generationConfig.build();
     }
 
-    private VertexAI getVertexAI(@NotNull String apiKey) throws IOException {
+    private VertexAI getVertexAI(@NotNull LlmProviderClientApiConfig config) throws IOException {
         var credentials = ServiceAccountCredentials.fromStream(
-                new ByteArrayInputStream(apiKey.getBytes(StandardCharsets.UTF_8)));
+                new ByteArrayInputStream(config.apiKey().getBytes(StandardCharsets.UTF_8)));
 
         return new VertexAI.Builder()
                 .setProjectId(credentials.getProjectId())
-                .setLocation("us-central1") // Set the location as needed
+                .setLocation(config.configuration().get("location"))
                 .setCredentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
                 .build();
     }
 
     @Override
-    public ChatLanguageModel generate(String apiKey, Object... params) {
+    public ChatLanguageModel generate(LlmProviderClientApiConfig config, Object... params) {
         Preconditions.checkArgument(params.length >= 1, "Expected at least 1 parameter, got " + params.length);
         ChatCompletionRequest request = (ChatCompletionRequest) Objects.requireNonNull(params[0],
                 "ChatCompletionRequest is required");
 
         if (request.model().contains("gemini")) {
-            return newVertexAIClient(apiKey, request);
+            return newVertexAIClient(config, request);
         }
 
         throw new IllegalArgumentException("Unsupported model: " + request.model());
     }
 
     @Override
-    public ChatLanguageModel generateChat(String apiKey, LlmAsJudgeModelParameters modelParameters) {
+    public ChatLanguageModel generateChat(LlmProviderClientApiConfig apiKey,
+            LlmAsJudgeModelParameters modelParameters) {
         return newVertexAIClient(apiKey, ChatCompletionRequest.builder()
                 .model(modelParameters.name())
                 .temperature(modelParameters.temperature())

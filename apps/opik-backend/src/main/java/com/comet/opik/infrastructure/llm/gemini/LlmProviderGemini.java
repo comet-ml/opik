@@ -35,10 +35,13 @@ public class LlmProviderGemini implements LlmProviderService {
     public void generateStream(@NonNull ChatCompletionRequest request, @NonNull String workspaceId,
             @NonNull Consumer<ChatCompletionResponse> handleMessage, @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-      
-        Schedulers.boundedElastic().schedule(() -> llmProviderClientGenerator.newGeminiStreamingClient(apiKey, request)
-                .generate(request.messages().stream().map(LlmProviderGeminiMapper.INSTANCE::toChatMessage).toList(),
-                        new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model())));
+
+        Schedulers.boundedElastic()
+                .schedule(() -> llmProviderClientGenerator.newGeminiStreamingClient(config.apiKey(), request)
+                        .generate(
+                                request.messages().stream().map(LlmProviderGeminiMapper.INSTANCE::toChatMessage)
+                                        .toList(),
+                                new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model())));
     }
 
     @Override

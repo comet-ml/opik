@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.vertexai;
 
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.gemini.GeminiErrorObject;
 import com.comet.opik.utils.JsonUtils;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
@@ -21,11 +22,11 @@ import java.util.function.Consumer;
 public class LlmProviderVertexAI implements LlmProviderService {
 
     private final @NonNull VertexAIClientGenerator llmProviderClientGenerator;
-    private final @NonNull String apiKey;
+    private final @NonNull LlmProviderClientApiConfig config;
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        var response = llmProviderClientGenerator.generate(apiKey, request)
+        var response = llmProviderClientGenerator.generate(config, request)
                 .generate(request.messages().stream().map(VertexAIMapper.INSTANCE::toChatMessage).toList());
 
         return VertexAIMapper.INSTANCE.toChatCompletionResponse(request, response);
@@ -37,7 +38,7 @@ public class LlmProviderVertexAI implements LlmProviderService {
             @NonNull Consumer<Throwable> handleError) {
 
         Schedulers.boundedElastic()
-                .schedule(() -> llmProviderClientGenerator.newVertexAIStreamingClient(apiKey, request)
+                .schedule(() -> llmProviderClientGenerator.newVertexAIStreamingClient(config, request)
                         .generate(request.messages().stream().map(VertexAIMapper.INSTANCE::toChatMessage).toList(),
                                 new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model())));
     }

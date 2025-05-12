@@ -60,7 +60,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class LlmProviderApiKeyResourceTest {
     private static final String USER = UUID.randomUUID().toString();
-    public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt"};
+    public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt", "apiKey"};
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -341,13 +341,16 @@ class LlmProviderApiKeyResourceTest {
 
     private void getAndAssertProviderApiKey(ProviderApiKey expected, String apiKey, String workspaceName) {
         var actualEntity = llmProviderApiKeyResourceClient.getById(expected.id(), workspaceName, apiKey, 200);
-        assertThat(actualEntity.provider()).isEqualTo(expected.provider());
-        assertThat(actualEntity.name()).isEqualTo(expected.name());
-        assertThat(actualEntity.baseUrl()).isEqualTo(expected.baseUrl());
-        assertThat(actualEntity.headers()).isEqualTo(expected.headers());
+
+        assertThat(actualEntity)
+                .usingRecursiveComparison()
+                .ignoringFields(IGNORED_FIELDS)
+                .isEqualTo(expected);
 
         // We should decrypt api key in order to compare, since it encrypts on deserialization
         assertThat(decrypt(actualEntity.apiKey())).isEqualTo(maskApiKey(expected.apiKey()));
+        assertThat(actualEntity.createdAt()).isAfter(expected.createdAt());
+        assertThat(actualEntity.lastUpdatedAt()).isAfter(expected.lastUpdatedAt());
     }
 
     private void checkEncryption(UUID id, String workspaceId, String expectedApiKey) {
@@ -360,15 +363,24 @@ class LlmProviderApiKeyResourceTest {
 
     private void assertPage(Page<ProviderApiKey> actual, List<ProviderApiKey> expected) {
         assertThat(actual.content()).hasSize(expected.size());
-        assertThat(actual.page()).isEqualTo(0);
+        assertThat(actual.page()).isZero();
         assertThat(actual.total()).isEqualTo(expected.size());
         assertThat(actual.size()).isEqualTo(expected.size());
 
+
+        assertThat(actual.content())
+                .usingRecursiveComparison()
+                .ignoringFields(IGNORED_FIELDS)
+                .isEqualTo(expected);
+
         for (int i = 0; i < expected.size(); i++) {
-            assertThat(actual.content().get(i).provider()).isEqualTo(expected.get(i).provider());
-            assertThat(actual.content().get(i).name()).isEqualTo(expected.get(i).name());
-            assertThat(decrypt(actual.content().get(i).apiKey()))
-                    .isEqualTo(maskApiKey(expected.get(i).apiKey()));
+            ProviderApiKey actualEntity = actual.content().get(i);
+            ProviderApiKey expectedEntity = expected.get(i);
+
+            // We should decrypt api key in order to compare, since it encrypts on deserialization
+            assertThat(decrypt(actualEntity.apiKey())).isEqualTo(maskApiKey(expectedEntity.apiKey()));
+            assertThat(actualEntity.createdAt()).isAfter(expectedEntity.createdAt());
+            assertThat(actualEntity.lastUpdatedAt()).isAfter(expectedEntity.lastUpdatedAt());
         }
     }
 }

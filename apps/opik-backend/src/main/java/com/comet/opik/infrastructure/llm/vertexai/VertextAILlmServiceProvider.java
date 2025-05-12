@@ -4,6 +4,7 @@ import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import jakarta.inject.Named;
@@ -23,12 +24,12 @@ class VertextAILlmServiceProvider implements LlmServiceProvider {
     }
 
     @Override
-    public LlmProviderService getService(String apiKey) {
+    public LlmProviderService getService(LlmProviderClientApiConfig apiKey) {
         return new LlmProviderVertexAI(clientGenerator, apiKey);
     }
 
     @Override
-    public ChatLanguageModel getLanguageModel(String apiKey,
+    public ChatLanguageModel getLanguageModel(LlmProviderClientApiConfig apiKey,
             AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters) {
         return clientGenerator.generateChat(apiKey, modelParameters);
     }
