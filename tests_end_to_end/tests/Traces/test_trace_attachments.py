@@ -135,7 +135,7 @@ class TestTraceSpans:
                     f"Error: {str(e)}"
                 ) from e
 
-    @allure.title("Attachments in traces - log_trace_attachment_decorator")
+    @allure.title("Attachments in traces - log_trace_attachment_in_span")
     def test_attachments_span(
         self, page, create_project_api, log_trace_attachment_in_span
     ):
@@ -200,5 +200,3 @@ class TestTraceSpans:
                     f"Expected attachment: {attachment_name}\n"
                     f"Error: {str(e)}"
                 ) from e
-
-        page.pause()
