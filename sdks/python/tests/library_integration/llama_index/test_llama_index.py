@@ -126,6 +126,80 @@ def test_llama_index__happyflow(
         ("llama-index-integration-test", "llama-index-integration-test"),
     ],
 )
+def test_llama_index__no_index_construction_logging_happyflow(
+    ensure_openai_configured,
+    fake_backend,
+    index_documents_directory,
+    project_name,
+    expected_project_name,
+):
+    opik_callback_handler = LlamaIndexCallbackHandler(
+        project_name=project_name,
+        skip_index_construction_trace=True,
+    )
+    opik_callback_manager = CallbackManager([opik_callback_handler])
+    Settings.callback_manager = opik_callback_manager
+
+    # This comment refers to Lama Index Core version 0.11.18.
+    # Since `Settings` is a Singleton, we need to manually reset the `Transformations` because
+    # they might include objects that still refer to the old Callback Manager instead of the current one (above).
+    #
+    # The error looks like this: when running this parameterized test without this statement, the second test will
+    # always fail, no matter what parameters are passed (even if they are the same).
+    Settings.transformations = None
+
+    from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
+
+    documents = SimpleDirectoryReader(index_documents_directory).load_data()
+    index = VectorStoreIndex.from_documents(documents)
+
+    query_engine = index.as_query_engine()
+    _ = query_engine.query("What did the author do growing up?")
+
+    opik_callback_handler.flush()
+
+    EXPECTED_TRACE_TREES = [
+        # TraceModel(
+        #     id=ANY_BUT_NONE,
+        #     name="index_construction",
+        #     input={"documents": ANY_BUT_NONE},
+        #     output=ANY_BUT_NONE,
+        #     metadata={"created_from": "llama_index"},
+        #     start_time=ANY_BUT_NONE,
+        #     end_time=ANY_BUT_NONE,
+        #     project_name=expected_project_name,
+        #     spans=ANY_BUT_NONE,  # too complex spans tree, no check
+        # ),
+        TraceModel(
+            id=ANY_BUT_NONE,
+            name="query",
+            input={"query_str": "What did the author do growing up?"},
+            output=ANY_BUT_NONE,
+            metadata={"created_from": "llama_index"},
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            project_name=expected_project_name,
+            spans=ANY_BUT_NONE,  # too complex spans tree, no check
+        ),
+    ]
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREES, fake_backend.trace_trees)
+
+    # check token usage info
+    llm_response = fake_backend.trace_trees[0].spans[0].spans[1].spans[3].usage
+    assert_dict_has_keys(
+        llm_response, ["completion_tokens", "prompt_tokens", "total_tokens"]
+    )
+
+
+@pytest.mark.parametrize(
+    "project_name, expected_project_name",
+    [
+        (None, OPIK_PROJECT_DEFAULT_NAME),
+        ("llama-index-integration-test", "llama-index-integration-test"),
+    ],
+)
 def test_llama_index_chat__happyflow(
     ensure_openai_configured,
     fake_backend,
