@@ -22,7 +22,7 @@ class AuthServiceImplTest {
     @Mock
     private HttpHeaders headers;
 
-    private UriInfo uriInfo = Mockito.mock(UriInfo.class);;
+    private UriInfo uriInfo = Mockito.mock(UriInfo.class);
 
     private AuthServiceImpl authService = new AuthServiceImpl(() -> requestContext);
     private ContextInfoHolder infoHolder = ContextInfoHolder.builder()

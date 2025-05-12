@@ -38,6 +38,7 @@ public class ProviderApiKeyManufacturer extends AbstractTypeManufacturer<Provide
                         RandomStringUtils.secure().nextAlphabetic(5), RandomStringUtils.secure().nextAlphabetic(5),
                         RandomStringUtils.secure().nextAlphabetic(5), RandomStringUtils.secure().nextAlphabetic(5)))
                 .createdAt(Instant.now())
+                .lastUpdatedAt(Instant.now())
                 .build();
     }
 
