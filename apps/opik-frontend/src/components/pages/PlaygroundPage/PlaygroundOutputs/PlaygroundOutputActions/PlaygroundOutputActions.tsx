@@ -214,7 +214,7 @@ const PlaygroundOutputActions = ({
           placeholder={
             <div className="flex w-full items-center text-light-slate">
               <Database className="mr-2 size-4" />
-              <span className="truncate font-normal">Dataset</span>
+              <span className="truncate font-normal">Test over dataset</span>
             </div>
           }
           onChange={handleChangeDatasetId}
