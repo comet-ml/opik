@@ -43,6 +43,7 @@ from opik_optimizer import (
     TaskConfig,
     from_dataset_field,
     from_llm_response_text,
+    GeneticOptimizer,
 )
 from opik_optimizer.demo import get_or_create_dataset
 from opik_optimizer.cache_config import initialize_cache, clear_cache
@@ -438,14 +439,42 @@ class BenchmarkRunner:
                 params.setdefault("temperature", 0.1)
                 params.setdefault("max_tokens", 5000)
 
-            # Handle external optimizers (if any were defined)
-            # if optimizer_class_name == "ExternalDspyMiproOptimizer": ...
-            # elif optimizer_class_name == "ExternalAdalFlowOptimizer": ...
-            optimizer_class = globals()[optimizer_class_name]
-            return optimizer_class(**params)
+            # No special parameters needed for GeneticOptimizer - config is in benchmark_config.py
+            
+            # Try direct optimizer class resolution first
+            try:
+                if optimizer_class_name == "GeneticOptimizer":
+                    from opik_optimizer import GeneticOptimizer
+                    optimizer_class = GeneticOptimizer
+                    logger.info("Using direct import for GeneticOptimizer")
+                else:
+                    optimizer_class = globals()[optimizer_class_name]
+            except Exception as e_class:
+                logger.warning(f"Error in direct class resolution for {optimizer_class_name}: {e_class}")
+                optimizer_class = globals()[optimizer_class_name]
+                
+            result = optimizer_class(**params)
+            return result
         except Exception as e:
             logger.error(f"[red]Error creating optimizer {optimizer_config['class']} for model {model_name}: {e}[/red]")
             logger.exception(f"Traceback for error creating optimizer [bold]{optimizer_config['class']}[/bold]:")
+
+            # Special handling for GeneticOptimizer to help diagnose issues
+            if optimizer_class_name == "GeneticOptimizer":
+                logger.error(f"[red]GeneticOptimizer creation failed. Available keys: {list(globals().keys())}[/red]")
+                try:
+                    # Verify GeneticOptimizer is imported properly
+                    import opik_optimizer
+                    from opik_optimizer import GeneticOptimizer  # Try direct import
+                    logger.info(f"GeneticOptimizer direct import successful: {GeneticOptimizer}")
+                    # Try alternate initialization path
+                    alternate_optimizer = GeneticOptimizer(model=model_name, project_name=project_name, **params)
+                    logger.info("[green]Alternate GeneticOptimizer initialization successful[/green]")
+                    return alternate_optimizer
+                except Exception as e_alt:
+                    logger.error(f"[red]Alternate GeneticOptimizer initialization also failed: {e_alt}[/red]")
+                    logger.exception("Traceback for alternate initialization attempt:")
+            
             return None
 
     def run_optimization(
@@ -533,12 +562,9 @@ class BenchmarkRunner:
 
         dataset_name = experiment_config["dataset"]
         optimizer_config_name_display = experiment_config["optimizer"]
-        actual_optimizer_class_name_display = type(optimizer).__name__.lower().replace("_", "-")
+        actual_optimizer_class_name = type(optimizer).__name__
+        actual_optimizer_class_name_display = actual_optimizer_class_name.lower().replace("_", "-")
         model_name_display = optimizer.model
-
-        # Use the optimizer_config_name_display for the console print
-        console.print(f"🏁 Starting task: [bold magenta]{task_id}[/bold magenta] ({dataset_name} / {optimizer_config_name_display} / {model_name_display})")
-        logger.info(f"Starting optimization task: {task_id}...")
 
         # Initialize comprehensive result structure
         task_result = {
@@ -574,6 +600,13 @@ class BenchmarkRunner:
             "final_evaluation": None,
             "raw_optimizer_result": None,
         }
+        
+        # Store original class name for precise class checks later
+        task_result["optimizer_original_class_name"] = actual_optimizer_class_name
+        
+        # Use the optimizer_config_name_display for the console print
+        console.print(f"🏁 Starting task: [bold magenta]{task_id}[/bold magenta] ({dataset_name} / {optimizer_config_name_display} / {model_name_display})")
+        logger.info(f"Starting optimization task: {task_id}...")
 
         # List to collect errors during evaluation steps
         evaluation_errors = []
@@ -761,6 +794,16 @@ class BenchmarkRunner:
                         n_trials=getattr(optimizer, 'n_trials', 10),
                         n_samples=getattr(optimizer, 'n_samples', 100)
                     )
+                # Check for GeneticOptimizer by actual class name, not by lowercase displayed name
+                elif "GeneticOptimizer" in type(optimizer).__name__:
+                    logger.info(f"Detected GeneticOptimizer. Running with appropriate parameters.")
+                    # Don't pass experiment_config to GeneticOptimizer's optimize_prompt method
+                    results_obj = optimizer.optimize_prompt(
+                        dataset=config.dataset,
+                        metric_config=config.objective,
+                        task_config=config.task,
+                        n_samples=getattr(optimizer, 'n_samples', 5)
+                    )
                 else:
                     logger.error(f"Unsupported optimizer: {actual_optimizer_class_name_display}")
                     task_result["error_message"] = f"Unsupported optimizer: {actual_optimizer_class_name_display}"
@@ -926,6 +969,52 @@ class BenchmarkRunner:
                         else: opt_history_processed = []
                     else: opt_history_processed = [] # Simplified for brevity, but should be the detailed logging
 
+                # Check both the lowercase display name and the original class name for more robust detection
+                elif actual_optimizer_class_name_display == "geneticoptimizer" or "GeneticOptimizer" in task_result.get("optimizer_original_class_name", ""): # Add dedicated block for GeneticOptimizer
+                    logger.debug(f"HISTORY_DEBUG ({actual_optimizer_class_name_display}, {task_id}): Entered GeneticOptimizer history processing block.")
+                    
+                    if hasattr(results_obj, "history") and results_obj.history is not None:
+                        logger.debug(f"HISTORY_DEBUG: results_obj has history attribute, type: {type(results_obj.history)}")
+                        
+                        if isinstance(results_obj.history, list):
+                            print(f"PRINT_DEBUG_HISTORY: results_obj.history is a list with {len(results_obj.history)} items")
+                            logger.debug(f"HISTORY_DEBUG: results_obj.history is a list with {len(results_obj.history)} items")
+                            
+                            if results_obj.history:
+                                # Try looking at the first history item structure
+                                first_item = results_obj.history[0]
+                                logger.debug(f"HISTORY_DEBUG: First history item keys: {list(first_item.keys()) if isinstance(first_item, dict) else 'Not a dict'}")
+                                
+                                opt_history_processed = results_obj.history
+                                # Process the rounds from history into the expected format
+                                for i, hist_item in enumerate(opt_history_processed):
+                                    # Make sure each history item has the expected fields
+                                    if "iteration" not in hist_item:
+                                        hist_item["iteration"] = i + 1
+                                    if "timestamp" not in hist_item:
+                                        hist_item["timestamp"] = datetime.now().isoformat()
+                                    # Ensure scores are in the right format
+                                    if "scores" not in hist_item and "score" in hist_item:
+                                        hist_item["scores"] = [{"metric_name": "objective_score", "score": hist_item["score"]}]
+                                        
+                                # Get LLM calls from last round or overall details if available
+                                if results_obj.history and len(results_obj.history) > 0:
+                                    last_round = results_obj.history[-1]
+                                    if isinstance(last_round, dict):
+                                        if "llm_calls" in last_round:
+                                            task_result["optimization_process"]["llm_calls_total_optimization"] = last_round["llm_calls"]
+                                
+                                # Also try to get from details if it exists
+                                if hasattr(results_obj, 'details') and isinstance(results_obj.details, dict):
+                                    if "llm_calls" in results_obj.details:
+                                        task_result["optimization_process"]["llm_calls_total_optimization"] = results_obj.details["llm_calls"]
+                            else:
+                                opt_history_processed = []
+                        else:
+                            opt_history_processed = []
+                    else:
+                        opt_history_processed = []
+
                 else: # Fallback for other or unknown optimizer types
                     logger.debug(f"Processing history with fallback logic for {actual_optimizer_class_name_display} task {task_id}")
                     raw_history_fallback = []
@@ -1045,6 +1134,48 @@ class BenchmarkRunner:
                     final_prompt_to_eval = [{"role": "system", "content": base_instr_fsbo}]
                     actual_prompt_for_submission = final_prompt_to_eval 
                     evaluation_errors.append("FSBO: Optimized chat_messages not retrieved for final eval; used base prompt.")
+            
+            elif actual_optimizer_class_name_display == "geneticoptimizer": # Specific handling for GeneticOptimizer
+                # Get prompt from multiple possible sources
+                prompt_text = None
+                
+                # First, try direct attributes of the results_obj
+                if hasattr(results_obj, 'prompt') and results_obj.prompt is not None:
+                    prompt_text = results_obj.prompt
+                # If not found, try .best_prompt direct attribute
+                elif hasattr(results_obj, 'best_prompt') and results_obj.best_prompt is not None:
+                    prompt_text = results_obj.best_prompt
+                # If not found, check details dictionary
+                elif hasattr(results_obj, 'details') and isinstance(results_obj.details, dict):
+                    # Try standard entries in details
+                    for key in ['final_prompt', 'best_prompt', 'prompt', 'final_prompt_representative']:
+                        if key in results_obj.details and results_obj.details[key] is not None:
+                            prompt_text = results_obj.details[key]
+                            break
+                
+                # If still not found, try looking in history for best prompt
+                if prompt_text is None and hasattr(results_obj, 'history') and isinstance(results_obj.history, list) and results_obj.history:
+                    # Try to get the latest history entry
+                    latest_history = results_obj.history[-1]
+                    if isinstance(latest_history, dict):
+                        # Check history fields
+                        for key in ['best_prompt', 'current_prompt']:
+                            if key in latest_history and latest_history[key] is not None:
+                                prompt_text = latest_history[key]
+                                break
+                
+                if prompt_text is not None:
+                    if isinstance(prompt_text, str):
+                        final_prompt_to_eval = [{"role": "system", "content": prompt_text}]
+                        actual_prompt_for_submission = prompt_text
+                    else:
+                        final_prompt_to_eval = prompt_text
+                        actual_prompt_for_submission = prompt_text
+                else:
+                    final_prompt_to_eval = [{"role": "system", "content": "Error: GeneticOptimizer prompt was None for final eval."}]
+                    actual_prompt_for_submission = None
+                    logger.error("[red]GeneticOptimizer: Prompt not found in results_obj for final evaluation. Cannot evaluate.[/red]")
+                    evaluation_errors.append("GeneticOptimizer: Prompt not found for final eval.")
                 
             else: # MetaPromptOptimizer and other fallbacks
                 string_prompt_val = getattr(results_obj, 'prompt', None) 
@@ -1058,7 +1189,7 @@ class BenchmarkRunner:
                     if actual_prompt_for_submission is None: # Only log error if submission also fails
                         logger.error(f"[red]{actual_optimizer_class_name_display}: Prompt not found in results_obj for final evaluation. Cannot evaluate.[/red]")
                         evaluation_errors.append(f"{actual_optimizer_class_name_display}: Prompt not found for final eval.")
-            
+
             task_result["final_prompt"] = final_prompt_to_eval
 
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor_final_eval:
@@ -1071,13 +1202,28 @@ class BenchmarkRunner:
                     if actual_prompt_for_submission is None:
                          logger.error("[red]MiproOptimizer: DSPy program object not found for final evaluation. Cannot evaluate.[/red]")
                          evaluation_errors.append("MiproOptimizer: DSPy program not found for final eval.")
-                elif actual_optimizer_class_name_display == "FewShotBayesianOptimizer":
+                elif actual_optimizer_class_name_display.lower() == "fewshotbayesianoptimizer".lower() or "FewShotBayesianOptimizer" in task_result.get("optimizer_original_class_name", ""):
                     actual_prompt_for_submission = opt_details_for_final_prompt.get("chat_messages") # List of chat messages
                     if not actual_prompt_for_submission and opt_details_for_final_prompt.get("prompt_parameter") and hasattr(opt_details_for_final_prompt.get("prompt_parameter"), "as_template"):
                          actual_prompt_for_submission = opt_details_for_final_prompt.get("prompt_parameter").as_template().format()
                     if actual_prompt_for_submission is None:
                         logger.error("[red]FewShotBayesianOptimizer: Chat messages not found for final evaluation. Cannot evaluate.[/red]")
                         evaluation_errors.append("FewShotBayesianOptimizer: Chat messages not found for final eval.")
+                elif actual_optimizer_class_name_display.lower() == "geneticoptimizer".lower() or "GeneticOptimizer" in task_result.get("optimizer_original_class_name", ""):
+                    # Since we already set actual_prompt_for_submission above, we don't need to duplicate the logic here
+                    # But we do need to check if it's None for error handling consistency
+                    if actual_prompt_for_submission is None:
+                        # One more attempt to get the prompt
+                        if hasattr(results_obj, 'history') and isinstance(results_obj.history, list) and results_obj.history:
+                            latest_entry = results_obj.history[-1]
+                            if isinstance(latest_entry, dict) and 'best_prompt' in latest_entry:
+                                actual_prompt_for_submission = latest_entry['best_prompt']
+                        
+                        if actual_prompt_for_submission is None:
+                            logger.error("[red]GeneticOptimizer: Prompt not found for final evaluation (from previous handling). Cannot evaluate.[/red]")
+                            evaluation_errors.append("GeneticOptimizer: Prompt not found for final eval.")
+                    else:
+                        print(f"DEBUG: GeneticOptimizer actual_prompt_for_submission is set: {actual_prompt_for_submission[:50]}...")
                 else: # MetaPromptOptimizer and other fallbacks
                     actual_prompt_for_submission = getattr(results_obj, 'prompt', None) # Usually a string
                     if actual_prompt_for_submission is None:
@@ -1965,9 +2111,13 @@ def create_result_panel(
                 
                 if isinstance(round_data, dict):
                     score_val = "N/A"
-                    scores_list = round_data.get('scores')
-                    if isinstance(scores_list, list) and len(scores_list) > 0 and isinstance(scores_list[0], dict):
-                        score_val = scores_list[0].get('score')
+                    # Try multiple common fields to find score
+                    if 'scores' in round_data and isinstance(round_data['scores'], list) and len(round_data['scores']) > 0 and isinstance(round_data['scores'][0], dict):
+                        score_val = round_data['scores'][0].get('score')
+                    elif 'current_score' in round_data:
+                        score_val = round_data['current_score']
+                    elif 'best_score' in round_data:
+                        score_val = round_data['best_score']
                     
                     score_text_styled: Text
                     if isinstance(score_val, (float, int)):
@@ -2081,7 +2231,7 @@ def print_benchmark_footer(results: List[dict], successful_tasks: int, failed_ta
         logger.info("Generating detailed pivoted results table for footer...")
         results_table = Table(box=box.SIMPLE_HEAVY, show_header=True, header_style=STYLES["header"], title="Detailed Results Summary", title_style="dim", show_lines=True, padding=(0,1,0,1))
         results_table.add_column("Dataset", style=STYLES["dim"], max_width=25, overflow="ellipsis", no_wrap=True)
-        results_table.add_column("Optimizer", no_wrap=True)
+        results_table.add_column("Optimizer", max_width=25, overflow="fold", no_wrap=False) # Modified to allow text wrapping
         results_table.add_column("Model", no_wrap=True, max_width=20, overflow="ellipsis")
         results_table.add_column("🔥", justify="center", no_wrap=True)
         results_table.add_column("☎️", justify="right", no_wrap=True) # Changed header for clarity
