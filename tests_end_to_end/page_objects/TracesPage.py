@@ -21,6 +21,10 @@ class TracesPage:
             .get_by_role("button")
             .nth(2)
         )
+        self.attachments_submenu_button = self.page.get_by_role(
+            "button", name="Attachments"
+        )
+        self.attachment_container = self.page.get_by_label("Attachments")
 
     def get_all_trace_names_on_page(self):
         self.page.wait_for_selector(self.trace_names_selector)
@@ -31,6 +35,15 @@ class TracesPage:
         self.page.get_by_role("row").filter(has_text=trace_name).first.get_by_role(
             "button"
         ).first.click()
+
+    def check_trace_attachment(self, attachment_name=None):
+        if attachment_name:
+            expect(self.attachments_submenu_button).to_be_visible()
+            expect(
+                self.attachment_container.filter(has_text=attachment_name)
+            ).to_be_visible()
+        else:
+            expect(self.attachments_submenu_button).to_have_count(0)
 
     def get_first_trace_name_on_page(self):
         self.page.wait_for_selector(self.trace_names_selector)
