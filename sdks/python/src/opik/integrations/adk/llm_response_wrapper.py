@@ -1,5 +1,6 @@
 import dataclasses
 import logging
+import os
 from typing import Callable, Optional, Dict, Any
 
 from google.adk import models as adk_models
@@ -79,3 +80,11 @@ def _wrap_llm_response_create(
     response.custom_metadata["model_version"] = generate_content_response.model_version
 
     return response
+
+
+def get_adk_provider() -> LLMProvider:
+    use_vertexai = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "0").lower() in [
+        "true",
+        "1",
+    ]
+    return LLMProvider.GOOGLE_VERTEXAI if use_vertexai else LLMProvider.GOOGLE_AI

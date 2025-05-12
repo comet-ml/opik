@@ -12,15 +12,19 @@ from typing import (
 )
 
 import opik.types as opik_types
+import pydantic
 from opik.api_objects import span
+from opik import dict_utils
 from opik.decorator import arguments_helpers, base_track_decorator
 
 from . import llm_response_wrapper
 
 
-def convert_adk_base_models(arg: Any) -> Dict[str, Any]:
+def convert_adk_base_models(value: pydantic.BaseModel) -> Dict[str, Any]:
     """Most ADK objects are Pydantic Base Models"""
-    return arg.model_dump(mode="json", exclude_unset=True)
+    return dict_utils.remove_none_from_dict(
+        value.model_dump(mode="json", exclude_unset=True)
+    )
 
 
 def get_adk_provider() -> opik_types.LLMProvider:
