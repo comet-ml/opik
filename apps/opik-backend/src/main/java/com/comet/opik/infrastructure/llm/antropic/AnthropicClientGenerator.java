@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import dev.langchain4j.model.anthropic.AnthropicChatModel;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
@@ -18,12 +19,17 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
 
-    private AnthropicClient newAnthropicClient(@NonNull String apiKey) {
+    private AnthropicClient newAnthropicClient(@NonNull LlmProviderClientApiConfig config) {
         var anthropicClientBuilder = AnthropicClient.builder();
         Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
                 .map(LlmProviderClientConfig.AnthropicClientConfig::url)
                 .filter(StringUtils::isNotEmpty)
                 .ifPresent(anthropicClientBuilder::baseUrl);
+
+        if (StringUtils.isNotEmpty(config.baseUrl())) {
+            anthropicClientBuilder.baseUrl(config.baseUrl());
+        }
+
         Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
                 .map(LlmProviderClientConfig.AnthropicClientConfig::version)
                 .filter(StringUtils::isNotBlank)
@@ -36,13 +42,14 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
         Optional.ofNullable(llmProviderClientConfig.getCallTimeout())
                 .ifPresent(callTimeout -> anthropicClientBuilder.timeout(callTimeout.toJavaDuration()));
         return anthropicClientBuilder
-                .apiKey(apiKey)
+                .apiKey(config.apiKey())
                 .build();
     }
 
-    private ChatLanguageModel newChatLanguageModel(String apiKey, LlmAsJudgeModelParameters modelParameters) {
+    private ChatLanguageModel newChatLanguageModel(LlmProviderClientApiConfig config,
+            LlmAsJudgeModelParameters modelParameters) {
         var builder = AnthropicChatModel.builder()
-                .apiKey(apiKey)
+                .apiKey(config.apiKey())
                 .modelName(modelParameters.name());
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
@@ -53,18 +60,23 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
                 .filter(StringUtils::isNotBlank)
                 .ifPresent(builder::baseUrl);
 
+        if (StringUtils.isNotEmpty(config.baseUrl())) {
+            builder.baseUrl(config.baseUrl());
+        }
+
         Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
 
         return builder.build();
     }
 
     @Override
-    public AnthropicClient generate(@NonNull String apiKey, Object... params) {
-        return newAnthropicClient(apiKey);
+    public AnthropicClient generate(@NonNull LlmProviderClientApiConfig config, Object... params) {
+        return newAnthropicClient(config);
     }
 
     @Override
-    public ChatLanguageModel generateChat(@NonNull String apiKey, @NonNull LlmAsJudgeModelParameters modelParameters) {
-        return newChatLanguageModel(apiKey, modelParameters);
+    public ChatLanguageModel generateChat(@NonNull LlmProviderClientApiConfig config,
+            @NonNull LlmAsJudgeModelParameters modelParameters) {
+        return newChatLanguageModel(config, modelParameters);
     }
 }
