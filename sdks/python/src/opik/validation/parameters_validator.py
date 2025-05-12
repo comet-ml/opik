@@ -130,6 +130,7 @@ class MethodParametersTypeValidator(validator.Validator):
             for param in self.parameters:
                 valid, msg = validator_helpers.validate_parameter(param)
                 if not valid:
+                    assert msg is not None, "msg must be set if valid is False"
                     failures.append(msg)
 
             if len(failures) > 0:
