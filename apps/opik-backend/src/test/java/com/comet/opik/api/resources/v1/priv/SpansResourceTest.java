@@ -621,14 +621,19 @@ class SpansResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
-        void search__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean expected,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
-
-            var span = podamFactory.manufacturePojo(Span.class);
+        @MethodSource("publicCredentials")
+        void search__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
+                Visibility visibility, int expectedCode) {
             String workspaceName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
+
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder().visibility(visibility).build();
+            projectResourceClient.createProject(project, okApikey, workspaceName);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder().projectId(null).projectName(project.name())
+                    .build();
 
             createAndAssert(span, okApikey, workspaceName);
 
@@ -639,15 +644,13 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(SpanSearchStreamRequest.builder().projectName(span.projectName()).build()))) {
 
-                if (expected) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                if (expectedCode == 200) {
                     var expectedSpans = spanResourceClient.getStreamedItems(actualResponse);
                     assertThat(expectedSpans).hasSize(1);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(errorMessage);
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NAME_NOT_FOUND_MESSAGE.formatted(span.projectName()));
                 }
             }
         }
@@ -1000,17 +1003,21 @@ class SpansResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
-        void search__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean expected,
-                String workspaceName) {
-
-            var span = podamFactory.manufacturePojo(Span.class);
+        @MethodSource("publicCredentials")
+        void search__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
+                Visibility visibility,
+                String workspaceName, int expectedCode) {
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
             mockSessionCookieTargetWorkspace(this.sessionToken, workspaceName, workspaceId);
+            mockGetWorkspaceIdByName(workspaceName, workspaceId);
 
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder().visibility(visibility).build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder().projectName(project.name()).build();
             createAndAssert(span, apiKey, workspaceName);
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
@@ -1020,15 +1027,13 @@ class SpansResourceTest {
                     .header(WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(SpanSearchStreamRequest.builder().projectName(span.projectName()).build()))) {
 
-                if (expected) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                if (expectedCode == 200) {
                     var expectedSpans = spanResourceClient.getStreamedItems(actualResponse);
                     assertThat(expectedSpans).hasSize(1);
                 } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
-                    assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(UNAUTHORIZED_RESPONSE);
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NAME_NOT_FOUND_MESSAGE.formatted(span.projectName()));
                 }
             }
         }
