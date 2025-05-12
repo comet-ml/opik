@@ -27,12 +27,14 @@ from opik.evaluation.models.litellm import warning_filters
 warning_filters.add_warning_filters()
 
 from .optimization_result import OptimizationResult
+from opik_optimizer.genetic_optimizer.genetic_optimizer import GeneticOptimizer
 
 __all__ = [
     "BaseOptimizer",
     "FewShotBayesianOptimizer",
     "MetaPromptOptimizer",
     "MiproOptimizer",
+    "GeneticOptimizer",
     "MetricConfig",
     "OptimizationConfig",
     "TaskConfig",
