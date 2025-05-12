@@ -320,6 +320,18 @@ $env:TOGGLE_GUARDRAILS_ENABLED = "false"
 
 if ($options -contains '--build') {
     $BUILD_MODE = $true
+    docker buildx bake --help *>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        # TODO: Enable bake once the issue with Windows paths is resolved:
+        # - https://github.com/docker/for-win/issues/14761
+        # - https://github.com/docker/buildx/issues/1028
+        # - https://github.com/docker/compose/issues/12669
+        Write-Host '[INFO] Bake is not available for docker compose on Windows yet. Not using it for builds'
+        $env:COMPOSE_BAKE = "false"
+    } else {
+        Write-Host '[INFO] Bake is not available on Docker Buildx. Not using it for builds'
+        $env:COMPOSE_BAKE = "false"
+    }
     $options = $options | Where-Object { $_ -ne '--build' }
 }
 
