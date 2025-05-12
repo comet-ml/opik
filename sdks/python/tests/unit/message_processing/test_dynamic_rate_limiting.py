@@ -28,9 +28,8 @@ def steamer_with_mock_message_processor():
 def test_dynamic_rate_limiting(steamer_with_mock_message_processor):
     streamer, mock_message_processor = steamer_with_mock_message_processor
 
-    retry_after = (
-        queue_consumer.SLEEP_BETWEEN_LOOP_ITERATIONS * 3
-    )  # to allow a few skipped loop iterations
+    # to allow a few skipped loop iterations
+    retry_after = queue_consumer.SLEEP_BETWEEN_LOOP_ITERATIONS * 3
     mock_message_processor.process.side_effect = (
         exceptions.OpikCloudRequestsRateLimited(
             headers={},
@@ -45,7 +44,7 @@ def test_dynamic_rate_limiting(steamer_with_mock_message_processor):
 
     # sleep for a while to allow queue_consumer to execute a few loop iterations
     time.sleep(retry_after)
-    # check that messages was put back into the message queue for retry
+    # check that messages were put back into the message queue for retry
     assert streamer.queue_size() == messages_number
     assert streamer._queue_consumers[0].next_message_time > now
 
@@ -60,9 +59,8 @@ def test_dynamic_rate_limiting__check_queue_size_bounded(
 ):
     streamer, mock_message_processor = steamer_with_mock_message_processor
 
-    retry_after = (
-        queue_consumer.SLEEP_BETWEEN_LOOP_ITERATIONS * 3
-    )  # to allow a few skipped loop iterations
+    # to allow a few skipped loop iterations
+    retry_after = queue_consumer.SLEEP_BETWEEN_LOOP_ITERATIONS * 3
     mock_message_processor.process.side_effect = (
         exceptions.OpikCloudRequestsRateLimited(
             headers={},
