@@ -11,19 +11,19 @@ If you have any ideas or suggestions for the roadmap, you can create a [new Feat
 We are currently working on both improving existing features and developing new features:
 
 - **Tracing**:
-  - [x] Integration with Dify
-  - [x] DSPY integration
-  - [x] Guardrails integration
-  - [x] Crew AI integration
-  - [ ] Typescript / Javascript SDK
+  - [x] Add OpenAI Typescript integration
+  - [x] Add support for trace attachments
+  - [ ] Update the Python ADK integration to support multi-agent tracing
+  - [ ] Update to pretty mode to support more data formats
+  - [ ] Release Go SDK
+  - [ ] Release Ruby SDK
 - **Evaluation**:
-  - [ ] Update to evaluation docs
-  - [ ] New reference based evaluation metrics (ROUGE, BLEU, etc)
+  - [ ] Simplify evaluation endpoints for custom integrations
+  - [ ] Decouple evaluations from datasets to simplify usage
+  - [ ] Add evaluation features to Typescript SDK
 - **New features**:
-  - [x] Prompt playground for evaluating prompt templates
-  - [ ] Running evaluations from the Opik platform
-  - [x] Online evaluation using LLM as a Judge metrics, allows Opik to score traces logged to the platform using LLM as a Judge metrics
-  - [ ] Online evaluation using code metrics
+  - [ ] Introduce Guardrails server to identify PII issues for example
+  - [ ] Introduce Prompt Optimization SDK
 
 You can view all the features we have released in our [changelog](/docs/opik/changelog).
 
@@ -32,16 +32,13 @@ You can view all the features we have released in our [changelog](/docs/opik/cha
 We are currently working on both improvements to the existing features in Opik as well as new features:
 
 - **Improvements**:
-  - [ ] Introduce a "Pretty" format mode for trace inputs and outputs
-  - [ ] Improved display of chat conversations
-  - [ ] Add support for trace attachments to track PDFs, audio, video, etc associated with a trace
-  - [ ] Agent replay feature
+  - [ ] Introduce public and private projects
+  - [ ] Introduce new agent observability features
 - **Evaluation**:
   - [ ] Dataset versioning
-  - [ ] Prompt optimizations tools for both the playground and the Python SDK
-  - [ ] Support for agents in the Opik playground
+  - [ ] Introduce evaluation features in the Opik playground
 - **Production**:
-  - [ ] Introduce Guardrails metrics to the Opik platform
+  - [ ] Introduce dashboarding features
 
 You can vote on these items as well as suggest new ideas on our [Github Issues page](https://github.com/comet-ml/opik/issues/new/choose).
 
