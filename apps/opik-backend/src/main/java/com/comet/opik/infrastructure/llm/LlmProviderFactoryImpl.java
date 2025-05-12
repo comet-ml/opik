@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
@@ -35,10 +36,15 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
 
     public LlmProviderService getService(@NonNull String workspaceId, @NonNull String model) {
         var llmProvider = getLlmProvider(model);
-        var apiKey = EncryptionUtils.decrypt(getEncryptedApiKey(workspaceId, llmProvider));
+        var providerConfig = getProviderApiKey(workspaceId, llmProvider);
+
+        var config = new LlmProviderClientApiConfig(
+                EncryptionUtils.decrypt(providerConfig.apiKey()),
+                providerConfig.headers(),
+                providerConfig.baseUrl());
 
         return Optional.ofNullable(services.get(llmProvider))
-                .map(provider -> provider.getService(apiKey))
+                .map(provider -> provider.getService(config))
                 .orElseThrow(() -> new LlmProviderUnsupportedException(
                         "LLM provider not supported: %s".formatted(llmProvider)));
     }
@@ -46,10 +52,15 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     public ChatLanguageModel getLanguageModel(@NonNull String workspaceId,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         var llmProvider = getLlmProvider(modelParameters.name());
-        var apiKey = EncryptionUtils.decrypt(getEncryptedApiKey(workspaceId, llmProvider));
+        var providerConfig = getProviderApiKey(workspaceId, llmProvider);
+
+        var config = new LlmProviderClientApiConfig(
+                EncryptionUtils.decrypt(providerConfig.apiKey()),
+                providerConfig.headers(),
+                providerConfig.baseUrl());
 
         return Optional.ofNullable(services.get(llmProvider))
-                .map(provider -> provider.getLanguageModel(apiKey, modelParameters))
+                .map(provider -> provider.getLanguageModel(config, modelParameters))
                 .orElseThrow(() -> new BadRequestException(
                         String.format(ERROR_MODEL_NOT_SUPPORTED, modelParameters.name())));
     }
@@ -82,13 +93,12 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
      * Finding API keys isn't paginated at the moment.
      * Even in the future, the number of supported LLM providers per workspace is going to be very low.
      */
-    private String getEncryptedApiKey(String workspaceId, LlmProvider llmProvider) {
+    private ProviderApiKey getProviderApiKey(String workspaceId, LlmProvider llmProvider) {
         return llmProviderApiKeyService.find(workspaceId).content().stream()
                 .filter(providerApiKey -> llmProvider.equals(providerApiKey.provider()))
                 .findFirst()
                 .orElseThrow(() -> new BadRequestException("API key not configured for LLM provider '%s'".formatted(
-                        llmProvider.getValue())))
-                .apiKey();
+                        llmProvider.getValue())));
     }
 
     private static <E extends Enum<E>> boolean isModelBelongToProvider(
