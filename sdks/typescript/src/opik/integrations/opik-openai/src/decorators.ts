@@ -59,6 +59,7 @@ const wrapMethod = <T extends GenericMethod>(
   const finalMetadata = {
     ...configMetadata,
     ...modelParameters,
+    model,
     response_format:
       "response_format" in modelParameters
         ? modelParameters.response_format
@@ -115,6 +116,13 @@ const wrapMethod = <T extends GenericMethod>(
           const { model: modelFromResponse, metadata: metadataFromResponse } =
             parseModelDataFromResponse(result);
 
+          const latestMetadata = {
+            ...observationData.metadata,
+            ...metadataFromResponse,
+            usage,
+            model: modelFromResponse || observationData.model,
+          };
+
           rootTracer.span({
             ...observationData,
             output,
@@ -122,14 +130,14 @@ const wrapMethod = <T extends GenericMethod>(
             usage,
             model: modelFromResponse || observationData.model,
             type: OpikSpanType.General,
-            metadata: { ...observationData.metadata, ...metadataFromResponse },
+            metadata: latestMetadata,
           });
 
           if (!hasUserProvidedParent) {
             rootTracer.update({ output });
+            rootTracer.end();
           }
 
-          rootTracer.end();
           return result;
         })
         .catch((err) => {
@@ -139,8 +147,6 @@ const wrapMethod = <T extends GenericMethod>(
 
       return wrappedPromise;
     }
-
-    rootTracer.end();
 
     return res as ReturnType<T>;
   } catch (error) {
@@ -153,7 +159,7 @@ const processResponseChunk = (
   rawChunk: unknown,
   observationData: ObservationData
 ): {
-  output: Record<string, unknown>;
+  output?: Record<string, unknown>;
   usage: OpenAI.CompletionUsage | undefined;
   chunkData: {
     isToolCall: boolean;
@@ -163,7 +169,7 @@ const processResponseChunk = (
   };
   updatedObservationData: ObservationData;
 } => {
-  let output = null;
+  let output;
   let usage: OpenAI.CompletionUsage | undefined = undefined;
   const updatedObservationData = { ...observationData };
 
