@@ -46,14 +46,18 @@ tabs:
     display-name: Documentation
     icon: fa-regular fa-building
     slug: /
-  self-host:
-    display-name: Self-hosting Opik
-    icon: fa-regular fa-server
-    slug: /self-host
+  agent-optimization:
+    display-name: Agent Optimization
+    icon: fa-regular fa-robot
+    slug: /agent_optimization
   cookbook:
     display-name: Cookbooks
     icon: fa-regular fa-book
     slug: /cookbook
+  self-host:
+    display-name: Self-hosting Opik
+    icon: fa-regular fa-server
+    slug: /self-host
   reference:
     display-name: SDK and API reference
     icon: fa-regular fa-square-terminal
@@ -312,6 +316,35 @@ navigation:
           - page: Gateway
             path: docs/production/gateway.mdx
             slug: gateway
+  - tab: agent-optimization
+    layout:
+      - page: Overview
+        path: docs/agent_optimization/overview.mdx
+        slug: overview
+      - page: Prompt engineering best practices
+        path: docs/agent_optimization/best_practices.mdx
+        slug: best_practices
+      - section: Opik Optimizer
+        slug: /opik_optimizer
+        contents:
+          - page: Quickstart
+            path: docs/agent_optimization/opik_optimizer/quickstart.mdx
+            slug: quickstart
+          - page: Concepts
+            path: docs/agent_optimization/opik_optimizer/concepts.mdx
+            slug: concepts
+      - section: Prompt Optimization algorithms
+        slug: /algorithms
+        contents:
+          - page: MetaPrompt Optimization
+            path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
+            slug: metaprompt_optimizer
+          - page: Few-shot Bayesian Optimization
+            path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
+            slug: fewshot_bayesian_optimizer
+          - page: Mipro Optimization
+            path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
+            slug: mipro_optimizer
   - tab: self-host
     layout:
       - page: Overview

@@ -1,0 +1,160 @@
+**Prompt engineering** is the practice of designing and refining prompts to help
+LLMs generate the desired output. Typically prompt engineering is a manual process
+that involves editing the prompt, evaluating it, reviewing the results and
+trying again.
+
+**Prompt optimization** is the process of automating the prompt engineering process.
+
+<Frame>
+  <img src="/img/agent_optimization/concept.png" alt="Agent Optimization" />
+</Frame>
+
+## Why optimize prompts ?
+
+Prompt engineering is a skill that can be difficult to master as highlighted by
+the [Anthropic ](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview#how-to-prompt-engineer),
+[OpenAI](https://help.openai.com/en/articles/6654000-best-practices-for-prompt-engineering-with-the-openai-api)
+and [Google](https://www.kaggle.com/whitepaper-prompt-engineering) prompt
+engineering guides. There are a lot of techniques that can be used to help
+LLMs generate the desired output.
+
+Prompt optimization solves many of the issues that come with prompt engineering:
+
+1. Prompt engineering is not easily repeatable or scalable alone
+2. Variations across models could lead to performance degration, you need to
+   tune prompts for each model
+3. Optimization may unlock performance, cost and reliability improvements
+4. As systems evolve to be more interdependent, manually tuning multiple prompts
+   becomes increasingly difficult.
+
+<br />
+So when should you use prompt optimization?
+
+| **Aspect**    | **Prompt Engineering**                              | **Prompt Optimization**                           |
+| ------------- | --------------------------------------------------- | ------------------------------------------------- |
+| **Scope**     | Broad — includes designing, experimenting, refining | Narrow — improving already existing prompts       |
+| **Goal**      | Create a working prompt for a specific task         | Maximize performance (accuracy, efficiency, etc.) |
+| **Involves**  | Initial drafting, understanding model behavior      | Tweaking wording, structure, or context           |
+| **When used** | Early in task setup or experimentation              | After a baseline prompt is in place               |
+
+## Optimization algorithms
+
+The [Opik Optimizer](https://pypi.org/project/opik-optimizer/) is an
+experimental Python library that aims at implementing Prompt and Agent
+Optimization algorithms in a consistent format.
+
+The following algorithms have been implemented:
+
+| **Algorithm**                  | **Description**                                                                                                                                                                                                  | **Guide**                                                                        |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| MetaPrompt Optimization        | A prompt engineering algorithm that uses a meta-prompt to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt.                                       | [MetaPrompt Optimization](/agent_optimization/metaprompt_optimizer)              |
+| Few-shot Bayesian Optimization | A prompt engineering algorithm that uses a few-shot learning approach to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt.                        | [Few-shot Bayesian Optimization](/agent_optimization/fewshot_bayesian_optimizer) |
+| Mipro Optimization             | A prompt engineering algorithm that uses a MIPRO (Multi-Instance Prompt Refinement) approach to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt. | [Mipro Optimization](/agent_optimization/mipro_optimizer)                        |
+
+### Benchmark results
+
+Each optimization algorithm is evaluated against different use-cases and datasets:
+
+1. Arc: The [ai2_arc](https://huggingface.co/datasets/allenai/ai2_arc) dataset contains a set of multiple choice science questions
+2. GSM8K: The [gsm8k](https://huggingface.co/datasets/gsm8k) dataset contains a set of math problems
+3. Medhallucination: The [medhallucination](https://huggingface.co/datasets/medhallucination) dataset contains a set of medical questions
+4. RagBench: The [ragbench](https://huggingface.co/datasets/ragbench) dataset contains a set of questions and answers
+
+| Rank | Algorithm                      | Average Score | Arc dataset | GSM8K dataset | Medhallucination | RagBench |
+| ---- | ------------------------------ | ------------- | ----------- | ------------- | ---------------- | -------- |
+| 1    | Few-shot Bayesian Optimization | 0.6733        | 0.2809      | 0.5926        | 0.9180           | 0.9015   |
+| 2    | Mipro Optimization             | 0.5591        | 0.0197      | 0.3970        | 0.9270           | 0.8928   |
+| 3    | MetaPrompt Optimization        | 0.5201        | 0.2500      | 0.2693        | 0.9179           | 0.6431   |
+| 4    | No optimization                | 0.1199        | 0.0169      | 0.2406        | 0.1238           | 0.0981   |
+
+The results above are for `gpt-40-mini`, the results might change if you use a different model.
+
+_Note: This results are preliminary and subject to change, you can learn more about
+our benchmarks [here](https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/benchmarks/run_benchmark.py)._
+
+<Tip>
+  If you would like us to implement another optimization algorithm, reach out to us on
+  [Github](https://github.com/comet-ml/opik).
+</Tip>
+
+## Quickstart guide
+
+### Installing the optimizer
+
+The Opik Optimizer works with Python 3.9+ and can be installed using:
+
+```bash
+# pip
+pip install opik opik-optimizer
+
+# uv
+uv pip install opik-optimizer
+```
+
+Once Opik is installed, you can configure it using:
+
+```bash
+# Install the Opik CLI
+pip install opik
+
+# Configure your API key
+opik configure
+```
+
+### Running an optimization run
+
+```python
+from opik.evaluation.metrics import LevenshteinRatio
+from opik_optimizer import FewShotBayesianOptimizer
+from opik_optimizer.demo import get_or_create_dataset
+
+from opik_optimizer import (
+    MetricConfig,
+    TaskConfig,
+    from_llm_response_text,
+    from_dataset_field,
+)
+
+# Define the dataset to optimize over
+dataset = get_or_create_dataset("tiny-test")
+metric_config = MetricConfig(
+    metric=LevenshteinRatio(),
+    inputs={
+        "output": from_llm_response_text(),
+        "reference": from_dataset_field(name="label"),
+    }
+)
+
+# Define the prompt to optimize
+system_prompt = """Answer the question."""
+
+# Define the optimization algorithm to use
+optimizer = FewShotBayesianOptimizer(
+    model="gpt-4o-mini",
+    project_name="Prompt Optimization"
+)
+
+# Run the optimization algorithm
+task_config = TaskConfig(
+    instruction_prompt=system_prompt,
+    input_dataset_fields=["text"],
+    output_dataset_field="label",
+    use_chat_prompt=True,
+)
+
+result = optimizer.optimize_prompt(
+    dataset=dataset,
+    metric_config=metric_config,
+    task_config=task_config,
+)
+
+
+result.display()
+```
+
+The results will be displayed in the console and also available in the
+[Opik Agent Optimization dashboard](/agent_optimization/dashboard).
+
+<Frame>
+  <img src="/img/agent_optimization/trial_dashboard.png" />
+</Frame>
