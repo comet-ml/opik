@@ -125,7 +125,7 @@ class OpikTracer:
             self._context_storage.set_trace_data(value)
         else:
             raise ValueError(f"Invalid context type: {type(value)}")
-    
+
     def before_agent_callback(
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
     ) -> None:
