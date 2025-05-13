@@ -104,6 +104,9 @@ class RawLlmProviderKeyClient:
         provider: ProviderApiKeyWriteProvider,
         api_key: str,
         name: typing.Optional[str] = OMIT,
+        headers: typing.Optional[typing.Dict[str, str]] = OMIT,
+        configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
+        base_url: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -116,6 +119,12 @@ class RawLlmProviderKeyClient:
         api_key : str
 
         name : typing.Optional[str]
+
+        headers : typing.Optional[typing.Dict[str, str]]
+
+        configuration : typing.Optional[typing.Dict[str, str]]
+
+        base_url : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -131,6 +140,9 @@ class RawLlmProviderKeyClient:
                 "provider": provider,
                 "api_key": api_key,
                 "name": name,
+                "headers": headers,
+                "configuration": configuration,
+                "base_url": base_url,
             },
             headers={
                 "content-type": "application/json",
@@ -381,6 +393,9 @@ class AsyncRawLlmProviderKeyClient:
         provider: ProviderApiKeyWriteProvider,
         api_key: str,
         name: typing.Optional[str] = OMIT,
+        headers: typing.Optional[typing.Dict[str, str]] = OMIT,
+        configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
+        base_url: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -393,6 +408,12 @@ class AsyncRawLlmProviderKeyClient:
         api_key : str
 
         name : typing.Optional[str]
+
+        headers : typing.Optional[typing.Dict[str, str]]
+
+        configuration : typing.Optional[typing.Dict[str, str]]
+
+        base_url : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -408,6 +429,9 @@ class AsyncRawLlmProviderKeyClient:
                 "provider": provider,
                 "api_key": api_key,
                 "name": name,
+                "headers": headers,
+                "configuration": configuration,
+                "base_url": base_url,
             },
             headers={
                 "content-type": "application/json",
