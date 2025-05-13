@@ -2,8 +2,9 @@ import functools
 import logging
 from typing import List, Optional
 
+import opik.rest_api
 from opik.message_processing.batching import sequence_splitter
-from opik.rest_api import ExperimentItemCompare, client as rest_api_client
+from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import experiment_item as rest_experiment_item
 from . import experiment_item
 from .. import constants, helpers, rest_stream_parser
@@ -125,7 +126,7 @@ class Experiment:
             experiment_item_compare_current_batch = (
                 rest_stream_parser.read_and_parse_stream(
                     stream=items_stream,
-                    item_class=ExperimentItemCompare,
+                    item_class=opik.rest_api.ExperimentItemCompare,
                 )
             )
 
