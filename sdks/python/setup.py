@@ -49,7 +49,6 @@ setup(
         "rich",
         "sentry_sdk>=2.0.0",
         "tenacity",
-        "tokenizers<0.21.0 ; python_version<'3.9.0'",  # no 3.8 support starting from 0.21.0
         "tqdm",
         "uuid6",
         "jinja2",
