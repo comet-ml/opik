@@ -71,22 +71,6 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
           .
         </span>
       )}
-
-      {provider === PROVIDER_TYPE.VERTEX_AI && (
-        <span className="comet-body-s mt-1 text-light-slate">
-          <Button variant="link" size="sm" asChild className="px-0">
-            <a
-              href={buildDocsUrl("/tracing/integrations/vertexAi")}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Click here
-            </a>
-          </Button>{" "}
-          for instructions on how to create a service account and assign the
-          correct permissions.
-        </span>
-      )}
     </div>
   );
 };

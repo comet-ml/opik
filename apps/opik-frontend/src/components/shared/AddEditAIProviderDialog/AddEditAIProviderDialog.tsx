@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -43,6 +43,7 @@ import {
 } from "@/components/shared/AddEditAIProviderDialog/schema";
 import CloudAIProviderDetails from "@/components/shared/AddEditAIProviderDialog/CloudAIProviderDetails";
 import LocalAIProviderDetails from "@/components/shared/AddEditAIProviderDialog/LocalAIProviderDetails";
+import VertexAIProviderDetails from "@/components/shared/AddEditAIProviderDialog/VertexAIProviderDetails";
 
 type AddEditAIProviderDialogProps = {
   providerKey?: ProviderKey;
@@ -82,6 +83,7 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
       apiKey: "",
       url: localData?.url ?? "",
       models: localData?.models ?? "",
+      location: undefined,
     },
   });
 
@@ -125,11 +127,15 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
 
   const cloudConfigHandler = useCallback(() => {
     const apiKey = form.getValues("apiKey");
+    const location = form.getValues("location");
+    const isVertex = provider === PROVIDER_TYPE.VERTEX_AI;
+
     if (isEdit) {
       updateMutate({
         providerKey: {
           id: providerKey!.id,
           apiKey,
+          location: isVertex ? location : undefined,
         },
       });
     } else if (provider) {
@@ -141,6 +147,7 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
         providerKey: {
           apiKey,
           provider,
+          location: isVertex ? location : undefined,
         },
       });
     }
@@ -185,6 +192,18 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
         </div>
       </SelectItem>
     );
+  };
+
+  const getProviderDetails = () => {
+    if (provider === PROVIDER_TYPE.VERTEX_AI) {
+      return <VertexAIProviderDetails form={form} />;
+    }
+
+    if (!isCloudProvider) {
+      return <LocalAIProviderDetails provider={provider} form={form} />;
+    }
+
+    return <CloudAIProviderDetails provider={provider} form={form} />;
   };
 
   return (
@@ -234,11 +253,7 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
                 );
               }}
             />
-            {isCloudProvider ? (
-              <CloudAIProviderDetails provider={provider} form={form} />
-            ) : (
-              <LocalAIProviderDetails provider={provider} form={form} />
-            )}
+            {getProviderDetails()}
           </form>
         </Form>
         <DialogFooter>

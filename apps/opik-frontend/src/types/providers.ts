@@ -408,6 +408,7 @@ export interface ProviderKey {
 
 export interface ProviderKeyWithAPIKey extends ProviderKey {
   apiKey: string;
+  location?: string;
 }
 
 export interface LLMOpenAIConfigsType {
