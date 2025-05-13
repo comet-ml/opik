@@ -42,6 +42,7 @@ class RemoteAuthService implements AuthService {
 
     private static final Map<String, Set<String>> PUBLIC_ENDPOINTS = new HashMap<>() {
         {
+            // Private projects related endpoints
             put("^/v1/private/projects/?$", Set.of("GET"));
             put("^/v1/private/projects/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/?$",
                     Set.of("GET"));
@@ -59,6 +60,17 @@ class RemoteAuthService implements AuthService {
             put("^/v1/private/traces/threads/?$", Set.of("GET"));
             put("^/v1/private/traces/threads/retrieve/?$", Set.of("POST"));
             put("^/v1/private/traces/search/?$", Set.of("POST"));
+
+            // Public datasets related endpoints
+            put("^/v1/private/datasets/?$", Set.of("GET"));
+            put("^/v1/private/datasets/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/?$",
+                    Set.of("GET"));
+            put("^/v1/private/datasets/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/items/?$",
+                    Set.of("GET"));
+            put("^/v1/private/datasets/items/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/?$",
+                    Set.of("GET"));
+            put("^/v1/private/datasets/retrieve/?$", Set.of("POST"));
+            put("^/v1/private/datasets/items/stream/?$", Set.of("POST"));
         }
     };
 

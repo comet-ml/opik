@@ -1,5 +1,6 @@
 package com.comet.opik.utils;
 
+import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Provider;
 import lombok.experimental.UtilityClass;
@@ -12,6 +13,7 @@ import reactor.util.retry.RetryBackoffSpec;
 
 import java.net.SocketException;
 import java.time.Duration;
+import java.util.Optional;
 
 @UtilityClass
 @Slf4j
@@ -20,7 +22,9 @@ public class AsyncUtils {
     public static Context setRequestContext(Context ctx, Provider<RequestContext> requestContext) {
         return ctx.put(RequestContext.USER_NAME, requestContext.get().getUserName())
                 .put(RequestContext.WORKSPACE_ID, requestContext.get().getWorkspaceId())
-                .put(RequestContext.WORKSPACE_NAME, requestContext.get().getWorkspaceName());
+                .put(RequestContext.WORKSPACE_NAME, requestContext.get().getWorkspaceName())
+                .put(RequestContext.VISIBILITY,
+                        Optional.ofNullable(requestContext.get().getVisibility()).orElse(Visibility.PRIVATE));
     }
 
     public static Context setRequestContext(Context ctx, String userName, String workspaceId) {
