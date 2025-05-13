@@ -44,52 +44,6 @@ class OpikTracer:
         create_wrapper = llm_response_wrapper.LlmResponseCreateWrapper(old_function)
         LlmResponse.create = create_wrapper
 
-    def before_agent_callback(
-        self, callback_context: CallbackContext, *args: Any, **kwargs: Any
-    ) -> None:
-        if "opik_thread_id" in callback_context.state:
-            thread_id = callback_context.state["opik_thread_id"]
-        else:
-            thread_id = str(uuid.uuid4())
-            callback_context.state["opik_thread_id"] = thread_id
-
-        # Should we create a trace here as we don't have an input?
-
-        trace_metadata = self.metadata.copy()
-        trace_metadata["adk_invocation_id"] = callback_context.invocation_id
-
-        user_input = adk_helpers.convert_adk_base_model_to_dict(
-            callback_context.user_content
-        )
-        name = self.name or callback_context.agent_name
-
-        if (current_span_data := self._context_storage.top_span_data()) is not None:
-            self._attach_span_to_existing_span(
-                current_span_data=current_span_data,
-                name=name,
-                input=user_input,
-                type="general",
-                metadata=self.metadata,
-            )
-        elif (current_trace_data := self._context_storage.get_trace_data()) is not None:
-            self._attach_span_to_existing_trace(
-                current_trace_data=current_trace_data,
-                name=name,
-                input=user_input,
-                type="general",
-                metadata=self.metadata,
-            )
-        else:
-            print("Starting new trace")
-            new_trace_data = trace.TraceData(
-                name=name,
-                input=user_input,
-                metadata=self.metadata,
-                project_name=self.project_name,
-                thread_id=thread_id,
-            )
-            self._start_trace(new_trace_data)
-
     def _attach_span_to_existing_span(
         self,
         current_span_data: span.SpanData,
@@ -172,6 +126,52 @@ class OpikTracer:
             self._context_storage.set_trace_data(value)
         else:
             raise ValueError(f"Invalid context type: {type(value)}")
+    
+    def before_agent_callback(
+        self, callback_context: CallbackContext, *args: Any, **kwargs: Any
+    ) -> None:
+        if "opik_thread_id" in callback_context.state:
+            thread_id = callback_context.state["opik_thread_id"]
+        else:
+            thread_id = str(uuid.uuid4())
+            callback_context.state["opik_thread_id"] = thread_id
+
+        # Should we create a trace here as we don't have an input?
+
+        trace_metadata = self.metadata.copy()
+        trace_metadata["adk_invocation_id"] = callback_context.invocation_id
+
+        user_input = adk_helpers.convert_adk_base_model_to_dict(
+            callback_context.user_content
+        )
+        name = self.name or callback_context.agent_name
+
+        if (current_span_data := self._context_storage.top_span_data()) is not None:
+            self._attach_span_to_existing_span(
+                current_span_data=current_span_data,
+                name=name,
+                input=user_input,
+                type="general",
+                metadata=self.metadata,
+            )
+        elif (current_trace_data := self._context_storage.get_trace_data()) is not None:
+            self._attach_span_to_existing_trace(
+                current_trace_data=current_trace_data,
+                name=name,
+                input=user_input,
+                type="general",
+                metadata=self.metadata,
+            )
+        else:
+            print("Starting new trace")
+            new_trace_data = trace.TraceData(
+                name=name,
+                input=user_input,
+                metadata=self.metadata,
+                project_name=self.project_name,
+                thread_id=thread_id,
+            )
+            self._start_trace(new_trace_data)
 
     def after_agent_callback(
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
@@ -179,8 +179,8 @@ class OpikTracer:
         output = self._last_model_output
 
         # remove the custom metadata with opik usage we added
-        if output is not None:
-            llm_response_wrapper.pop_llm_usage_data(**output)
+        if output is not None and "custom_metadata" in output:
+            output.pop("custom_metadata")
 
         if (span_data := self._context_storage.top_span_data()) is None:
             trace_data = self._context_storage.get_trace_data()
