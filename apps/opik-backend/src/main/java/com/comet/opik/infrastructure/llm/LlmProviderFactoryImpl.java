@@ -48,11 +48,12 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     }
 
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig) {
-        return new LlmProviderClientApiConfig(
-                EncryptionUtils.decrypt(providerConfig.apiKey()),
-                providerConfig.headers(),
-                providerConfig.baseUrl(),
-                providerConfig.configuration());
+        return LlmProviderClientApiConfig.builder()
+                .apiKey(EncryptionUtils.decrypt(providerConfig.apiKey()))
+                .headers(providerConfig.headers())
+                .baseUrl(providerConfig.baseUrl())
+                .configuration(providerConfig.configuration())
+                .build();
     }
 
     public ChatLanguageModel getLanguageModel(@NonNull String workspaceId,

@@ -1,5 +1,7 @@
-package com.comet.opik.infrastructure.llm.gemini;
+package com.comet.opik.infrastructure.llm;
 
+import com.comet.opik.infrastructure.llm.gemini.GeminiErrorObject;
+import com.comet.opik.utils.JsonUtils;
 import dev.ai4j.openai4j.chat.AssistantMessage;
 import dev.ai4j.openai4j.chat.ChatCompletionChoice;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
@@ -11,25 +13,26 @@ import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
-import dev.langchain4j.model.googleai.GoogleAiGeminiStreamingChatModel;
 import dev.langchain4j.model.output.Response;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.Named;
 import org.mapstruct.factory.Mappers;
+import org.slf4j.Logger;
 
-import java.time.Duration;
+import java.io.UncheckedIOException;
 import java.util.List;
+import java.util.Optional;
 
 @Mapper
-interface LlmProviderGeminiMapper {
+public interface LlmProviderLangChainMapper {
     String ERR_UNEXPECTED_ROLE = "unexpected role '%s'";
     String ERR_ROLE_MSG_TYPE_MISMATCH = "role and message instance are not matching, role: '%s', instance: '%s'";
 
-    LlmProviderGeminiMapper INSTANCE = Mappers.getMapper(LlmProviderGeminiMapper.class);
+    LlmProviderLangChainMapper INSTANCE = Mappers.getMapper(LlmProviderLangChainMapper.class);
 
     default ChatMessage toChatMessage(@NonNull Message message) {
         if (!List.of(Role.ASSISTANT, Role.USER, Role.SYSTEM).contains(message.role())) {
@@ -80,19 +83,25 @@ interface LlmProviderGeminiMapper {
                 .build();
     }
 
-    @Mapping(expression = "java(request.model())", target = "modelName")
-    @Mapping(expression = "java(request.maxCompletionTokens())", target = "maxOutputTokens")
-    @Mapping(expression = "java(request.stop())", target = "stopSequences")
-    @Mapping(expression = "java(request.temperature())", target = "temperature")
-    @Mapping(expression = "java(request.topP())", target = "topP")
-    GoogleAiGeminiChatModel toGeminiChatModel(
-            @NonNull String apiKey, @NonNull ChatCompletionRequest request, @NonNull Duration timeout, int maxRetries);
+    default List<ChatMessage> mapMessages(ChatCompletionRequest request) {
+        return request.messages().stream().map(this::toChatMessage).toList();
+    }
 
-    @Mapping(expression = "java(request.model())", target = "modelName")
-    @Mapping(expression = "java(request.maxCompletionTokens())", target = "maxOutputTokens")
-    @Mapping(expression = "java(request.stop())", target = "stopSequences")
-    @Mapping(expression = "java(request.temperature())", target = "temperature")
-    @Mapping(expression = "java(request.topP())", target = "topP")
-    GoogleAiGeminiStreamingChatModel toGeminiStreamingChatModel(
-            @NonNull String apiKey, @NonNull ChatCompletionRequest request, @NonNull Duration timeout, int maxRetries);
+    default Optional<ErrorMessage> getGeminiErrorObject(@NonNull Throwable throwable, Logger log) {
+        String message = throwable.getMessage();
+        var openBraceIndex = message.indexOf('{');
+        if (openBraceIndex >= 0) {
+            String jsonPart = message.substring(openBraceIndex); // Extract JSON part
+            try {
+                var geminiError = JsonUtils.readValue(jsonPart, GeminiErrorObject.class);
+                return geminiError.toErrorMessage();
+            } catch (UncheckedIOException e) {
+                log.warn("failed to parse Gemini error message", e);
+                return Optional.empty();
+            }
+        }
+
+        return Optional.empty();
+    }
+
 }
