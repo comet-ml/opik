@@ -13,6 +13,7 @@ import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.PageColumns;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
@@ -99,7 +100,7 @@ public class DatasetsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Finding dataset by id '{}' on workspaceId '{}'", id, workspaceId);
-        Dataset dataset = service.findByIdVerifyVisibility(id);
+        Dataset dataset = service.findById(id);
         log.info("Found dataset by id '{}' on workspaceId '{}'", id, workspaceId);
 
         return Response.ok().entity(dataset).build();
@@ -234,11 +235,11 @@ public class DatasetsResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetIdentifier.class))) @NotNull @Valid DatasetIdentifier identifier) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        Visibility visibility = requestContext.get().getVisibility();
         String name = identifier.datasetName();
 
         log.info("Finding dataset by name '{}' on workspace_id '{}'", name, workspaceId);
-        Dataset dataset = service.findByName(workspaceId, name);
-        service.verifyVisibility(dataset);
+        Dataset dataset = service.findByName(workspaceId, name, visibility);
         log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", name, dataset.id(), workspaceId);
 
         return Response.ok(dataset).build();
@@ -260,9 +261,6 @@ public class DatasetsResource {
         DatasetItem datasetItem = itemService.get(itemId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-
-        // Verify visibility
-        service.findByIdVerifyVisibility(datasetItem.datasetId());
 
         log.info("Found dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
 

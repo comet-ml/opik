@@ -65,15 +65,15 @@ public interface DatasetService {
 
     void update(UUID id, DatasetUpdate dataset);
 
-    Dataset findByIdVerifyVisibility(UUID id);
+    Dataset findById(UUID id);
 
     String findWorkspaceIdByDatasetId(UUID id);
 
-    Dataset findById(UUID id, String workspaceId);
+    Dataset findById(UUID id, String workspaceId, Visibility visibility);
 
     List<Dataset> findByIds(Set<UUID> ids, String workspaceId);
 
-    Dataset findByName(String workspaceId, String name);
+    Dataset findByName(String workspaceId, String name, Visibility visibility);
 
     void delete(DatasetIdentifier identifier);
 
@@ -92,10 +92,6 @@ public interface DatasetService {
     Set<UUID> exists(Set<UUID> datasetIds, String workspaceId);
 
     long getDailyCreatedCount();
-
-    Dataset verifyVisibility(Dataset dataset);
-
-    Dataset verifyVisibility(Dataset dataset, Visibility visibility);
 }
 
 @Singleton
@@ -234,10 +230,12 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     @Override
-    public Dataset findByIdVerifyVisibility(@NonNull UUID id) {
+    public Dataset findById(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
+        Visibility visibility = requestContext.get().getVisibility();
 
-        return enrichDatasetWithAdditionalInformation(List.of(verifyVisibility(findById(id, workspaceId)))).get(0);
+        return enrichDatasetWithAdditionalInformation(List.of(findById(id, workspaceId, visibility)))
+                .get(0);
     }
 
     @Override
@@ -252,14 +250,16 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     @Override
-    public Dataset findById(@NonNull UUID id, @NonNull String workspaceId) {
+    public Dataset findById(@NonNull UUID id, @NonNull String workspaceId, Visibility visibility) {
         log.info("Finding dataset with id '{}', workspaceId '{}'", id, workspaceId);
-        return template.inTransaction(READ_ONLY, handle -> {
+        Dataset dataset = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
-            var dataset = dao.findById(id, workspaceId).orElseThrow(this::newNotFoundException);
+            var d = dao.findById(id, workspaceId).orElseThrow(this::newNotFoundException);
             log.info("Found dataset with id '{}', workspaceId '{}'", id, workspaceId);
-            return dataset;
+            return d;
         });
+
+        return verifyVisibility(dataset, visibility);
     }
 
     @Override
@@ -278,15 +278,17 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     @Override
-    public Dataset findByName(@NonNull String workspaceId, @NonNull String name) {
-        return template.inTransaction(READ_ONLY, handle -> {
+    public Dataset findByName(@NonNull String workspaceId, @NonNull String name, Visibility visibility) {
+        Dataset dataset = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
 
-            Dataset dataset = dao.findByName(workspaceId, name).orElseThrow(this::newNotFoundException);
+            Dataset d = dao.findByName(workspaceId, name).orElseThrow(this::newNotFoundException);
 
-            log.info("Found dataset with name '{}', id '{}', workspaceId '{}'", name, dataset.id(), workspaceId);
-            return dataset;
+            log.info("Found dataset with name '{}', id '{}', workspaceId '{}'", name, d.id(), workspaceId);
+            return d;
         });
+
+        return verifyVisibility(dataset, visibility);
     }
 
     /**
@@ -298,7 +300,7 @@ class DatasetServiceImpl implements DatasetService {
     public void delete(@NonNull DatasetIdentifier identifier) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        Dataset dataset = findByName(workspaceId, identifier.datasetName());
+        Dataset dataset = findByName(workspaceId, identifier.datasetName(), Visibility.PRIVATE);
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetDAO.class);
@@ -630,13 +632,7 @@ class DatasetServiceImpl implements DatasetService {
         });
     }
 
-    @Override
-    public Dataset verifyVisibility(@NonNull Dataset dataset) {
-        return verifyVisibility(dataset, requestContext.get().getVisibility());
-    }
-
-    @Override
-    public Dataset verifyVisibility(@NonNull Dataset dataset, Visibility visibility) {
+    private Dataset verifyVisibility(@NonNull Dataset dataset, Visibility visibility) {
         boolean publicOnly = Optional.ofNullable(visibility)
                 .map(v -> v == Visibility.PUBLIC)
                 .orElse(false);
@@ -651,7 +647,7 @@ class DatasetServiceImpl implements DatasetService {
             return Mono.deferContextual(ctx -> {
                 String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-                return Mono.fromCallable(() -> findByName(workspaceId, datasetName))
+                return Mono.fromCallable(() -> findByName(workspaceId, datasetName, Visibility.PRIVATE))
                         .subscribeOn(Schedulers.boundedElastic());
             });
         }

@@ -76,6 +76,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return Mono.deferContextual(ctx -> {
             String userName = ctx.get(RequestContext.USER_NAME);
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            Visibility visibility = ctx.get(RequestContext.VISIBILITY);
 
             return Mono.fromCallable(() -> {
 
@@ -83,7 +84,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     return datasetService.getOrCreate(workspaceId, batch.datasetName(), userName);
                 }
 
-                Dataset dataset = datasetService.findById(batch.datasetId(), workspaceId);
+                Dataset dataset = datasetService.findById(batch.datasetId(), workspaceId, visibility);
 
                 if (dataset == null) {
                     throw newConflict(
@@ -109,6 +110,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @WithSpan
     public Mono<DatasetItem> get(@NonNull UUID id) {
         return dao.get(id)
+                .flatMap(item -> Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    Visibility visibility = ctx.get(RequestContext.VISIBILITY);
+                    // Verify dataset visibility
+                    datasetService.findById(item.datasetId(), workspaceId, visibility);
+
+                    return Mono.just(item);
+                }))
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Dataset item not found"))));
     }
 
@@ -117,8 +126,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             Visibility visibility) {
         log.info("Getting dataset items by '{}' on workspaceId '{}'", request, workspaceId);
         return Mono
-                .fromCallable(() -> datasetService
-                        .verifyVisibility(datasetService.findByName(workspaceId, request.datasetName()), visibility))
+                .fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), visibility))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMapMany(dataset -> dao.getItems(dataset.id(), request.steamLimit(), request.lastRetrievedId()));
     }
@@ -214,7 +222,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @WithSpan
     public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size, boolean truncate) {
         // Verify dataset visibility
-        datasetService.findByIdVerifyVisibility(datasetId);
+        datasetService.findById(datasetId);
 
         return dao.getItems(datasetId, page, size, truncate)
                 .defaultIfEmpty(DatasetItemPage.empty(page));
