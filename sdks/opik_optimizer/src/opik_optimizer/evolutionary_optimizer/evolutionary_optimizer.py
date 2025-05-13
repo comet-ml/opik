@@ -1258,7 +1258,8 @@ Ensure a good mix of variations, all targeting the specified output style from t
             n_samples=subset_size if dataset_item_ids is None else None,
             experiment_config=current_experiment_config,
             optimization_id=optimization_id,
-            verbose=effective_verbose,
+            # FIXME: Hack for verbose till its merged
+            #verbose=effective_verbose,
         )
         logger.debug(f"Evaluation score for prompt: {score:.4f}")
         return score
