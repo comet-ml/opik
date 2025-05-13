@@ -52,6 +52,4 @@ export const AIProviderFormSchema = z.union([
   LocalAIProviderDetailsFormSchema,
 ]);
 
-export type AIProviderFormType =
-  | z.infer<typeof AIProviderFormSchema>
-  | z.infer<typeof VertexAIProviderDetailsFormSchema>;
+export type AIProviderFormType = z.infer<typeof AIProviderFormSchema>;

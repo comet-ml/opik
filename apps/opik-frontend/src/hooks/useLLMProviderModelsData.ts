@@ -1489,7 +1489,7 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   [PROVIDER_TYPE.VERTEX_AI]: [
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17,
-      label: "Gemini 2.5 PRO Preview 04.17",
+      label: "Gemini 2.5 Pro Preview 04.17",
       structuredOutput: false,
     },
     {
@@ -1498,43 +1498,13 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       structuredOutput: false,
     },
     {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_PREVIEW,
-      label: "Gemini 2.5 Flash Preview",
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO_PREVIEW_03_25,
+      label: "Gemini 2.5 Pro Preview 03.25",
       structuredOutput: false,
     },
     {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
-      label: "Gemini 2.5 Pro",
-      structuredOutput: false,
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
-      label: "Gemini 2.5 Flash",
-      structuredOutput: false,
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO_LITE,
-      label: "Gemini 2.5 Pro Lite",
-      structuredOutput: false,
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE,
-      label: "Gemini 2.5 Flash Lite",
-      structuredOutput: false,
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_PRO_PREVIEW,
-      label: "Gemini 2.0 Pro Preview",
-      structuredOutput: false,
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH_PREVIEW,
-      label: "Gemini 2.0 Flash Preview",
-      structuredOutput: false,
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_PRO,
-      label: "Gemini 2.0 Pro",
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO_EXP_03_25,
+      label: "Gemini 2.5 Pro Exp 03.25",
       structuredOutput: false,
     },
     {
@@ -1543,33 +1513,8 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       structuredOutput: false,
     },
     {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_PRO_LITE,
-      label: "Gemini 2.0 Pro Lite",
-      structuredOutput: false,
-    },
-    {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH_LITE,
       label: "Gemini 2.0 Flash Lite",
-      structuredOutput: false,
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_1_5_PRO,
-      label: "Gemini 1.5 Pro",
-      structuredOutput: false,
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_1_5_FLASH,
-      label: "Gemini 1.5 Flash",
-      structuredOutput: false,
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_1_5_FLASH_8B,
-      label: "Gemini 1.5 Flash 8b",
-      structuredOutput: false,
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_EMBEDDING,
-      label: "Gemini Embedding",
       structuredOutput: false,
     },
   ],

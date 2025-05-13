@@ -363,21 +363,10 @@ export enum PROVIDER_MODEL_TYPE {
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17 = "vertex_ai/gemini-2.5-flash-preview-04-17",
   VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_05_06 = "vertex_ai/gemini-2.5-pro-preview-05-06",
-  VERTEX_AI_GEMINI_2_5_FLASH_PREVIEW = "vertex_ai/gemini-2.5-flash-preview-05-06",
-  VERTEX_AI_GEMINI_2_5_PRO = "vertex_ai/gemini-2.5-pro-001",
-  VERTEX_AI_GEMINI_2_5_FLASH = "vertex_ai/gemini-2.5-flash-001",
-  VERTEX_AI_GEMINI_2_5_PRO_LITE = "vertex_ai/gemini-2.5-pro-lite-001",
-  VERTEX_AI_GEMINI_2_5_FLASH_LITE = "vertex_ai/gemini-2.5-flash-lite-001",
-  VERTEX_AI_GEMINI_2_0_PRO_PREVIEW = "vertex_ai/gemini-2.0-pro-preview-05-06",
-  VERTEX_AI_GEMINI_2_0_FLASH_PREVIEW = "vertex_ai/gemini-2.0-flash-preview-05-06",
-  VERTEX_AI_GEMINI_2_0_PRO = "vertex_ai/gemini-2.0-pro-001",
+  GEMINI_2_5_PRO_PREVIEW_03_25 = "vertex_ai/gemini-2.5-pro-preview-03-25",
+  GEMINI_2_5_PRO_EXP_03_25 = "vertex_ai/gemini-2.5-pro-exp-03-25",
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
-  VERTEX_AI_GEMINI_2_0_PRO_LITE = "vertex_ai/gemini-2.0-pro-lite-001",
   VERTEX_AI_GEMINI_2_0_FLASH_LITE = "vertex_ai/gemini-2.0-flash-lite-001",
-  VERTEX_AI_GEMINI_1_5_PRO = "vertex_ai/gemini-1.5-pro-001",
-  VERTEX_AI_GEMINI_1_5_FLASH = "vertex_ai/gemini-1.5-flash-001",
-  VERTEX_AI_GEMINI_1_5_FLASH_8B = "vertex_ai/gemini-1.5-flash-8b-001",
-  VERTEX_AI_GEMINI_EMBEDDING = "vertex_ai/gemini-embedding-001",
 }
 
 export type PROVIDER_MODELS_TYPE = {
