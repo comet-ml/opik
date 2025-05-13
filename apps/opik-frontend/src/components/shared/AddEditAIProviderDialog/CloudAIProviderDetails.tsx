@@ -13,7 +13,7 @@ import {
   FormItem,
   FormMessage,
 } from "@/components/ui/form";
-import { buildDocsUrl, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 type CloudAIProviderDetailsProps = {
   provider: PROVIDER_TYPE | "";

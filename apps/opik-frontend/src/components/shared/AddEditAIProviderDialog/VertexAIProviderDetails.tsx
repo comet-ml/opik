@@ -3,7 +3,7 @@ import { UseFormReturn } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PROVIDER_TYPE } from "@/types/providers";
-import { CLOUD_PROVIDER_OPTION_TYPE, PROVIDERS } from "@/constants/providers";
+import { PROVIDERS } from "@/constants/providers";
 import EyeInput from "@/components/shared/EyeInput/EyeInput";
 import { AIProviderFormType } from "@/components/shared/AddEditAIProviderDialog/schema";
 import get from "lodash/get";
