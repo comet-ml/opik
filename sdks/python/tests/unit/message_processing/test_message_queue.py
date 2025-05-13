@@ -10,12 +10,16 @@ def test_message_queue_accept_put_without_discarding___max_size_handling():
     queue.put("the oldest message")
     assert queue.accept_put_without_discarding() is True
 
-    for i in range(max_size):
+    for i in range(max_size - 1):
+        assert queue.accept_put_without_discarding() is True, f"Failed at {i}"
         queue.put(f"line: {i}")
 
     assert queue.accept_put_without_discarding() is False
 
-    # check that oldest message ("the oldest message") was discarded
+    # put one more message to have the oldest discarded
+    queue.put("the newest message")
+
+    # check that the oldest message ("the oldest message") was discarded
     assert queue.get(0.0001) == "line: 0"
 
 

@@ -48,10 +48,10 @@ class MessageQueue(Generic[T]):
 
             self._not_empty.wait_for(lambda: len(self._deque) > 0, timeout=timeout)
 
-            try:
-                return self._deque.pop()
-            except IndexError:
+            if len(self._deque) == 0:
                 raise Empty
+
+            return self._deque.pop()
 
     def empty(self) -> bool:
         return len(self._deque) == 0
@@ -60,7 +60,7 @@ class MessageQueue(Generic[T]):
         if self.max_size is None:
             return True
         with self._not_empty:
-            return len(self._deque) + 1 < self.max_size
+            return len(self._deque) < self.max_size
 
     def size(self) -> int:
         return len(self._deque)
