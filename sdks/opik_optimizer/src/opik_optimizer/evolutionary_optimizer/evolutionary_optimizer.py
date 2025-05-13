@@ -288,12 +288,12 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
             semantic_threshold = 0.4
             structural_threshold = 0.7 # semantic_threshold + 0.3
 
-        mutation_rate = random.random()
+        mutation_choice = random.random()
 
-        if mutation_rate > structural_threshold:
+        if mutation_choice > structural_threshold:
             # This corresponds to the original 'else' (word_level_mutation)
             return self._word_level_mutation(prompt)
-        elif mutation_rate > semantic_threshold:
+        elif mutation_choice > semantic_threshold:
             # This corresponds to the original 'elif' (structural_mutation)
             return self._structural_mutation(prompt)
         else:
@@ -610,9 +610,10 @@ Ensure a good mix of variations, all targeting the specified output style from t
         max_attempts = 5
         for _ in range(max_attempts):
             # Try different mutation strategies
-            if random.random() < 0.3:
+            mutation_choice = random.random()
+            if mutation_choice < 0.3:
                 new_prompt = self._semantic_mutation(base_prompt)[0]
-            elif random.random() < 0.6:
+            elif mutation_choice < 0.6:
                 new_prompt = self._structural_mutation(base_prompt)[0]
             else:
                 new_prompt = self._word_level_mutation(base_prompt)[0]
