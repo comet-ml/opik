@@ -18,6 +18,9 @@ public class LlmProviderClientConfig {
     public record AnthropicClientConfig(String url, String version) {
     }
 
+    public record VertexAIClientConfig(String scope) {
+    }
+
     @Min(1) private Integer maxAttempts;
 
     @Min(1) private int delayMillis = 500;
@@ -45,6 +48,8 @@ public class LlmProviderClientConfig {
     @Valid private LlmProviderClientConfig.OpenAiClientConfig openAiClient;
 
     @Valid private LlmProviderClientConfig.AnthropicClientConfig anthropicClient;
+
+    @Valid private LlmProviderClientConfig.VertexAIClientConfig vertexAIClient;
 
     private String openRouterUrl;
 }

@@ -1,10 +1,13 @@
 package com.comet.opik.infrastructure.llm;
 
+import lombok.Builder;
 import lombok.ToString;
 
 import java.util.Map;
 
-public record LlmProviderClientApiConfig(@ToString.Exclude String apiKey, Map<String, String> headers, String baseUrl) {
+@Builder
+public record LlmProviderClientApiConfig(@ToString.Exclude String apiKey, Map<String, String> headers, String baseUrl,
+        Map<String, String> configuration) {
 
     @Override
     public String toString() {
@@ -12,6 +15,7 @@ public record LlmProviderClientApiConfig(@ToString.Exclude String apiKey, Map<St
                 "apiKey='*********'" +
                 ", headers=" + headers +
                 ", baseUrl='" + baseUrl + '\'' +
+                ", configuration=" + configuration +
                 '}';
     }
 }

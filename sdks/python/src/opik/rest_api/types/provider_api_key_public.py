@@ -13,6 +13,9 @@ class ProviderApiKeyPublic(UniversalBaseModel):
     provider: ProviderApiKeyPublicProvider
     api_key: str
     name: typing.Optional[str] = None
+    headers: typing.Optional[typing.Dict[str, str]] = None
+    configuration: typing.Optional[typing.Dict[str, str]] = None
+    base_url: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None
