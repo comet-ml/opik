@@ -432,7 +432,7 @@ export interface LLMGeminiConfigsType {
   topP: number;
 }
 
-export interface LLMVertexConfigsType {
+export interface LLMVertexAIConfigsType {
   temperature: number;
   maxCompletionTokens: number;
   topP: number;
@@ -444,4 +444,4 @@ export type LLMPromptConfigsType =
   | LLMAnthropicConfigsType
   | LLMOpenRouterConfigsType
   | LLMGeminiConfigsType
-  | LLMVertexConfigsType;
+  | LLMVertexAIConfigsType;

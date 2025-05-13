@@ -13,7 +13,7 @@ import {
   LLMOpenAIConfigsType,
   LLMOpenRouterConfigsType,
   LLMPromptConfigsType,
-  LLMVertexConfigsType,
+  LLMVertexAIConfigsType,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
@@ -71,7 +71,7 @@ export const getDefaultConfigByProvider = (
       temperature: DEFAULT_VERTEX_AI_CONFIGS.TEMPERATURE,
       maxCompletionTokens: DEFAULT_VERTEX_AI_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_VERTEX_AI_CONFIGS.TOP_P,
-    } as LLMVertexConfigsType;
+    } as LLMVertexAIConfigsType;
   }
 
   return {};

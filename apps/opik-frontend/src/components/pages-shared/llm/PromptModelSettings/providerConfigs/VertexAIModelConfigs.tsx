@@ -1,17 +1,20 @@
 import React from "react";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
-import { LLMVertexConfigsType } from "@/types/providers";
+import { LLMVertexAIConfigsType } from "@/types/providers";
 import { DEFAULT_VERTEX_AI_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import isUndefined from "lodash/isUndefined";
 
-interface geminiModelConfigsProps {
-  configs: LLMVertexConfigsType;
-  onChange: (configs: Partial<LLMVertexConfigsType>) => void;
+interface VertexAIModelConfigsProps {
+  configs: LLMVertexAIConfigsType;
+  onChange: (configs: Partial<LLMVertexAIConfigsType>) => void;
 }
 
-const GeminiModelConfigs = ({ configs, onChange }: geminiModelConfigsProps) => {
+const VertexAIModelConfigs = ({
+  configs,
+  onChange,
+}: VertexAIModelConfigsProps) => {
   return (
     <div className="flex w-72 flex-col gap-6">
       {!isUndefined(configs.temperature) && (
@@ -65,4 +68,4 @@ const GeminiModelConfigs = ({ configs, onChange }: geminiModelConfigsProps) => {
   );
 };
 
-export default GeminiModelConfigs;
+export default VertexAIModelConfigs;
