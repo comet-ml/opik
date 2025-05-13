@@ -5,6 +5,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.DatasetUpdate;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
@@ -67,59 +68,70 @@ public interface DatasetDAO {
     @SqlQuery("SELECT COUNT(id) FROM datasets " +
             " WHERE workspace_id = :workspace_id " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +
+            " <if(visibility)> AND visibility = :visibility <endif> " +
             " <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif> " +
             " <if(with_optimizations_only)> AND last_created_optimization_at IS NOT NULL <endif> ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long findCount(@Bind("workspace_id") String workspaceId, @Define("name") @Bind("name") String name,
             @Define("with_experiments_only") boolean withExperimentsOnly,
-            @Define("with_optimizations_only") boolean withOptimizationOnly);
+            @Define("with_optimizations_only") boolean withOptimizationOnly,
+            @Define("visibility") @Bind("visibility") Visibility visibility);
 
     @SqlQuery("SELECT COUNT(id) FROM datasets " +
             "WHERE workspace_id = :workspace_id " +
             "AND id IN (<ids>) " +
-            "<if(name)> AND name like concat('%', :name, '%') <endif> ")
+            "<if(name)> AND name like concat('%', :name, '%') <endif> " +
+            "<if(visibility)> AND visibility = :visibility <endif> ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long findCountByIds(@Bind("workspace_id") String workspaceId, @BindList("ids") Set<UUID> ids,
-            @Define("name") @Bind("name") String name);
+            @Define("name") @Bind("name") String name,
+            @Define("visibility") @Bind("visibility") Visibility visibility);
 
     @SqlQuery("SELECT * FROM datasets " +
             "WHERE workspace_id = :workspace_id " +
             "AND id IN (<ids>) " +
             "<if(name)> AND name like concat('%', :name, '%') <endif> " +
+            "<if(visibility)> AND visibility = :visibility <endif> " +
             " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
             " LIMIT :limit OFFSET :offset ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<Dataset> findByIds(@Bind("workspace_id") String workspaceId, @BindList("ids") Set<UUID> ids,
             @Define("name") @Bind("name") String name, @Bind("limit") int limit, @Bind("offset") int offset,
-            @Define("sort_fields") @Bind("sort_fields") String sortingFields);
+            @Define("sort_fields") @Bind("sort_fields") String sortingFields,
+            @Define("visibility") @Bind("visibility") Visibility visibility);
 
     @SqlQuery("SELECT COUNT(id) FROM datasets " +
             "WHERE workspace_id = :workspace_id " +
             "AND id IN (SELECT id FROM experiment_dataset_ids_<table_name>) " +
-            "<if(name)> AND name like concat('%', :name, '%') <endif> ")
+            "<if(name)> AND name like concat('%', :name, '%') <endif> " +
+            "<if(visibility)> AND visibility = :visibility <endif> ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long findCountByTempTable(@Bind("workspace_id") String workspaceId, @Define("table_name") String tableName,
-            @Define("name") @Bind("name") String name);
+            @Define("name") @Bind("name") String name,
+            @Define("visibility") @Bind("visibility") Visibility visibility);
 
     @SqlQuery("SELECT * FROM datasets " +
             "WHERE workspace_id = :workspace_id " +
             "AND id IN (SELECT id FROM experiment_dataset_ids_<table_name>) " +
             "<if(name)> AND name like concat('%', :name, '%') <endif> " +
+            "<if(visibility)> AND visibility = :visibility <endif> " +
             " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
             " LIMIT :limit OFFSET :offset ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<Dataset> findByTempTable(@Bind("workspace_id") String workspaceId, @Define("table_name") String tableName,
             @Define("name") @Bind("name") String name, @Bind("limit") int limit, @Bind("offset") int offset,
-            @Define("sort_fields") @Bind("sort_fields") String sortingFields);
+            @Define("sort_fields") @Bind("sort_fields") String sortingFields,
+            @Define("visibility") @Bind("visibility") Visibility visibility);
 
     @SqlQuery("SELECT * FROM datasets " +
             " WHERE workspace_id = :workspace_id " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +
+            " <if(visibility)> AND visibility = :visibility <endif> " +
             " <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif> " +
             " <if(with_optimizations_only)> AND last_created_optimization_at IS NOT NULL <endif> " +
             " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
@@ -132,7 +144,8 @@ public interface DatasetDAO {
             @Define("name") @Bind("name") String name,
             @Define("with_experiments_only") boolean withExperimentsOnly,
             @Define("with_optimizations_only") boolean withOptimizationOnly,
-            @Define("sort_fields") @Bind("sort_fields") String sortingFields);
+            @Define("sort_fields") @Bind("sort_fields") String sortingFields,
+            @Define("visibility") @Bind("visibility") Visibility visibility);
 
     @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name")
     Optional<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name);
