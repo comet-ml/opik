@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.gemini;
 
+import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.podam.PodamFactoryUtils;
 import dev.ai4j.openai4j.chat.AssistantMessage;
 import dev.ai4j.openai4j.chat.ChatCompletionChoice;
@@ -41,7 +42,7 @@ public class GeminiMappersTest {
                     new TokenUsage(podamFactory.manufacturePojo(Integer.class),
                             podamFactory.manufacturePojo(Integer.class)),
                     FinishReason.STOP);
-            var actual = LlmProviderGeminiMapper.INSTANCE.toChatCompletionResponse(request, response);
+            var actual = LlmProviderLangChainMapper.INSTANCE.toChatCompletionResponse(request, response);
             assertThat(actual).isNotNull();
             assertThat(actual.model()).isEqualTo(request.model());
             assertThat(actual.choices()).isEqualTo(List.of(ChatCompletionChoice.builder()
@@ -57,7 +58,7 @@ public class GeminiMappersTest {
         @ParameterizedTest
         @MethodSource
         void testToChatMessage(Message message, ChatMessage expected) {
-            ChatMessage actual = LlmProviderGeminiMapper.INSTANCE.toChatMessage(message);
+            ChatMessage actual = LlmProviderLangChainMapper.INSTANCE.toChatMessage(message);
             assertThat(actual).isEqualTo(expected);
         }
 

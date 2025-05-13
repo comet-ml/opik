@@ -39,13 +39,18 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
 
         GenerationConfig generationConfig = getGenerationConfig(request);
 
+        GenerativeModel generativeModel = getGenerativeModel(request, vertexAI, generationConfig);
+
+        return new VertexAiGeminiChatModel(generativeModel, generationConfig);
+    }
+
+    private GenerativeModel getGenerativeModel(@NotNull ChatCompletionRequest request, VertexAI vertexAI,
+            GenerationConfig generationConfig) {
         var vertexAIModelName = VertexAIModelName.byQualifiedName(request.model())
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported model: " + request.model()));
 
-        GenerativeModel generativeModel = new GenerativeModel(vertexAIModelName.toString(), vertexAI)
+        return new GenerativeModel(vertexAIModelName.toString(), vertexAI)
                 .withGenerationConfig(generationConfig);
-
-        return new VertexAiGeminiChatModel(generativeModel, generationConfig);
     }
 
     public StreamingChatLanguageModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
@@ -55,11 +60,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
 
         GenerationConfig generationConfig = getGenerationConfig(request);
 
-        var vertexAIModelName = VertexAIModelName.byQualifiedName(request.model())
-                .orElseThrow(() -> new IllegalArgumentException("Unsupported model: " + request.model()));
-
-        GenerativeModel generativeModel = new GenerativeModel(vertexAIModelName.toString(), vertexAI)
-                .withGenerationConfig(generationConfig);
+        GenerativeModel generativeModel = getGenerativeModel(request, vertexAI, generationConfig);
 
         return new VertexAiGeminiStreamingChatModel(generativeModel, generationConfig);
     }

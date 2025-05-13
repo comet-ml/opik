@@ -3,8 +3,7 @@ package com.comet.opik.infrastructure.llm.vertexai;
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
-import com.comet.opik.infrastructure.llm.gemini.GeminiErrorObject;
-import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -13,7 +12,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.scheduler.Schedulers;
 
-import java.io.UncheckedIOException;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -26,10 +24,9 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        var response = llmProviderClientGenerator.generate(config, request)
-                .generate(request.messages().stream().map(VertexAIMapper.INSTANCE::toChatMessage).toList());
-
-        return VertexAIMapper.INSTANCE.toChatCompletionResponse(request, response);
+        var mapper = LlmProviderLangChainMapper.INSTANCE;
+        var response = llmProviderClientGenerator.generate(config, request).generate(mapper.mapMessages(request));
+        return mapper.toChatCompletionResponse(request, response);
     }
 
     @Override
@@ -45,8 +42,7 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
                         streamingChatLanguageModel
                                 .generate(
-                                        request.messages().stream().map(VertexAIMapper.INSTANCE::toChatMessage)
-                                                .toList(),
+                                        LlmProviderLangChainMapper.INSTANCE.mapMessages(request),
                                         new ChunkedResponseHandler(handleMessage, handleClose, handleError,
                                                 request.model()));
                     } catch (Exception e) {
@@ -63,19 +59,6 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
     @Override
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
-        String message = throwable.getMessage();
-        var openBraceIndex = message.indexOf('{');
-        if (openBraceIndex >= 0) {
-            String jsonPart = message.substring(openBraceIndex); // Extract JSON part
-            try {
-                var geminiError = JsonUtils.readValue(jsonPart, GeminiErrorObject.class);
-                return geminiError.toErrorMessage();
-            } catch (UncheckedIOException e) {
-                log.warn("failed to parse Gemini error message", e);
-                return Optional.empty();
-            }
-        }
-
-        return Optional.empty();
+        return LlmProviderLangChainMapper.INSTANCE.getGeminiErrorObject(throwable, log);
     }
 }
