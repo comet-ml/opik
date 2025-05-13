@@ -29,7 +29,7 @@ _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 disk_cache_dir = os.path.expanduser("~/.litellm_cache")
 litellm.cache = Cache(type="disk", disk_cache_dir=disk_cache_dir)
 
-class GeneticOptimizer(BaseOptimizer):
+class EvolutionaryOptimizer(BaseOptimizer):
     """
     Optimizes prompts using a genetic algorithm approach.
     Focuses on evolving the prompt text itself.
@@ -157,7 +157,7 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
             self.toolbox.register("select", tools.selTournament, tournsize=self.tournament_size)
 
         logger.debug(
-            f"Initialized GeneticOptimizer with model: {model}, MOO_enabled: {self.enable_moo}, "
+            f"Initialized EvolutionaryOptimizer with model: {model}, MOO_enabled: {self.enable_moo}, "
             f"LLM_Crossover: {self.enable_llm_crossover}, Seed: {self.seed}, "
             f"OutputStyleGuidance: '{self.output_style_guidance[:50]}...', "
             f"population_size: {self.population_size}, num_generations: {self.num_generations}, "
@@ -708,7 +708,7 @@ Ensure a good mix of variations, all targeting the specified output style from t
         
         # The methods like get_reasoning_system_prompt_for_variation will now use the potentially updated self.output_style_guidance
         log_prefix = "DEAP MOO" if self.enable_moo else "DEAP SO"
-        logger.info(f"Starting {log_prefix} Genetic Optimization for prompt: {task_config.instruction_prompt[:100]}...")
+        logger.info(f"Starting {log_prefix} Evolutionary Optimization for prompt: {task_config.instruction_prompt[:100]}...")
         logger.info(f"Population: {self.population_size}, Generations: {self.num_generations}, Mutation: {self.mutation_rate}, Crossover: {self.crossover_rate}")
 
         opik_dataset_obj: opik.Dataset
@@ -838,7 +838,7 @@ Ensure a good mix of variations, all targeting the specified output style from t
             ).dict()
             self._add_to_history(initial_round_data)
 
-        pbar_desc = f"{log_prefix} Genetic Optimization"
+        pbar_desc = f"{log_prefix} Evolutionary Optimization"
         pbar_postfix_key = "best_primary_score" if self.enable_moo else "best_score"
         pbar = tqdm(
             total=self.num_generations,
@@ -963,7 +963,7 @@ Ensure a good mix of variations, all targeting the specified output style from t
                 break
 
         pbar.close()
-        logger.info(f"\n{log_prefix} Genetic Optimization finished after {gen} generations.")
+        logger.info(f"\n{log_prefix} Evolutionary Optimization finished after {gen} generations.")
         stopped_early_flag = self._generations_without_overall_improvement >= self.DEFAULT_EARLY_STOPPING_GENERATIONS
         final_details = {}
         initial_score_for_display = initial_primary_score

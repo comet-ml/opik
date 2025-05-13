@@ -1,4 +1,4 @@
-from opik_optimizer import GeneticOptimizer
+from opik_optimizer import EvolutionaryOptimizer
 from opik.evaluation.metrics import LevenshteinRatio
 from opik_optimizer.demo import get_or_create_dataset
 
@@ -14,10 +14,10 @@ hotpot_dataset = get_or_create_dataset("hotpot-300")
 
 # Define the initial prompt to optimize
 initial_prompt = "Answer the question."
-project_name = "optimize-genetic-hotpot"
+project_name = "optimize-evolutionary-hotpot"
 
 # Initialize the optimizer with custom parameters
-optimizer = GeneticOptimizer(
+optimizer = EvolutionaryOptimizer(
     model="gpt-4o-mini",
     project_name=project_name,
     population_size=10,

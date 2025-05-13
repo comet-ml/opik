@@ -1,1 +1,0 @@
-from .genetic_optimizer import GeneticOptimizer
