@@ -104,7 +104,6 @@ class OpikTracer:
 
     def _end_current_trace(self) -> None:
         if (trace_data := self._context_storage.get_trace_data()) is not None:
-            print("Ending trace")
             trace_data.init_end_time()
             self._opik_client.trace(**trace_data.__dict__)
 
@@ -163,7 +162,6 @@ class OpikTracer:
                 metadata=self.metadata,
             )
         else:
-            print("Starting new trace")
             new_trace_data = trace.TraceData(
                 name=name,
                 input=user_input,
