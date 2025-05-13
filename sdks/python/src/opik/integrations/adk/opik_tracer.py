@@ -35,6 +35,9 @@ class OpikTracer:
         self._client = opik_client.get_client_cached()
 
         self._last_model_output: Optional[Dict[str, Any]] = None
+
+        # Use OpikContextStorage instance instead of global context storage module
+        # in case we need to use different context storage for ADK in the future
         self._context_storage = context_storage.get_current_context_instance()
 
         self._opik_client = opik_client.get_client_cached()
