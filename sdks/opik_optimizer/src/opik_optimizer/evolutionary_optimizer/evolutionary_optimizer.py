@@ -5,6 +5,8 @@ import random
 import json
 from string import Template
 import os
+import time
+import Levenshtein
 
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
 from opik_optimizer.optimization_config.configs import TaskConfig, MetricConfig
@@ -208,7 +210,7 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
             for j in range(i + 1, len(self._current_population)):
                 str1 = str(self._current_population[i])
                 str2 = str(self._current_population[j])
-                distance = self._levenshtein_distance(str1, str2)
+                distance = Levenshtein.distance(str1, str2)
                 max_len = max(len(str1), len(str2))
                 if max_len > 0:
                     normalized_distance = distance / max_len
@@ -216,25 +218,6 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
                     count += 1
         
         return total_distance / count if count > 0 else 0.0
-
-    def _levenshtein_distance(self, s1: str, s2: str) -> int:
-        """Calculate the Levenshtein distance between two strings."""
-        if len(s1) < len(s2):
-            return self._levenshtein_distance(s2, s1)
-        if len(s2) == 0:
-            return len(s1)
-        
-        previous_row = range(len(s2) + 1)
-        for i, c1 in enumerate(s1):
-            current_row = [i + 1]
-            for j, c2 in enumerate(s2):
-                insertions = previous_row[j + 1] + 1
-                deletions = current_row[j] + 1
-                substitutions = previous_row[j] + (c1 != c2)
-                current_row.append(min(insertions, deletions, substitutions))
-            previous_row = current_row
-        
-        return previous_row[-1]
 
     def _deap_crossover(
             self,
@@ -294,28 +277,28 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
         
         # Choose mutation strategy based on current diversity
         diversity = self._calculate_population_diversity()
+
+        # Determine thresholds based on diversity
         if diversity < self.DEFAULT_DIVERSITY_THRESHOLD:
-            # Low diversity - use more aggressive mutations
-            mutation_type = random.random()
-
-            # Increased chance of semantic changes (includes radical)
-            if mutation_type < 0.5:
-                return self._semantic_mutation(prompt, task_config)
-            elif mutation_type < 0.8:
-                return self._structural_mutation(prompt)
-            else:
-                return self._word_level_mutation(prompt)
+            # Low diversity - use more aggressive mutations (higher chance for semantic)
+            semantic_threshold = 0.5
+            structural_threshold = 0.8 # semantic_threshold + 0.3
         else:
-            # Good diversity - use more conservative mutations
-            mutation_type = random.random()
+            # Good diversity - use more conservative mutations (higher chance for word_level)
+            semantic_threshold = 0.4
+            structural_threshold = 0.7 # semantic_threshold + 0.3
 
-            # Slightly higher chance for semantic if diversity is good too
-            if mutation_type < 0.4:
-                return self._semantic_mutation(prompt, task_config)
-            elif mutation_type < 0.7:
-                return self._structural_mutation(prompt)
-            else:
-                return self._word_level_mutation(prompt)
+        mutation_rate = random.random()
+
+        if mutation_rate > structural_threshold:
+            # This corresponds to the original 'else' (word_level_mutation)
+            return self._word_level_mutation(prompt)
+        elif mutation_rate > semantic_threshold:
+            # This corresponds to the original 'elif' (structural_mutation)
+            return self._structural_mutation(prompt)
+        else:
+            # This corresponds to the original 'if' (semantic_mutation)
+            return self._semantic_mutation(prompt, task_config)
 
     def _semantic_mutation(
             self,
@@ -637,7 +620,7 @@ Ensure a good mix of variations, all targeting the specified output style from t
             # Check if this variation is sufficiently different
             is_diverse = True
             for existing in seen_prompts:
-                if self._levenshtein_distance(str(new_prompt), existing) / max(len(str(new_prompt)), len(existing)) < 0.3:
+                if Levenshtein.distance(str(new_prompt), existing) / max(len(str(new_prompt)), len(existing)) < 0.3:
                     is_diverse = False
                     break
             if is_diverse:
