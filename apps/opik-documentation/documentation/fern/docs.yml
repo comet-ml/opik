@@ -232,12 +232,6 @@ navigation:
           - page: Evaluate agents
             path: docs/evaluation/evaluate_agents.mdx
             slug: evaluate_agents
-          - page: Prompt optimization
-            path: docs/evaluation/prompt_optimization.mdx
-            slug: prompt_optimization
-          - page: Agent optimization
-            path: docs/evaluation/agent_optimization.mdx
-            slug: agent_optimization
           - page: Update existing experiment
             path: docs/evaluation/update_existing_experiment.mdx
             slug: update_existing_experiment
@@ -283,12 +277,6 @@ navigation:
       - section: Prompt engineering
         slug: /prompt_engineering
         contents:
-          - page: Prompt optimization
-            path: docs/prompt_engineering/prompt_optimization.mdx
-            slug: prompt_optimization
-          - page: Agent optimization
-            path: docs/prompt_engineering/agent_optimization.mdx
-            slug: agent_optimization
           - page: Prompt management
             path: docs/prompt_engineering/prompt_management.mdx
             slug: prompt_management
@@ -319,20 +307,34 @@ navigation:
   - tab: agent-optimization
     layout:
       - page: Overview
+        icon: fa-regular fa-house
         path: docs/agent_optimization/overview.mdx
         slug: overview
-      - page: Prompt engineering best practices
-        path: docs/agent_optimization/best_practices.mdx
-        slug: best_practices
       - section: Opik Optimizer
         slug: /opik_optimizer
         contents:
-          - page: Quickstart
-            path: docs/agent_optimization/opik_optimizer/quickstart.mdx
-            slug: quickstart
           - page: Concepts
+            icon: fa-regular fa-lightbulb
             path: docs/agent_optimization/opik_optimizer/concepts.mdx
             slug: concepts
+          - page: Quickstart
+            icon: fa-regular fa-bolt
+            path: docs/agent_optimization/opik_optimizer/quickstart.mdx
+            slug: quickstart
+          - page: Datasets and testing
+            icon: fa-regular fa-database
+            path: docs/agent_optimization/opik_optimizer/datasets.mdx
+            slug: datasets
+          - page: FAQ
+            icon: fa-regular fa-question
+            path: docs/agent_optimization/opik_optimizer/faq.mdx
+            slug: faq
+      - section: Best Practices
+        contents:
+          - page: Prompt engineering
+            icon: fa-regular fa-book
+            path: docs/agent_optimization/best_practices/prompt_engineering.mdx
+            slug: prompt_engineering
       - section: Prompt Optimization algorithms
         slug: /algorithms
         contents:

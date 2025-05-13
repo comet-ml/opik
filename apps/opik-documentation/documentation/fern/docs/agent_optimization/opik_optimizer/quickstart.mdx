@@ -1,0 +1,81 @@
+## Quickstart guide
+
+### Installing the optimizer
+
+The Opik Optimizer works with Python 3.9+ and can be installed using:
+
+```bash
+# pip
+pip install opik opik-optimizer
+
+# uv
+uv pip install opik-optimizer
+```
+
+Once Opik is installed, you can configure it using:
+
+```bash
+# Install the Opik CLI
+pip install opik
+
+# Configure your API key
+opik configure
+```
+
+### Running an optimization run
+
+```python
+from opik.evaluation.metrics import LevenshteinRatio
+from opik_optimizer import FewShotBayesianOptimizer
+from opik_optimizer.demo import get_or_create_dataset
+
+from opik_optimizer import (
+    MetricConfig,
+    TaskConfig,
+    from_llm_response_text,
+    from_dataset_field,
+)
+
+# Define the dataset to optimize over
+dataset = get_or_create_dataset("tiny-test")
+metric_config = MetricConfig(
+    metric=LevenshteinRatio(),
+    inputs={
+        "output": from_llm_response_text(),
+        "reference": from_dataset_field(name="label"),
+    }
+)
+
+# Define the prompt to optimize
+system_prompt = """Answer the question."""
+
+# Define the optimization algorithm to use
+optimizer = FewShotBayesianOptimizer(
+    model="gpt-4o-mini",
+    project_name="Prompt Optimization"
+)
+
+# Run the optimization algorithm
+task_config = TaskConfig(
+    instruction_prompt=system_prompt,
+    input_dataset_fields=["text"],
+    output_dataset_field="label",
+    use_chat_prompt=True,
+)
+
+result = optimizer.optimize_prompt(
+    dataset=dataset,
+    metric_config=metric_config,
+    task_config=task_config,
+)
+
+
+result.display()
+```
+
+The results will be displayed in the console and also available in the
+[Opik Agent Optimization dashboard](/agent_optimization/dashboard).
+
+<Frame>
+  <img src="/img/agent_optimization/trial_dashboard.png" />
+</Frame>

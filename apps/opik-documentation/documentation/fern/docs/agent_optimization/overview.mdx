@@ -39,6 +39,8 @@ So when should you use prompt optimization?
 
 ## Optimization algorithms
 
+### Supported algorithms
+
 The [Opik Optimizer](https://pypi.org/project/opik-optimizer/) is an
 experimental Python library that aims at implementing Prompt and Agent
 Optimization algorithms in a consistent format.
@@ -49,9 +51,18 @@ The following algorithms have been implemented:
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | MetaPrompt Optimization        | A prompt engineering algorithm that uses a meta-prompt to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt.                                       | [MetaPrompt Optimization](/agent_optimization/metaprompt_optimizer)              |
 | Few-shot Bayesian Optimization | A prompt engineering algorithm that uses a few-shot learning approach to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt.                        | [Few-shot Bayesian Optimization](/agent_optimization/fewshot_bayesian_optimizer) |
-| Mipro Optimization             | A prompt engineering algorithm that uses a MIPRO (Multi-Instance Prompt Refinement) approach to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt. | [Mipro Optimization](/agent_optimization/mipro_optimizer)                        |
+| MIPRO Optimization             | A prompt engineering algorithm that uses a MIPRO (Multi-Instance Prompt Refinement) approach to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt. | [Mipro Optimization](/agent_optimization/mipro_optimizer)                        |
+
+<Tip>
+  If you would like us to implement another optimization algorithm, reach out to us on
+  [Github](https://github.com/comet-ml/opik).
+</Tip>
 
 ### Benchmark results
+
+<Warning>
+  We are currently working on the benchmarking results, these are early preliminary results and are subject to change.
+</Warning>
 
 Each optimization algorithm is evaluated against different use-cases and datasets:
 
@@ -69,92 +80,5 @@ Each optimization algorithm is evaluated against different use-cases and dataset
 
 The results above are for `gpt-40-mini`, the results might change if you use a different model.
 
-_Note: This results are preliminary and subject to change, you can learn more about
-our benchmarks [here](https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/benchmarks/run_benchmark.py)._
-
-<Tip>
-  If you would like us to implement another optimization algorithm, reach out to us on
-  [Github](https://github.com/comet-ml/opik).
-</Tip>
-
-## Quickstart guide
-
-### Installing the optimizer
-
-The Opik Optimizer works with Python 3.9+ and can be installed using:
-
-```bash
-# pip
-pip install opik opik-optimizer
-
-# uv
-uv pip install opik-optimizer
-```
-
-Once Opik is installed, you can configure it using:
-
-```bash
-# Install the Opik CLI
-pip install opik
-
-# Configure your API key
-opik configure
-```
-
-### Running an optimization run
-
-```python
-from opik.evaluation.metrics import LevenshteinRatio
-from opik_optimizer import FewShotBayesianOptimizer
-from opik_optimizer.demo import get_or_create_dataset
-
-from opik_optimizer import (
-    MetricConfig,
-    TaskConfig,
-    from_llm_response_text,
-    from_dataset_field,
-)
-
-# Define the dataset to optimize over
-dataset = get_or_create_dataset("tiny-test")
-metric_config = MetricConfig(
-    metric=LevenshteinRatio(),
-    inputs={
-        "output": from_llm_response_text(),
-        "reference": from_dataset_field(name="label"),
-    }
-)
-
-# Define the prompt to optimize
-system_prompt = """Answer the question."""
-
-# Define the optimization algorithm to use
-optimizer = FewShotBayesianOptimizer(
-    model="gpt-4o-mini",
-    project_name="Prompt Optimization"
-)
-
-# Run the optimization algorithm
-task_config = TaskConfig(
-    instruction_prompt=system_prompt,
-    input_dataset_fields=["text"],
-    output_dataset_field="label",
-    use_chat_prompt=True,
-)
-
-result = optimizer.optimize_prompt(
-    dataset=dataset,
-    metric_config=metric_config,
-    task_config=task_config,
-)
-
-
-result.display()
-```
-
-The results will be displayed in the console and also available in the
-[Opik Agent Optimization dashboard](/agent_optimization/dashboard).
-
-<Frame>
-  <img src="/img/agent_optimization/trial_dashboard.png" />
-</Frame>
+Note: This results are preliminary and subject to change, you can learn more about
+our benchmarks [here](https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/benchmarks/run_benchmark.py).\_
