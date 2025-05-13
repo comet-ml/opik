@@ -15,4 +15,7 @@ export interface ProviderApiKeyWrite {
     provider: OpikApi.ProviderApiKeyWriteProvider;
     apiKey: string;
     name?: string;
+    headers?: Record<string, string>;
+    configuration?: Record<string, string>;
+    baseUrl?: string;
 }
