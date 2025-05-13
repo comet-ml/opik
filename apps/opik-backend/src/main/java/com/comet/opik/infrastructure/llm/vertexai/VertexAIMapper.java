@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.llm.gemini;
+package com.comet.opik.infrastructure.llm.vertexai;
 
 import dev.ai4j.openai4j.chat.AssistantMessage;
 import dev.ai4j.openai4j.chat.ChatCompletionChoice;
@@ -11,8 +11,6 @@ import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
-import dev.langchain4j.model.googleai.GoogleAiGeminiStreamingChatModel;
 import dev.langchain4j.model.output.Response;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
@@ -21,15 +19,15 @@ import org.mapstruct.Mapping;
 import org.mapstruct.Named;
 import org.mapstruct.factory.Mappers;
 
-import java.time.Duration;
 import java.util.List;
 
 @Mapper
-interface LlmProviderGeminiMapper {
+interface VertexAIMapper {
+
     String ERR_UNEXPECTED_ROLE = "unexpected role '%s'";
     String ERR_ROLE_MSG_TYPE_MISMATCH = "role and message instance are not matching, role: '%s', instance: '%s'";
 
-    LlmProviderGeminiMapper INSTANCE = Mappers.getMapper(LlmProviderGeminiMapper.class);
+    VertexAIMapper INSTANCE = Mappers.getMapper(VertexAIMapper.class);
 
     default ChatMessage toChatMessage(@NonNull Message message) {
         if (!List.of(Role.ASSISTANT, Role.USER, Role.SYSTEM).contains(message.role())) {
@@ -79,20 +77,4 @@ interface LlmProviderGeminiMapper {
                 .totalTokens(response.tokenUsage().totalTokenCount())
                 .build();
     }
-
-    @Mapping(expression = "java(request.model())", target = "modelName")
-    @Mapping(expression = "java(request.maxCompletionTokens())", target = "maxOutputTokens")
-    @Mapping(expression = "java(request.stop())", target = "stopSequences")
-    @Mapping(expression = "java(request.temperature())", target = "temperature")
-    @Mapping(expression = "java(request.topP())", target = "topP")
-    GoogleAiGeminiChatModel toGeminiChatModel(
-            @NonNull String apiKey, @NonNull ChatCompletionRequest request, @NonNull Duration timeout, int maxRetries);
-
-    @Mapping(expression = "java(request.model())", target = "modelName")
-    @Mapping(expression = "java(request.maxCompletionTokens())", target = "maxOutputTokens")
-    @Mapping(expression = "java(request.stop())", target = "stopSequences")
-    @Mapping(expression = "java(request.temperature())", target = "temperature")
-    @Mapping(expression = "java(request.topP())", target = "topP")
-    GoogleAiGeminiStreamingChatModel toGeminiStreamingChatModel(
-            @NonNull String apiKey, @NonNull ChatCompletionRequest request, @NonNull Duration timeout, int maxRetries);
 }

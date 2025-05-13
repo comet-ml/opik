@@ -24,13 +24,13 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
 
     public GoogleAiGeminiChatModel newGeminiClient(@NonNull String apiKey, @NonNull ChatCompletionRequest request) {
-        return LlmProviderGeminiMapper.INSTANCE.toGeminiChatModel(apiKey, request,
+        return GeminiChatModelMapper.INSTANCE.toGeminiChatModel(apiKey, request,
                 llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES);
     }
 
     public GoogleAiGeminiStreamingChatModel newGeminiStreamingClient(
             @NonNull String apiKey, @NonNull ChatCompletionRequest request) {
-        return LlmProviderGeminiMapper.INSTANCE.toGeminiStreamingChatModel(apiKey, request,
+        return GeminiChatModelMapper.INSTANCE.toGeminiStreamingChatModel(apiKey, request,
                 llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES);
     }
 
