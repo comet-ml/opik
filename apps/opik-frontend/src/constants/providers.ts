@@ -93,7 +93,7 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     value: PROVIDER_TYPE.VERTEX_AI,
     icon: VertexAIIcon,
     apiKeyName: "VERTEX_API_KEY",
-    defaultModel: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_1_5_FLASH_8B,
+    defaultModel: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17,
     locationType: PROVIDER_LOCATION_TYPE.cloud,
   },
 };
