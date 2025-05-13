@@ -85,6 +85,9 @@ class LlmProviderKeyClient:
         provider: ProviderApiKeyWriteProvider,
         api_key: str,
         name: typing.Optional[str] = OMIT,
+        headers: typing.Optional[typing.Dict[str, str]] = OMIT,
+        configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
+        base_url: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -97,6 +100,12 @@ class LlmProviderKeyClient:
         api_key : str
 
         name : typing.Optional[str]
+
+        headers : typing.Optional[typing.Dict[str, str]]
+
+        configuration : typing.Optional[typing.Dict[str, str]]
+
+        base_url : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -112,7 +121,13 @@ class LlmProviderKeyClient:
         client.llm_provider_key.store_llm_provider_api_key(provider="openai", api_key='api_key', )
         """
         _response = self._raw_client.store_llm_provider_api_key(
-            provider=provider, api_key=api_key, name=name, request_options=request_options
+            provider=provider,
+            api_key=api_key,
+            name=name,
+            headers=headers,
+            configuration=configuration,
+            base_url=base_url,
+            request_options=request_options,
         )
         return _response.data
 
@@ -259,6 +274,9 @@ class AsyncLlmProviderKeyClient:
         provider: ProviderApiKeyWriteProvider,
         api_key: str,
         name: typing.Optional[str] = OMIT,
+        headers: typing.Optional[typing.Dict[str, str]] = OMIT,
+        configuration: typing.Optional[typing.Dict[str, str]] = OMIT,
+        base_url: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -271,6 +289,12 @@ class AsyncLlmProviderKeyClient:
         api_key : str
 
         name : typing.Optional[str]
+
+        headers : typing.Optional[typing.Dict[str, str]]
+
+        configuration : typing.Optional[typing.Dict[str, str]]
+
+        base_url : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -289,7 +313,13 @@ class AsyncLlmProviderKeyClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.store_llm_provider_api_key(
-            provider=provider, api_key=api_key, name=name, request_options=request_options
+            provider=provider,
+            api_key=api_key,
+            name=name,
+            headers=headers,
+            configuration=configuration,
+            base_url=base_url,
+            request_options=request_options,
         )
         return _response.data
 

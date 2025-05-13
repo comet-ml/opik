@@ -15,6 +15,9 @@ export const ProviderApiKeyPublic: core.serialization.ObjectSchema<
     provider: ProviderApiKeyPublicProvider,
     apiKey: core.serialization.property("api_key", core.serialization.string()),
     name: core.serialization.string().optional(),
+    headers: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
+    configuration: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
+    baseUrl: core.serialization.property("base_url", core.serialization.string().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -27,6 +30,9 @@ export declare namespace ProviderApiKeyPublic {
         provider: ProviderApiKeyPublicProvider.Raw;
         api_key: string;
         name?: string | null;
+        headers?: Record<string, string> | null;
+        configuration?: Record<string, string> | null;
+        base_url?: string | null;
         created_at?: string | null;
         created_by?: string | null;
         last_updated_at?: string | null;

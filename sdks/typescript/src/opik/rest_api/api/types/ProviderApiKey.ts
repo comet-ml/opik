@@ -9,6 +9,9 @@ export interface ProviderApiKey {
     provider: OpikApi.ProviderApiKeyProvider;
     apiKey: string;
     name?: string;
+    headers?: Record<string, string>;
+    configuration?: Record<string, string>;
+    baseUrl?: string;
     createdAt?: Date;
     createdBy?: string;
     lastUpdatedAt?: Date;

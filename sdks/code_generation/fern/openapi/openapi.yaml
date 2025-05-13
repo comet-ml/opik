@@ -6218,11 +6218,23 @@ components:
           - anthropic
           - gemini
           - openrouter
+          - vertex-ai
         api_key:
           type: string
         name:
           maxLength: 150
           minLength: 0
+          type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        configuration:
+          type: object
+          additionalProperties:
+            type: string
+        base_url:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         created_at:
           type: string
@@ -6255,11 +6267,23 @@ components:
           - anthropic
           - gemini
           - openrouter
+          - vertex-ai
         api_key:
           type: string
         name:
           maxLength: 150
           minLength: 0
+          type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        configuration:
+          type: object
+          additionalProperties:
+            type: string
+        base_url:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         created_at:
           type: string
@@ -6288,11 +6312,23 @@ components:
           - anthropic
           - gemini
           - openrouter
+          - vertex-ai
         api_key:
           type: string
         name:
           maxLength: 150
           minLength: 0
+          type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        configuration:
+          type: object
+          additionalProperties:
+            type: string
+        base_url:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
     ProviderApiKeyUpdate:
       required:
