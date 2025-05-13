@@ -46,6 +46,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.testcontainers.clickhouse.ClickHouseContainer;
@@ -63,6 +64,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -190,6 +192,36 @@ class OptimizationsResourceTest {
                     .isEqualTo(optimization);
         }
 
+        @ParameterizedTest
+        @ValueSource(ints = {0, 1, 10})
+        @DisplayName("Get optimizer by id with the number of trials")
+        void getByIdWithNumTrials(long numTrials) {
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .numTrials(numTrials)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            LongStream.range(0, numTrials)
+                    .parallel()
+                    .forEach(i -> {
+                        var experiment = experimentResourceClient.createPartialExperiment()
+                                .optimizationId(id)
+                                .type(ExperimentType.TRIAL)
+                                .build();
+
+                        experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE_NAME);
+                    });
+
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            assertThat(actualOptimization)
+                    .usingRecursiveComparison()
+                    .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .isEqualTo(optimization);
+        }
+
         @Test
         @DisplayName("Get optimizer by id with feedback scores")
         void getByIdWithFeedbackScores() {
@@ -277,6 +309,7 @@ class OptimizationsResourceTest {
                                             .value(BigDecimal.valueOf(entry.getValue()))
                                             .build())
                                     .toList())
+                    .numTrials(1L)
                     .build();
 
             // then
@@ -616,6 +649,7 @@ class OptimizationsResourceTest {
                                             .value(BigDecimal.valueOf(entry.getValue()))
                                             .build())
                                     .toList())
+                    .numTrials(1L)
                     .build();
 
             // Find optimization

@@ -196,6 +196,11 @@ class OpikConfig(pydantic_settings.BaseSettings):
     If set to True - Opik will compress the JSON request body.
     """
 
+    guardrail_timeout: int = 30
+    """
+    Timeout for guardrail.validate calls in seconds. If response takes more than this, it will be considered failed and raises an Exception.
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)

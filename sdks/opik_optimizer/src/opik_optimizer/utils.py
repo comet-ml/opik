@@ -2,15 +2,20 @@
 
 import opik
 import logging
+import random
+import string
 from opik.api_objects.opik_client import Opik
-from opik.api_objects.dataset.dataset_item import DatasetItem
-from typing import List, Dict, Any, Optional, Callable
+
+from typing import List, Dict, Any, Optional, Callable, TYPE_CHECKING
 
 # Test dataset name for optimizer examples
 TEST_DATASET_NAME = "tiny-test-optimizer"
 
-# Default model for optimizers
-DEFAULT_MODEL = "o3-mini"
+# Type hint for OptimizationResult without circular import
+if TYPE_CHECKING:
+    from .optimization_result import OptimizationResult
+
+logger = logging.getLogger(__name__)
 
 
 def format_prompt(prompt: str, **kwargs: Any) -> str:
@@ -123,57 +128,5 @@ def get_or_create_dataset(
     return dataset
 
 
-def _in_jupyter_environment() -> bool:
-    """
-    Check to see if code is running in a Jupyter environment,
-    including jupyter notebook, lab, or console.
-    """
-    try:
-        import IPython
-    except Exception:
-        return False
-
-    ipy = IPython.get_ipython()
-    if ipy is None or not hasattr(ipy, "kernel"):
-        return False
-    else:
-        return True
-
-
-def _in_ipython_environment() -> bool:
-    """
-    Check to see if code is running in an IPython environment.
-    """
-    try:
-        import IPython
-    except Exception:
-        return False
-
-    ipy = IPython.get_ipython()
-    if ipy is None:
-        return False
-    else:
-        return True
-
-
-def _in_colab_environment() -> bool:
-    """
-    Check to see if code is running in Google colab.
-    """
-    try:
-        import IPython
-    except Exception:
-        return False
-
-    ipy = IPython.get_ipython()
-    return "google.colab" in str(ipy)
-
-
-def get_tqdm():
-    """
-    Get a tqdm progress bar for your environment.
-    """
-    if _in_jupyter_environment() or _in_colab_environment():
-        return tqdm.tqdm_notebook
-    else:
-        return tqdm.tqdm
+def random_chars(n: int) -> str:
+    return "".join(random.choice(string.ascii_letters) for _ in range(n))

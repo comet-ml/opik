@@ -20,6 +20,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
@@ -59,7 +60,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class LlmProviderApiKeyResourceTest {
     private static final String USER = UUID.randomUUID().toString();
-    public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt"};
+    public static final String[] IGNORED_FIELDS = {"createdAt", "lastUpdatedAt", "apiKey"};
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -122,7 +123,7 @@ class LlmProviderApiKeyResourceTest {
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
-        ProviderApiKey providerApiKey = factory.manufacturePojo(ProviderApiKey.class);
+        ProviderApiKey providerApiKey = createProviderApiKey();
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -144,6 +145,13 @@ class LlmProviderApiKeyResourceTest {
         checkEncryption(expectedProviderApiKey.id(), workspaceId, providerApiKeyUpdate.apiKey());
     }
 
+    private ProviderApiKey createProviderApiKey() {
+        return factory.manufacturePojo(ProviderApiKey.class).toBuilder()
+                .createdBy(USER)
+                .lastUpdatedBy(USER)
+                .build();
+    }
+
     @Test
     @DisplayName("Create and update provider Api Key for invalid name")
     void createAndUpdateProviderApiKeyForInvalidName() {
@@ -154,18 +162,21 @@ class LlmProviderApiKeyResourceTest {
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-        ProviderApiKey invalidNameProviderApiKey = factory.manufacturePojo(ProviderApiKey.class).toBuilder()
+        ProviderApiKey invalidNameProviderApiKey = createProviderApiKey().toBuilder()
                 .name(StringUtils.repeat('x', 160))
                 .build();
+
         llmProviderApiKeyResourceClient.createProviderApiKey(invalidNameProviderApiKey, apiKey, workspaceName, 422);
 
-        ProviderApiKey providerApiKey = factory.manufacturePojo(ProviderApiKey.class);
+        ProviderApiKey providerApiKey = createProviderApiKey();
+
         var expectedProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey,
                 workspaceName, 201);
 
         var providerApiKeyUpdate = factory.manufacturePojo(ProviderApiKeyUpdate.class).toBuilder()
                 .name(StringUtils.repeat('x', 160))
                 .build();
+
         llmProviderApiKeyResourceClient.updateProviderApiKey(expectedProviderApiKey.id(), providerApiKeyUpdate, apiKey,
                 workspaceName, 422);
     }
@@ -189,6 +200,37 @@ class LlmProviderApiKeyResourceTest {
         }
     }
 
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("Create provider Api Key with invalid payload 422")
+    void createAndUpdateProviderApiKeyInvalidPayload422(String body, String errorMsg) {
+
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        try (var actualResponse = llmProviderApiKeyResourceClient.createProviderApiKey(body, apiKey, workspaceName,
+                422)) {
+            var actualError = actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class);
+
+            assertThat(actualError.errors()).contains(errorMsg);
+        }
+    }
+
+    Stream<Arguments> createAndUpdateProviderApiKeyInvalidPayload422() {
+        ProviderApiKey providerApiKey = factory.manufacturePojo(ProviderApiKey.class);
+        return Stream.of(
+                arguments(
+                        JsonUtils.writeValueAsString(providerApiKey.toBuilder().baseUrl("").build()),
+                        "baseUrl must not be blank"),
+                arguments(
+                        JsonUtils.writeValueAsString(providerApiKey.toBuilder()
+                                .name(RandomStringUtils.secure().nextAlphabetic(200)).build()),
+                        "name size must be between 0 and 150"));
+    }
+
     Stream<Arguments> createAndUpdateProviderApiKeyInvalidPayload() {
         String body = "qwerty12345";
         ProviderApiKey providerApiKey = factory.manufacturePojo(ProviderApiKey.class);
@@ -209,7 +251,7 @@ class LlmProviderApiKeyResourceTest {
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
-        ProviderApiKey providerApiKey = factory.manufacturePojo(ProviderApiKey.class);
+        ProviderApiKey providerApiKey = createProviderApiKey();
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -235,7 +277,7 @@ class LlmProviderApiKeyResourceTest {
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
-        ProviderApiKey providerApiKey = factory.manufacturePojo(ProviderApiKey.class);
+        ProviderApiKey providerApiKey = createProviderApiKey();
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -267,7 +309,7 @@ class LlmProviderApiKeyResourceTest {
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
-        ProviderApiKey providerApiKey = factory.manufacturePojo(ProviderApiKey.class);
+        ProviderApiKey providerApiKey = createProviderApiKey();
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -282,13 +324,46 @@ class LlmProviderApiKeyResourceTest {
         assertPage(actualProviderApiKeyPage, List.of(expectedProviderApiKey));
     }
 
+    @Test
+    @DisplayName("Create and get provider Api Keys List With Minimal Fields")
+    void createAndGetProviderApiKeyListWithMinimalFields() {
+
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        ProviderApiKey providerApiKey = createProviderApiKey().toBuilder()
+                .headers(null)
+                .baseUrl(null)
+                .build();
+
+        // No LLM Provider api keys, expect empty response
+        var actualProviderApiKeyPage = llmProviderApiKeyResourceClient.getAll(workspaceName, apiKey);
+        assertPage(actualProviderApiKeyPage, List.of());
+
+        // Create LLM Provider api key
+        var expectedProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey,
+                workspaceName, 201);
+        actualProviderApiKeyPage = llmProviderApiKeyResourceClient.getAll(workspaceName, apiKey);
+        assertPage(actualProviderApiKeyPage, List.of(expectedProviderApiKey));
+    }
+
     private void getAndAssertProviderApiKey(ProviderApiKey expected, String apiKey, String workspaceName) {
         var actualEntity = llmProviderApiKeyResourceClient.getById(expected.id(), workspaceName, apiKey, 200);
-        assertThat(actualEntity.provider()).isEqualTo(expected.provider());
-        assertThat(actualEntity.name()).isEqualTo(expected.name());
+
+        assertThat(actualEntity)
+                .usingRecursiveComparison()
+                .ignoringFields(IGNORED_FIELDS)
+                .isEqualTo(expected);
 
         // We should decrypt api key in order to compare, since it encrypts on deserialization
         assertThat(decrypt(actualEntity.apiKey())).isEqualTo(maskApiKey(expected.apiKey()));
+        assertThat(actualEntity.createdAt()).isAfter(expected.createdAt());
+        assertThat(actualEntity.createdBy()).isEqualTo(expected.createdBy());
+        assertThat(actualEntity.lastUpdatedAt()).isAfter(expected.lastUpdatedAt());
+        assertThat(actualEntity.lastUpdatedBy()).isEqualTo(expected.lastUpdatedBy());
     }
 
     private void checkEncryption(UUID id, String workspaceId, String expectedApiKey) {
@@ -301,15 +376,25 @@ class LlmProviderApiKeyResourceTest {
 
     private void assertPage(Page<ProviderApiKey> actual, List<ProviderApiKey> expected) {
         assertThat(actual.content()).hasSize(expected.size());
-        assertThat(actual.page()).isEqualTo(0);
+        assertThat(actual.page()).isZero();
         assertThat(actual.total()).isEqualTo(expected.size());
         assertThat(actual.size()).isEqualTo(expected.size());
 
+        assertThat(actual.content())
+                .usingRecursiveComparison()
+                .ignoringFields(IGNORED_FIELDS)
+                .isEqualTo(expected);
+
         for (int i = 0; i < expected.size(); i++) {
-            assertThat(actual.content().get(i).provider()).isEqualTo(expected.get(i).provider());
-            assertThat(actual.content().get(i).name()).isEqualTo(expected.get(i).name());
-            assertThat(decrypt(actual.content().get(i).apiKey()))
-                    .isEqualTo(maskApiKey(expected.get(i).apiKey()));
+            ProviderApiKey actualEntity = actual.content().get(i);
+            ProviderApiKey expectedEntity = expected.get(i);
+
+            // We should decrypt api key in order to compare, since it encrypts on deserialization
+            assertThat(decrypt(actualEntity.apiKey())).isEqualTo(maskApiKey(expectedEntity.apiKey()));
+            assertThat(actualEntity.createdAt()).isAfter(expectedEntity.createdAt());
+            assertThat(actualEntity.createdBy()).isEqualTo(expectedEntity.createdBy());
+            assertThat(actualEntity.lastUpdatedAt()).isAfter(expectedEntity.lastUpdatedAt());
+            assertThat(actualEntity.lastUpdatedBy()).isEqualTo(expectedEntity.lastUpdatedBy());
         }
     }
 }

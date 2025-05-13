@@ -1,10 +1,11 @@
 from typing import (
     List,
+    Optional,
 )
 
 import httpx
 
-from opik import exceptions
+from opik import exceptions, config
 from opik.api_objects import opik_client
 from opik.message_processing.messages import (
     GuardrailBatchItemMessage,
@@ -28,6 +29,7 @@ class Guardrail:
     def __init__(
         self,
         guards: List[guards.Guard],
+        guardrail_timeout: Optional[int] = None,
     ) -> None:
         """
         Initialize a Guardrail client.
@@ -65,13 +67,17 @@ class Guardrail:
         self.guards = guards
         self._client = opik_client.get_client_cached()
 
+        self.config_ = config.get_from_user_inputs(
+            guardrail_timeout=guardrail_timeout,
+        )
+
         self._initialize_api_client(
             host_url=self._client.config.guardrails_backend_host,
         )
 
     def _initialize_api_client(self, host_url: str) -> None:
         self._api_client = rest_api_client.GuardrailsApiClient(
-            httpx_client=httpx.Client(),
+            httpx_client=httpx.Client(timeout=self.config_.guardrail_timeout),
             host_url=host_url,
         )
 

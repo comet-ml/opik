@@ -9,12 +9,16 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+
+import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -26,6 +30,10 @@ public record ProviderApiKey(
         @JsonView({View.Public.class,
                 View.Write.class}) @NotBlank @JsonDeserialize(using = ProviderApiKeyDeserializer.class) String apiKey,
         @JsonView({View.Public.class, View.Write.class}) @Size(max = 150) String name,
+        @JsonView({View.Public.class, View.Write.class}) Map<String, String> headers,
+        @JsonView({View.Public.class, View.Write.class}) Map<String, String> configuration,
+        @JsonView({View.Public.class,
+                View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String baseUrl,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
@@ -35,7 +43,11 @@ public record ProviderApiKey(
     public String toString() {
         return "ProviderApiKey{" +
                 "id=" + id +
-                ", provider='" + provider + '\'' +
+                ", provider=" + provider +
+                ", apiKey='*******'" +
+                ", name='" + name + '\'' +
+                ", headers=" + headers +
+                ", baseUrl='" + baseUrl + '\'' +
                 ", createdAt=" + createdAt +
                 ", createdBy='" + createdBy + '\'' +
                 ", lastUpdatedAt=" + lastUpdatedAt +

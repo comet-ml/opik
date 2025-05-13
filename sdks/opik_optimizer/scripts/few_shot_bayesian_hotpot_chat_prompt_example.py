@@ -1,11 +1,10 @@
 from opik.evaluation.metrics import LevenshteinRatio
-from opik_optimizer.few_shot_bayesian_optimizer import FewShotBayesianOptimizer
+from opik_optimizer import FewShotBayesianOptimizer
 from opik_optimizer.demo import get_or_create_dataset
 
 from opik_optimizer import (
-    OptimizationConfig,
     MetricConfig,
-    PromptTaskConfig,
+    TaskConfig,
     from_dataset_field,
     from_llm_response_text,
 )
@@ -17,10 +16,6 @@ prompt_instruction = """
 Answer the question.
 """
 project_name = "optimize-few-shot-bayesian-hotpot"
-initial_prompt_no_examples = [
-    {"role": "system", "content": prompt_instruction},
-    {"role": "user", "content": "{{question}}"},
-]
 
 optimizer = FewShotBayesianOptimizer(
     model="gpt-4o-mini",
@@ -31,40 +26,27 @@ optimizer = FewShotBayesianOptimizer(
     seed=42,
 )
 
-optimization_config = OptimizationConfig(
-    dataset=hot_pot_dataset,
-    objective=MetricConfig(
-        metric=LevenshteinRatio(project_name=project_name),
-        inputs={
-            "output": from_llm_response_text(),
-            "reference": from_dataset_field(name="answer"),
-        },
-    ),
-    task=PromptTaskConfig(
-        instruction_prompt=prompt_instruction,
-        input_dataset_fields=["question"],
-        output_dataset_field="answer",
-        use_chat_prompt=True,
-    ),
+metric_config = MetricConfig(
+    metric=LevenshteinRatio(project_name=project_name),
+    inputs={
+        "output": from_llm_response_text(),
+        "reference": from_dataset_field(name="answer"),
+    },
 )
 
-initial_score = optimizer.evaluate_prompt(
-    dataset=hot_pot_dataset,
-    metric_config=optimization_config.objective,
-    prompt=initial_prompt_no_examples,
+task_config = TaskConfig(
+    instruction_prompt=prompt_instruction,
+    input_dataset_fields=["question"],
+    output_dataset_field="answer",
+    use_chat_prompt=True,
 )
 
-print("Initial prompt:", initial_prompt_no_examples)
-print("Initial score:", initial_score)
-
-result = optimizer.optimize_prompt(optimization_config, n_trials=10)
-
-print("Final prompt:", result.prompt)
-
-final_score = optimizer.evaluate_prompt(
+result = optimizer.optimize_prompt(
     dataset=hot_pot_dataset,
-    metric_config=optimization_config.objective,
-    prompt=result.prompt,
+    metric_config=metric_config,
+    task_config=task_config,
+    n_trials=10,
+    n_samples=150,
 )
 
-print("Final score:", final_score)
+result.display()

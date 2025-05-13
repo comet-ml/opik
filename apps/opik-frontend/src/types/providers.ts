@@ -4,6 +4,7 @@ export enum PROVIDER_TYPE {
   OPEN_ROUTER = "openrouter",
   OLLAMA = "ollama",
   GEMINI = "gemini",
+  VERTEX_AI = "vertex-ai",
 }
 
 export enum PROVIDER_MODEL_TYPE {
@@ -358,6 +359,14 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_1_5_FLASH = "gemini-1.5-flash",
   GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b",
   GEMINI_1_5_PRO = "gemini-1.5-pro",
+
+  //   <------ vertex ai
+  VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17 = "vertex_ai/gemini-2.5-flash-preview-04-17",
+  VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_05_06 = "vertex_ai/gemini-2.5-pro-preview-05-06",
+  GEMINI_2_5_PRO_PREVIEW_03_25 = "vertex_ai/gemini-2.5-pro-preview-03-25",
+  GEMINI_2_5_PRO_EXP_03_25 = "vertex_ai/gemini-2.5-pro-exp-03-25",
+  VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
+  VERTEX_AI_GEMINI_2_0_FLASH_LITE = "vertex_ai/gemini-2.0-flash-lite-001",
 }
 
 export type PROVIDER_MODELS_TYPE = {
@@ -388,6 +397,7 @@ export interface ProviderKey {
 
 export interface ProviderKeyWithAPIKey extends ProviderKey {
   apiKey: string;
+  location?: string;
 }
 
 export interface LLMOpenAIConfigsType {
@@ -422,9 +432,16 @@ export interface LLMGeminiConfigsType {
   topP: number;
 }
 
+export interface LLMVertexAIConfigsType {
+  temperature: number;
+  maxCompletionTokens: number;
+  topP: number;
+}
+
 export type LLMPromptConfigsType =
   | Record<string, never>
   | LLMOpenAIConfigsType
   | LLMAnthropicConfigsType
   | LLMOpenRouterConfigsType
-  | LLMGeminiConfigsType;
+  | LLMGeminiConfigsType
+  | LLMVertexAIConfigsType;

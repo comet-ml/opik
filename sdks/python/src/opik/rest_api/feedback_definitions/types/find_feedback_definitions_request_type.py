@@ -2,6 +2,4 @@
 
 import typing
 
-FindFeedbackDefinitionsRequestType = typing.Union[
-    typing.Literal["numerical", "categorical"], typing.Any
-]
+FindFeedbackDefinitionsRequestType = typing.Union[typing.Literal["numerical", "categorical"], typing.Any]

@@ -83,10 +83,7 @@ services:
       timeout: 1s
       retries: 300
     volumes:
-      - zookeeper-data:/data
-      - zookeeper-datalog:/datalog
-
-
+      - zookeeper:/bitnami/zookeeper
 
   minio:
     image: minio/minio:RELEASE.2025-03-12T18-04-18Z
@@ -95,11 +92,11 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
     command: server --console-address ":9090" /data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 1s
       timeout: 10s
       retries: 30
-      start_period: 5s  
+      start_period: 5s
 
   mc:
     image: minio/mc:RELEASE.2025-03-12T17-29-24Z
@@ -153,10 +150,11 @@ services:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
       PYTHON_EVALUATOR_URL: http://python-backend:8000
+      TOGGLE_GUARDRAILS_ENABLED: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
     ports:
       - "3003" # OpenAPI specification port
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health-check"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health-check" ]
       interval: 1s
       timeout: 30s
       retries: 30
@@ -187,7 +185,7 @@ services:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
       OPIK_REVERSE_PROXY_URL: ${OPIK_REVERSE_PROXY_URL:-http://frontend:5173/api}
     healthcheck:
-      test: ["CMD", "sh", "-c", "if [ -f /opt/opik-python-backend/src/opik_backend/healthcheck.py ]; then wget --spider --quiet http://127.0.0.1:8000/healthcheck; else exit 0; fi"]
+      test: [ "CMD", "sh", "-c", "if [ -f /opt/opik-python-backend/src/opik_backend/healthcheck.py ]; then wget --spider --quiet http://127.0.0.1:8000/healthcheck; else exit 0; fi" ]
       interval: 2s
       timeout: 60s
       retries: 30
@@ -205,7 +203,7 @@ services:
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
     healthcheck:
-      test: ["CMD", "sh", "-c", "wget --spider --quiet http://127.0.0.1:5000/healthcheck"]
+      test: [ "CMD", "sh", "-c", "wget --spider --quiet http://127.0.0.1:5000/healthcheck" ]
       interval: 2s
       timeout: 60s
       retries: 30
@@ -237,20 +235,18 @@ services:
     hostname: frontend
     ports:
       - "5173:5173" # Frontend server port
-    extra_hosts:
-      - "apihost:host-gateway"
     volumes:
       - ./nginx_${OPIK_FRONTEND_FLAVOR:-default}_local.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      test: [ "CMD", "curl", "-f", "http://localhost:5173" ]
       interval: 1s
       timeout: 30s
       retries: 10
       start_period: 1s
-    environment: 
+    environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
 
 networks:
@@ -261,5 +257,4 @@ volumes:
   clickhouse-server:
   clickhouse-config:
   mysql:
-  zookeeper-data:
-  zookeeper-datalog:
+  zookeeper:

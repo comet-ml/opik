@@ -312,6 +312,11 @@ llmProviderClient:
   # Description: OpenRouter API URL
   openRouterUrl: ${LLM_PROVIDER_OPENROUTER_URL:-https://openrouter.ai/api/v1}
 
+  vertexAIClient:
+    # Default: https://www.googleapis.com/auth/cloud-platform
+    # Description: Vertex AI SCOPE API URL
+    scope: ${LLM_PROVIDER_VERTEXAI_SCOPE:-https://www.googleapis.com/auth/cloud-platform}
+
 # Configuration for cache manager
 cacheManager:
     # Default: true
@@ -363,3 +368,7 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Python evaluator is enabled
   pythonEvaluatorEnabled: ${TOGGLE_PYTHON_EVALUATOR_ENABLED:-"true"}
+  # Default: false
+  # Description: Whether or not Guardrails feature is enabled
+  guardrailsEnabled: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
+

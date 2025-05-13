@@ -32,6 +32,10 @@ import ConfigurationPage from "@/components/pages/ConfigurationPage/Configuratio
 import GetStartedPage from "@/components/pages/GetStartedPage/GetStartedPage";
 import AutomationLogsPage from "@/components/pages/AutomationLogsPage/AutomationLogsPage";
 import OnlineEvaluationPage from "@/components/pages/OnlineEvaluationPage/OnlineEvaluationPage";
+import OptimizationsPage from "@/components/pages/OptimizationsPage/OptimizationsPage";
+import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
+import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
+import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -182,6 +186,55 @@ const compareExperimentsRoute = createRoute({
   },
 });
 
+// Optimization runs
+const optimizationsRoute = createRoute({
+  path: "/optimizations",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Optimization runs",
+  },
+});
+
+const optimizationsListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => optimizationsRoute,
+  component: OptimizationsPage,
+});
+
+const compareOptimizationsRoute = createRoute({
+  path: "/$datasetId/compare",
+  getParentRoute: () => optimizationsRoute,
+  component: CompareOptimizationsPage,
+  staticData: {
+    param: "optimizationsCompare",
+    paramValue: "optimizationsCompare",
+  },
+});
+
+const optimizationBaseRoute = createRoute({
+  path: "/$datasetId/$optimizationId",
+  getParentRoute: () => optimizationsRoute,
+  staticData: {
+    param: "optimizationId",
+  },
+});
+
+const optimizationRoute = createRoute({
+  path: "/",
+  getParentRoute: () => optimizationBaseRoute,
+  component: OptimizationPage,
+});
+
+const compareTrialsRoute = createRoute({
+  path: "/compare",
+  getParentRoute: () => optimizationBaseRoute,
+  component: CompareTrialsPage,
+  staticData: {
+    param: "trialsCompare",
+    paramValue: "trialsCompare",
+  },
+});
+
 // ----------- datasets
 const datasetsRoute = createRoute({
   path: "/datasets",
@@ -322,6 +375,14 @@ const routeTree = rootRoute.addChildren([
       experimentsRoute.addChildren([
         experimentsListRoute,
         compareExperimentsRoute,
+      ]),
+      optimizationsRoute.addChildren([
+        optimizationsListRoute,
+        compareOptimizationsRoute,
+        optimizationBaseRoute.addChildren([
+          optimizationRoute,
+          compareTrialsRoute,
+        ]),
       ]),
       datasetsRoute.addChildren([
         datasetsListRoute,

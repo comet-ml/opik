@@ -8,6 +8,7 @@ import {
   LLMOpenAIConfigsType,
   LLMOpenRouterConfigsType,
   LLMPromptConfigsType,
+  LLMVertexAIConfigsType,
   PROVIDER_TYPE,
 } from "@/types/providers";
 
@@ -22,6 +23,7 @@ import OpenAIModelConfigs from "@/components/pages-shared/llm/PromptModelSetting
 import AnthropicModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/AnthropicModelConfigs";
 import OpenRouterModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/OpenRouterModelConfigs";
 import GeminiModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/GeminiModelConfigs";
+import VertexAIModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/VertexAIModelConfigs";
 
 interface PromptModelConfigsProps {
   provider: PROVIDER_TYPE | "";
@@ -68,6 +70,15 @@ const PromptModelConfigs = ({
       return (
         <GeminiModelConfigs
           configs={configs as LLMGeminiConfigsType}
+          onChange={onChange}
+        />
+      );
+    }
+
+    if (provider === PROVIDER_TYPE.VERTEX_AI) {
+      return (
+        <VertexAIModelConfigs
+          configs={configs as LLMVertexAIConfigsType}
           onChange={onChange}
         />
       );

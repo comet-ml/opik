@@ -125,7 +125,7 @@ class TraceServiceImpl implements TraceService {
 
         return Mono.deferContextual(ctx -> IdGenerator
                 .validateVersionAsync(id, TRACE_KEY)
-                .then(Mono.defer(() -> getOrCreateProject(projectName)))
+                .then(Mono.defer(() -> projectService.getOrCreate(projectName)))
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, TRACE_KEY),
                         Mono.defer(() -> insertTrace(trace, project, id)))
@@ -152,7 +152,7 @@ class TraceServiceImpl implements TraceService {
 
         return Mono.deferContextual(ctx -> {
             Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
-                    .flatMap(this::getOrCreateProject)
+                    .flatMap(projectService::getOrCreate)
                     .collectList()
                     .map(projects -> bindTraceToProjectAndId(batch, projects))
                     .subscribeOn(Schedulers.boundedElastic());
@@ -218,13 +218,6 @@ class TraceServiceImpl implements TraceService {
         });
     }
 
-    private Mono<Project> getOrCreateProject(String projectName) {
-        return AsyncUtils.makeMonoContextAware((userName, workspaceId) -> Mono
-                .fromCallable(() -> projectService.getOrCreate(workspaceId, projectName, userName))
-                .onErrorResume(e -> handleProjectCreationError(e, projectName, workspaceId))
-                .subscribeOn(Schedulers.boundedElastic()));
-    }
-
     private Mono<UUID> insertTrace(Trace newTrace, Project project, UUID id, Trace existingTrace) {
         return Mono.defer(() -> {
             // check if a partial trace exists caused by a patch request
@@ -251,16 +244,6 @@ class TraceServiceImpl implements TraceService {
         });
     }
 
-    private Mono<Project> handleProjectCreationError(Throwable exception, String projectName, String workspaceId) {
-        return switch (exception) {
-            case EntityAlreadyExistsException __ -> Mono.fromCallable(
-                    () -> projectService.findByNames(workspaceId, List.of(projectName)).stream().findFirst()
-                            .orElseThrow())
-                    .subscribeOn(Schedulers.boundedElastic());
-            default -> Mono.error(exception);
-        };
-    }
-
     @Override
     @WithSpan
     public Mono<Void> update(@NonNull TraceUpdate traceUpdate, @NonNull UUID id) {
@@ -268,7 +251,7 @@ class TraceServiceImpl implements TraceService {
         var projectName = WorkspaceUtils.getProjectName(traceUpdate.projectName());
 
         return Mono.deferContextual(ctx -> getProjectById(traceUpdate)
-                .switchIfEmpty(Mono.defer(() -> getOrCreateProject(projectName)))
+                .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, TRACE_KEY),
@@ -464,15 +447,9 @@ class TraceServiceImpl implements TraceService {
 
     @Override
     public Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria) {
+        criteria = findProjectAndVerifyVisibility(criteria);
 
-        if (criteria.projectId() != null) {
-            return dao.search(limit, criteria);
-        }
-
-        return getProjectByName(criteria.projectName())
-                .map(project -> criteria.toBuilder().projectId(project.id()).build())
-                .flatMapMany(newCriteria -> dao.search(limit, newCriteria))
-                .switchIfEmpty(Flux.empty());
+        return dao.search(limit, criteria);
     }
 
     @Override

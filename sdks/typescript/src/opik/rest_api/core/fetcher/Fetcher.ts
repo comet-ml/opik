@@ -1,5 +1,6 @@
 import { toJson } from "../json";
 import { APIResponse } from "./APIResponse";
+import { abortRawResponse, toRawResponse, unknownRawResponse } from "./RawResponse";
 import { createRequestUrl } from "./createRequestUrl";
 import { getFetchFn } from "./getFetchFn";
 import { getRequestBody } from "./getRequestBody";
@@ -94,6 +95,7 @@ export async function fetcherImpl<R = unknown>(args: Fetcher.Args): Promise<APIR
                 ok: true,
                 body: responseBody as R,
                 headers: response.headers,
+                rawResponse: toRawResponse(response),
             };
         } else {
             return {
@@ -103,6 +105,7 @@ export async function fetcherImpl<R = unknown>(args: Fetcher.Args): Promise<APIR
                     statusCode: response.status,
                     body: responseBody,
                 },
+                rawResponse: toRawResponse(response),
             };
         }
     } catch (error) {
@@ -113,6 +116,7 @@ export async function fetcherImpl<R = unknown>(args: Fetcher.Args): Promise<APIR
                     reason: "unknown",
                     errorMessage: "The user aborted a request",
                 },
+                rawResponse: abortRawResponse,
             };
         } else if (error instanceof Error && error.name === "AbortError") {
             return {
@@ -120,6 +124,7 @@ export async function fetcherImpl<R = unknown>(args: Fetcher.Args): Promise<APIR
                 error: {
                     reason: "timeout",
                 },
+                rawResponse: abortRawResponse,
             };
         } else if (error instanceof Error) {
             return {
@@ -128,6 +133,7 @@ export async function fetcherImpl<R = unknown>(args: Fetcher.Args): Promise<APIR
                     reason: "unknown",
                     errorMessage: error.message,
                 },
+                rawResponse: unknownRawResponse,
             };
         }
 
@@ -137,6 +143,7 @@ export async function fetcherImpl<R = unknown>(args: Fetcher.Args): Promise<APIR
                 reason: "unknown",
                 errorMessage: toJson(error),
             },
+            rawResponse: unknownRawResponse,
         };
     }
 }

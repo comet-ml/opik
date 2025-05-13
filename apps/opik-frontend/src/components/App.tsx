@@ -7,6 +7,10 @@ import { QueryParamProvider } from "use-query-params";
 import { WindowHistoryAdapter } from "use-query-params/adapters/window";
 import useCustomScrollbarClass from "@/hooks/useCustomScrollbarClass";
 import SentryErrorBoundary from "@/components/layout/SentryErrorBoundary/SentryErrorBoundary";
+import { TooltipProvider } from "@/components/ui/tooltip";
+
+const TOOLTIP_DELAY_DURATION = 500;
+const TOOLTIP_SKIP__DELAY_DURATION = 0;
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,7 +28,12 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <QueryParamProvider adapter={WindowHistoryAdapter}>
           <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
-            <RouterProvider router={router} />
+            <TooltipProvider
+              delayDuration={TOOLTIP_DELAY_DURATION}
+              skipDelayDuration={TOOLTIP_SKIP__DELAY_DURATION}
+            >
+              <RouterProvider router={router} />
+            </TooltipProvider>
             <Toaster />
           </ThemeProvider>
         </QueryParamProvider>

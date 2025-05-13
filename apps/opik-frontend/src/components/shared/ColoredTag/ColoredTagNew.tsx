@@ -29,8 +29,10 @@ const ColoredTagNew: React.FunctionComponent<ColoredTagNewProps> = ({
   className,
   size = "default",
 }) => {
-  const variant = useMemo(() => generateTagVariant(label), [label]);
-  const color = TAG_VARIANTS_COLOR_MAP[generateTagVariant(variant!)!];
+  const color = useMemo(
+    () => TAG_VARIANTS_COLOR_MAP[generateTagVariant(label)!],
+    [label],
+  );
 
   return (
     <div

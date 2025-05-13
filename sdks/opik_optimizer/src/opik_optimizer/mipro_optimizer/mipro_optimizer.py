@@ -3,15 +3,13 @@ import os
 import random
 
 import opik
+
 from opik.integrations.dspy.callback import OpikCallback
 from opik.opik_context import get_current_span_data
-from opik.evaluation.metrics import BaseMetric
 from opik.evaluation import evaluate
 from opik import Dataset
-from opik_optimizer import optimization_dsl, base_optimizer
 
 import dspy
-from dspy.clients.base_lm import BaseLM
 
 import litellm
 from litellm.caching import Cache
@@ -20,6 +18,7 @@ from ..optimization_result import OptimizationResult
 from ..base_optimizer import BaseOptimizer
 from ._mipro_optimizer_v2 import MIPROv2
 from ._lm import LM
+from ..optimization_config.configs import MetricConfig, TaskConfig
 from .utils import (
     create_dspy_signature,
     opik_metric_to_dspy,
@@ -34,16 +33,7 @@ litellm.cache = Cache(type="disk", disk_cache_dir=disk_cache_dir)
 # Set up logging
 import logging
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Configure LiteLLM logging
-litellm_logger = logging.getLogger("LiteLLM")
-litellm_logger.setLevel(logging.WARNING)  # Only show warnings and errors from LiteLLM
-
-# Configure HTTPX logging
-httpx_logger = logging.getLogger("httpx")
-httpx_logger.setLevel(logging.WARNING)  # Only show warnings and errors from HTTPX
+logger = logging.getLogger(__name__)  # Inherits config from setup_logging
 
 
 class MiproOptimizer(BaseOptimizer):
@@ -53,18 +43,19 @@ class MiproOptimizer(BaseOptimizer):
         self.num_threads = self.model_kwargs.pop("num_threads", 6)
         self.model_kwargs["model"] = self.model
         lm = LM(**self.model_kwargs)
-        opik_callback = OpikCallback(project_name=self.project_name)
+        opik_callback = OpikCallback(project_name=self.project_name, log_graph=True)
         dspy.configure(lm=lm, callbacks=[opik_callback])
+        logger.debug(f"Initialized MiproOptimizer with model: {model}")
 
     def evaluate_prompt(
         self,
         dataset: Union[str, Dataset],
-        config: optimization_dsl.OptimizationConfig,
-        prompt: str = None,
-        num_test: int = 10,
+        metric_config: MetricConfig,
+        task_config: TaskConfig,
+        prompt: Union[str, dspy.Module, OptimizationResult] = None,
+        n_samples: int = 10,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
-        module=None,
         **kwargs,
     ) -> float:
         """
@@ -72,9 +63,10 @@ class MiproOptimizer(BaseOptimizer):
 
         Args:
             dataset: Opik dataset name or dataset
-            config: Opik Optimization Config
+            metric_config: A MetricConfig instance
+            task_config: A TaskConfig instance
             prompt: The prompt to evaluate
-            num_test: number of items to test in the dataset
+            n_samples: number of items to test in the dataset
             dataset_item_ids: Optional list of dataset item IDs to evaluate
             experiment_config: Optional configuration for the experiment
             **kwargs: Additional arguments for evaluation
@@ -84,9 +76,9 @@ class MiproOptimizer(BaseOptimizer):
         """
         # FIMXE: call super when it is ready
         # FIXME: Intermediate values:
-        metric = config.objective.metric
-        input_key = config.task.input_dataset_fields[0]  # FIXME: allow all inputs
-        output_key = config.task.output_dataset_field
+        metric = metric_config.metric
+        input_key = task_config.input_dataset_fields[0]  # FIXME: allow all inputs
+        output_key = task_config.output_dataset_field
 
         if isinstance(dataset, str):
             opik_client = opik.Opik(project_name=self.project_name)
@@ -152,12 +144,12 @@ class MiproOptimizer(BaseOptimizer):
 
             return result
 
-        if num_test is not None:
+        if n_samples is not None:
             if dataset_item_ids is not None:
-                raise Exception("Can't use num_test and dataset_item_ids")
+                raise Exception("Can't use n_samples and dataset_item_ids")
 
             all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
-            dataset_item_ids = random.sample(all_ids, num_test)
+            dataset_item_ids = random.sample(all_ids, n_samples)
 
         experiment_config = experiment_config or {}
         experiment_config = {
@@ -165,14 +157,12 @@ class MiproOptimizer(BaseOptimizer):
             **{
                 "optimizer": self.__class__.__name__,
                 "tools": (
-                    [f.__name__ for f in config.task.tools] if config.task.tools else []
+                    [f.__name__ for f in task_config.tools] if task_config.tools else []
                 ),
-                "metric": config.objective.metric.name,
+                "metric": metric_config.metric.name,
                 "dataset": dataset.name,
             },
         }
-        # FIXME: add prompt, examples to experiment_config
-
         # Run evaluation with all metrics at once
         evaluation = evaluate(
             dataset=dataset,
@@ -191,39 +181,99 @@ class MiproOptimizer(BaseOptimizer):
         count = len(evaluation.test_results)
         for i in range(count):
             total_score += evaluation.test_results[i].score_results[0].value
-        return total_score / count if count > 0 else 0.0
+        score = total_score / count if count > 0 else 0.0
+
+        logger.debug(
+            f"Starting Mipro evaluation for prompt type: {type(prompt).__name__}"
+        )
+        logger.debug(f"Evaluation score: {score:.4f}")
+        return score
 
     def optimize_prompt(
         self,
-        config: optimization_dsl.OptimizationConfig,
+        dataset: Union[str, Dataset],
+        metric_config: MetricConfig,
+        task_config: TaskConfig,
         num_candidates: int = 10,
         experiment_config: Optional[Dict] = None,
         **kwargs,
     ) -> OptimizationResult:
+        self._opik_client = opik.Opik()
+        optimization = None
+        try:
+            optimization = self._opik_client.create_optimization(
+                dataset_name=dataset.name,
+                objective_name=metric_config.metric.name,
+            )
+        except Exception:
+            logger.warning(
+                "Opik server does not support optimizations. Please upgrade opik."
+            )
+            optimization = None
 
+        if not optimization:
+            logger.warning("Continuing without Opik optimization tracking.")
+
+        try:
+            result = self._optimize_prompt(
+                dataset=dataset,
+                metric_config=metric_config,
+                task_config=task_config,
+                num_candidates=num_candidates,
+                experiment_config=experiment_config,
+                optimization_id=optimization.id if optimization is not None else None,
+                **kwargs,
+            )
+            if optimization:
+                self.update_optimization(optimization, status="completed")
+            return result
+        except Exception as e:
+            logger.error(f"Mipro optimization failed: {e}", exc_info=True)
+            if optimization:
+                self.update_optimization(optimization, status="cancelled")
+            raise e
+
+    def _optimize_prompt(
+        self,
+        dataset: Union[str, Dataset],
+        metric_config: MetricConfig,
+        task_config: TaskConfig,
+        num_candidates: int = 10,
+        experiment_config: Optional[Dict] = None,
+        optimization_id: Optional[str] = None,
+        **kwargs,
+    ) -> OptimizationResult:
+        logger.info("Preparing MIPRO optimization...")
         self.prepare_optimize_prompt(
-            config=config,
+            dataset=dataset,
+            metric_config=metric_config,
+            task_config=task_config,
             num_candidates=num_candidates,
             experiment_config=experiment_config,
+            optimization_id=optimization_id,
             **kwargs,
         )
-
-        return self.continue_optimize_prompt()
+        logger.info("Starting MIPRO compilation...")
+        result = self.continue_optimize_prompt()
+        logger.info("MIPRO optimization complete.")
+        return result
 
     def prepare_optimize_prompt(
         self,
-        config: optimization_dsl.OptimizationConfig,
+        dataset,
+        metric_config,
+        task_config,
         num_candidates: int = 10,
         experiment_config: Optional[Dict] = None,
+        optimization_id: Optional[str] = None,
         **kwargs,
     ) -> None:
         # FIXME: Intermediate values:
-        dataset = config.dataset
-        metric = config.objective.metric
-        prompt = config.task.instruction_prompt
-        input_key = config.task.input_dataset_fields[0]  # FIXME: allow all
-        output_key = config.task.output_dataset_field
-        self.tools = config.task.tools
+        metric = metric_config.metric
+        prompt = task_config.instruction_prompt
+        input_key = task_config.input_dataset_fields[0]  # FIXME: allow all
+        output_key = task_config.output_dataset_field
+        self.tools = task_config.tools
         self.num_candidates = num_candidates
         self.seed = 9
         self.input_key = input_key
@@ -269,7 +319,7 @@ class MiproOptimizer(BaseOptimizer):
                 "metric": metric.name,
                 "num_threads": self.num_threads,
                 "num_candidates": self.num_candidates,
-                "dataset": config.dataset.name,
+                "dataset": dataset.name,
             },
         }
 
@@ -281,13 +331,18 @@ class MiproOptimizer(BaseOptimizer):
             verbose=False,
             num_candidates=self.num_candidates,
             seed=self.seed,
-            opik_prompt_task_config=config.task,
-            opik_dataset=config.dataset,
+            opik_prompt_task_config=task_config,
+            opik_dataset=dataset,
             opik_project_name=self.project_name,
-            opik_metric_config=config.objective,
+            opik_metric_config=metric_config,
+            opik_optimization_id=optimization_id,
             log_dir=log_dir,
             experiment_config=experiment_config,
         )
+
+        logger.debug("Created DSPy training set.")
+        logger.debug(f"Using DSPy module: {type(self.module).__name__}")
+        logger.debug(f"Using metric function: {self.metric_function.__name__}")
 
     def load_from_checkpoint(self, filename):
         """

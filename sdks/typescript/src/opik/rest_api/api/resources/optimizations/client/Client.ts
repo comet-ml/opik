@@ -53,10 +53,17 @@ export class Optimizations {
      * @example
      *     await client.optimizations.findOptimizations()
      */
-    public async findOptimizations(
+    public findOptimizations(
         request: OpikApi.FindOptimizationsRequest = {},
         requestOptions?: Optimizations.RequestOptions,
-    ): Promise<OpikApi.OptimizationPagePublic> {
+    ): core.HttpResponsePromise<OpikApi.OptimizationPagePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__findOptimizations(request, requestOptions));
+    }
+
+    private async __findOptimizations(
+        request: OpikApi.FindOptimizationsRequest = {},
+        requestOptions?: Optimizations.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.OptimizationPagePublic>> {
         const { page, size, datasetId, name, datasetDeleted } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
@@ -107,22 +114,26 @@ export class Optimizations {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.OptimizationPagePublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.OptimizationPagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body);
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -132,12 +143,14 @@ export class Optimizations {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/optimizations.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -155,10 +168,17 @@ export class Optimizations {
      *         status: "running"
      *     })
      */
-    public async createOptimization(
+    public createOptimization(
         request: OpikApi.OptimizationWrite,
         requestOptions?: Optimizations.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__createOptimization(request, requestOptions));
+    }
+
+    private async __createOptimization(
+        request: OpikApi.OptimizationWrite,
+        requestOptions?: Optimizations.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -187,13 +207,14 @@ export class Optimizations {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -202,12 +223,14 @@ export class Optimizations {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling POST /v1/private/optimizations.");
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -223,10 +246,17 @@ export class Optimizations {
      *         ids: ["ids"]
      *     })
      */
-    public async deleteOptimizationsById(
+    public deleteOptimizationsById(
         request: OpikApi.DeleteIdsHolder,
         requestOptions?: Optimizations.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteOptimizationsById(request, requestOptions));
+    }
+
+    private async __deleteOptimizationsById(
+        request: OpikApi.DeleteIdsHolder,
+        requestOptions?: Optimizations.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -255,13 +285,14 @@ export class Optimizations {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -270,6 +301,7 @@ export class Optimizations {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -278,6 +310,7 @@ export class Optimizations {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -293,10 +326,17 @@ export class Optimizations {
      * @example
      *     await client.optimizations.getOptimizationById("id")
      */
-    public async getOptimizationById(
+    public getOptimizationById(
         id: string,
         requestOptions?: Optimizations.RequestOptions,
-    ): Promise<OpikApi.OptimizationPublic> {
+    ): core.HttpResponsePromise<OpikApi.OptimizationPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getOptimizationById(id, requestOptions));
+    }
+
+    private async __getOptimizationById(
+        id: string,
+        requestOptions?: Optimizations.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.OptimizationPublic>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -324,22 +364,26 @@ export class Optimizations {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return serializers.OptimizationPublic.parseOrThrow(_response.body, {
-                unrecognizedObjectKeys: "passthrough",
-                allowUnrecognizedUnionMembers: true,
-                allowUnrecognizedEnumValues: true,
-                breadcrumbsPrefix: ["response"],
-            });
+            return {
+                data: serializers.OptimizationPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
         }
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body);
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
                         body: _response.error.body,
+                        rawResponse: _response.rawResponse,
                     });
             }
         }
@@ -349,6 +393,7 @@ export class Optimizations {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -357,6 +402,7 @@ export class Optimizations {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }
@@ -371,11 +417,19 @@ export class Optimizations {
      * @example
      *     await client.optimizations.updateOptimizationsById("id")
      */
-    public async updateOptimizationsById(
+    public updateOptimizationsById(
         id: string,
         request: OpikApi.OptimizationUpdate = {},
         requestOptions?: Optimizations.RequestOptions,
-    ): Promise<void> {
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__updateOptimizationsById(id, request, requestOptions));
+    }
+
+    private async __updateOptimizationsById(
+        id: string,
+        request: OpikApi.OptimizationUpdate = {},
+        requestOptions?: Optimizations.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -404,13 +458,14 @@ export class Optimizations {
             abortSignal: requestOptions?.abortSignal,
         });
         if (_response.ok) {
-            return;
+            return { data: undefined, rawResponse: _response.rawResponse };
         }
 
         if (_response.error.reason === "status-code") {
             throw new errors.OpikApiError({
                 statusCode: _response.error.statusCode,
                 body: _response.error.body,
+                rawResponse: _response.rawResponse,
             });
         }
 
@@ -419,6 +474,7 @@ export class Optimizations {
                 throw new errors.OpikApiError({
                     statusCode: _response.error.statusCode,
                     body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
@@ -427,6 +483,7 @@ export class Optimizations {
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
                 });
         }
     }

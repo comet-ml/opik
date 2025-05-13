@@ -128,111 +128,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             """;
 
     private static final String FIND = """
-            WITH trace_final AS (
-                SELECT
-                    id
-                FROM traces
-                WHERE workspace_id = :workspace_id
-            ),
-            feedback_scores_agg AS (
-                SELECT
-                    experiment_id,
-                    if(
-                        notEmpty(arrayFilter(x -> length(x) > 0, groupArray(name))),
-                        mapFromArrays(
-                            arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(name))),
-                            arrayMap(
-                                vName -> if(
-                                    arrayReduce(
-                                        'SUM',
-                                        arrayMap(
-                                            vNameAndValue -> vNameAndValue.2,
-                                            arrayFilter(
-                                                pair -> pair.1 = vName,
-                                                groupArray(DISTINCT tuple(name, count_value, trace_id))
-                                            )
-                                        )
-                                    ) = 0,
-                                    0,
-                                    arrayReduce(
-                                        'SUM',
-                                        arrayMap(
-                                            vNameAndValue -> vNameAndValue.2,
-                                            arrayFilter(
-                                                pair -> pair.1 = vName,
-                                                groupArray(DISTINCT tuple(name, total_value, trace_id))
-                                            )
-                                        )
-                                    ) / arrayReduce(
-                                        'SUM',
-                                        arrayMap(
-                                            vNameAndValue -> vNameAndValue.2,
-                                            arrayFilter(
-                                                pair -> pair.1 = vName,
-                                                groupArray(DISTINCT tuple(name, count_value, trace_id))
-                                            )
-                                        )
-                                    )
-                                ),
-                                arrayDistinct(arrayFilter(x -> length(x) > 0, groupArray(name)))
-                            )
-                        ),
-                        map()
-                    ) as feedback_scores
-                FROM (
-                    SELECT
-                        ei.experiment_id,
-                        tfs.name,
-                        tfs.total_value,
-                        tfs.count_value,
-                        tfs.trace_id as trace_id
-                    FROM experiment_items ei
-                    JOIN (
-                        SELECT
-                            entity_id as trace_id,
-                            name,
-                            SUM(value) as total_value,
-                            COUNT(value) as count_value
-                        FROM (
-                            SELECT
-                                entity_id,
-                                name,
-                                value
-                            FROM feedback_scores
-                            WHERE workspace_id = :workspace_id
-                            AND entity_type = :entity_type
-                            AND entity_id IN (SELECT id FROM trace_final)
-                            ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                            LIMIT 1 BY entity_id, name
-                        )
-                        GROUP BY
-                            entity_id,
-                            name
-                    ) AS tfs ON ei.trace_id = tfs.trace_id
-                    WHERE ei.trace_id IN (SELECT id FROM trace_final)
-                )
-                GROUP BY experiment_id
-            ), experiments_fs AS (
-                SELECT
-                    e.id as id,
-                    e.optimization_id as optimization_id,
-                    fs.feedback_scores as feedback_scores
-                FROM (
-                    SELECT
-                        id,
-                        optimization_id
-                    FROM experiments
-                    WHERE workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS e
-                LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
-            )
-            SELECT
-                o.*,
-                COUNT(DISTINCT efs.id) AS num_trials,
-                maxMap(efs.feedback_scores) AS feedback_scores
-            FROM (
+            WITH optimization_final AS (
                 SELECT
                     *
                 FROM optimizations
@@ -243,8 +139,61 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
-            ) AS o
-            LEFT JOIN experiments_fs AS efs ON o.id = efs.optimization_id
+            ), experiments_final AS (
+                SELECT
+                    id,
+                    optimization_id
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                AND optimization_id IN (SELECT id FROM optimization_final)
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), experiment_items_final AS (
+                SELECT
+                    DISTINCT
+                        experiment_id,
+                        trace_id
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                AND experiment_id IN (SELECT id FROM experiments_final)
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), feedback_scores_agg AS (
+                SELECT
+                    experiment_id,
+                    mapFromArrays(
+                        groupArray(fs_avg.name),
+                        groupArray(fs_avg.avg_value)
+                    ) AS feedback_scores
+                FROM (
+                    SELECT
+                        et.experiment_id,
+                        fs.name,
+                        avg(fs.value) AS avg_value
+                    FROM experiment_items_final as et
+                    LEFT JOIN (
+                        SELECT
+                            name,
+                            entity_id AS trace_id,
+                            value
+                        FROM feedback_scores final
+                        WHERE workspace_id = :workspace_id
+                        AND entity_type = :entity_type
+                        AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                    ) fs ON fs.trace_id = et.trace_id
+                    GROUP BY et.experiment_id, fs.name
+                    HAVING length(fs.name) > 0
+                ) as fs_avg
+                GROUP BY experiment_id
+            )
+            SELECT
+                o.*,
+                o.id as id,
+                COUNT(DISTINCT e.id) FILTER (WHERE e.id != '') AS num_trials,
+                maxMap(fs.feedback_scores) AS feedback_scores
+            FROM optimization_final AS o
+            LEFT JOIN experiments_final AS e ON o.id = e.optimization_id
+            LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
             GROUP BY o.*
             ORDER BY o.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
@@ -329,7 +278,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             WHERE workspace_id = :workspace_id
             AND dataset_id IN :dataset_ids
             ORDER BY id DESC, last_updated_at DESC
-            LIMIT 1
+            LIMIT 1 by id
             ;
             """;
 

@@ -44,20 +44,18 @@ import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperi
 import ExperimentsActionsPanel from "@/components/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
 import ExperimentsFiltersButton from "@/components/pages-shared/experiments/ExperimentsFiltersButton/ExperimentsFiltersButton";
 import ExperimentRowActionsCell from "@/components/pages/ExperimentsPage/ExperimentRowActionsCell";
-import ExperimentsChartsWrapper from "@/components/pages/ExperimentsPage/charts/ExperimentsChartsWrapper";
+import FeedbackScoresChartsWrapper from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartsWrapper";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
 import useGroupedExperimentsList, {
-  checkIsMoreRowId,
-  DEFAULT_GROUPS_PER_PAGE,
   GroupedExperiment,
-  GROUPING_COLUMN,
 } from "@/hooks/useGroupedExperimentsList";
 import {
-  generateExperimentNameColumDef,
+  checkIsMoreRowId,
+  generateGroupedNameColumDef,
   generateGroupedCellDef,
   getIsCustomRow,
   getRowId,
@@ -65,6 +63,7 @@ import {
   GROUPING_CONFIG,
   renderCustomRow,
 } from "@/components/pages-shared/experiments/table";
+import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/grouping";
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
@@ -285,7 +284,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
   const columns = useMemo(() => {
     return [
-      generateExperimentNameColumDef<GroupedExperiment>(
+      generateGroupedNameColumDef<GroupedExperiment>(
         checkboxClickHandler,
         isColumnSortable(COLUMN_NAME_ID, sortableBy),
       ),
@@ -447,10 +446,13 @@ const ExperimentsPage: React.FunctionComponent = () => {
           </Button>
         </div>
       </div>
-      <ExperimentsChartsWrapper
-        experiments={experiments}
-        datasetsData={datasetsData}
-      />
+      {Boolean(experiments.length) && (
+        <FeedbackScoresChartsWrapper
+          entities={experiments}
+          datasetsData={datasetsData}
+          isAverageScores
+        />
+      )}
       <DataTable
         columns={columns}
         data={experiments}

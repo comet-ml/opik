@@ -2,8 +2,10 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
+import com.comet.opik.infrastructure.db.MapFlatArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
+import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
@@ -18,11 +20,13 @@ import java.util.UUID;
 
 @RegisterConstructorMapper(ProviderApiKey.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
+@RegisterArgumentFactory(MapFlatArgumentFactory.class)
+@RegisterColumnMapper(MapFlatArgumentFactory.class)
 public interface LlmProviderApiKeyDAO {
 
-    @SqlUpdate("INSERT INTO llm_provider_api_key (id, provider, workspace_id, api_key, name, created_by, last_updated_by) "
+    @SqlUpdate("INSERT INTO llm_provider_api_key (id, provider, workspace_id, api_key, name, created_by, last_updated_by, headers, base_url, configuration) "
             +
-            "VALUES (:bean.id, :bean.provider, :workspaceId, :bean.apiKey, :bean.name, :bean.createdBy, :bean.lastUpdatedBy)")
+            "VALUES (:bean.id, :bean.provider, :workspaceId, :bean.apiKey, :bean.name, :bean.createdBy, :bean.lastUpdatedBy, :bean.headers, :bean.baseUrl, :bean.configuration)")
     void save(@Bind("workspaceId") String workspaceId,
             @BindMethods("bean") ProviderApiKey providerApiKey);
 

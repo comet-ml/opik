@@ -25,6 +25,14 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -U pip
 RUN pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
 
+COPY entrypoint.sh .
+RUN chmod u+x entrypoint.sh
+
+# Download the cache with the final user to ensure that files are in the right
+# place and readable by the user
+RUN mkdir /.cache/ /.local/ && chown -R 1001:1001 /opt/opik-guardrails-backend /.cache/ /.local/
+USER 1001:1001
+
 # Download spaCy model for PII detection
 RUN python -m spacy download en_core_web_lg
 
@@ -32,7 +40,6 @@ RUN python -m spacy download en_core_web_lg
 RUN python -c "from transformers import AutoModelForSequenceClassification, AutoTokenizer; AutoModelForSequenceClassification.from_pretrained('facebook/bart-large-mnli'); AutoTokenizer.from_pretrained('facebook/bart-large-mnli')"
 
 COPY opik_guardrails ./opik_guardrails
-COPY entrypoint.sh .
 
 ARG OPIK_VERSION
 ENV OPIK_VERSION="${OPIK_VERSION}"
@@ -42,11 +49,7 @@ ENV NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility \
     TORCH_CUDA_ARCH_LIST="7.0;7.5;8.0;8.6;9.0"
 
-RUN chmod u+x entrypoint.sh
 EXPOSE 5000
-
-RUN mkdir /.cache/ && chown -R 1001:1001 /opt/opik-guardrails-backend /.cache/
-USER 1001:1001
 
 ENTRYPOINT ["tini", "--"]
 CMD ["./entrypoint.sh"]

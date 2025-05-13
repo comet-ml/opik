@@ -35,8 +35,20 @@ export const LocalAIProviderDetailsFormSchema = z.object({
     ),
 });
 
-export const AIProviderFormSchema = z.discriminatedUnion("locationType", [
+export const VertexAIProviderDetailsFormSchema = z.object({
+  provider: ProviderSchema,
+  locationType: z.literal(PROVIDER_LOCATION_TYPE.cloud),
+  apiKey: z
+    .string({
+      required_error: "API key is required",
+    })
+    .min(1, { message: "API key is required" }),
+  location: z.string(),
+});
+
+export const AIProviderFormSchema = z.union([
   CloudAIProviderDetailsFormSchema,
+  VertexAIProviderDetailsFormSchema,
   LocalAIProviderDetailsFormSchema,
 ]);
 

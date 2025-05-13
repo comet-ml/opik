@@ -98,6 +98,24 @@ provider.add_span_processor(processor)
 trace.set_tracer_provider(provider)
 ```
 
+<Tip>
+In order to track OpenAI calls, you need to use the OpenTelemetry instrumentations
+for OpenAI:
+
+```bash wordWrap
+pip install opentelemetry-instrumentation-openai
+```
+
+And then instrument your OpenAI client:
+
+```python wordWrap
+from opentelemetry.instrumentation.openai import OpenAIInstrumentor
+
+OpenAIInstrumentor().instrument()
+```
+
+</Tip>
+
 <Warning>
   Make sure to import the `http` trace exporter (`opentelemetry.exporter.otlp.proto.http.trace_exporter`), if you use
   the GRPC exporter you will face errors.

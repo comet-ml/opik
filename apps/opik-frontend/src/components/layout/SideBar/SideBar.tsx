@@ -17,6 +17,7 @@ import {
   Brain,
   ChevronLeft,
   ChevronRight,
+  SparklesIcon,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -25,6 +26,7 @@ import useProjectsList from "@/api/projects/useProjectsList";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useRulesList from "@/api/automations/useRulesList";
+import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
 import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -93,20 +95,28 @@ const MENU_ITEMS: MenuItemGroup[] = [
     label: "Evaluation",
     items: [
       {
-        id: "datasets",
-        path: "/$workspaceName/datasets",
-        type: MENU_ITEM_TYPE.router,
-        icon: Database,
-        label: "Datasets",
-        count: "datasets",
-      },
-      {
         id: "experiments",
         path: "/$workspaceName/experiments",
         type: MENU_ITEM_TYPE.router,
         icon: FlaskConical,
         label: "Experiments",
         count: "experiments",
+      },
+      {
+        id: "optimizations",
+        path: "/$workspaceName/optimizations",
+        type: MENU_ITEM_TYPE.router,
+        icon: SparklesIcon,
+        label: "Optimization runs",
+        count: "optimizations",
+      },
+      {
+        id: "datasets",
+        path: "/$workspaceName/datasets",
+        type: MENU_ITEM_TYPE.router,
+        icon: Database,
+        label: "Datasets",
+        count: "datasets",
       },
     ],
   },
@@ -237,6 +247,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
       enabled: expanded,
     },
   );
+
   const { data: datasetsData } = useDatasetsList(
     {
       workspaceName,
@@ -248,6 +259,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
       enabled: expanded,
     },
   );
+
   const { data: experimentsData } = useExperimentsList(
     {
       workspaceName,
@@ -284,12 +296,25 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
   );
 
+  const { data: optimizationsData } = useOptimizationsList(
+    {
+      workspaceName,
+      page: 1,
+      size: 1,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: expanded,
+    },
+  );
+
   const countDataMap: Record<string, number | undefined> = {
     projects: projectData?.total,
     datasets: datasetsData?.total,
     experiments: experimentsData?.total,
     prompts: promptsData?.total,
     rules: rulesData?.total,
+    optimizations: optimizationsData?.total,
   };
 
   const bottomMenuItems: MenuItem[] = [

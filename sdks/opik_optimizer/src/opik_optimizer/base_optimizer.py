@@ -1,20 +1,23 @@
 from typing import Optional, Union, List, Dict, Any
 import opik
 import logging
+import time
 
 import litellm
-from opik.evaluation import metrics
-from opik.opik_context import get_current_span_data
+from opik.rest_api.core import ApiError
+
 from pydantic import BaseModel
 from ._throttle import RateLimiter, rate_limited
+from .cache_config import initialize_cache
+from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
+from .optimization_config.configs import TaskConfig, MetricConfig
 
-limiter = RateLimiter(max_calls_per_second=15)
+limiter = RateLimiter(max_calls_per_second=8)
 
 # Don't use unsupported params:
 litellm.drop_params = True
 
 # Set up logging:
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -44,11 +47,16 @@ class BaseOptimizer:
         self.project_name = project_name
         self._history = []
         self.experiment_config = None
+        self.llm_call_counter = 0
+
+        # Initialize shared cache
+        initialize_cache()
 
     def optimize_prompt(
         self,
         dataset: Union[str, opik.Dataset],
-        metric: metrics.BaseMetric,
+        metric_config: MetricConfig,
+        task_config: TaskConfig,
         prompt: str,
         input_key: str,
         output_key: str,
@@ -60,7 +68,8 @@ class BaseOptimizer:
 
         Args:
            dataset: Opik dataset name, or Opik dataset
-           metric: instance of an Opik metric
+           metric_config: instance of a MetricConfig
+           task_config: instance of a TaskConfig
            prompt: the prompt to optimize
            input_key: input field of dataset
            output_key: output field of dataset
@@ -77,11 +86,12 @@ class BaseOptimizer:
     def evaluate_prompt(
         self,
         dataset: Union[str, opik.Dataset],
-        metric: metrics.BaseMetric,
+        metric_config: MetricConfig,
         prompt: str,
         input_key: str,
         output_key: str,
-        num_test: int = 10,
+        n_samples: int = 10,
+        task_config: Optional[TaskConfig] = None,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
         **kwargs,
@@ -91,11 +101,12 @@ class BaseOptimizer:
 
         Args:
            dataset: Opik dataset name, or Opik dataset
-           metric: instance of an Opik metric
+           metric_config: instance of a MetricConfig
+           task_config: instance of a TaskConfig
            prompt: the prompt to evaluate
            input_key: input field of dataset
            output_key: output field of dataset
-           num_test: number of items to test in the dataset
+           n_samples: number of items to test in the dataset
            dataset_item_ids: Optional list of dataset item IDs to evaluate
            experiment_config: Optional configuration for the experiment
            **kwargs: Additional arguments for evaluation
@@ -104,7 +115,8 @@ class BaseOptimizer:
             float: The evaluation score
         """
         self.dataset = dataset
-        self.metric = metric
+        self.metric_config = metric_config
+        self.task_config = task_config
         self.prompt = prompt
         self.input_key = input_key
         self.output_key = output_key
@@ -129,41 +141,19 @@ class BaseOptimizer:
         """
         self._history.append(round_data)
 
-    @rate_limited(limiter)
-    def _call_model(
-        self, prompt: str, system_prompt: str = None, is_reasoning: bool = False
-    ) -> str:
-        """Call the model to get suggestions based on the meta-prompt."""
-        model = self.reasoning_model if is_reasoning else self.model
-        messages = []
 
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-            logger.debug(f"Using custom system prompt: {system_prompt[:100]}...")
-        else:
-            messages.append(
-                {"role": "system", "content": "You are a helpful assistant."}
-            )
-
-        messages.append({"role": "user", "content": prompt})
-        logger.debug(f"Calling model {model} with prompt: {prompt[:100]}...")
-
-        api_params = self.model_kwargs.copy()
-        api_params.update(
-            {
-                "model": model,
-                "messages": messages,
-                "metadata": {
-                    "opik": {
-                        "current_span_data": get_current_span_data(),
-                        "tags": ["optimizer"],
-                    },
-                },
-            }
-        )
-
-        response = litellm.completion(**api_params)
-        model_output = response.choices[0].message.content.strip()
-        logger.debug(f"Model response: {model_output[:100]}...")
-
-        return model_output
+    def update_optimization(self, optimization, status: str) -> None:
+        """
+        Update the optimization status
+        """
+        # FIXME: remove when a solution is added to opik's optimization.update method
+        count = 0
+        while count < 3:
+            try:
+                optimization.update(status="completed")
+                break
+            except ApiError:
+                count += 1
+                time.sleep(5)
+        if count == 3:
+            logger.warning("Unable to update optimization status; continuing...")
