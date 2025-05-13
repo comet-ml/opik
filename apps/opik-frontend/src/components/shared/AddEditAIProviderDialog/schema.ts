@@ -43,7 +43,7 @@ export const VertexAIProviderDetailsFormSchema = z.object({
       required_error: "API key is required",
     })
     .min(1, { message: "API key is required" }),
-  location: z.string().default("us-central1"),
+  location: z.string(),
 });
 
 export const AIProviderFormSchema = z.union([
