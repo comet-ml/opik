@@ -50,6 +50,7 @@ class RemoteAuthService implements AuthService {
             put("^/v1/private/spans/?$", Set.of("GET"));
             put("^/v1/private/spans/stats/?$", Set.of("GET"));
             put("^/v1/private/spans/feedback-scores/names/?$", Set.of("GET"));
+            put("^/v1/private/spans/search/?$", Set.of("POST"));
             put("^/v1/private/traces/?$", Set.of("GET"));
             put("^/v1/private/traces/stats/?$", Set.of("GET"));
             put("^/v1/private/traces/feedback-scores/names/?$", Set.of("GET"));
@@ -57,6 +58,7 @@ class RemoteAuthService implements AuthService {
                     Set.of("GET"));
             put("^/v1/private/traces/threads/?$", Set.of("GET"));
             put("^/v1/private/traces/threads/retrieve/?$", Set.of("POST"));
+            put("^/v1/private/traces/search/?$", Set.of("POST"));
         }
     };
 

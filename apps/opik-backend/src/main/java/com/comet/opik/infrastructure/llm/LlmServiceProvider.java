@@ -7,7 +7,7 @@ import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeMod
 
 public interface LlmServiceProvider {
 
-    LlmProviderService getService(String apiKey);
+    LlmProviderService getService(LlmProviderClientApiConfig config);
 
-    ChatLanguageModel getLanguageModel(String apiKey, LlmAsJudgeModelParameters modelParameters);
+    ChatLanguageModel getLanguageModel(LlmProviderClientApiConfig config, LlmAsJudgeModelParameters modelParameters);
 }
