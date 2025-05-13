@@ -76,8 +76,26 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
                 .map(Double::floatValue)
                 .ifPresent(generationConfig::setTemperature);
 
+        Optional.ofNullable(request.topP())
+                .map(Double::floatValue)
+                .ifPresent(generationConfig::setTopP);
+
+        Optional.ofNullable(request.stop())
+                .ifPresent(values -> values.forEach(generationConfig::addStopSequences));
+
+        Optional.ofNullable(request.presencePenalty())
+                .map(Double::floatValue)
+                .ifPresent(generationConfig::setPresencePenalty);
+
+        Optional.ofNullable(request.frequencyPenalty())
+                .map(Double::floatValue)
+                .ifPresent(generationConfig::setFrequencyPenalty);
+
         Optional.ofNullable(request.maxTokens())
                 .ifPresent(generationConfig::setMaxOutputTokens);
+
+        Optional.ofNullable(request.seed())
+                .ifPresent(generationConfig::setSeed);
 
         return generationConfig.build();
     }
