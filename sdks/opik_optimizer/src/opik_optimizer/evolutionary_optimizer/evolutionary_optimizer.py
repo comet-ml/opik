@@ -7,6 +7,7 @@ from string import Template
 import os
 import time
 import Levenshtein
+import numpy as np
 
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
 from opik_optimizer.optimization_config.configs import TaskConfig, MetricConfig
@@ -124,6 +125,7 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
 
         if self.seed is not None:
             random.seed(self.seed)
+            np.random.seed(self.seed)
             logger.info(f"Global random seed set to: {self.seed}")
             # Note: DEAP tools generally respect random.seed(). 
             # TODO investigate if specific DEAP components require separate seeding
