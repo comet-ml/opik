@@ -59,7 +59,7 @@ class OpikTracer:
             parent_project_name=current_span_data.project_name,
             child_project_name=self.project_name,
         )
-        # Create a new span data object with all required parameters
+
         span_data = span.SpanData(
             trace_id=current_span_data.trace_id,
             parent_span_id=current_span_data.id,
@@ -85,7 +85,6 @@ class OpikTracer:
             parent_project_name=current_trace_data.project_name,
             child_project_name=self.project_name,
         )
-        # Create a new span data object with all required parameters
         span_data = span.SpanData(
             trace_id=current_trace_data.id,
             parent_span_id=None,
@@ -137,8 +136,6 @@ class OpikTracer:
         else:
             thread_id = str(uuid.uuid4())
             callback_context.state["opik_thread_id"] = thread_id
-
-        # Should we create a trace here as we don't have an input?
 
         trace_metadata = self.metadata.copy()
         trace_metadata["adk_invocation_id"] = callback_context.invocation_id
