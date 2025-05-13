@@ -23,5 +23,9 @@
     }
   },
   "include": ["src", "tests"],
-  "exclude": ["node_modules", "src/opik/integrations/opik-langchain"]
+  "exclude": [
+    "node_modules",
+    "src/opik/integrations/opik-langchain",
+    "src/opik/integrations/opik-openai"
+  ]
 }

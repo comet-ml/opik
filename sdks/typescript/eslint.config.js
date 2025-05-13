@@ -10,6 +10,7 @@ export default [
       "node_modules/**",
       "src/opik/rest_api/**",
       "src/opik/integrations/opik-langchain/**",
+      "src/opik/integrations/opik-openai/**",
     ],
   },
   { files: ["src/**/*.{js,mjs,cjs,ts}", "tests/**/*.{js,mjs,cjs,ts}"] },
