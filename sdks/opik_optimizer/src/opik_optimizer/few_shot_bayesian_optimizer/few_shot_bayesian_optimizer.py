@@ -26,19 +26,6 @@ _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 logger = logging.getLogger(__name__)
 
-@_throttle.rate_limited(_limiter)
-def _call_model(model, messages, seed, model_kwargs):
-    model_kwargs = opik_litellm_monitor.try_add_opik_monitoring_to_params(model_kwargs)
-
-    response = litellm.completion(
-        model=model,
-        messages=messages,
-        seed=seed,
-        **model_kwargs,
-    )
-
-    return response
-
 
 class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     def __init__(
@@ -67,9 +54,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         logger.debug(f"Initialized FewShotBayesianOptimizer with model: {model}")
 
     @_throttle.rate_limited(_limiter)
-    def _call_model_internal(self, messages: List[Dict[str, str]], seed: int, model_kwargs: Dict[str, Any]) -> Any:
+    def _call_model(self, model, messages, seed, model_kwargs):
         self.llm_call_counter += 1
-        
+
         current_model_kwargs = self.model_kwargs.copy()
         current_model_kwargs.update(model_kwargs)
 
@@ -480,7 +467,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, Any]:
             prompt_ = template.format(**dataset_item)
 
-            response = self._call_model_internal(
+            response = self._call_model(
+                model=self.model,
                 messages=prompt_,
                 seed=self.seed,
                 model_kwargs=self.model_kwargs
