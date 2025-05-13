@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.llm.gemini;
+package com.comet.opik.infrastructure.llm.vertexai;
 
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
@@ -15,11 +15,11 @@ import reactor.core.scheduler.Schedulers;
 import java.util.Optional;
 import java.util.function.Consumer;
 
-@Slf4j
 @RequiredArgsConstructor
-public class LlmProviderGemini implements LlmProviderService {
+@Slf4j
+public class LlmProviderVertexAI implements LlmProviderService {
 
-    private final @NonNull GeminiClientGenerator llmProviderClientGenerator;
+    private final @NonNull VertexAIClientGenerator llmProviderClientGenerator;
     private final @NonNull LlmProviderClientApiConfig config;
 
     @Override
@@ -37,8 +37,7 @@ public class LlmProviderGemini implements LlmProviderService {
         Schedulers.boundedElastic()
                 .schedule(() -> {
                     try {
-                        var streamingChatLanguageModel = llmProviderClientGenerator.newGeminiStreamingClient(
-                                config.apiKey(),
+                        var streamingChatLanguageModel = llmProviderClientGenerator.newVertexAIStreamingClient(config,
                                 request);
 
                         streamingChatLanguageModel
@@ -55,18 +54,9 @@ public class LlmProviderGemini implements LlmProviderService {
 
     @Override
     public void validateRequest(@NonNull ChatCompletionRequest request) {
+
     }
 
-    /// gemini throws RuntimeExceptions with message structure as follows:
-    /// ```
-    /// java.lang.RuntimeException: HTTP error (429): {
-    ///   "error": {
-    ///     "code": 429,
-    ///     "message": "Resource has been exhausted (e.g. check quota).",
-    ///     "status": "RESOURCE_EXHAUSTED"
-    ///   }
-    /// }
-    ///  ```
     @Override
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
         return LlmProviderLangChainMapper.INSTANCE.getGeminiErrorObject(throwable, log);
