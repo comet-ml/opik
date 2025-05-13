@@ -107,7 +107,7 @@ const MENU_ITEMS: MenuItemGroup[] = [
         path: "/$workspaceName/optimizations",
         type: MENU_ITEM_TYPE.router,
         icon: SparklesIcon,
-        label: "Agent optimization",
+        label: "Optimization runs",
         count: "optimizations",
       },
       {

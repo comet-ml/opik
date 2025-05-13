@@ -186,12 +186,12 @@ const compareExperimentsRoute = createRoute({
   },
 });
 
-// Agent optimization
+// Optimization runs
 const optimizationsRoute = createRoute({
   path: "/optimizations",
   getParentRoute: () => workspaceRoute,
   staticData: {
-    title: "Agent optimization",
+    title: "Optimization runs",
   },
 });
 
