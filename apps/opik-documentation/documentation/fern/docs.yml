@@ -46,14 +46,18 @@ tabs:
     display-name: Documentation
     icon: fa-regular fa-building
     slug: /
-  self-host:
-    display-name: Self-hosting Opik
-    icon: fa-regular fa-server
-    slug: /self-host
+  agent-optimization:
+    display-name: Agent Optimization
+    icon: fa-regular fa-robot
+    slug: /agent_optimization
   cookbook:
     display-name: Cookbooks
     icon: fa-regular fa-book
     slug: /cookbook
+  self-host:
+    display-name: Self-hosting Opik
+    icon: fa-regular fa-server
+    slug: /self-host
   reference:
     display-name: SDK and API reference
     icon: fa-regular fa-square-terminal
@@ -273,19 +277,13 @@ navigation:
       - section: Prompt engineering
         slug: /prompt_engineering
         contents:
-          - page: Prompt optimization
-            path: docs/prompt_engineering/prompt_optimization.mdx
-            slug: prompt_optimization
-          - page: Agent optimization
-            path: docs/prompt_engineering/agent_optimization.mdx
-            slug: agent_optimization
           - page: Prompt management
             path: docs/prompt_engineering/prompt_management.mdx
             slug: prompt_management
           - page: Opik's MCP server
             path: docs/prompt_engineering/mcp_server.mdx
             slug: mcp_server
-          - page: Playground
+          - page: Prompt Playground
             path: docs/prompt_engineering/playground.mdx
             slug: playground
       - section: Testing
@@ -306,6 +304,53 @@ navigation:
           - page: Gateway
             path: docs/production/gateway.mdx
             slug: gateway
+  - tab: agent-optimization
+    layout:
+      - page: Overview
+        icon: fa-regular fa-house
+        path: docs/agent_optimization/overview.mdx
+        slug: overview
+      - section: Opik Optimizer
+        slug: /opik_optimizer
+        contents:
+          - page: Quickstart
+            icon: fa-regular fa-bolt
+            path: docs/agent_optimization/opik_optimizer/quickstart.mdx
+            slug: quickstart
+          - page: Concepts
+            icon: fa-regular fa-lightbulb
+            path: docs/agent_optimization/opik_optimizer/concepts.mdx
+            slug: concepts
+          - page: Datasets and testing
+            icon: fa-regular fa-database
+            path: docs/agent_optimization/opik_optimizer/datasets.mdx
+            slug: datasets
+          - page: Reference
+            icon: fa-regular fa-square-terminal
+            path: docs/agent_optimization/opik_optimizer/reference.mdx
+            slug: reference
+          - page: FAQ
+            icon: fa-regular fa-question
+            path: docs/agent_optimization/opik_optimizer/faq.mdx
+            slug: faq
+      - section: Best Practices
+        contents:
+          - page: Prompt engineering
+            icon: fa-regular fa-book
+            path: docs/agent_optimization/best_practices/prompt_engineering.mdx
+            slug: prompt_engineering
+      - section: Prompt Optimization algorithms
+        slug: /algorithms
+        contents:
+          - page: MetaPrompt Optimization
+            path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
+            slug: metaprompt_optimizer
+          - page: Few-shot Bayesian Optimization
+            path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
+            slug: fewshot_bayesian_optimizer
+          - page: Mipro Optimization
+            path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
+            slug: mipro_optimizer
   - tab: self-host
     layout:
       - page: Overview
@@ -451,4 +496,10 @@ redirects:
     permanent: true
   - source: "docs/prompt_engineering/managing_prompts_in_code"
     destination: "/docs/opik/prompt_engineering/prompt_management"
+    permanent: true
+  - source: "docs/prompt_engineering/prompt_optimization"
+    destination: "docs/agent_optimization/best-practices/prompt_engineering"
+    permanent: true
+  - source: "docs/prompt_engineering/agent_optimization"
+    destination: "docs/agent_optimization/overview"
     permanent: true

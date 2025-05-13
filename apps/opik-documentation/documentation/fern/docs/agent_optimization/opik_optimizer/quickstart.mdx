@@ -1,0 +1,106 @@
+This guide will help you get started with Opik Optimizer for improving your LLM
+prompts through systematic optimization.
+
+## Prerequisites
+
+- Python 3.9 or higher
+- An Opik API key ([sign up here](https://www.comet.com/signup?from=llm) if you don't have one)
+
+## Installation
+
+Install Opik and the optimizer package:
+
+```bash
+# Using pip
+pip install opik opik-optimizer
+
+# Using uv (recommended for faster installation)
+uv pip install opik-optimizer
+```
+
+Configure your Opik environment:
+
+```bash
+# Install the Opik CLI if not already installed
+pip install opik
+
+# Configure your API key
+opik configure
+```
+
+## Basic Usage
+
+Here's a complete example of optimizing a prompt using the Few-Shot Bayesian Optimizer:
+
+```python
+from opik.evaluation.metrics import LevenshteinRatio
+from opik_optimizer import FewShotBayesianOptimizer
+from opik_optimizer.demo import get_or_create_dataset
+from opik_optimizer import (
+    MetricConfig,
+    TaskConfig,
+    from_llm_response_text,
+    from_dataset_field,
+)
+
+# 1. Define your evaluation dataset
+# You can use a demo dataset for testing, or your own dataset
+dataset = get_or_create_dataset("tiny-test")
+
+# 2. Configure the evaluation metric
+# This example uses Levenshtein distance to measure output quality
+metric_config = MetricConfig(
+    metric=LevenshteinRatio(),
+    inputs={
+        "output": from_llm_response_text(),  # Model's output
+        "reference": from_dataset_field(name="label"),  # Ground truth
+    }
+)
+
+# 3. Define your base prompt
+# Following best practices, provide clear instructions and context
+system_prompt = """You are an expert assistant. Your task is to answer questions
+accurately and concisely. Consider the context carefully before responding."""
+
+# 4. Choose and configure an optimizer
+# FewShotBayesianOptimizer automatically finds optimal examples to include
+optimizer = FewShotBayesianOptimizer(
+    model="gpt-4",  # Choose your preferred model
+    project_name="Prompt Optimization",
+    min_examples=2,  # Minimum number of examples to try
+    max_examples=8,  # Maximum number of examples to try
+    n_iterations=10  # Number of optimization iterations
+)
+
+# 5. Configure the task
+task_config = TaskConfig(
+    instruction_prompt=system_prompt,
+    input_dataset_fields=["text"],  # Input field(s) from your dataset
+    output_dataset_field="label",   # Output field from your dataset
+    use_chat_prompt=True,  # Use chat format for modern LLMs
+)
+
+# 6. Run the optimization
+result = optimizer.optimize_prompt(
+    dataset=dataset,
+    metric_config=metric_config,
+    task_config=task_config,
+)
+
+# 7. View the results
+result.display()  # Shows improvement metrics and best prompt
+```
+
+The optimization results will be displayed in your console and are also available in the
+Opik Agent Optimization dashboard:
+
+<Frame>
+  <img src="/img/agent_optimization/trial_dashboard.png" />
+</Frame>
+
+## Next Steps
+
+1. Learn about different [optimization algorithms](/agent_optimization/algorithms/metaprompt_optimizer) to choose the best one for your use case
+2. Explore [prompt engineering best practices](/agent_optimization/best_practices/prompt_engineering)
+3. Set up your own [evaluation datasets](/agent_optimization/opik_optimizer/datasets)
+4. Review the [API reference](/agent_optimization/opik_optimizer/reference) for detailed configuration options
