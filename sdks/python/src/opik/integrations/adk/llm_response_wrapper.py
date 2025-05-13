@@ -7,6 +7,7 @@ from google.genai import types as genai_types
 
 from ... import llm_usage, LLMProvider
 from ...llm_usage import opik_usage
+from . import helpers as adk_helpers
 
 LOGGER = logging.Logger(__name__)
 
@@ -74,7 +75,7 @@ def _wrap_llm_response_create(
         response.custom_metadata = {}
 
     response.custom_metadata["opik_usage"] = usage_metadata
-    response.custom_metadata["provider"] = LLMProvider.GOOGLE_AI
+    response.custom_metadata["provider"] = adk_helpers.get_adk_provider()
     response.custom_metadata["model_version"] = generate_content_response.model_version
 
     return response
