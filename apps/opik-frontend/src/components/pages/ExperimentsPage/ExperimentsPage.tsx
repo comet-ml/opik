@@ -446,11 +446,13 @@ const ExperimentsPage: React.FunctionComponent = () => {
           </Button>
         </div>
       </div>
-      <FeedbackScoresChartsWrapper
-        entities={experiments}
-        datasetsData={datasetsData}
-        isAverageScores
-      />
+      {Boolean(experiments.length) && (
+        <FeedbackScoresChartsWrapper
+          entities={experiments}
+          datasetsData={datasetsData}
+          isAverageScores
+        />
+      )}
       <DataTable
         columns={columns}
         data={experiments}
