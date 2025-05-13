@@ -33,33 +33,42 @@ def get_or_create_dataset(
     """Get or create a dataset from HuggingFace, using the provided seed for sampling."""
     try:
         opik_client = opik.Opik()
-        dataset_name = f"{name}_test" if test_mode else name
-        dataset = None # Initialize dataset variable
-        
-        print(f"Checking for existing dataset: {dataset_name}...") # Add log
-        try:
-            existing_dataset = opik_client.get_dataset(dataset_name)
-            if existing_dataset:
-                print(f"Found existing dataset object for {dataset_name}. Checking items...") # Add log
-                items = existing_dataset.get_items()
-                # Check explicitly if items is a list and has content
-                if isinstance(items, list) and len(items) > 0:
-                    print(f"Existing dataset {dataset_name} has {len(items)} items. Using cached version.") # Add log
-                    return existing_dataset # Return the cached dataset
-                else:
-                    # Dataset exists but appears empty/invalid items
-                    print(f"Existing dataset {dataset_name} found but has no valid items (items type: {type(items)}, len: {len(items) if isinstance(items, list) else 'N/A'}). Will proceed to load/recreate.")
-            else:
-                # get_dataset returned None
-                print(f"Opik client returned None for get_dataset({dataset_name}). Dataset likely doesn't exist.") # Add log
-        except Exception as get_exc:
-            # Exception during get_dataset - assume it doesn't exist
-            print(f"Exception during get_dataset({dataset_name}): {get_exc}. Assuming dataset needs creation.") # Add log
-            pass # Proceed to load/create
+    except Exception as e_client:
+        print(f"Failed to initialize Opik client: {e_client}")
+        raise HaltError(f"Critical error: Failed to initialize Opik client: {e_client}") from e_client
 
-        # --- If we reach here, dataset needs loading/creation ---
-        print(f"Proceeding to load data for {dataset_name} from source...")
-        # Load data based on dataset name, passing seed where relevant
+    dataset_name = f"{name}_test" if test_mode else name
+    dataset = None
+    
+    print(f"Checking for existing dataset: {dataset_name}...")
+    try:
+        # Attempt to get the dataset
+        existing_dataset = opik_client.get_dataset(dataset_name)
+        if existing_dataset:
+            print(f"Found existing dataset object for {dataset_name}. Checking items...")
+            items = None
+            try:
+                items = existing_dataset.get_items()
+            except Exception as e_items:
+                print(f"Error getting items for existing dataset {dataset_name}: {e_items}. Will proceed to load/recreate.")
+            
+            if isinstance(items, list) and len(items) > 0:
+                print(f"Existing dataset {dataset_name} has {len(items)} items. Using cached version.")
+                # Return the cached dataset
+                return existing_dataset
+            else:
+                # Dataset exists but appears empty/invalid items or error fetching items
+                item_info = f"type: {type(items)}, len: {len(items) if isinstance(items, list) else 'N/A'}"
+                print(f"Existing dataset {dataset_name} found but has no/invalid items ({item_info}). Will proceed to load/recreate.")
+        else:
+            print(f"Opik client returned None for get_dataset({dataset_name}). Dataset likely doesn't exist.")
+    except Exception as get_exc:
+        print(f"Exception during opik_client.get_dataset({dataset_name}): {get_exc}. Assuming dataset needs creation.")
+
+    # If we reach here, dataset needs loading/creation
+    print(f"Proceeding to load data for {dataset_name} from source...")
+    data = None
+    try:
         if name == "hotpot-300":
             data = _load_hotpot_300(test_mode, seed=seed)
         elif name == "hotpot-500":
@@ -91,45 +100,56 @@ def get_or_create_dataset(
 
         if not data:
             raise HaltError(f"No data loaded for dataset source: {name}")
+    except HaltError:
+        raise
+    except Exception as e_load:
+        print(f"Error during data loading for {name}: {e_load}")
+        raise HaltError(f"Critical error loading data for {name} from source: {e_load}") from e_load
 
-        # Create or potentially update dataset in Opik
-        try:
-            print(f"Attempting to create dataset: {dataset_name}...")
-            dataset = opik_client.create_dataset(dataset_name)
-            print(f"Dataset {dataset_name} created. Inserting {len(data)} items...")
-        except opik.rest_api.core.api_error.ApiError as e:
-            if e.status_code == 409: # Dataset already exists (conflict)
-                print(f"Dataset {dataset_name} already exists (Code 409). Getting existing dataset to insert/update...")
+    # Create or potentially update dataset in Opik
+    try:
+        print(f"Attempting to create dataset: {dataset_name}...")
+        dataset = opik_client.create_dataset(dataset_name)
+        print(f"Dataset {dataset_name} created. Inserting {len(data)} items...")
+    except opik.rest_api.core.api_error.ApiError as e_api:
+        if e_api.status_code == 409:
+            print(f"Dataset {dataset_name} already exists (Code 409). Getting existing dataset to insert/update...")
+            try:
                 dataset = opik_client.get_dataset(dataset_name)
                 if not dataset:
-                    raise HaltError(f"Conflict creating {dataset_name}, but failed to retrieve existing.")
+                    raise HaltError(f"Conflict (409) creating {dataset_name}, but failed to retrieve the existing dataset afterwards.")
                 print(f"Retrieved existing dataset {dataset_name}. Attempting to insert/update {len(data)} items...")
-            else:
-                raise HaltError(f"API error creating dataset {dataset_name}: {e}")
-        except Exception as create_exc:
-             raise HaltError(f"Unexpected error creating dataset {dataset_name}: {create_exc}")
+            except Exception as e_get_after_conflict:
+                raise HaltError(f"Error retrieving dataset {dataset_name} after 409 conflict: {e_get_after_conflict}") from e_get_after_conflict
+        else:
+            raise HaltError(f"API error regarding dataset {dataset_name}: {e_api}") from e_api
+    except Exception as create_exc:
+         raise HaltError(f"Unexpected error creating/accessing dataset {dataset_name}: {create_exc}") from create_exc
 
-        # Insert data into the dataset
-        try:
-            dataset.insert(data)
-            print(f"Successfully inserted {len(data)} items into {dataset_name}.")
-        except Exception as e:
-            raise HaltError(f"Failed to insert data into dataset {dataset_name}: {e}")
+    # Insert data into the dataset
+    try:
+        if not dataset: 
+            raise HaltError(f"Dataset object is not available for inserting data into {dataset_name}. This indicates a preceding error in dataset creation or retrieval.")
+        if data is None: 
+            raise HaltError(f"Data is None before attempting insertion into {dataset_name}, indicating an issue in data loading.")
+        dataset.insert(data)
+        print(f"Successfully inserted {len(data)} items into {dataset_name}.")
+    except Exception as e_insert:
+        raise HaltError(f"Failed to insert data into dataset {dataset_name}: {e_insert}") from e_insert
 
-        # Verify data was added
-        items = dataset.get_items()
-        if not items or len(items) == 0:
+    # Verify data was added
+    try:
+        if not dataset: 
+             raise HaltError(f"Dataset object is not available for verification for {dataset_name}.")
+        items_after_insert = dataset.get_items()
+        if not items_after_insert or len(items_after_insert) == 0:
             raise HaltError(f"Verification failed: No items found in dataset {dataset_name} after insert.")
         else:
-             print(f"Verified {len(items)} items in dataset {dataset_name} after insert.")
+             print(f"Verified {len(items_after_insert)} items in dataset {dataset_name} after insert.")
+    except Exception as e_verify:
+        raise HaltError(f"Failed to verify items in dataset {dataset_name} after insert: {e_verify}") from e_verify
 
-        return dataset
-    except HaltError:
-        raise  # Re-raise HaltError to stop the process
-    except Exception as e:
-        print(f"Error loading dataset {name}: {e}")
-        print(traceback.format_exc())
-        raise HaltError(f"Critical error loading dataset {name}: {e}")
+    return dataset
 
 
 def _load_hotpot_500(test_mode: bool = False, seed: int = 42) -> List[Dict[str, Any]]:
