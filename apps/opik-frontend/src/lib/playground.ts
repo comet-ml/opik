@@ -5,6 +5,7 @@ import {
   DEFAULT_GEMINI_CONFIGS,
   DEFAULT_OPEN_AI_CONFIGS,
   DEFAULT_OPEN_ROUTER_CONFIGS,
+  DEFAULT_VERTEX_AI_CONFIGS,
 } from "@/constants/llm";
 import {
   LLMAnthropicConfigsType,
@@ -12,6 +13,7 @@ import {
   LLMOpenAIConfigsType,
   LLMOpenRouterConfigsType,
   LLMPromptConfigsType,
+  LLMVertexAIConfigsType,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
@@ -62,6 +64,14 @@ export const getDefaultConfigByProvider = (
       maxCompletionTokens: DEFAULT_GEMINI_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_GEMINI_CONFIGS.TOP_P,
     } as LLMGeminiConfigsType;
+  }
+
+  if (provider === PROVIDER_TYPE.VERTEX_AI) {
+    return {
+      temperature: DEFAULT_VERTEX_AI_CONFIGS.TEMPERATURE,
+      maxCompletionTokens: DEFAULT_VERTEX_AI_CONFIGS.MAX_COMPLETION_TOKENS,
+      topP: DEFAULT_VERTEX_AI_CONFIGS.TOP_P,
+    } as LLMVertexAIConfigsType;
   }
 
   return {};

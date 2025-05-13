@@ -3,6 +3,7 @@ import AnthropicIcon from "@/icons/integrations/anthropic.svg?react";
 import OpenRouterIcon from "@/icons/integrations/open_router.svg?react";
 import OllamaIcon from "@/icons/integrations/ollama.svg?react";
 import GeminiIcon from "@/icons/integrations/gemini.svg?react";
+import VertexAIIcon from "@/icons/integrations/vertex_ai.svg?react";
 
 import {
   PROVIDER_LOCATION_TYPE,
@@ -23,7 +24,7 @@ type PROVIDER_OPTION_TYPE = {
 
 export type CLOUD_PROVIDER_OPTION_TYPE = PROVIDER_OPTION_TYPE & {
   locationType: PROVIDER_LOCATION_TYPE.cloud;
-  apiKeyURL: string;
+  apiKeyURL?: string;
 };
 
 export type LOCAL_PROVIDER_OPTION_TYPE = PROVIDER_OPTION_TYPE & {
@@ -85,6 +86,14 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     apiKeyName: "GEMINI_API_KEY",
     apiKeyURL: "https://aistudio.google.com/apikey",
     defaultModel: PROVIDER_MODEL_TYPE.GEMINI_1_5_FLASH,
+    locationType: PROVIDER_LOCATION_TYPE.cloud,
+  },
+  [PROVIDER_TYPE.VERTEX_AI]: {
+    label: "Vertex AI",
+    value: PROVIDER_TYPE.VERTEX_AI,
+    icon: VertexAIIcon,
+    apiKeyName: "VERTEX_API_KEY",
+    defaultModel: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17,
     locationType: PROVIDER_LOCATION_TYPE.cloud,
   },
 };

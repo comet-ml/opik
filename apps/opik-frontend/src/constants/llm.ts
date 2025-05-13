@@ -45,6 +45,12 @@ export const DEFAULT_OPEN_ROUTER_CONFIGS = {
   TOP_A: 0,
 };
 
+export const DEFAULT_VERTEX_AI_CONFIGS = {
+  TEMPERATURE: 0,
+  MAX_COMPLETION_TOKENS: 1024,
+  TOP_P: 1,
+};
+
 export const LLM_PROMPT_CUSTOM_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",
   description:

@@ -20,9 +20,14 @@ const useProviderKeysCreateMutation = () => {
     mutationFn: async ({
       providerKey,
     }: UseProviderKeysCreateMutationParams) => {
+      const configuration = providerKey?.location
+        ? { configuration: { location: providerKey.location } }
+        : {};
+
       const { data } = await api.post(PROVIDER_KEYS_REST_ENDPOINT, {
         provider: providerKey.provider,
         api_key: providerKey.apiKey,
+        ...configuration,
       });
 
       return data;
