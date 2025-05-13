@@ -7,6 +7,7 @@ from . import messages, message_queue, queue_consumer
 from .. import synchronization
 from .batching import batch_manager
 from ..file_upload import base_upload_manager
+from .. import _logging
 
 LOGGER = logging.getLogger(__name__)
 
@@ -45,12 +46,13 @@ class Streamer:
             elif base_upload_manager.message_supports_upload(message):
                 self._file_upload_manager.upload(message)
             else:
+                if self._message_queue.accept_put_without_discarding() is False:
+                    _logging.log_once_at_level(
+                        logging.WARNING,
+                        "The message queue size limit has been reached. The new message has been added to the queue, and the oldest message has been discarded.",
+                        logger=LOGGER,
+                    )
                 self._message_queue.put(message)
-                if LOGGER.isEnabledFor(logging.DEBUG):
-                    if self._message_queue.accept_put_without_discarding() is False:
-                        LOGGER.debug(
-                            "Message queue size limit reached. The new message added to the queue but old will be discarded."
-                        )
 
     def close(self, timeout: Optional[int]) -> bool:
         """

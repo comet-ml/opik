@@ -59,8 +59,8 @@ class MessageQueue(Generic[T]):
     def accept_put_without_discarding(self) -> bool:
         if self.max_size is None:
             return True
-
-        return len(self._deque) + 1 < self.max_size
+        with self._not_empty:
+            return len(self._deque) + 1 < self.max_size
 
     def size(self) -> int:
         return len(self._deque)

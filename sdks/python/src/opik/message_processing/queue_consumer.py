@@ -5,8 +5,7 @@ from typing import Optional
 from queue import Empty
 
 from . import message_processors, message_queue, messages
-from .. import exceptions
-
+from .. import exceptions, _logging
 
 LOGGER = logging.getLogger(__name__)
 
@@ -53,7 +52,7 @@ class QueueConsumer(threading.Thread):
                 self._message_processor.process(message)
             else:
                 # put back to keep an order in the queue
-                self._message_queue.put_back(message)
+                self._put_back_message(message)
 
         except Empty:
             time.sleep(SLEEP_BETWEEN_LOOP_ITERATIONS)
@@ -68,7 +67,7 @@ class QueueConsumer(threading.Thread):
             if message is not None:
                 message.delivery_time = self.next_message_time
                 # put back to keep an order in the queue
-                self._message_queue.put_back(message)
+                self._put_back_message(message)
         except Exception as ex:
             LOGGER.error(
                 "Failed to process message, unexpected error: %s", ex, exc_info=ex
@@ -77,3 +76,12 @@ class QueueConsumer(threading.Thread):
 
     def close(self) -> None:
         self._processing_stopped = True
+
+    def _put_back_message(self, message: messages.BaseMessage) -> None:
+        if self._message_queue.accept_put_without_discarding() is False:
+            _logging.log_once_at_level(
+                logging.WARNING,
+                "The message queue size limit has been reached. The current message has been returned to the queue, and the newest message has been discarded.",
+                logger=LOGGER,
+            )
+        self._message_queue.put_back(message)
