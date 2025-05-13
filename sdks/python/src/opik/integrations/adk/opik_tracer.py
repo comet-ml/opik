@@ -1,4 +1,5 @@
 import logging
+import uuid
 from typing import Any, Dict, List, Optional, Union
 
 from google.adk.agents.callback_context import CallbackContext
@@ -7,10 +8,10 @@ from google.adk.tools.base_tool import BaseTool
 from google.adk.tools.tool_context import ToolContext
 from opik import context_storage
 from opik.api_objects import helpers, opik_client, trace, span
-from opik.types import DistributedTraceHeadersDict
+from opik.types import DistributedTraceHeadersDict, SpanType
 
-from . import adk_decorators
 from . import llm_response_wrapper
+from . import helpers as adk_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -34,9 +35,7 @@ class OpikTracer:
         self._client = opik_client.get_client_cached()
 
         self._last_model_output: Optional[Dict[str, Any]] = None
-        self._context_storage = context_storage._context_storage
-        self._llm_tracer = adk_decorators.ADKLLMTrackDecorator()
-        self._tool_tracer = adk_decorators.ADKToolTrackDecorator()
+        self._context_storage = context_storage.get_current_context_instance()
 
         self._opik_client = opik_client.get_client_cached()
 
@@ -48,18 +47,18 @@ class OpikTracer:
     def before_agent_callback(
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
     ) -> None:
-        # if "opik_thread_id" in callback_context.state:
-        #     thread_id = callback_context.state["opik_thread_id"]
-        # else:
-        #     thread_id = str(uuid.uuid4())
-        #     callback_context.state["opik_thread_id"] = thread_id
+        if "opik_thread_id" in callback_context.state:
+            thread_id = callback_context.state["opik_thread_id"]
+        else:
+            thread_id = str(uuid.uuid4())
+            callback_context.state["opik_thread_id"] = thread_id
 
         # Should we create a trace here as we don't have an input?
 
         trace_metadata = self.metadata.copy()
         trace_metadata["adk_invocation_id"] = callback_context.invocation_id
 
-        user_input = adk_decorators.convert_adk_base_models(
+        user_input = adk_helpers.convert_adk_base_model_to_dict(
             callback_context.user_content
         )
         name = self.name or callback_context.agent_name
@@ -81,11 +80,13 @@ class OpikTracer:
                 metadata=self.metadata,
             )
         else:
+            print("Starting new trace")
             new_trace_data = trace.TraceData(
                 name=name,
                 input=user_input,
                 metadata=self.metadata,
                 project_name=self.project_name,
+                thread_id=thread_id,
             )
             self._start_trace(new_trace_data)
 
@@ -94,7 +95,7 @@ class OpikTracer:
         current_span_data: span.SpanData,
         name: str,
         input: Dict[str, Any],
-        type: str,
+        type: SpanType,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         project_name = helpers.resolve_child_span_project_name(
@@ -120,7 +121,7 @@ class OpikTracer:
         current_trace_data: trace.TraceData,
         name: str,
         input: Dict[str, Any],
-        type: str,
+        type: SpanType,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         project_name = helpers.resolve_child_span_project_name(
@@ -149,6 +150,7 @@ class OpikTracer:
 
     def _end_current_trace(self) -> None:
         if (trace_data := self._context_storage.get_trace_data()) is not None:
+            print("Ending trace")
             trace_data.init_end_time()
             self._opik_client.trace(**trace_data.__dict__)
 
@@ -174,7 +176,7 @@ class OpikTracer:
     def after_agent_callback(
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
     ) -> None:
-        output = self._last_model_output  # should probably remove
+        output = self._last_model_output
 
         # remove the custom metadata with opik usage we added
         if output is not None:
@@ -185,12 +187,10 @@ class OpikTracer:
             assert trace_data is not None
             trace_data.update(output=output).init_end_time()
             self._end_current_trace()
+            self._last_model_output = None
         else:
             span_data.update(output=output).init_end_time()
             self._end_current_span()
-
-        # Cleaning
-        self._last_model_output = None
 
     def before_model_callback(
         self,
@@ -199,11 +199,12 @@ class OpikTracer:
         *args: Any,
         **kwargs: Any,
     ) -> None:
+        input = adk_helpers.convert_adk_base_model_to_dict(llm_request)
         if (current_span_data := self._context_storage.top_span_data()) is not None:
             self._attach_span_to_existing_span(
                 current_span_data=current_span_data,
                 name=llm_request.model,
-                input=llm_request,
+                input=input,
                 type="llm",
                 metadata=self.metadata,
             )
@@ -213,7 +214,7 @@ class OpikTracer:
             self._attach_span_to_existing_trace(
                 current_trace_data=current_trace_data,
                 name=llm_request.model,
-                input=llm_request,
+                input=input,
                 type="llm",
                 metadata=self.metadata,
             )
@@ -233,7 +234,7 @@ class OpikTracer:
         except Exception:
             LOGGER.debug("Error checking for partial chunks", exc_info=True)
 
-        output = adk_decorators.convert_adk_base_models(llm_response)
+        output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
         usage_data = llm_response_wrapper.pop_llm_usage_data(**output)
         if usage_data is not None:
             model = usage_data.model
@@ -244,7 +245,6 @@ class OpikTracer:
             provider = None
             usage = None
 
-        # store output for later use
         self._last_model_output = output
 
         span_data = self._context_storage.top_span_data()
