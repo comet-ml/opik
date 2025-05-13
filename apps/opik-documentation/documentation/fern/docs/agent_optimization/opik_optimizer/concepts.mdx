@@ -2,102 +2,99 @@
 
 ## Overview
 
-Understanding the core concepts of the Opik Optimizer is crucial for leveraging
-its full potential. This section provides a detailed explanation of the key
-terms and processes involved in optimizing AI models.
+Understanding the core concepts of the Opik Optimizer is essential for unlocking
+its full potential in LLM evaluation and optimization. This section explains the
+foundational terms, processes, and strategies that underpin effective agent and
+prompt optimization within Opik.
 
-## Agent Optimization Overview
+## What is Agent Optimization?
 
-Agent Optimization in Opik involves systematically refining prompts and
-evaluating their effectiveness to enhance AI model performance. This iterative
-process ensures optimal results through continuous testing and refinement.
+Agent Optimization in Opik refers to the systematic process of refining prompts
+and evaluating their effectiveness to maximize AI model performance. This
+iterative approach leverages continuous testing, data-driven refinement, and
+advanced evaluation techniques to deliver robust, reproducible results.
 
 ## Key Terms
 
-### Trials/Iterations
+### Runs and Trials
 
-- **Trial**: A single attempt to optimize a prompt using a specific
+- **Run:** A single execution of a prompt optimization process using a specific
   configuration.
-- **Iteration**: A complete cycle of optimization, including testing and
-  refinement. Multiple trials are typically run in each iteration to ensure
-  statistical significance.
+- **Trial:** A complete cycle of optimization, including multiple runs and
+  iterative refinements to ensure statistical significance.
 
 ### Optimizers
 
-- Specialized algorithms designed to improve prompt effectiveness. Each
-  optimizer employs different strategies and techniques, configurable with various
-  parameters to suit specific needs.
+- Specialized algorithms designed to enhance prompt effectiveness. Each
+  optimizer employs unique strategies and configurable parameters to address
+  specific optimization goals.
 
-### Multi-agent Optimization
+### Multi-Agent Optimization
 
-- Utilizes multiple AI agents to evaluate and refine prompts. Agents can have
-  different roles (e.g., evaluator, refiner, critic), enabling comprehensive
-  optimization through diverse perspectives.
+- Involves multiple AI agents, each potentially serving different roles
+  (evaluator, refiner, critic), working collaboratively to evaluate and improve
+  prompts from diverse perspectives.
 
 ### Datasets and Evaluation
 
-- **Training Dataset**: Used to optimize prompts.
-- **Validation Dataset**: Used to evaluate optimization effectiveness.
-- **Ground Truth**: Expected outputs for given inputs.
-- **Evaluation Metrics**: Measures of optimization success.
+- **Training Dataset:** Used for prompt optimization and model improvement.
+- **Validation Dataset:** Used to assess the effectiveness of the optimization.
+- **Ground Truth:** The expected output for a given input, serving as a
+  benchmark for evaluation.
+- **Evaluation Metrics:** Quantitative measures (e.g., accuracy, efficiency,
+  hallucination rate) used to assess optimization success.
 
-## Optimization Process Flow
+## Optimization Workflow
 
 1. **Initialization**
-
-   - Select optimizer type and configure parameters.
-   - Prepare dataset for optimization.
-
+   - Select the optimizer and configure parameters.
+   - Prepare and validate datasets.
 2. **Trial Execution**
-
    - Run optimization trials and collect results.
-   - Evaluate performance based on metrics.
-
+   - Evaluate performance using defined metrics.
 3. **Analysis**
-
-   - Compare results and identify improvements.
-   - Generate insights for further refinement.
-
+   - Compare results, identify improvements, and generate actionable insights.
 4. **Refinement**
-
-   - Adjust parameters and modify prompts.
-   - Prepare for the next iteration.
-
+   - Adjust parameters, modify prompts, and prepare for the next iteration.
 5. **Validation**
-   - Test on validation set and measure improvements.
-   - Document results and insights.
+   - Test on validation datasets, measure improvements, and document findings.
 
 ## Optimization Strategies
 
 ### Few-shot Learning
 
-- Leverages examples to guide prompt optimization, adapting to specific use cases.
+- Uses curated examples to guide prompt optimization, enabling adaptation to
+  specific use cases.
 
-### Multi-agent Collaboration
+### Multi-Agent Collaboration
 
-- Combines multiple perspectives for comprehensive evaluation and diverse feedback.
+- Leverages the strengths of multiple agents to provide comprehensive evaluation
+  and diverse feedback.
 
 ### Iterative Refinement
 
-- Continuous improvement cycle with data-driven adjustments for progressive optimization.
+- Employs a continuous improvement cycle, making data-driven adjustments for
+  progressive optimization.
 
 ## Best Practices
 
 1. **Dataset Preparation**
-
-   - Ensure sufficient examples and include diverse scenarios.
-   - Maintain quality ground truth and consistent formatting.
-
+   - Ensure datasets contain sufficient and diverse examples.
+   - Maintain high-quality ground truth and consistent formatting.
 2. **Parameter Selection**
-
-   - Start with recommended defaults and adjust based on results.
-   - Document changes for future reference.
-
+   - Start with recommended defaults, then iteratively adjust based on results.
+   - Document all changes for reproducibility.
 3. **Evaluation**
-   - Use appropriate metrics and consider multiple perspectives.
-   - Validate improvements and document findings.
+   - Use appropriate, task-relevant metrics and consider multiple perspectives.
+   - Validate improvements and thoroughly document findings.
 
 ## Next Steps
 
-- Explore specific Optimizers for detailed algorithm information.
-- Understand [Dataset Requirements](/agent_optimization/opik_optimizer/datasets) for effective optimization.
+- Explore specific [Optimizers](/agent_optimization/algorithms) for algorithm
+  details.
+- Review [Dataset Requirements](/agent_optimization/opik_optimizer/datasets) to
+  ensure effective optimization.
+- Consult the [Quickstart Guide](/agent_optimization/opik_optimizer/quickstart)
+  to get started rapidly.
+- Refer to the [FAQ](/agent_optimization/opik_optimizer/faq) for common
+  questions and troubleshooting.

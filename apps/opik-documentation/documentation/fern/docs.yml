@@ -313,18 +313,22 @@ navigation:
       - section: Opik Optimizer
         slug: /opik_optimizer
         contents:
-          - page: Concepts
-            icon: fa-regular fa-lightbulb
-            path: docs/agent_optimization/opik_optimizer/concepts.mdx
-            slug: concepts
           - page: Quickstart
             icon: fa-regular fa-bolt
             path: docs/agent_optimization/opik_optimizer/quickstart.mdx
             slug: quickstart
+          - page: Concepts
+            icon: fa-regular fa-lightbulb
+            path: docs/agent_optimization/opik_optimizer/concepts.mdx
+            slug: concepts
           - page: Datasets and testing
             icon: fa-regular fa-database
             path: docs/agent_optimization/opik_optimizer/datasets.mdx
             slug: datasets
+          - page: Reference
+            icon: fa-regular fa-square-terminal
+            path: docs/agent_optimization/opik_optimizer/reference.mdx
+            slug: reference
           - page: FAQ
             icon: fa-regular fa-question
             path: docs/agent_optimization/opik_optimizer/faq.mdx
@@ -492,4 +496,10 @@ redirects:
     permanent: true
   - source: "docs/prompt_engineering/managing_prompts_in_code"
     destination: "/docs/opik/prompt_engineering/prompt_management"
+    permanent: true
+  - source: "docs/prompt_engineering/prompt_optimization"
+    destination: "docs/agent_optimization/best-practices/prompt_engineering"
+    permanent: true
+  - source: "docs/prompt_engineering/agent_optimization"
+    destination: "docs/agent_optimization/overview"
     permanent: true
