@@ -15,23 +15,29 @@ class CloudRateLimit:
 
 
 def parse_rate_limit(rate_limit_response: Dict[str, Any]) -> Optional[CloudRateLimit]:
-    pattern = re.compile(r"Opik-(.+)-Limit")
+    pattern = re.compile(r"opik-(.\w*)-limit")
 
     for key in rate_limit_response.keys():
         match = pattern.match(key)
         if match:
             rate_limit_name = match.group(1)
-            return CloudRateLimit(
+            rate_limit = CloudRateLimit(
                 bucket_name=rate_limit_response.get(
-                    f"Opik-{rate_limit_name}-Limit", ""
+                    f"opik-{rate_limit_name}-limit", ""
                 ),
                 rate_limit_name=rate_limit_name,
-                remaining_limit=rate_limit_response.get(
-                    f"Opik-{rate_limit_name}-Remaining-Limit", 0
+                remaining_limit=int(
+                    rate_limit_response.get(
+                        f"opik-{rate_limit_name}-remaining-limit", 0
+                    )
                 ),
-                remaining_limit_reset_time_ms=rate_limit_response.get(
-                    f"Opik-{rate_limit_name}-Remaining-Limit-TTL-Millis", 0
+                remaining_limit_reset_time_ms=int(
+                    rate_limit_response.get(
+                        f"opik-{rate_limit_name}-remaining-limit-ttl-millis", 0
+                    )
                 ),
             )
+            if rate_limit.remaining_limit == 0:
+                return rate_limit
 
     return None

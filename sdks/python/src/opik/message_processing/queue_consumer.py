@@ -1,8 +1,8 @@
 import logging
-import time
 import threading
-from typing import Optional
+import time
 from queue import Empty
+from typing import Optional
 
 from . import message_processors, message_queue, messages
 from .. import exceptions, _logging
@@ -57,9 +57,10 @@ class QueueConsumer(threading.Thread):
         except Empty:
             time.sleep(SLEEP_BETWEEN_LOOP_ITERATIONS)
         except exceptions.OpikCloudRequestsRateLimited as limit_exception:
-            LOGGER.debug(
-                "Rate limited, retrying in %s seconds, details: %s",
+            LOGGER.info(
+                "Ingestion rate limited, retrying in %s seconds, remaining queue size: %d, details: %s",
                 limit_exception.retry_after,
+                len(self._message_queue),
                 limit_exception.headers,
             )
             # set the next iteration time to avoid rate limiting
