@@ -4607,6 +4607,10 @@ components:
           readOnly: true
           items:
             $ref: "#/components/schemas/ExperimentItem"
+        dataset_id:
+          type: string
+          format: uuid
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -4904,6 +4908,10 @@ components:
           readOnly: true
           items:
             $ref: "#/components/schemas/ExperimentItem_Compare"
+        dataset_id:
+          type: string
+          format: uuid
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -5135,6 +5143,10 @@ components:
           readOnly: true
           items:
             $ref: "#/components/schemas/ExperimentItem_Public"
+        dataset_id:
+          type: string
+          format: uuid
+          readOnly: true
         created_at:
           type: string
           format: date-time
