@@ -105,9 +105,13 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
             var credentials = ServiceAccountCredentials.fromStream(
                     new ByteArrayInputStream(config.apiKey().getBytes(StandardCharsets.UTF_8)));
 
-            return new VertexAI.Builder()
+            VertexAI.Builder builder = new VertexAI.Builder();
+
+            Optional.ofNullable(config.configuration().get("location"))
+                    .ifPresent(builder::setLocation);
+
+            return builder
                     .setProjectId(credentials.getProjectId())
-                    .setLocation(config.configuration().get("location"))
                     .setCredentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
                     .build();
 
