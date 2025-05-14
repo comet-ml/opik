@@ -11,6 +11,7 @@ export interface DatasetItemCompare {
     source: OpikApi.DatasetItemCompareSource;
     data: OpikApi.JsonNode;
     experimentItems?: OpikApi.ExperimentItemCompare[];
+    datasetId?: string;
     createdAt?: Date;
     lastUpdatedAt?: Date;
     createdBy?: string;

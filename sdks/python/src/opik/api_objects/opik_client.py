@@ -969,10 +969,10 @@ class Opik:
             new_spans = rest_stream_parser.read_and_parse_stream(
                 stream=spans_stream, item_class=span_public.SpanPublic
             )
-            if len(new_spans) == 0:
-                break
-
             spans.extend(new_spans)
+
+            if current_batch_size > len(new_spans):
+                break
 
         return spans
 

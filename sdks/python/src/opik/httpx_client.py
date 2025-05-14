@@ -60,6 +60,7 @@ def _prepare_headers(
     result = {
         "X-OPIK-DEBUG-SDK-VERSION": package_version.VERSION,
         "X-OPIK-DEBUG-PY-VERSION": platform.python_version(),
+        "Accept-Encoding": "gzip",
     }
 
     if workspace is not None:

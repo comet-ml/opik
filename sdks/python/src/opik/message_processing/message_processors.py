@@ -1,6 +1,8 @@
 import abc
 import logging
 from typing import Callable, Dict, Type, List
+import pydantic
+
 from opik import logging_messages, exceptions
 from . import messages
 from ..jsonable_encoder import encode
@@ -72,6 +74,15 @@ class MessageSender(BaseMessageProcessor):
                 logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
                 message_type.__name__,
                 str(exception),
+                extra={"error_fingerprint": error_fingerprint},
+            )
+        except pydantic.ValidationError as validation_error:
+            error_fingerprint = _generate_error_fingerprint(validation_error, message)
+            LOGGER.error(
+                "Failed to process message: '%s' due to input data validation error:\n%s\n",
+                message_type.__name__,
+                validation_error,
+                exc_info=True,
                 extra={"error_fingerprint": error_fingerprint},
             )
         except Exception as exception:

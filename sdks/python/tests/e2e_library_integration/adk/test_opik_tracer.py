@@ -6,7 +6,7 @@ import pytest
 import requests
 
 from opik import synchronization
-from opik.integrations.adk import adk_decorators
+from opik.integrations.adk import helpers as adk_helpers
 from ... import testlib
 
 ADK_SERVER_PORT = 21345
@@ -104,5 +104,5 @@ def test_opik_tracer_with_sample_agent(
 
     spans = opik_client_unique_project_name.search_spans()
     assert len(spans) == 3
-    assert spans[0].provider == adk_decorators.get_adk_provider()
-    assert spans[2].provider == adk_decorators.get_adk_provider()
+    assert spans[0].provider == adk_helpers.get_adk_provider()
+    assert spans[2].provider == adk_helpers.get_adk_provider()

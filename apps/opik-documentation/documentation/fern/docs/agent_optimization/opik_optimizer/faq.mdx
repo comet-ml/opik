@@ -1,0 +1,183 @@
+This FAQ section addresses common questions and concerns about the Opik
+Optimizer, providing clear and concise answers to help users effectively utilize
+the tool.
+
+## Model Configuration
+
+### Q: What should I pass in the model parameter when using Azure OpenAI?
+
+A: When using Azure OpenAI, use the following format:
+
+```python {pytest_codeblocks_skip=true}
+optimizer = FewShotOptimizer(
+    model="azure/gpt-4",  # For Azure GPT-4
+    project_name="my-project",
+    temperature=0.1,
+    max_tokens=5000
+)
+```
+
+Supported Azure OpenAI models:
+
+- `azure/gpt-4`
+- `azure/gpt-3.5-turbo`
+
+For regular OpenAI models, use:
+
+- `openai/gpt-4`
+- `openai/gpt-3.5-turbo`
+
+## Algorithm Understanding
+
+### Q: Is there any document which explains how these optimization algorithms work?
+
+A: Yes, we have detailed documentation about how the optimization algorithms work:
+
+1. **Core Concepts**: See our [Core Concepts](/agent_optimization/opik_optimizer/concepts) documentation for an overview of the optimization process.
+
+2. **Optimizer Details**: The Optimization Algorithm documentation provides in-depth information about each optimizer, including:
+
+   - How they work
+   - Algorithm details
+   - Research papers and references
+   - Configuration options
+
+3. **Research Papers**: Each optimizer's documentation includes links to relevant research papers that explain the underlying algorithms.
+
+## Dataset Requirements
+
+### Q: What is the recommended number of records for the optimization algorithm?
+
+A: We recommend the following dataset sizes:
+
+- **Minimum**: 50 examples
+  - Provides basic coverage for optimization.
+  - Suitable for simple use cases.
+- **Optimal**: 100-500 examples
+  - Better representation of real-world scenarios.
+  - More reliable optimization results.
+- **Maximum**: Context window dependent
+  - Limited by model's maximum context length.
+
+For more details, see our [Datasets and Testing](/agent_optimization/opik_optimizer/datasets) documentation.
+
+### Q: Does the algorithm use input and output data to optimize the prompt?
+
+A: Yes, the optimization process uses both input and output data in several ways:
+
+1. **Pattern Recognition**
+
+   - Analyzes input-output relationships.
+   - Identifies successful patterns.
+   - Learns from examples.
+
+2. **Prompt Refinement**
+   - Uses output data to guide prompt improvements.
+   - Tests against validation data.
+   - Iteratively optimizes based on results.
+
+For a detailed explanation, see the [Optimization Process](/agent_optimization/opik_optimizer/datasets#optimization-process) section in our documentation.
+
+## General Questions
+
+### Q: How do I get started with Opik Optimizer?
+
+A: Follow these steps:
+
+1. Install the package:
+
+   ```bash
+   pip install opik-optimizer
+   ```
+
+2. Review the [Quickstart](/agent_optimization/opik_optimizer/quickstart) documentation.
+
+3. Start with a simple example and gradually add complexity.
+
+### Q: What models are supported?
+
+A: Opik Optimizer supports:
+
+1. **OpenAI Models**
+
+   - GPT-4
+   - GPT-3.5 Turbo
+
+2. **Azure OpenAI Models**
+
+   - GPT-4
+   - GPT-3.5 Turbo
+
+3. **All models support by LiteLLM**
+
+### Q: How do I evaluate the results?
+
+A: The optimizer provides several ways to evaluate results:
+
+1. **Built-in Metrics**
+
+   - Accuracy
+   - Precision
+   - Recall
+   - F1 Score
+
+2. **Custom Metrics**
+
+   - You can define your own evaluation metrics.
+   - Implement custom scoring functions.
+
+3. **Validation Results**
+   - Training accuracy
+   - Validation accuracy
+   - Improvement percentage
+
+See the [Testing Methodology](/agent_optimization/opik_optimizer/datasets#testing-methodology) section for more details.
+
+## Troubleshooting
+
+### Q: What should I do if the optimization isn't improving results?
+
+A: Try these steps:
+
+1. **Check Dataset**
+
+   - Ensure sufficient examples.
+   - Verify data quality.
+   - Check for diversity.
+
+2. **Adjust Parameters**
+
+   - Try different temperature values.
+   - Increase number of trials.
+   - Enable multi-agent optimization.
+
+3. **Review Configuration**
+   - Verify model selection.
+   - Check parameter settings.
+   - Ensure proper validation split.
+
+### Q: How can I optimize for specific use cases?
+
+A: Consider these approaches:
+
+1. **Custom Metrics**
+
+   - Define domain-specific metrics.
+   - Implement custom evaluation.
+   - Focus on relevant aspects.
+
+2. **Parameter Tuning**
+
+   - Adjust for your specific needs.
+   - Experiment with settings.
+   - Document successful configurations.
+
+3. **Data Preparation**
+   - Include relevant examples.
+   - Cover edge cases.
+   - Ensure proper representation.
+
+## Next Steps
+
+- Explore [API Reference](/agent_optimization/opik_optimizer/api_reference) for detailed technical documentation.
+- Review the Optimizers for algorithm-specific information.

@@ -76,8 +76,26 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
                 .map(Double::floatValue)
                 .ifPresent(generationConfig::setTemperature);
 
+        Optional.ofNullable(request.topP())
+                .map(Double::floatValue)
+                .ifPresent(generationConfig::setTopP);
+
+        Optional.ofNullable(request.stop())
+                .ifPresent(values -> values.forEach(generationConfig::addStopSequences));
+
+        Optional.ofNullable(request.presencePenalty())
+                .map(Double::floatValue)
+                .ifPresent(generationConfig::setPresencePenalty);
+
+        Optional.ofNullable(request.frequencyPenalty())
+                .map(Double::floatValue)
+                .ifPresent(generationConfig::setFrequencyPenalty);
+
         Optional.ofNullable(request.maxTokens())
                 .ifPresent(generationConfig::setMaxOutputTokens);
+
+        Optional.ofNullable(request.seed())
+                .ifPresent(generationConfig::setSeed);
 
         return generationConfig.build();
     }
@@ -87,9 +105,13 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
             var credentials = ServiceAccountCredentials.fromStream(
                     new ByteArrayInputStream(config.apiKey().getBytes(StandardCharsets.UTF_8)));
 
-            return new VertexAI.Builder()
+            VertexAI.Builder builder = new VertexAI.Builder();
+
+            Optional.ofNullable(config.configuration().get("location"))
+                    .ifPresent(builder::setLocation);
+
+            return builder
                     .setProjectId(credentials.getProjectId())
-                    .setLocation(config.configuration().get("location"))
                     .setCredentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
                     .build();
 
