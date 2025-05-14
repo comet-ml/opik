@@ -91,6 +91,7 @@ class SpanDAO {
                 total_estimated_cost_version,
                 tags,
                 usage,
+                last_updated_at,
                 error_info,
                 created_by,
                 last_updated_by
@@ -115,6 +116,7 @@ class SpanDAO {
                         :total_estimated_cost_version<item.index>,
                         :tags<item.index>,
                         mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>),
+                        if(:last_updated_at<item.index> IS NULL, NULL, parseDateTime64BestEffort(:last_updated_at<item.index>, 6)),
                         :error_info<item.index>,
                         :created_by<item.index>,
                         :last_updated_by<item.index>
@@ -971,6 +973,12 @@ class SpanDAO {
                 } else {
                     statement.bind("usage_keys" + i, new String[]{});
                     statement.bind("usage_values" + i, new Integer[]{});
+                }
+
+                if (span.lastUpdatedAt() != null) {
+                    statement.bind("last_updated_at" + i, span.lastUpdatedAt().toString());
+                } else {
+                    statement.bindNull("last_updated_at" + i, String.class);
                 }
 
                 bindCost(span, statement, String.valueOf(i));

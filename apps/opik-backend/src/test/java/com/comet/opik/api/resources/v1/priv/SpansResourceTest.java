@@ -95,6 +95,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.com.google.common.collect.Lists;
+import org.testcontainers.shaded.org.apache.commons.lang3.RandomUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -5149,6 +5150,112 @@ class SpansResourceTest {
                     API_KEY, List.of(), List.of());
         }
 
+        @Test
+        void upsert() {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            // Ingesting spans with the minimum required fields
+            var expectedSpans0 = IntStream.range(0, 5)
+                    .mapToObj(i -> Span.builder()
+                            .projectName(projectName)
+                            .id(generator.generate())
+                            .traceId(generator.generate())
+                            .name("name-00-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                            .type(SpanType.values()[RandomUtils.nextInt(0, SpanType.values().length)])
+                            .startTime(Instant.now())
+                            .createdAt(Instant.now())
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(expectedSpans0, API_KEY, TEST_WORKSPACE);
+            getAndAssertPage(
+                    TEST_WORKSPACE,
+                    projectName,
+                    List.of(),
+                    List.of(),
+                    expectedSpans0.reversed(),
+                    List.of(),
+                    API_KEY,
+                    List.of(),
+                    List.of());
+
+            // The spans are overwritten, by using a server side generated last_updated_at
+            var expectedSpans1 = IntStream.range(0, 5)
+                    .mapToObj(i -> podamFactory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .id(expectedSpans0.get(i).id())
+                            .traceId(expectedSpans0.get(i).traceId())
+                            .parentSpanId(null)
+                            .name("name-01-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                            .startTime(expectedSpans0.get(i).startTime())
+                            .lastUpdatedAt(null)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(expectedSpans1, API_KEY, TEST_WORKSPACE);
+            getAndAssertPage(
+                    TEST_WORKSPACE,
+                    projectName,
+                    List.of(),
+                    List.of(),
+                    expectedSpans1.reversed(), // Finds the updated
+                    expectedSpans0, // Does not find the previous
+                    API_KEY,
+                    List.of(),
+                    List.of());
+
+            // The spans are overwritten, by using a client side generated last_updated_at
+            var expectedSpans2 = IntStream.range(0, 5)
+                    .mapToObj(i -> podamFactory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .id(expectedSpans0.get(i).id())
+                            .traceId(expectedSpans0.get(i).traceId())
+                            .parentSpanId(null)
+                            .name("name-02-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                            .startTime(expectedSpans0.get(i).startTime())
+                            .lastUpdatedAt(Instant.now().plus(1, ChronoUnit.DAYS))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(expectedSpans2, API_KEY, TEST_WORKSPACE);
+            getAndAssertPage(
+                    TEST_WORKSPACE,
+                    projectName,
+                    List.of(),
+                    List.of(),
+                    expectedSpans2.reversed(), // Finds the updated
+                    expectedSpans1, // Does not find the previous
+                    API_KEY,
+                    List.of(),
+                    List.of());
+
+            // The span is not overwritten, the client side last_updated_at is older
+            var unexpectedSpans = IntStream.range(0, 5)
+                    .mapToObj(i -> podamFactory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .id(expectedSpans0.get(i).id())
+                            .traceId(expectedSpans0.get(i).traceId())
+                            .parentSpanId(null)
+                            .name("name-03-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                            .startTime(expectedSpans0.get(i).startTime())
+                            .lastUpdatedAt(Instant.now().minus(1, ChronoUnit.DAYS))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(unexpectedSpans, API_KEY, TEST_WORKSPACE);
+            getAndAssertPage(
+                    TEST_WORKSPACE,
+                    projectName,
+                    List.of(),
+                    List.of(),
+                    expectedSpans2.reversed(), // finds the previous
+                    unexpectedSpans, // Does not find the update attempt
+                    API_KEY,
+                    List.of(),
+                    List.of());
+        }
+
         @ParameterizedTest
         @MethodSource("com.comet.opik.api.resources.utils.QuotaLimitTestUtils#quotaLimitsTestProvider")
         void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
@@ -5188,7 +5295,7 @@ class SpansResourceTest {
         assertThat(actualSpan.projectId()).isNotNull();
         assertThat(actualSpan.projectName()).isEqualTo(expectedSpan.projectName());
         assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
-        assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
+        assertThat(actualSpan.lastUpdatedAt()).isAfterOrEqualTo(expectedSpan.lastUpdatedAt());
         assertThat(actualSpan.createdBy()).isEqualTo(USER);
         assertThat(actualSpan.lastUpdatedBy()).isEqualTo(USER);
         var expected = DurationUtils.getDurationInMillisWithSubMilliPrecision(
