@@ -7,6 +7,10 @@ Guardrails help you protect your application from risks inherent in LLMs.
 Use them to check the inputs and outputs of your LLM calls, and detect issues like 
 off-topic answers or leaking sensitive information. 
 
+<Frame>
+  <img src="/img/production/guardrails_results.gif" />
+</Frame>
+
 # How it works 
 
 Conceptually, we need to determine the presence of a series of risks for each input and 
@@ -58,6 +62,10 @@ You can start the guardrails backend by running:
 
 ## Using the Python SDK 
 
+<Frame>
+  <img src="/img/production/guardrails_editor.gif" />
+</Frame>
+
 ```python
 from opik.guardrails import Guardrail, PII, Topic
 from opik import exceptions
@@ -102,7 +110,7 @@ When a guardrail fails on an LLM call, Opik automatically adds the information t
 You can filter the traces in your project to only view those that have failed the guardrails. 
 
 <Frame>
-  <img src="/img/production/guardrail_example.png" />
+  <img src="/img/production/guardrails_example.png" />
 </Frame>
 
 ### Analyzing trends 
