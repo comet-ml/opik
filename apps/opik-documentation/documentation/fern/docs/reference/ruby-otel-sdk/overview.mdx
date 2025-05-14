@@ -95,7 +95,7 @@ TRACER.in_span('JSONPlaceholder API Call', kind: :client, attributes: {
 end
 ```
 
-It’s important to note that otel auto-instrumentations are not familiar with Opik, so you may need to set attributes manually, like the `output` attribute in the example above.
+It's important to note that OpenTelemetry (otel) auto-instrumentations don’t automatically align with Opik’s schema, so you may need to manually set certain attributes, like the `output` attribute in the example above.
 
 Opik supports mapping of attributes to Opik traces, for the following libraries:
 - `python/OpenInference`
