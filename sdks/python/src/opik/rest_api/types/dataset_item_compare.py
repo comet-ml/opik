@@ -17,6 +17,7 @@ class DatasetItemCompare(UniversalBaseModel):
     source: DatasetItemCompareSource
     data: JsonNode
     experiment_items: typing.Optional[typing.List[ExperimentItemCompare]] = None
+    dataset_id: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None

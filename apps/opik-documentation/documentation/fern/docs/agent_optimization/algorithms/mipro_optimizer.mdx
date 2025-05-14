@@ -1,22 +1,21 @@
-# MiproOptimizer
-
-## Overview
-
 The MiproOptimizer is a specialized prompt optimization tool that implements the MIPRO (Multi-agent Interactive Prompt Optimization) algorithm. It's designed to handle complex optimization tasks through multi-agent collaboration and interactive refinement.
 
 ## How It Works
 
 1. **Multi-agent System**
+
    - Specialized agents for different aspects of optimization
    - Collaborative prompt generation and refinement
    - Distributed evaluation and feedback
 
 2. **Interactive Optimization**
+
    - Real-time feedback integration
    - Dynamic prompt adjustment
    - Continuous learning from interactions
 
 3. **Performance Evaluation**
+
    - Multi-metric assessment
    - Parallel testing capabilities
    - Comprehensive logging
@@ -29,8 +28,9 @@ The MiproOptimizer is a specialized prompt optimization tool that implements the
 ## Configuration Options
 
 ### Basic Configuration
+
 ```python
-from opik.optimizer import MiproOptimizer
+from opik_optimizer import MiproOptimizer
 
 optimizer = MiproOptimizer(
     model="openai/gpt-4",  # or "azure/gpt-4"
@@ -43,6 +43,7 @@ optimizer = MiproOptimizer(
 ```
 
 ### Advanced Configuration
+
 ```python
 optimizer = MiproOptimizer(
     model="openai/gpt-4",
@@ -62,33 +63,52 @@ optimizer = MiproOptimizer(
 ## Example Usage
 
 ```python
-from opik.optimizer import MiproOptimizer
+from opik_optimizer import MiproOptimizer
+from opik.evaluation.metrics import LevenshteinRatio
+from opik_optimizer import (
+    MetricConfig,
+    TaskConfig,
+    from_llm_response_text,
+    from_dataset_field,
+)
+from opik_optimizer.demo import get_or_create_dataset
 
 # Initialize optimizer
 optimizer = MiproOptimizer(
     model="openai/gpt-4",
-    project_name="optimize-mipro",
     temperature=0.1,
     max_tokens=5000
 )
 
 # Prepare dataset
-dataset = [
-    {"input": "example input 1", "output": "expected output 1"},
-    {"input": "example input 2", "output": "expected output 2"},
-    # ... more examples
-]
+dataset = get_or_create_dataset("hotpot-300")
+
+# Define metric and task configuration (see docs for more options)
+metric_config = MetricConfig(
+    metric=LevenshteinRatio(),
+    inputs={
+        "output": from_llm_response_text(),  # Model's output
+        "reference": from_dataset_field(name="answer"),  # Ground truth
+    }
+)
+task_config = TaskConfig(
+    type="text_generation",
+    instruction_prompt="Provide an answer to the question.",
+    input_dataset_fields=["question"],
+    output_dataset_field="answer"
+)
 
 # Run optimization
-results = optimizer.optimize(
+results = optimizer.optimize_prompt(
     dataset=dataset,
-    num_trials=10
+    num_trials=10,
+    metric_config=metric_config,
+    task_config=task_config
 )
 
 # Access results
 print(f"Best prompt: {results.best_prompt}")
 print(f"Improvement: {results.improvement_percentage}%")
-print(f"Agent interactions: {results.interaction_history}")
 ```
 
 ## Model Support
@@ -96,6 +116,7 @@ print(f"Agent interactions: {results.interaction_history}")
 The MiproOptimizer supports all models available through LiteLLM. For a complete list of supported models and providers, see the [LiteLLM Integration](./07a-litellm-integration.md) documentation.
 
 ### Common Providers
+
 - OpenAI (gpt-4, gpt-3.5-turbo, etc.)
 - Azure OpenAI
 - Anthropic (Claude)
@@ -104,6 +125,7 @@ The MiproOptimizer supports all models available through LiteLLM. For a complete
 - Cohere
 
 ### Configuration Example
+
 ```python
 optimizer = MiproOptimizer(
     model="anthropic/claude-3-opus",  # or any LiteLLM supported model
@@ -116,16 +138,19 @@ optimizer = MiproOptimizer(
 ## Best Practices
 
 1. **Agent Configuration**
+
    - Start with 2-3 agents for simple tasks
    - Increase agents for complex problems
    - Monitor agent interactions
 
 2. **Interaction Strategy**
+
    - Balance exploration and exploitation
    - Use appropriate feedback weights
    - Monitor convergence metrics
 
 3. **Performance Tuning**
+
    - Adjust num_threads based on resources
    - Optimize interaction rounds
    - Fine-tune exploration rate
@@ -143,6 +168,4 @@ optimizer = MiproOptimizer(
 
 ## Next Steps
 
-- Learn about [ExternalDspyMiproOptimizer](./03c-external-dspy-mipro-optimizer.md)
-- Explore [Dataset Requirements](./04-datasets-and-testing.md)
-- Check [Configuration Options](./05-configuration-and-usage.md) 
+- Learn about [DSPy](https://dspy.ai/)

@@ -23,6 +23,7 @@ setup(
         "pandas",
         "hf_xet",
         "pyrate-limiter",
+        "deap>=1.4.3",
     ],
     # dev requirements
     extras_require={

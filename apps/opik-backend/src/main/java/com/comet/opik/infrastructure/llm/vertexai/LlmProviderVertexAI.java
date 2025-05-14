@@ -3,17 +3,20 @@ package com.comet.opik.infrastructure.llm.vertexai;
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
-import com.comet.opik.infrastructure.llm.gemini.GeminiErrorObject;
-import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.ChatMessageType;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.scheduler.Schedulers;
 
-import java.io.UncheckedIOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -26,10 +29,8 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        var response = llmProviderClientGenerator.generate(config, request)
-                .generate(request.messages().stream().map(VertexAIMapper.INSTANCE::toChatMessage).toList());
-
-        return VertexAIMapper.INSTANCE.toChatCompletionResponse(request, response);
+        var response = llmProviderClientGenerator.generate(config, request).generate(getChatMessages(request));
+        return LlmProviderLangChainMapper.INSTANCE.toChatCompletionResponse(request, response);
     }
 
     @Override
@@ -45,8 +46,7 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
                         streamingChatLanguageModel
                                 .generate(
-                                        request.messages().stream().map(VertexAIMapper.INSTANCE::toChatMessage)
-                                                .toList(),
+                                        getChatMessages(request),
                                         new ChunkedResponseHandler(handleMessage, handleClose, handleError,
                                                 request.model()));
                     } catch (Exception e) {
@@ -56,6 +56,21 @@ public class LlmProviderVertexAI implements LlmProviderService {
                 });
     }
 
+    private List<ChatMessage> getChatMessages(ChatCompletionRequest request) {
+        List<ChatMessage> chatMessages = LlmProviderLangChainMapper.INSTANCE.mapMessages(request);
+
+        // This is a workaround for the Vertex AI API, which requires at least one user or AI message in the request.
+        if (chatMessages.stream().noneMatch(chatMessage -> chatMessage.type() == ChatMessageType.AI
+                || chatMessage.type() == ChatMessageType.USER)) {
+            var newMessages = new ArrayList<ChatMessage>();
+            newMessages.add(AiMessage.from("User message:")); // Add an empty user message to the list as has to have at least one user or ai message
+            newMessages.addAll(chatMessages);
+            chatMessages = newMessages;
+        }
+
+        return chatMessages;
+    }
+
     @Override
     public void validateRequest(@NonNull ChatCompletionRequest request) {
 
@@ -63,19 +78,6 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
     @Override
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
-        String message = throwable.getMessage();
-        var openBraceIndex = message.indexOf('{');
-        if (openBraceIndex >= 0) {
-            String jsonPart = message.substring(openBraceIndex); // Extract JSON part
-            try {
-                var geminiError = JsonUtils.readValue(jsonPart, GeminiErrorObject.class);
-                return geminiError.toErrorMessage();
-            } catch (UncheckedIOException e) {
-                log.warn("failed to parse Gemini error message", e);
-                return Optional.empty();
-            }
-        }
-
-        return Optional.empty();
+        return LlmProviderLangChainMapper.INSTANCE.getGeminiErrorObject(throwable, log);
     }
 }

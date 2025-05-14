@@ -21,6 +21,7 @@ import {
 } from "@/types/shared";
 import {
   OPTIMIZATION_EXAMPLES_KEY,
+  OPTIMIZATION_OPTIMIZER_KEY,
   OPTIMIZATION_PROMPT_KEY,
   STATUS_TO_VARIANT_MAP,
 } from "@/constants/experiments";
@@ -79,6 +80,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "optimizer",
   "prompt",
   "examples",
   "objective_name",
@@ -259,6 +261,17 @@ const CompareOptimizationsPage: React.FC = () => {
         label: "ID",
         type: COLUMN_TYPE.string,
         cell: IdCell as never,
+      },
+      {
+        id: "optimizer",
+        label: "Optimizer",
+        type: COLUMN_TYPE.string,
+        size: 200,
+        accessorFn: (row) => {
+          const val = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY, "-");
+
+          return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
+        },
       },
       {
         id: "prompt",

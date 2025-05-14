@@ -49,8 +49,6 @@ public class LlmProviderClientConfig {
 
     @Valid private LlmProviderClientConfig.AnthropicClientConfig anthropicClient;
 
-    @Valid private LlmProviderClientConfig.OpenAiClientConfig azureOpenAiClient;
-
     @Valid private LlmProviderClientConfig.VertexAIClientConfig vertexAIClient;
 
     private String openRouterUrl;

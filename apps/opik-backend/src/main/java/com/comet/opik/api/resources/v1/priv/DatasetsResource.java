@@ -13,6 +13,7 @@ import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.PageColumns;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
@@ -234,10 +235,11 @@ public class DatasetsResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetIdentifier.class))) @NotNull @Valid DatasetIdentifier identifier) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        Visibility visibility = requestContext.get().getVisibility();
         String name = identifier.datasetName();
 
         log.info("Finding dataset by name '{}' on workspace_id '{}'", name, workspaceId);
-        Dataset dataset = service.findByName(workspaceId, name);
+        Dataset dataset = service.findByName(workspaceId, name, visibility);
         log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", name, dataset.id(), workspaceId);
 
         return Response.ok(dataset).build();
@@ -259,6 +261,7 @@ public class DatasetsResource {
         DatasetItem datasetItem = itemService.get(itemId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
+
         log.info("Found dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
 
         return Response.ok(datasetItem).build();
@@ -301,8 +304,10 @@ public class DatasetsResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemStreamRequest.class))) @NotNull @Valid DatasetItemStreamRequest request) {
         var workspaceId = requestContext.get().getWorkspaceId();
         var userName = requestContext.get().getUserName();
+        var visibility = requestContext.get().getVisibility();
+
         log.info("Streaming dataset items by '{}' on workspaceId '{}'", request, workspaceId);
-        var items = itemService.getItems(workspaceId, request)
+        var items = itemService.getItems(workspaceId, request, visibility)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId));
         var outputStream = streamer.getOutputStream(items);
