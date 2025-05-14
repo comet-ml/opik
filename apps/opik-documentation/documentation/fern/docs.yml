@@ -478,6 +478,12 @@ navigation:
           - api: API Reference
             slug: /
             display-errors: true
+      - section: Ruby OpenTelemetry SDK docs
+        slug: ruby-otel-sdk
+        contents:
+          - page: Overview
+            path: docs/reference/ruby-otel-sdk/overview.mdx
+            slug: overview
 redirects:
   - source: "/docs/opik/playground"
     destination: "/docs/opik/prompt_engineering/playground"
