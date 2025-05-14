@@ -397,7 +397,7 @@ def log_traces_with_spans_low_level(client: opik.Opik):
     Log 5 traces with spans and subspans using the low level Opik client
     Each should have their own names, tags, metadata and feedback scores to test integrity of data transmitted
     """
-    client.get_project
+
     trace_config = {
         "count": 5,
         "prefix": "client-trace-",
