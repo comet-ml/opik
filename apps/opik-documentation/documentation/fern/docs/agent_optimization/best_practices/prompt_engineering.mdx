@@ -111,21 +111,13 @@ a good way to ensure your prompt follows the best practices for specific model p
 
 ## Automated prompt optimization
 
-If you are looking at going one step further than meta-prompt optimization, you can use frameworks like
-[DSPy](https://dspy.ai/) that will automatically improve your prompts based on a dataset and a set of metrics.
+You can automate the prompt engineering process by using the
+[Opik Optimizer](/agent_optimization/opik_optimizer/quickstart). The `Opik Optimizer`
+allows you to refine a prompt by using a dataset and a set of metrics to evaluate the prompts.
 
-The main algorithm that powers DSPy is called MIPRO and combines a couple of concepts:
+We provide a number of different optimization algorithms for you to choose from:
 
-1. Grounding: When optimizing a prompt or agent, the optimizer should be aware both of what the agent is trying
-to achieve and what the dataset looks like
-2. Bayesion optimization: Once you have generated some candidate "instructions" to improve the prompt, you can use
-bayesian optimization techniques to identify which combination of instructions provides the best performance.
-
-To learn more about MIPRO, we recommend [reading the paper](https://arxiv.org/abs/2406.11695) that proposed a set of really interesting ideas on the
-topic of prompt and agent optimization.
-
-<Tip>
-If you would like to chat more about prompt optimization, feel free to book a chat with an Opik core contributor:
-[Calendar link](https://calendly.com/jacques-comet/prompt-optimization)
-</Tip>
+1. [Meta-prompt optimization](/agent_optimization/algorithms/metaprompt_optimizer)
+2. [Few-shot Bayesian optimization](/agent_optimization/algorithms/fewshot_bayesian_optimizer)
+3. [Mipro optimization](/agent_optimization/algorithms/mipro_optimizer)
 ```

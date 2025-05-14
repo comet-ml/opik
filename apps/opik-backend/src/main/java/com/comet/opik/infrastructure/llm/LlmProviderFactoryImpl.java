@@ -50,9 +50,9 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig) {
         return LlmProviderClientApiConfig.builder()
                 .apiKey(EncryptionUtils.decrypt(providerConfig.apiKey()))
-                .headers(providerConfig.headers())
+                .headers(Optional.ofNullable(providerConfig.headers()).orElse(Map.of()))
                 .baseUrl(providerConfig.baseUrl())
-                .configuration(providerConfig.configuration())
+                .configuration(Optional.ofNullable(providerConfig.configuration()).orElse(Map.of()))
                 .build();
     }
 
