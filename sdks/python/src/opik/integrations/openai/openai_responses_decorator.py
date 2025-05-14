@@ -102,7 +102,7 @@ class OpenaiResponsesTrackDecorator(base_track_decorator.BaseTrackDecorator):
         )
 
         opik_usage = None
-        if "usage" in result_dict:
+        if result_dict.get("usage") is not None:
             opik_usage = llm_usage.try_build_opik_usage_or_log_error(
                 provider="_openai_responses",
                 usage=result_dict["usage"],

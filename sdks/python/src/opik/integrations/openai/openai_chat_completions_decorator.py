@@ -110,7 +110,7 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
         output, metadata = dict_utils.split_dict_by_keys(result_dict, ["choices"])
 
         opik_usage = None
-        if "usage" in result_dict:
+        if result_dict.get("usage") is not None:
             opik_usage = llm_usage.try_build_opik_usage_or_log_error(
                 provider=LLMProvider.OPENAI,
                 usage=result_dict["usage"],
