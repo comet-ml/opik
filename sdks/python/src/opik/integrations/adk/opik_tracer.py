@@ -176,10 +176,6 @@ class OpikTracer:
     ) -> None:
         output = self._last_model_output
 
-        # remove the custom metadata with opik usage we added
-        if output is not None and "custom_metadata" in output:
-            output.pop("custom_metadata")
-
         if (span_data := self._context_storage.top_span_data()) is None:
             trace_data = self._context_storage.get_trace_data()
             assert trace_data is not None
@@ -233,7 +229,7 @@ class OpikTracer:
             LOGGER.debug("Error checking for partial chunks", exc_info=True)
 
         output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
-        usage_data = llm_response_wrapper.pop_llm_usage_data(**output)
+        usage_data = llm_response_wrapper.pop_llm_usage_data(output)
         if usage_data is not None:
             model = usage_data.model
             provider = usage_data.provider

@@ -36,7 +36,7 @@ class LLMUsageData:
     provider: Optional[str]
 
 
-def pop_llm_usage_data(**result_dict: Dict[str, Any]) -> Optional[LLMUsageData]:
+def pop_llm_usage_data(result_dict: Dict[str, Any]) -> Optional[LLMUsageData]:
     """Extracts Opik usage metadata from ADK output and removes it from the result dict."""
     custom_metadata = result_dict.get("custom_metadata", None)
     if custom_metadata is None:
