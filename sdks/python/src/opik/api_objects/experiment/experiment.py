@@ -87,7 +87,7 @@ class Experiment:
     def get_items(
         self,
         max_results: Optional[int] = None,
-        truncate: bool = True,
+        truncate: bool = False,
     ) -> List[experiment_item.ExperimentItemContent]:
         """
         Retrieves and returns a list of experiment items by streaming from the backend in batches, with an option to
