@@ -77,3 +77,17 @@ class GuardrailValidationFailed(OpikException):
 
     def __str__(self) -> str:
         return f"{self.message}. Failed validations: {self.failed_validations}\n"
+
+
+class ValidationError(OpikException):
+    """Exception raised when a validation fails."""
+
+    def __init__(self, prefix: str, failure_reasons: List[str]):
+        self._prefix = prefix
+        self._failure_reasons = failure_reasons
+
+    def __str__(self) -> str:
+        return f"Validation failed in {self._prefix}(): {self._failure_reasons}"
+
+    def __repr__(self) -> str:
+        return f"ValidationError(prefix={self._prefix}, failure_reasons={self._failure_reasons})"

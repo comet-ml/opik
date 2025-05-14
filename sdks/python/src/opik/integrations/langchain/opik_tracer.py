@@ -9,6 +9,7 @@ from langchain_core.tracers.schemas import Run
 from opik import dict_utils, opik_context, llm_usage
 from opik.api_objects import span, trace
 from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
+from opik.validation import parameters_validator
 from . import (
     base_llm_patcher,
     google_run_helpers,
@@ -65,6 +66,16 @@ class OpikTracer(BaseTracer):
         thread_id: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
+        validator = parameters_validator.create_validator(
+            method_name="__init__", class_name=self.__class__.__name__
+        )
+        validator.add_str_parameter(thread_id, name="thread_id")
+        validator.add_str_parameter(project_name, name="project_name")
+        validator.add_dict_parameter(metadata, name="metadata")
+        validator.add_list_parameter(tags, name="tags")
+        if not validator.validate():
+            validator.raise_validation_error()
+
         super().__init__(**kwargs)
         self._trace_default_metadata = metadata if metadata is not None else {}
         self._trace_default_metadata["created_from"] = "langchain"
