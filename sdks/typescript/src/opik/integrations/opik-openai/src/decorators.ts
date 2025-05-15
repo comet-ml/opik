@@ -17,6 +17,7 @@ import {
   TrackOpikConfig,
 } from "./types";
 import { OpikSpanType, Span, Trace } from "opik";
+import { flattenObject } from "./utils";
 
 const handleError = (
   error: Error,
@@ -60,10 +61,6 @@ const wrapMethod = <T extends GenericMethod>(
     ...configMetadata,
     ...modelParameters,
     model,
-    response_format:
-      "response_format" in modelParameters
-        ? modelParameters.response_format
-        : undefined,
   };
 
   const observationData = {
@@ -265,6 +262,7 @@ function wrapAsyncIterable<T>(
         completion_tokens: usage?.completion_tokens ?? 0,
         prompt_tokens: usage?.prompt_tokens ?? 0,
         total_tokens: usage?.total_tokens ?? 0,
+        ...(usage ? flattenObject(usage, "original_usage") : {}),
       },
     });
 
