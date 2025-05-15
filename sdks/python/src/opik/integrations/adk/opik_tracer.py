@@ -286,11 +286,14 @@ class OpikTracer:
         tool: BaseTool,
         args: Dict[str, Any],
         tool_context: ToolContext,
-        tool_response: Dict,
+        tool_response: Any,
         *other_args: Any,
         **kwargs: Any,
     ) -> None:
         current_span_data = self._context_storage.top_span_data()
         assert current_span_data is not None
-        current_span_data.update(output=tool_response)
+        if isinstance(tool_response, dict):
+            current_span_data.update(output=tool_response)
+        else:
+            current_span_data.update(output={"output": tool_response})
         self._end_current_span()
