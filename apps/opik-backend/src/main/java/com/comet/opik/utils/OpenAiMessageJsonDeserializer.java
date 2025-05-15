@@ -4,13 +4,13 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.JsonNode;
-import dev.ai4j.openai4j.chat.AssistantMessage;
-import dev.ai4j.openai4j.chat.FunctionMessage;
-import dev.ai4j.openai4j.chat.Message;
-import dev.ai4j.openai4j.chat.Role;
-import dev.ai4j.openai4j.chat.SystemMessage;
-import dev.ai4j.openai4j.chat.ToolMessage;
-import dev.ai4j.openai4j.chat.UserMessage;
+import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
+import dev.langchain4j.model.openai.internal.chat.FunctionMessage;
+import dev.langchain4j.model.openai.internal.chat.Message;
+import dev.langchain4j.model.openai.internal.chat.Role;
+import dev.langchain4j.model.openai.internal.chat.SystemMessage;
+import dev.langchain4j.model.openai.internal.chat.ToolMessage;
+import dev.langchain4j.model.openai.internal.chat.UserMessage;
 
 import java.io.IOException;
 

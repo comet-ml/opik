@@ -2,18 +2,19 @@ package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.infrastructure.llm.gemini.GeminiErrorObject;
 import com.comet.opik.utils.JsonUtils;
-import dev.ai4j.openai4j.chat.AssistantMessage;
-import dev.ai4j.openai4j.chat.ChatCompletionChoice;
-import dev.ai4j.openai4j.chat.ChatCompletionRequest;
-import dev.ai4j.openai4j.chat.ChatCompletionResponse;
-import dev.ai4j.openai4j.chat.Message;
-import dev.ai4j.openai4j.chat.Role;
-import dev.ai4j.openai4j.shared.Usage;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.SystemMessage;
-import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.output.Response;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.ChatResponseMetadata;
+import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionChoice;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
+import dev.langchain4j.model.openai.internal.chat.Message;
+import dev.langchain4j.model.openai.internal.chat.Role;
+import dev.langchain4j.model.openai.internal.chat.SystemMessage;
+import dev.langchain4j.model.openai.internal.chat.UserMessage;
+import dev.langchain4j.model.openai.internal.shared.Usage;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
@@ -46,13 +47,13 @@ public interface LlmProviderLangChainMapper {
                 }
             }
             case USER -> {
-                if (message instanceof dev.ai4j.openai4j.chat.UserMessage userMessage) {
-                    return UserMessage.from(userMessage.content().toString());
+                if (message instanceof UserMessage userMessage) {
+                    return dev.langchain4j.data.message.UserMessage.from(userMessage.content().toString());
                 }
             }
             case SYSTEM -> {
-                if (message instanceof dev.ai4j.openai4j.chat.SystemMessage systemMessage) {
-                    return SystemMessage.from(systemMessage.content());
+                if (message instanceof SystemMessage systemMessage) {
+                    return dev.langchain4j.data.message.SystemMessage.from(systemMessage.content());
                 }
             }
         }
@@ -64,18 +65,26 @@ public interface LlmProviderLangChainMapper {
     @Mapping(expression = "java(request.model())", target = "model")
     @Mapping(source = "response", target = "choices", qualifiedByName = "mapToChoices")
     @Mapping(source = "response", target = "usage", qualifiedByName = "mapToUsage")
+    @Mapping(source = "response", target = "id", qualifiedByName = "mapToId")
     ChatCompletionResponse toChatCompletionResponse(
-            @NonNull ChatCompletionRequest request, @NonNull Response<AiMessage> response);
+            @NonNull ChatCompletionRequest request, @NonNull ChatResponse response);
 
     @Named("mapToChoices")
-    default List<ChatCompletionChoice> mapToChoices(@NonNull Response<AiMessage> response) {
+    default List<ChatCompletionChoice> mapToChoices(@NonNull ChatResponse response) {
         return List.of(ChatCompletionChoice.builder()
-                .message(AssistantMessage.builder().content(response.content().text()).build())
+                .message(AssistantMessage.builder().content(response.aiMessage().text()).build())
                 .build());
     }
 
+    @Named("mapToId")
+    default String mapToId(@NonNull ChatResponse response) {
+        return Optional.ofNullable(response.metadata())
+                .map(ChatResponseMetadata::id)
+                .orElse(null);
+    }
+
     @Named("mapToUsage")
-    default Usage mapToUsage(@NonNull Response<AiMessage> response) {
+    default Usage mapToUsage(@NonNull ChatResponse response) {
         return Usage.builder()
                 .promptTokens(response.tokenUsage().inputTokenCount())
                 .completionTokens(response.tokenUsage().outputTokenCount())

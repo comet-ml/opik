@@ -4,11 +4,12 @@ import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
-import dev.ai4j.openai4j.chat.ChatCompletionRequest;
-import dev.ai4j.openai4j.chat.ChatCompletionResponse;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ChatMessageType;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +30,7 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        var response = llmProviderClientGenerator.generate(config, request).generate(getChatMessages(request));
+        ChatResponse response = llmProviderClientGenerator.generate(config, request).chat(getChatMessages(request));
         return LlmProviderLangChainMapper.INSTANCE.toChatCompletionResponse(request, response);
     }
 
@@ -44,9 +45,9 @@ public class LlmProviderVertexAI implements LlmProviderService {
                         var streamingChatLanguageModel = llmProviderClientGenerator.newVertexAIStreamingClient(config,
                                 request);
 
+                        List<ChatMessage> chatMessages = getChatMessages(request);
                         streamingChatLanguageModel
-                                .generate(
-                                        getChatMessages(request),
+                                .chat(chatMessages,
                                         new ChunkedResponseHandler(handleMessage, handleClose, handleError,
                                                 request.model()));
                     } catch (Exception e) {
