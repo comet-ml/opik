@@ -97,6 +97,10 @@ public interface LlmProviderLangChainMapper {
     }
 
     default Optional<ErrorMessage> getGeminiErrorObject(@NonNull Throwable throwable, Logger log) {
+        if (throwable.getMessage() == null) {
+            log.warn("failed to parse Gemini error message", throwable);
+            return Optional.empty();
+        }
         String message = throwable.getMessage();
         var openBraceIndex = message.indexOf('{');
         if (openBraceIndex >= 0) {

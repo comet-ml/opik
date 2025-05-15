@@ -43,11 +43,7 @@ public class LlmProviderOpenAi implements LlmProviderService {
 
     @Override
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
-        /*if (throwable instanceof OpenAiHttpException openAiHttpException) {
-            return Optional.of(new ErrorMessage(openAiHttpException.code(), openAiHttpException.getMessage()));
-        }
-         */
-
+        // Exception doesn't exist anymore OpenAiHttpException
         return Optional.empty();
     }
 }
