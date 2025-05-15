@@ -1,17 +1,27 @@
 import base64
-from typing import Optional, Dict, Any, List, Literal, Iterable, Set, Union
-import opik
 import json
-
-from opik.rest_api import ExperimentPublic
-from opik.rest_api.types import trace_public, span_public
-from opik.rest_api.types import attachment as rest_api_attachment
-from opik.types import FeedbackScoreDict, ErrorInfoDict
-from opik.api_objects.dataset import dataset_item
-from opik import Prompt, synchronization, Attachment
-
-from .. import testlib
+from typing import Any, Dict, Iterable, List, Literal, Optional, Set, Union
 from unittest import mock
+
+import opik
+from opik import Attachment, Prompt, synchronization
+from opik.api_objects.dataset import dataset_item
+from opik.rest_api import ExperimentPublic
+from opik.rest_api.types import (
+    attachment as rest_api_attachment,
+    span_public,
+    trace_public,
+)
+from opik.types import ErrorInfoDict, FeedbackScoreDict
+from .. import testlib
+
+InputType = Union[
+    Dict[str, Any],
+    List[Any],
+    str,
+]
+
+OutputType = InputType
 
 
 def _try_get__dict__(instance: Any) -> Optional[Dict[str, Any]]:
@@ -33,8 +43,8 @@ def verify_trace(
     trace_id: str,
     name: str = mock.ANY,  # type: ignore
     metadata: Dict[str, Any] = mock.ANY,  # type: ignore
-    input: Dict[str, Any] = mock.ANY,  # type: ignore
-    output: Optional[Dict[str, Any]] = mock.ANY,  # type: ignore
+    input: InputType = mock.ANY,  # type: ignore
+    output: Optional[OutputType] = mock.ANY,  # type: ignore
     tags: Union[List[str], Set[str]] = mock.ANY,  # type: ignore
     feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore
     project_name: Optional[str] = mock.ANY,  # type: ignore
@@ -148,8 +158,8 @@ def verify_span(
     parent_span_id: Optional[str],
     name: str = mock.ANY,  # type: ignore
     metadata: Dict[str, Any] = mock.ANY,  # type: ignore
-    input: Dict[str, Any] = mock.ANY,  # type: ignore
-    output: Optional[Dict[str, Any]] = mock.ANY,  # type: ignore
+    input: InputType = mock.ANY,  # type: ignore
+    output: Optional[OutputType] = mock.ANY,  # type: ignore
     tags: Union[List[str], Set[str]] = mock.ANY,  # type: ignore
     type: str = mock.ANY,  # type: ignore
     feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore

@@ -4,6 +4,7 @@ import pytest
 
 import opik
 import opik.api_objects.opik_client
+from tests.library_integration.conftest import ensure_openai_configured  # noqa: F401
 from .. import testlib
 from ..conftest import random_chars
 
