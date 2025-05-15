@@ -13,16 +13,14 @@ def get_experiment_data_by_name(
     #  deprecated Opik.get_experiment_by_name() will be removed.
     #  This function should not be used anywhere else except for deprecated logic as it is confusing and misleading
 
-    while True:
-        experiment_page_public = rest_client.experiments.find_experiments(name=name)
-        if len(experiment_page_public.content) == 0:
-            raise exceptions.ExperimentNotFound(
-                f"Experiment with the name '{name}' is not found."
-            )
+    experiments = get_experiments_data_by_name(rest_client, name)
+    for experiment in experiments:
+        if experiment.name == name:
+            return experiment
 
-        for experiment in experiment_page_public.content:
-            if experiment.name == name:
-                return experiment
+    raise exceptions.ExperimentNotFound(
+        f"Experiment with the name '{name}' is not found."
+    )
 
 
 def get_experiments_data_by_name(
