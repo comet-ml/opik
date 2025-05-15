@@ -18,9 +18,7 @@ def get_experiment_data_by_name(
         if experiment.name == name:
             return experiment
 
-    raise exceptions.ExperimentNotFound(
-        f"Experiment with the name '{name}' is not found."
-    )
+    raise exceptions.ExperimentNotFound(f"No experiment found with the name '{name}'.")
 
 
 def get_experiments_data_by_name(
@@ -33,7 +31,7 @@ def get_experiments_data_by_name(
 
     if len(experiments) == 0:
         raise exceptions.ExperimentNotFound(
-            f"Experiment(s) with the name '{name}' is not found."
+            f"No experiment(s) found with the name '{name}'."
         )
 
     return experiments
