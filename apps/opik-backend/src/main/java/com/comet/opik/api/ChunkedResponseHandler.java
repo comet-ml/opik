@@ -12,6 +12,7 @@ import dev.langchain4j.model.openai.internal.shared.Usage;
 import dev.langchain4j.model.output.Response;
 import lombok.NonNull;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -67,10 +68,26 @@ public record ChunkedResponseHandler(
                 chatResponse.aiMessage(),
                 chatResponse.tokenUsage(),
                 chatResponse.finishReason(),
-                Map.of(
-                        "id", chatResponse.metadata().id(),
-                        "model", chatResponse.metadata().modelName(),
-                        "modelName", chatResponse.metadata().modelName())));
+                getMetadata(chatResponse)));
+    }
+
+    private Map<String, Object> getMetadata(ChatResponse chatResponse) {
+        if (chatResponse.metadata() == null) {
+            return Map.of();
+        }
+
+        Map<String, Object> metadata = new HashMap<>();
+
+        if (chatResponse.metadata().modelName() != null) {
+            metadata.put("modelName", chatResponse.metadata().modelName());
+            metadata.put("model", chatResponse.metadata().modelName());
+        }
+
+        if (chatResponse.metadata().id() != null) {
+            metadata.put("id", chatResponse.metadata().id());
+        }
+
+        return metadata;
     }
 
     @Override

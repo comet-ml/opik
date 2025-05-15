@@ -3,7 +3,9 @@ package com.comet.opik.infrastructure.llm.vertexai;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import com.comet.opik.infrastructure.llm.vertexai.internal.VertexAiGeminiChatModelCustom;
 import com.google.auth.oauth2.ServiceAccountCredentials;
+import com.google.cloud.vertexai.Transport;
 import com.google.cloud.vertexai.VertexAI;
 import com.google.cloud.vertexai.api.GenerationConfig;
 import com.google.cloud.vertexai.generativeai.GenerativeModel;
@@ -11,7 +13,6 @@ import com.google.common.base.Preconditions;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
-import dev.langchain4j.model.vertexai.VertexAiGeminiChatModel;
 import dev.langchain4j.model.vertexai.VertexAiGeminiStreamingChatModel;
 import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
@@ -41,7 +42,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
         GenerativeModel generativeModel = getGenerativeModel(request, vertexAI, generationConfig);
 
-        return new VertexAiGeminiChatModel(generativeModel, generationConfig);
+        return new VertexAiGeminiChatModelCustom(generativeModel, generationConfig);
     }
 
     private GenerativeModel getGenerativeModel(@NotNull ChatCompletionRequest request, VertexAI vertexAI,
@@ -113,6 +114,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             return builder
                     .setProjectId(credentials.getProjectId())
                     .setCredentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
+                    .setTransport(Transport.REST)
                     .build();
 
         } catch (Exception e) {
