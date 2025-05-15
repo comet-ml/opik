@@ -515,15 +515,12 @@ redirects:
   - source: "/docs/opik/reference/rest_api/opik-rest-api/:slug/:slug"
     destination: "/docs/opik/reference/rest-api/overview"
     permanent: true
-  - source: "docs/prompt_engineering/managing_prompts_in_code"
+  - source: "/docs/opik/prompt_engineering/managing_prompts_in_code"
     destination: "/docs/opik/prompt_engineering/prompt_management"
     permanent: true
-  - source: "docs/prompt_engineering/prompt_optimization"
-    destination: "docs/agent_optimization/best-practices/prompt_engineering"
+  - source: "/docs/opik/prompt_engineering/prompt_optimization"
+    destination: "/docs/opik/agent_optimization/best-practices/prompt_engineering"
     permanent: true
-  - source: "docs/prompt_engineering/agent_optimization"
-    destination: "docs/agent_optimization/overview"
-    permanent: true
-  - source: "docs/prompt_engineering/agent_optimization"
-    destination: "docs/agent_optimization/overview"
+  - source: "/docs/opik/prompt_engineering/agent_optimization"
+    destination: "/docs/opik/agent_optimization/overview"
     permanent: true
