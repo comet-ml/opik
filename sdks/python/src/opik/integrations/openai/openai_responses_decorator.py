@@ -12,7 +12,7 @@ from typing_extensions import override
 
 import openai
 
-from opik import dict_utils, llm_usage
+from opik import LLMProvider, dict_utils, llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 from openai.types import responses as openai_responses
@@ -104,7 +104,7 @@ class OpenaiResponsesTrackDecorator(base_track_decorator.BaseTrackDecorator):
         opik_usage = None
         if result_dict.get("usage") is not None:
             opik_usage = llm_usage.try_build_opik_usage_or_log_error(
-                provider="_openai_responses",
+                provider=LLMProvider.OPENAI,
                 usage=result_dict["usage"],
                 logger=LOGGER,
                 error_message="Failed to log token usage from openai responses call",
