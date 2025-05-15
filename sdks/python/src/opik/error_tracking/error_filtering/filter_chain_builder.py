@@ -19,7 +19,7 @@ def build_filter_chain() -> filter_chain.FilterChain:
     )
     filter_by_response_status_code_handler = (
         filter_by_response_status_code.FilterByResponseStatusCode(
-            max_count=DEFAULT_ERROR_QUOTA, status_codes_to_drop=[400, 401, 402, 403]
+            status_codes_to_drop=[400, 401, 402, 403]
         )
     )
 

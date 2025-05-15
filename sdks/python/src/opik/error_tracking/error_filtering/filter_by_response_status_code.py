@@ -4,7 +4,7 @@ from . import event_filter
 
 
 class FilterByResponseStatusCode(event_filter.EventFilter):
-    def __init__(self, max_count: int, status_codes_to_drop: List[int]):
+    def __init__(self, status_codes_to_drop: List[int]):
         super().__init__()
 
         self._status_codes_to_drop = status_codes_to_drop
