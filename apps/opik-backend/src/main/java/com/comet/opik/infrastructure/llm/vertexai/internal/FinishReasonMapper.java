@@ -6,14 +6,11 @@ import dev.langchain4j.model.output.FinishReason;
 public class FinishReasonMapper {
 
     static FinishReason map(Candidate.FinishReason finishReason) {
-        switch (finishReason) {
-            case STOP :
-                return FinishReason.STOP;
-            case MAX_TOKENS :
-                return FinishReason.LENGTH;
-            case SAFETY :
-                return FinishReason.CONTENT_FILTER;
-        }
-        return FinishReason.OTHER;
+        return switch (finishReason) {
+            case STOP -> FinishReason.STOP;
+            case MAX_TOKENS -> FinishReason.LENGTH;
+            case SAFETY -> FinishReason.CONTENT_FILTER;
+            default -> FinishReason.OTHER;
+        };
     }
 }

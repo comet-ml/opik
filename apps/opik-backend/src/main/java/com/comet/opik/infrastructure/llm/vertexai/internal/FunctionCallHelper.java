@@ -16,9 +16,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
-public class FunctionCallHelper {
+class FunctionCallHelper {
 
     private static final Gson GSON = new Gson();
 
@@ -60,32 +59,21 @@ public class FunctionCallHelper {
     }
 
     static Object unwrapProtoValue(Value value) {
-        Object unwrappedValue;
-        switch (value.getKindCase()) {
-            case NUMBER_VALUE :
-                unwrappedValue = value.getNumberValue();
-                break;
-            case STRING_VALUE :
-                unwrappedValue = value.getStringValue();
-                break;
-            case BOOL_VALUE :
-                unwrappedValue = value.getBoolValue();
-                break;
-            case STRUCT_VALUE :
+        return switch (value.getKindCase()) {
+            case NUMBER_VALUE -> value.getNumberValue();
+            case STRING_VALUE -> value.getStringValue();
+            case BOOL_VALUE -> value.getBoolValue();
+            case STRUCT_VALUE -> {
                 HashMap<String, Object> mapForStruct = new HashMap<>();
                 value.getStructValue().getFieldsMap()
                         .forEach((key, val) -> mapForStruct.put(key, unwrapProtoValue(val)));
-                unwrappedValue = mapForStruct;
-                break;
-            case LIST_VALUE :
-                unwrappedValue = value.getListValue().getValuesList().stream().map(FunctionCallHelper::unwrapProtoValue)
-                        .collect(Collectors.toList());
-                break;
-            default : // NULL_VALUE, KIND_NOT_SET, and default
-                unwrappedValue = null;
-                break;
-        }
-        return unwrappedValue;
+                yield mapForStruct;
+            }
+            case LIST_VALUE -> value.getListValue().getValuesList().stream().map(FunctionCallHelper::unwrapProtoValue)
+                    .toList();
+            default -> // NULL_VALUE, KIND_NOT_SET, and default
+                null;
+        };
     }
 
     static Tool convertToolSpecifications(List<ToolSpecification> toolSpecifications) {

@@ -1,19 +1,17 @@
 package com.comet.opik.infrastructure.llm.vertexai.internal;
 
 import dev.langchain4j.data.message.ChatMessageType;
+import lombok.experimental.UtilityClass;
 
-public class RoleMapper {
+@UtilityClass
+class RoleMapper {
 
     static String map(ChatMessageType type) {
-        switch (type) {
-            case TOOL_EXECUTION_RESULT :
-            case USER :
-                return "user";
-            case AI :
-                return "model";
-            case SYSTEM :
-                return "system";
-        }
-        throw new IllegalArgumentException(type + " is not allowed.");
+        return switch (type) {
+            case TOOL_EXECUTION_RESULT, USER -> "user";
+            case AI -> "model";
+            case SYSTEM -> "system";
+            default -> throw new IllegalStateException("Unexpected value: " + type);
+        };
     }
 }

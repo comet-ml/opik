@@ -144,8 +144,8 @@ public class VertexAiGeminiChatModelCustom extends VertexAiGeminiChatModel {
         ContentsMapper.InstructionAndContent instructionAndContent = ContentsMapper
                 .splitInstructionAndContent(messages);
 
-        if (instructionAndContent.systemInstruction != null) {
-            model = model.withSystemInstruction(instructionAndContent.systemInstruction);
+        if (instructionAndContent.systemInstruction() != null) {
+            model = model.withSystemInstruction(instructionAndContent.systemInstruction());
         }
 
         GenerativeModel finalModel = model;
@@ -174,7 +174,8 @@ public class VertexAiGeminiChatModelCustom extends VertexAiGeminiChatModel {
 
         GenerateContentResponse response = null;
         try {
-            response = withRetryMappingExceptions(() -> finalModel.generateContent(instructionAndContent.contents), 2);
+            response = withRetryMappingExceptions(() -> finalModel.generateContent(instructionAndContent.contents()),
+                    2);
         } catch (Exception e) {
             listeners().forEach((listener) -> {
                 try {

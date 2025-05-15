@@ -8,28 +8,25 @@ import dev.langchain4j.data.message.ChatMessageType;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
+import lombok.Builder;
+import lombok.experimental.UtilityClass;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
-public class ContentsMapper {
+@UtilityClass
+class ContentsMapper {
 
-    static class InstructionAndContent {
-        public Content systemInstruction = null;
-        public List<Content> contents = new ArrayList<>();
+    @Builder(toBuilder = true)
+    record InstructionAndContent(Content systemInstruction, List<Content> contents) {
 
-        @Override
-        public String toString() {
-            return "InstructionAndContent {\n" +
-                    " systemInstruction = " + systemInstruction +
-                    ",\n contents = " + contents +
-                    "\n}";
+        InstructionAndContent() {
+            this(null, new ArrayList<>());
         }
     }
 
-    static ContentsMapper.InstructionAndContent splitInstructionAndContent(List<ChatMessage> messages) {
-        ContentsMapper.InstructionAndContent instructionAndContent = new ContentsMapper.InstructionAndContent();
+    static InstructionAndContent splitInstructionAndContent(List<ChatMessage> messages) {
+        InstructionAndContent instructionAndContent = new InstructionAndContent();
         List<Part> sysInstructionParts = new ArrayList<>();
 
         List<ToolExecutionResultMessage> executionResultMessages = new ArrayList<>();
@@ -38,45 +35,65 @@ public class ContentsMapper {
             ChatMessage message = messages.get(msgIdx);
             boolean isLastMessage = msgIdx == messages.size() - 1;
 
-            if (message instanceof ToolExecutionResultMessage) {
-                ToolExecutionResultMessage toolResult = (ToolExecutionResultMessage) message;
-                if (isLastMessage) {
-                    // if there's no accumulated tool results, add it right away to the list of messages
-                    if (executionResultMessages.isEmpty()) {
-                        instructionAndContent.contents.add(createContent(message));
-                    } else { // otherwise add to the list, and create the new user message with all the tool results
-                        executionResultMessages.add(toolResult);
-                        instructionAndContent.contents.add(createToolExecutionResultContent(executionResultMessages));
-                    }
-                } else { // not the last message, so just accumulate the new tool result
-                    executionResultMessages.add(toolResult);
-                }
+            if (message instanceof ToolExecutionResultMessage toolResult) {
+                handleToolExecutionResultMessage(toolResult, isLastMessage, instructionAndContent,
+                        executionResultMessages);
             } else {
-                // if we're done with tool results and encounter a new user or AI message
-                // then bundle all the tool results into a new user message
-                if (!executionResultMessages.isEmpty()) {
-                    instructionAndContent.contents.add(createToolExecutionResultContent(executionResultMessages));
-                    executionResultMessages = new ArrayList<>();
-                }
-
-                // directly add user and AI messages to the list
-                if (message instanceof UserMessage || message instanceof AiMessage) {
-                    instructionAndContent.contents.add(createContent(message));
-                } else if (message instanceof SystemMessage) { // save system messages separately
-                    sysInstructionParts.addAll(PartsMapper.map(message));
-                }
+                handleNonToolMessage(message, instructionAndContent, sysInstructionParts, executionResultMessages);
             }
         }
 
-        // if there are system instructions, collect them together into one system instruction Content
         if (!sysInstructionParts.isEmpty()) {
-            instructionAndContent.systemInstruction = Content.newBuilder()
-                    .setRole("system")
-                    .addAllParts(sysInstructionParts)
-                    .build();
+            instructionAndContent = buildSystemInstruction(instructionAndContent, sysInstructionParts);
         }
 
         return instructionAndContent;
+    }
+
+    private void handleToolExecutionResultMessage(ToolExecutionResultMessage toolResult, boolean isLastMessage,
+            InstructionAndContent instructionAndContent, List<ToolExecutionResultMessage> executionResultMessages) {
+
+        if (isLastMessage) {
+            if (executionResultMessages.isEmpty()) {
+                instructionAndContent.contents().add(createContent(toolResult));
+            } else {
+                executionResultMessages.add(toolResult);
+                instructionAndContent.contents().add(createToolExecutionResultContent(executionResultMessages));
+            }
+        } else {
+            executionResultMessages.add(toolResult);
+        }
+    }
+
+    private void handleNonToolMessage(
+            ChatMessage message,
+            InstructionAndContent instructionAndContent,
+            List<Part> sysInstructionParts,
+            List<ToolExecutionResultMessage> executionResultMessages) {
+
+        if (!executionResultMessages.isEmpty()) {
+            instructionAndContent.contents().add(createToolExecutionResultContent(executionResultMessages));
+            executionResultMessages.clear();
+        }
+
+        if (message instanceof UserMessage || message instanceof AiMessage) {
+            instructionAndContent.contents().add(createContent(message));
+        } else if (message instanceof SystemMessage) {
+            sysInstructionParts.addAll(PartsMapper.map(message));
+        }
+    }
+
+    private InstructionAndContent buildSystemInstruction(
+            InstructionAndContent instructionAndContent,
+            List<Part> sysInstructionParts) {
+
+        return instructionAndContent.toBuilder()
+                .systemInstruction(
+                        Content.newBuilder()
+                                .setRole("system")
+                                .addAllParts(sysInstructionParts)
+                                .build())
+                .build();
     }
 
     // transform a LangChain4j ChatMessage into a Gemini Content
@@ -96,7 +113,7 @@ public class ContentsMapper {
                         executionResultMessages.stream()
                                 .map(PartsMapper::map)
                                 .flatMap(List::stream)
-                                .collect(Collectors.toList()))
+                                .toList())
                 .build();
     }
 }

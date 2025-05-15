@@ -42,7 +42,8 @@ class EventInterceptor implements MethodInterceptor {
 
         try (Scope scope = span.makeCurrent()) {
             Object result = methodInvocation.proceed();
-            log.info("Event intercepted: {}", event);
+            log.info("Event intercepted: {} by {}", event,
+                    methodInvocation.getMethod().getDeclaringClass().getSimpleName());
             return result;
         } catch (Throwable e) {
             meter.counterBuilder("opik.event.error")
