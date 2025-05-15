@@ -6,7 +6,7 @@ from . import (
     filter_by_response_status_code,
 )
 
-DEFAULT_ERROR_QUOTA = 50
+DEFAULT_ERROR_QUOTA = 30
 DEFAULT_WARNING_QUOTA = 10
 
 
