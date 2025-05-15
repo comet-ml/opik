@@ -303,7 +303,10 @@ navigation:
             slug: rules
           - page: Gateway
             path: docs/production/gateway.mdx
-            slug: gateway
+            slug: gateway          
+          - page: Guardrails
+            path: docs/production/guardrails.mdx
+            slug: guardrails
   - tab: agent-optimization
     layout:
       - page: Overview
