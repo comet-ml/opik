@@ -1,15 +1,21 @@
 import dataclasses
 import datetime
+from dataclasses import field
 from typing import Optional, Any, Dict, List, Union, Literal
 from ..types import SpanType, ErrorInfoDict, LLMProvider, AttachmentEntityType
 
 
 @dataclasses.dataclass
 class BaseMessage:
+    delivery_time: float = field(init=False, default=0.0)
+
     def as_payload_dict(self) -> Dict[str, Any]:
         # we are not using dataclasses.as_dict() here
-        # because it will try to deepcopy all object and will fail if there is non-serializable object
-        return {**self.__dict__}
+        # because it will try to deepcopy all objects and will fail if there is a non-serializable object
+        data = {**self.__dict__}
+        if "delivery_time" in data:
+            data.pop("delivery_time")
+        return data
 
 
 @dataclasses.dataclass
@@ -110,7 +116,7 @@ class UpdateSpanMessage(BaseMessage):
 @dataclasses.dataclass
 class FeedbackScoreMessage(BaseMessage):
     """
-    There is no handler for that in message processor, it exists
+    There is no handler for that in the message processor, it exists
     only as an item of BatchMessage
     """
 
@@ -157,7 +163,7 @@ class CreateTraceBatchMessage(BaseMessage):
 @dataclasses.dataclass
 class GuardrailBatchItemMessage(BaseMessage):
     """
-    There is no handler for that in message processor, it exists
+    There is no handler for that in the message processor, it exists
     only as an item of BatchMessage
     """
 

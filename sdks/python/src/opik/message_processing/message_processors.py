@@ -1,13 +1,13 @@
 import abc
 import logging
 from typing import Callable, Dict, Type, List
-
 import pydantic
 
-from opik import logging_messages
+from opik import logging_messages, exceptions
 from . import messages
 from ..jsonable_encoder import encode
 from .. import dict_utils
+from ..rate_limit import rate_limit
 from ..rest_api.types import (
     feedback_score_batch_item,
     trace_write,
@@ -57,9 +57,17 @@ class MessageSender(BaseMessageProcessor):
             handler(message)
         except rest_api_core.ApiError as exception:
             if exception.status_code == 409:
-                # sometimes retry mechanism works in a way that it sends the same request 2 times.
-                # second request is rejected by the backend, we don't want users to an error.
+                # sometimes a retry mechanism works in a way that it sends the same request 2 times.
+                # the second request is rejected by the backend, we don't want users to an error.
                 return
+            elif exception.status_code == 429:
+                if exception.headers is not None:
+                    rate_limiter = rate_limit.parse_rate_limit(exception.headers)
+                    if rate_limiter is not None:
+                        raise exceptions.OpikCloudRequestsRateLimited(
+                            headers=exception.headers,
+                            retry_after=rate_limiter.retry_after(),
+                        )
 
             error_fingerprint = _generate_error_fingerprint(exception, message)
             LOGGER.error(

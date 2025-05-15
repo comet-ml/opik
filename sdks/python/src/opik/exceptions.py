@@ -1,4 +1,4 @@
-from typing import Set, List, TYPE_CHECKING
+from typing import Set, List, TYPE_CHECKING, Dict, Any
 
 if TYPE_CHECKING:
     from opik.guardrails import schemas
@@ -77,6 +77,17 @@ class GuardrailValidationFailed(OpikException):
 
     def __str__(self) -> str:
         return f"{self.message}. Failed validations: {self.failed_validations}\n"
+
+
+class OpikCloudRequestsRateLimited(OpikException):
+    """Exception raised when the Opik Cloud limits the request rate."""
+
+    def __init__(self, headers: Dict[str, Any], retry_after: float):
+        self.headers = headers
+        self.retry_after = retry_after
+
+    def __str__(self) -> str:
+        return f"Requests rate limited. Response headers: {self.headers}, retry after: {self.retry_after} seconds"
 
 
 class ValidationError(OpikException):
