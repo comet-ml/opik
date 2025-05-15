@@ -6,7 +6,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
@@ -27,7 +27,7 @@ class AnthropicLlmServiceProvider implements LlmServiceProvider {
     }
 
     @Override
-    public ChatLanguageModel getLanguageModel(@NonNull LlmProviderClientApiConfig config,
+    public ChatModel getLanguageModel(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         return clientGenerator.generateChat(config, modelParameters);
     }

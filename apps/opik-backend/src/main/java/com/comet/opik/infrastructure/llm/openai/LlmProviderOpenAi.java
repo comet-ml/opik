@@ -1,10 +1,9 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.domain.llm.LlmProviderService;
-import dev.ai4j.openai4j.OpenAiClient;
-import dev.ai4j.openai4j.OpenAiHttpException;
-import dev.ai4j.openai4j.chat.ChatCompletionRequest;
-import dev.ai4j.openai4j.chat.ChatCompletionResponse;
+import dev.langchain4j.model.openai.internal.OpenAiClient;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -44,9 +43,10 @@ public class LlmProviderOpenAi implements LlmProviderService {
 
     @Override
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
-        if (throwable instanceof OpenAiHttpException openAiHttpException) {
+        /*if (throwable instanceof OpenAiHttpException openAiHttpException) {
             return Optional.of(new ErrorMessage(openAiHttpException.code(), openAiHttpException.getMessage()));
         }
+         */
 
         return Optional.empty();
     }
