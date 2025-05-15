@@ -7,10 +7,7 @@ import { Opik } from "opik";
 import { OpikExporter } from "opik/vercel";
 import { MockInstance } from "vitest";
 import { z } from "zod";
-
-async function mockAPIPromise<T>() {
-  return {} as T;
-}
+import { mockAPIFunction } from "./mockUtils";
 
 describe("Opik - Vercel AI SDK integration", () => {
   let client: Opik;
@@ -34,19 +31,19 @@ describe("Opik - Vercel AI SDK integration", () => {
 
     createSpansSpy = vi
       .spyOn(client.api.spans, "createSpans")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     updateSpansSpy = vi
       .spyOn(client.api.spans, "updateSpan")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     createTracesSpy = vi
       .spyOn(client.api.traces, "createTraces")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     updateTracesSpy = vi
       .spyOn(client.api.traces, "updateTrace")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     vi.useFakeTimers();
   });

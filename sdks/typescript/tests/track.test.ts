@@ -2,10 +2,7 @@ import { trackOpikClient } from "@/decorators/track";
 import { getTrackContext, track } from "opik";
 import { MockInstance } from "vitest";
 import { advanceToDelay } from "./utils";
-
-async function mockAPIPromise<T>() {
-  return {} as T;
-}
+import { mockAPIFunction } from "./mockUtils";
 
 describe("Track decorator", () => {
   let createSpansSpy: MockInstance<
@@ -22,19 +19,19 @@ describe("Track decorator", () => {
   beforeEach(() => {
     createSpansSpy = vi
       .spyOn(trackOpikClient.api.spans, "createSpans")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     updateSpansSpy = vi
       .spyOn(trackOpikClient.api.spans, "updateSpan")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     createTracesSpy = vi
       .spyOn(trackOpikClient.api.traces, "createTraces")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     updateTracesSpy = vi
       .spyOn(trackOpikClient.api.traces, "updateTrace")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     vi.useFakeTimers();
   });
