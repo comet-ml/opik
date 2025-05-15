@@ -472,6 +472,18 @@ navigation:
           - page: Overview
             path: docs/reference/typescript-sdk/overview.mdx
             slug: overview
+          - section: Integrations
+            slug: integrations
+            contents:
+              - page: Overview
+                path: docs/reference/typescript-sdk/integrations/overview.mdx
+                slug: overview
+              - page: Vercel AI SDK
+                path: docs/reference/typescript-sdk/integrations/vercel-ai-sdk.mdx
+                slug: vercel-ai-sdk
+              - page: LangChain
+                path: docs/reference/typescript-sdk/integrations/langchain.mdx
+                slug: langchain
       - section: Rest API
         slug: rest-api
         contents:
