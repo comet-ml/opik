@@ -798,7 +798,7 @@ class Opik:
 
     def get_experiments_by_name(self, name: str) -> List[experiment.Experiment]:
         """
-        Returns an existing experiments by its name.
+        Returns a list of existing experiments by its name.
 
         Args:
             name: The name of the experiment(s).

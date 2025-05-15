@@ -1,8 +1,9 @@
 from typing import List
 
-from opik import exceptions
-from opik.rest_api import OpikApi
-from opik.rest_api.types import experiment_public
+from ... import exceptions
+from .. import rest_stream_parser
+from ...rest_api import OpikApi
+from ...rest_api.types import experiment_public
 
 
 def get_experiment_data_by_name(
@@ -16,7 +17,7 @@ def get_experiment_data_by_name(
         experiment_page_public = rest_client.experiments.find_experiments(name=name)
         if len(experiment_page_public.content) == 0:
             raise exceptions.ExperimentNotFound(
-                f"Experiment with the name {name} not found."
+                f"Experiment with the name '{name}' is not found."
             )
 
         for experiment in experiment_page_public.content:
@@ -27,10 +28,14 @@ def get_experiment_data_by_name(
 def get_experiments_data_by_name(
     rest_client: OpikApi, name: str
 ) -> List[experiment_public.ExperimentPublic]:
-    experiment_page_public = rest_client.experiments.find_experiments(name=name)
-    if len(experiment_page_public.content) == 0:
+    experiments_stream = rest_client.experiments.stream_experiments(name=name)
+    experiments = rest_stream_parser.read_and_parse_stream(
+        stream=experiments_stream, item_class=experiment_public.ExperimentPublic
+    )
+
+    if len(experiments) == 0:
         raise exceptions.ExperimentNotFound(
-            f"Experiment with the name {name} not found."
+            f"Experiment(s) with the name '{name}' is not found."
         )
 
-    return experiment_page_public.content
+    return experiments
