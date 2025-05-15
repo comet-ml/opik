@@ -1,4 +1,3 @@
-from unittest import mock
 import pytest
 from typing import Dict, Any
 
@@ -11,22 +10,41 @@ class FakeException(Exception):
     pass
 
 
-@pytest.fixture
-def mocked_warning_event():
-    mocked_warning_event = mock.Mock()
-    mocked_warning_event.get.return_value = "warning"
-
-    return mocked_warning_event
+class FakeExceptionWithStatus:
+    def __init__(self, status_code):
+        self.status_code = status_code
 
 
 @pytest.fixture
-def mocked_error_event():
-    mocked_error_event = mock.Mock()
-    mocked_error_event.get.return_value = "error"
-
-    return mocked_error_event
+def fake_warning_event():
+    return {"level": "warning"}
 
 
 @pytest.fixture
-def basic_hint():
+def fake_error_event():
+    return {"level": "error"}
+
+
+@pytest.fixture
+def fake_error_event_with_status_code_401():
+    return {"level": "error", "extra": {"error_tracking_extra": {"status_code": 401}}}
+
+
+@pytest.fixture
+def fake_error_event_with_status_code_500():
+    return {"level": "error", "extra": {"error_tracking_extra": {"status_code": 500}}}
+
+
+@pytest.fixture
+def fake_basic_hint():
     return _generate_hint(FakeException())
+
+
+@pytest.fixture
+def fake_hint_with_exception_with_status_code_401():
+    return _generate_hint(FakeExceptionWithStatus(401))
+
+
+@pytest.fixture
+def fake_hint_with_exception_with_status_code_500():
+    return _generate_hint(FakeExceptionWithStatus(500))

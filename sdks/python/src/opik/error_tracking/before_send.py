@@ -50,12 +50,13 @@ def _add_extra_details(event: Event) -> None:
 
 def _try_add_fingerprint(event: Event) -> None:
     try:
-        if "extra" not in event:
+        if not (
+            "extra" in event
+            and "error_tracking_extra" in event["extra"]
+            and "fingerprint" in event["extra"]["error_tracking_extra"]
+        ):
             return
 
-        if "error_fingerprint" not in event["extra"]:
-            return
-
-        event["fingerprint"] = event["extra"]["error_fingerprint"]
+        event["fingerprint"] = event["extra"]["error_tracking_extra"]["fingerprint"]
     except Exception:
         pass

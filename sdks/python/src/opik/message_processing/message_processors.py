@@ -1,7 +1,8 @@
 import abc
 import logging
-from typing import Callable, Dict, Type, List
+from typing import Any, Callable, Dict, Type, List
 import pydantic
+import tenacity
 
 from opik import logging_messages, exceptions
 from . import messages
@@ -69,30 +70,41 @@ class MessageSender(BaseMessageProcessor):
                             retry_after=rate_limiter.retry_after(),
                         )
 
-            error_fingerprint = _generate_error_fingerprint(exception, message)
+            error_tracking_extra = _generate_error_tracking_extra(exception, message)
             LOGGER.error(
                 logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
                 message_type.__name__,
                 str(exception),
-                extra={"error_fingerprint": error_fingerprint},
+                extra={"error_tracking_extra": error_tracking_extra},
+            )
+        except tenacity.RetryError as retry_error:
+            cause = retry_error.last_attempt.exception()
+            error_tracking_extra = _generate_error_tracking_extra(cause, message)
+            LOGGER.error(
+                logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
+                message_type.__name__,
+                f"{cause.__class__.__name__} - {cause}",
+                extra={"error_tracking_extra": error_tracking_extra},
             )
         except pydantic.ValidationError as validation_error:
-            error_fingerprint = _generate_error_fingerprint(validation_error, message)
+            error_tracking_extra = _generate_error_tracking_extra(
+                validation_error, message
+            )
             LOGGER.error(
                 "Failed to process message: '%s' due to input data validation error:\n%s\n",
                 message_type.__name__,
                 validation_error,
                 exc_info=True,
-                extra={"error_fingerprint": error_fingerprint},
+                extra={"error_tracking_extra": error_tracking_extra},
             )
         except Exception as exception:
-            error_fingerprint = _generate_error_fingerprint(exception, message)
+            error_tracking_extra = _generate_error_tracking_extra(exception, message)
             LOGGER.error(
                 logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
                 message_type.__name__,
                 str(exception),
                 exc_info=True,
-                extra={"error_fingerprint": error_fingerprint},
+                extra={"error_tracking_extra": error_tracking_extra},
             )
 
     def _process_create_span_message(self, message: messages.CreateSpanMessage) -> None:
@@ -226,14 +238,15 @@ class MessageSender(BaseMessageProcessor):
         self._rest_client.guardrails.create_guardrails(guardrails=batch)
 
 
-def _generate_error_fingerprint(
+def _generate_error_tracking_extra(
     exception: Exception, message: messages.BaseMessage
-) -> List[str]:
-    fingerprint = [type(message).__name__, type(exception).__name__]
+) -> Dict[str, Any]:
+    result: Dict[str, Any] = {"exception": exception}
 
     if isinstance(exception, rest_api_core.ApiError):
+        fingerprint = [type(message).__name__, type(exception).__name__]
         fingerprint.append(str(exception.status_code))
+        result["fingerprint"] = fingerprint
+        result["status_code"] = exception.status_code
 
-        return fingerprint
-
-    return fingerprint
+    return result
