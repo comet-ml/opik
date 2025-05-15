@@ -3,6 +3,7 @@ import logging
 from typing import Any, Callable, Dict, Type, List
 
 import pydantic
+import tenacity
 
 from opik import logging_messages
 from . import messages
@@ -66,6 +67,15 @@ class MessageSender(BaseMessageProcessor):
                 logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
                 message_type.__name__,
                 str(exception),
+                extra={"error_tracking_extra": error_tracking_extra},
+            )
+        except tenacity.RetryError as retry_error:
+            cause = retry_error.last_attempt.exception()
+            error_tracking_extra = _generate_error_tracking_extra(cause, message)
+            LOGGER.error(
+                logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
+                message_type.__name__,
+                f"{cause.__class__.__name__} - {cause}",
                 extra={"error_tracking_extra": error_tracking_extra},
             )
         except pydantic.ValidationError as validation_error:
