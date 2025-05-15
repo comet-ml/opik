@@ -22,22 +22,21 @@ class FilterByResponseStatusCode(event_filter.EventFilter):
 
 
 def _try_get_status_code_from_error_tracking_extra(event: Event) -> Optional[int]:
-    status_code_available = (
-        "extra" in event
-        and "error_tracking_extra" in event["extra"]
-        and "status_code" in event["extra"]["error_tracking_extra"]
-    )
-
-    if status_code_available:
+    try:
         return event["extra"]["error_tracking_extra"]["status_code"]
-
-    return None
+    except Exception:
+        return None
 
 
 def _try_get_status_code_from_raised_exception(hint: Hint) -> Optional[int]:
-    if "exc_info" in hint:
+    try:
+        if "exc_info" not in hint:
+            return None
+
         exception_instance = hint["exc_info"][1]
         if hasattr(exception_instance, "status_code"):
             return getattr(exception_instance, "status_code")
 
-    return None
+        return None
+    except Exception:
+        return None
