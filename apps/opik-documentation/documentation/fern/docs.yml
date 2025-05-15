@@ -303,7 +303,7 @@ navigation:
             slug: rules
           - page: Gateway
             path: docs/production/gateway.mdx
-            slug: gateway          
+            slug: gateway
           - page: Guardrails
             path: docs/production/guardrails.mdx
             slug: guardrails
@@ -520,6 +520,9 @@ redirects:
     permanent: true
   - source: "docs/prompt_engineering/prompt_optimization"
     destination: "docs/agent_optimization/best-practices/prompt_engineering"
+    permanent: true
+  - source: "docs/prompt_engineering/agent_optimization"
+    destination: "docs/agent_optimization/overview"
     permanent: true
   - source: "docs/prompt_engineering/agent_optimization"
     destination: "docs/agent_optimization/overview"
