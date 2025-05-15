@@ -1,11 +1,12 @@
-import { OpikConfig, Trace, Span } from "opik";
+import { OpikConfig, Trace } from "opik";
 
-export type OpikParent = Trace | Span;
+export type OpikParent = Trace;
 
 export interface TrackOpikConfig extends Partial<OpikConfig> {
   traceMetadata?: Record<string, unknown> & {
     tags?: string[];
   };
+  clientOptions?: Partial<OpikConfig>;
   generationName?: string;
   parent?: OpikParent;
 }

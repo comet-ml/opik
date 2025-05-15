@@ -20,7 +20,7 @@ export const trackOpenAI = <SDKType extends object>(
       };
 
       if (propKey === "flush") {
-        const opikClient = OpikSingleton.getInstance();
+        const opikClient = OpikSingleton.getInstance(config.clientOptions);
         return opikClient.flush.bind(opikClient);
       }
 
