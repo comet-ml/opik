@@ -908,7 +908,7 @@ class Opik:
         ).get_filter_expressions()
         filters_ = helpers.parse_search_span_expressions(filter_expressions)
 
-        # this is the constant for maximum object sent from backend side
+        # this is the constant for maximum objects sent from backend side
         max_endpoint_batch_size = 2_000
 
         while len(traces) < max_results:
