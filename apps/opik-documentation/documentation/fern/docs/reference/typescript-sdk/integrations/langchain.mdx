@@ -53,12 +53,9 @@ const response = await llm.invoke("Hello, how can you help me today?");
 
 // Option 2: Add the handler at invocation time (or both)
 const llmWithoutHandler = new ChatOpenAI();
-const response2 = await llmWithoutHandler.invoke(
-  "What's the weather like today?",
-  {
-    callbacks: [opikHandler], // Will be used just for this specific call
-  }
-);
+const response2 = await llmWithoutHandler.invoke("What's the weather like today?", {
+  callbacks: [opikHandler], // Will be used just for this specific call
+});
 
 // You can also combine both approaches
 const anotherResponse = await llm.invoke("Tell me a joke", {
@@ -91,9 +88,7 @@ setGlobalCallbacks([opikHandler]);
 
 // These components will now automatically use the global handler
 const llm = new ChatOpenAI();
-const template = PromptTemplate.fromTemplate(
-  "Answer this question: {question}"
-);
+const template = PromptTemplate.fromTemplate("Answer this question: {question}");
 const chain = new LLMChain({ llm, prompt: template });
 
 // Global handlers are used automatically
