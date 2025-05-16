@@ -3,9 +3,10 @@ package com.comet.opik.infrastructure.llm.openai;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
-import dev.ai4j.openai4j.OpenAiClient;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+import dev.langchain4j.model.openai.internal.DefaultOpenAiClient;
+import dev.langchain4j.model.openai.internal.OpenAiClient;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
@@ -20,7 +21,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
 
     public OpenAiClient newOpenAiClient(@NonNull LlmProviderClientApiConfig config) {
-        var openAiClientBuilder = OpenAiClient.builder();
+        var openAiClientBuilder = DefaultOpenAiClient.builder();
         Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
                 .map(LlmProviderClientConfig.OpenAiClientConfig::url)
                 .filter(StringUtils::isNotBlank)
@@ -34,20 +35,17 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
             openAiClientBuilder.customHeaders(config.headers());
         }
 
-        Optional.ofNullable(llmProviderClientConfig.getCallTimeout())
-                .ifPresent(callTimeout -> openAiClientBuilder.callTimeout(callTimeout.toJavaDuration()));
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> openAiClientBuilder.connectTimeout(connectTimeout.toJavaDuration()));
         Optional.ofNullable(llmProviderClientConfig.getReadTimeout())
                 .ifPresent(readTimeout -> openAiClientBuilder.readTimeout(readTimeout.toJavaDuration()));
-        Optional.ofNullable(llmProviderClientConfig.getWriteTimeout())
-                .ifPresent(writeTimeout -> openAiClientBuilder.writeTimeout(writeTimeout.toJavaDuration()));
+
         return openAiClientBuilder
-                .openAiApiKey(config.apiKey())
+                .apiKey(config.apiKey())
                 .build();
     }
 
-    public ChatLanguageModel newOpenAiChatLanguageModel(@NonNull LlmProviderClientApiConfig config,
+    public ChatModel newOpenAiChatLanguageModel(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         var builder = OpenAiChatModel.builder()
                 .modelName(modelParameters.name())
@@ -82,7 +80,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     }
 
     @Override
-    public ChatLanguageModel generateChat(@NonNull LlmProviderClientApiConfig config,
+    public ChatModel generateChat(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         return newOpenAiChatLanguageModel(config, modelParameters);
     }

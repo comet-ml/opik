@@ -4,8 +4,8 @@ import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
-import dev.ai4j.openai4j.chat.ChatCompletionRequest;
-import dev.ai4j.openai4j.chat.ChatCompletionResponse;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +25,7 @@ public class LlmProviderGemini implements LlmProviderService {
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
         var mapper = LlmProviderLangChainMapper.INSTANCE;
-        var response = llmProviderClientGenerator.generate(config, request).generate(mapper.mapMessages(request));
+        var response = llmProviderClientGenerator.generate(config, request).chat(mapper.mapMessages(request));
         return mapper.toChatCompletionResponse(request, response);
     }
 
@@ -42,7 +42,7 @@ public class LlmProviderGemini implements LlmProviderService {
                                 request);
 
                         streamingChatLanguageModel
-                                .generate(
+                                .chat(
                                         LlmProviderLangChainMapper.INSTANCE.mapMessages(request),
                                         new ChunkedResponseHandler(handleMessage, handleClose, handleError,
                                                 request.model()));

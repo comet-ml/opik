@@ -4,10 +4,10 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.google.common.base.Preconditions;
-import dev.ai4j.openai4j.chat.ChatCompletionRequest;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import dev.langchain4j.model.googleai.GoogleAiGeminiStreamingChatModel;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
@@ -43,7 +43,7 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
     }
 
     @Override
-    public ChatLanguageModel generateChat(LlmProviderClientApiConfig config,
+    public ChatModel generateChat(LlmProviderClientApiConfig config,
             LlmAsJudgeModelParameters modelParameters) {
         GoogleAiGeminiChatModelBuilder modelBuilder = GoogleAiGeminiChatModel.builder()
                 .modelName(modelParameters.name())

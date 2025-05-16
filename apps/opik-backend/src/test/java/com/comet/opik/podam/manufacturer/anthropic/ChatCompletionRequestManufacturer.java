@@ -1,6 +1,6 @@
 package com.comet.opik.podam.manufacturer.anthropic;
 
-import dev.ai4j.openai4j.chat.ChatCompletionRequest;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import uk.co.jemos.podam.api.AttributeMetadata;
 import uk.co.jemos.podam.api.DataProviderStrategy;
 import uk.co.jemos.podam.common.ManufacturingContext;

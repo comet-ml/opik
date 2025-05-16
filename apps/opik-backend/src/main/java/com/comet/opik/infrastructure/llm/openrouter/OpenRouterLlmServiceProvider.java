@@ -8,7 +8,7 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.comet.opik.infrastructure.llm.openai.LlmProviderOpenAi;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import jakarta.inject.Named;
 import lombok.NonNull;
 
@@ -27,7 +27,7 @@ class OpenRouterLlmServiceProvider implements LlmServiceProvider {
     }
 
     @Override
-    public ChatLanguageModel getLanguageModel(@NonNull LlmProviderClientApiConfig config,
+    public ChatModel getLanguageModel(@NonNull LlmProviderClientApiConfig config,
             @NonNull AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters) {
         return clientGenerator.newOpenAiChatLanguageModel(config, modelParameters);
     }
