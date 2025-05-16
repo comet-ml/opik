@@ -4,15 +4,15 @@ import logging
 import time
 
 import litellm
+from . import _throttle
 from opik.rest_api.core import ApiError
 
 from pydantic import BaseModel
-from ._throttle import RateLimiter, rate_limited
 from .cache_config import initialize_cache
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from .optimization_config.configs import TaskConfig, MetricConfig
 
-limiter = RateLimiter(max_calls_per_second=8)
+_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 # Don't use unsupported params:
 litellm.drop_params = True
@@ -32,19 +32,21 @@ class OptimizationRound(BaseModel):
 
 
 class BaseOptimizer:
-    def __init__(self, model: str, project_name: Optional[str] = None, **model_kwargs):
+    def __init__(self, model: str, project_name: Optional[str] = None, verbose: int = 1, **model_kwargs):
         """
         Base class for optimizers.
 
         Args:
            model: LiteLLM model name
            project_name: Opik project name
+           verbose: Controls internal logging/progress bars (0=off, 1=on).
            model_kwargs: additional args for model (eg, temperature)
         """
         self.model = model
         self.reasoning_model = model
         self.model_kwargs = model_kwargs
         self.project_name = project_name
+        self.verbose = verbose
         self._history = []
         self.experiment_config = None
         self.llm_call_counter = 0
@@ -141,7 +143,7 @@ class BaseOptimizer:
         """
         self._history.append(round_data)
 
-
+            
     def update_optimization(self, optimization, status: str) -> None:
         """
         Update the optimization status
