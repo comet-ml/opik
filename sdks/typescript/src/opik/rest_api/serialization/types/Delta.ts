@@ -5,12 +5,11 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
-import { DeltaRole } from "./DeltaRole";
 import { ToolCall } from "./ToolCall";
 import { FunctionCall } from "./FunctionCall";
 
 export const Delta: core.serialization.ObjectSchema<serializers.Delta.Raw, OpikApi.Delta> = core.serialization.object({
-    role: DeltaRole.optional(),
+    role: core.serialization.string().optional(),
     content: core.serialization.string().optional(),
     toolCalls: core.serialization.property("tool_calls", core.serialization.list(ToolCall).optional()),
     functionCall: core.serialization.property("function_call", FunctionCall.optional()),
@@ -18,7 +17,7 @@ export const Delta: core.serialization.ObjectSchema<serializers.Delta.Raw, OpikA
 
 export declare namespace Delta {
     export interface Raw {
-        role?: DeltaRole.Raw | null;
+        role?: string | null;
         content?: string | null;
         tool_calls?: ToolCall.Raw[] | null;
         function_call?: FunctionCall.Raw | null;

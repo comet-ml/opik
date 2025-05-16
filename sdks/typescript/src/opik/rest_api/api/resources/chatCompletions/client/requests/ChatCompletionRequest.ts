@@ -28,6 +28,10 @@ export interface ChatCompletionRequest {
     tools?: OpikApi.Tool[];
     toolChoice?: Record<string, unknown>;
     parallelToolCalls?: boolean;
+    store?: boolean;
+    metadata?: Record<string, string>;
+    reasoningEffort?: string;
+    serviceTier?: string;
     functions?: OpikApi.Function[];
     functionCall?: OpikApi.FunctionCall;
 }

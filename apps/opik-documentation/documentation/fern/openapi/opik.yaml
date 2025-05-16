@@ -3732,6 +3732,7 @@ components:
           - USER
           - AI
           - TOOL_EXECUTION_RESULT
+          - CUSTOM
         content:
           type: string
     LlmAsJudgeModelParameters:
@@ -3861,6 +3862,7 @@ components:
           - USER
           - AI
           - TOOL_EXECUTION_RESULT
+          - CUSTOM
         content:
           type: string
     LlmAsJudgeModelParameters_Write:
@@ -4040,6 +4042,7 @@ components:
           - USER
           - AI
           - TOOL_EXECUTION_RESULT
+          - CUSTOM
         content:
           type: string
     LlmAsJudgeModelParameters_Public:
@@ -4267,7 +4270,7 @@ components:
           type: string
         created:
           type: integer
-          format: int32
+          format: int64
         model:
           type: string
         choices:
@@ -4277,6 +4280,8 @@ components:
         usage:
           $ref: "#/components/schemas/Usage"
         system_fingerprint:
+          type: string
+        service_tier:
           type: string
     CompletionTokensDetails:
       type: object
@@ -4289,12 +4294,6 @@ components:
       properties:
         role:
           type: string
-          enum:
-          - system
-          - user
-          - assistant
-          - tool
-          - function
         content:
           type: string
         tool_calls:
@@ -4310,6 +4309,12 @@ components:
           type: string
         arguments:
           type: string
+    PromptTokensDetails:
+      type: object
+      properties:
+        cached_tokens:
+          type: integer
+          format: int32
     ToolCall:
       type: object
       properties:
@@ -4333,6 +4338,8 @@ components:
         prompt_tokens:
           type: integer
           format: int32
+        prompt_tokens_details:
+          $ref: "#/components/schemas/PromptTokensDetails"
         completion_tokens:
           type: integer
           format: int32
@@ -4396,6 +4403,16 @@ components:
           type: object
         parallel_tool_calls:
           type: boolean
+        store:
+          type: boolean
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+        reasoning_effort:
+          type: string
+        service_tier:
+          type: string
         functions:
           type: array
           items:
@@ -4412,28 +4429,9 @@ components:
         strict:
           type: boolean
         parameters:
-          $ref: "#/components/schemas/JsonObjectSchema"
-    JsonObjectSchema:
-      type: object
-      properties:
-        type:
-          type: string
-        description:
-          type: string
-        properties:
           type: object
           additionalProperties:
-            $ref: "#/components/schemas/JsonSchemaElement"
-        required:
-          type: array
-          items:
-            type: string
-        additionalProperties:
-          type: boolean
-        $defs:
-          type: object
-          additionalProperties:
-            $ref: "#/components/schemas/JsonSchemaElement"
+            type: object
     JsonSchema:
       type: object
       properties:
@@ -4442,12 +4440,9 @@ components:
         strict:
           type: boolean
         schema:
-          $ref: "#/components/schemas/JsonObjectSchema"
-    JsonSchemaElement:
-      type: object
-      properties:
-        type:
-          type: string
+          type: object
+          additionalProperties:
+            type: object
     Message:
       type: object
     ResponseFormat:
@@ -7288,7 +7283,6 @@ components:
         last_updated_at:
           type: string
           format: date-time
-          readOnly: true
         created_by:
           type: string
           readOnly: true
@@ -7387,6 +7381,9 @@ components:
             format: int32
         error_info:
           $ref: "#/components/schemas/ErrorInfo_Write"
+        last_updated_at:
+          type: string
+          format: date-time
         total_estimated_cost:
           minimum: 0.0
           exclusiveMinimum: false
@@ -7543,7 +7540,6 @@ components:
         last_updated_at:
           type: string
           format: date-time
-          readOnly: true
         created_by:
           type: string
           readOnly: true

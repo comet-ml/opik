@@ -5,11 +5,13 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .completion_tokens_details import CompletionTokensDetails
+from .prompt_tokens_details import PromptTokensDetails
 
 
 class Usage(UniversalBaseModel):
     total_tokens: typing.Optional[int] = None
     prompt_tokens: typing.Optional[int] = None
+    prompt_tokens_details: typing.Optional[PromptTokensDetails] = None
     completion_tokens: typing.Optional[int] = None
     completion_tokens_details: typing.Optional[CompletionTokensDetails] = None
 

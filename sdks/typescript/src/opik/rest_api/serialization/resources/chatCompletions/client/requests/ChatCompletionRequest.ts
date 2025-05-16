@@ -41,6 +41,10 @@ export const ChatCompletionRequest: core.serialization.Schema<
         core.serialization.record(core.serialization.string(), core.serialization.unknown()).optional(),
     ),
     parallelToolCalls: core.serialization.property("parallel_tool_calls", core.serialization.boolean().optional()),
+    store: core.serialization.boolean().optional(),
+    metadata: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
+    reasoningEffort: core.serialization.property("reasoning_effort", core.serialization.string().optional()),
+    serviceTier: core.serialization.property("service_tier", core.serialization.string().optional()),
     functions: core.serialization.list(Function).optional(),
     functionCall: core.serialization.property("function_call", FunctionCall.optional()),
 });
@@ -66,6 +70,10 @@ export declare namespace ChatCompletionRequest {
         tools?: Tool.Raw[] | null;
         tool_choice?: Record<string, unknown> | null;
         parallel_tool_calls?: boolean | null;
+        store?: boolean | null;
+        metadata?: Record<string, string> | null;
+        reasoning_effort?: string | null;
+        service_tier?: string | null;
         functions?: Function.Raw[] | null;
         function_call?: FunctionCall.Raw | null;
     }
