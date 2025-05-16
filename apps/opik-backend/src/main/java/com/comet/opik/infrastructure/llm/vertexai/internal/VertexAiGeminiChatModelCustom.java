@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure.llm.vertexai.internal;
 
-import com.comet.opik.utils.JsonUtils;
 import com.google.cloud.vertexai.api.Content;
 import com.google.cloud.vertexai.api.FunctionCall;
 import com.google.cloud.vertexai.api.FunctionCallingConfig;
@@ -16,7 +15,6 @@ import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.internal.ChatRequestValidationUtils;
 import dev.langchain4j.model.chat.listener.ChatModelErrorContext;
 import dev.langchain4j.model.chat.listener.ChatModelListener;
@@ -25,11 +23,13 @@ import dev.langchain4j.model.chat.listener.ChatModelResponseContext;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.request.ResponseFormat;
+import dev.langchain4j.model.chat.request.ResponseFormatType;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.ChatResponseMetadata;
 import dev.langchain4j.model.output.Response;
 import dev.langchain4j.model.vertexai.HarmCategory;
 import dev.langchain4j.model.vertexai.SafetyThreshold;
+import dev.langchain4j.model.vertexai.SchemaHelper;
 import dev.langchain4j.model.vertexai.ToolCallingMode;
 import dev.langchain4j.model.vertexai.VertexAiGeminiChatModel;
 import lombok.extern.slf4j.Slf4j;
@@ -38,7 +38,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 import static dev.langchain4j.internal.RetryUtils.withRetryMappingExceptions;
 import static dev.langchain4j.internal.Utils.isNullOrEmpty;
@@ -47,21 +46,12 @@ import static dev.langchain4j.internal.Utils.isNullOrEmpty;
  * This class is a custom implementation of the VertexAiGeminiChatModel.
  *
  * It generates chat responses using the Vertex AI Gemini model.
- * It extends the VertexAiGeminiChatModel class to provide a custom way to support structured output with a best effort approach.
+ * It extends the VertexAiGeminiChatModel class to provide a way to support structured output.
  *
  * */
 @Slf4j
 public class VertexAiGeminiChatModelCustom extends VertexAiGeminiChatModel {
 
-    public static final String RESPONSE_FORMAT_PROMPT = """
-            Use the following format to reply the user message: %s
-
-            The response must follow strictly the  JSON schema described bellow and make sure it's a valid json therefore only valid json string must be returned, no other text this is critical.:
-
-            %s
-
-            This schema follows the Gemini API response format, so please make sure to follow it strictly.
-            """;
     private GenerativeModel generativeModel;
     private GenerationConfig generationConfig;
 
@@ -114,8 +104,8 @@ public class VertexAiGeminiChatModelCustom extends VertexAiGeminiChatModel {
         return generate(messages, new ArrayList<>(), responseFormat);
     }
 
-    private Response<AiMessage> generate(List<ChatMessage> messages, List<ToolSpecification> toolSpecifications,
-            ResponseFormat responseFormat) {
+    private Response<AiMessage> generate(
+            List<ChatMessage> messages, List<ToolSpecification> toolSpecifications, ResponseFormat responseFormat) {
         String modelName = generativeModel.getModelName();
 
         List<Tool> tools = new ArrayList<>();
@@ -124,7 +114,23 @@ public class VertexAiGeminiChatModelCustom extends VertexAiGeminiChatModel {
             tools.add(tool);
         }
 
+        // Create a new GenerationConfig if responseFormat is specified
+        GenerationConfig generationConfig = this.generationConfig;
+        if (responseFormat != null && responseFormat.type() == ResponseFormatType.JSON) {
+            GenerationConfig.Builder configBuilder = GenerationConfig.newBuilder(this.generationConfig);
+            configBuilder.setResponseMimeType("application/json");
+
+            // If a JSON schema is provided, convert it to Vertex AI Schema
+            if (responseFormat.jsonSchema() != null) {
+                Schema schema = SchemaHelper.from(responseFormat.jsonSchema().rootElement());
+                configBuilder.setResponseSchema(schema);
+            }
+
+            generationConfig = configBuilder.build();
+        }
+
         GenerativeModel model = this.generativeModel
+                .withGenerationConfig(generationConfig)
                 .withTools(tools)
                 .withToolConfig(ToolConfig.newBuilder()
                         .setFunctionCallingConfig(
@@ -132,14 +138,6 @@ public class VertexAiGeminiChatModelCustom extends VertexAiGeminiChatModel {
                                         .setMode(FunctionCallingConfig.Mode.AUTO)
                                         .build())
                         .build());
-
-        messages = new ArrayList<>(messages);
-        if (responseFormat != null) {
-            GeminiSchema geminiSchema = SchemaMapper.fromJsonSchemaToGSchema(responseFormat.jsonSchema());
-            messages.add(
-                    SystemMessage.systemMessage(RESPONSE_FORMAT_PROMPT.formatted(responseFormat.type().toString(),
-                            JsonUtils.writeValueAsString(geminiSchema))));
-        }
 
         ContentsMapper.InstructionAndContent instructionAndContent = ContentsMapper
                 .splitInstructionAndContent(messages);
@@ -162,8 +160,8 @@ public class VertexAiGeminiChatModelCustom extends VertexAiGeminiChatModel {
                         .build())
                 .build();
         ConcurrentHashMap<Object, Object> listenerAttributes = new ConcurrentHashMap<>();
-        ChatModelRequestContext chatModelRequestContext = new ChatModelRequestContext(
-                listenerRequest, provider(), listenerAttributes);
+        ChatModelRequestContext chatModelRequestContext = new ChatModelRequestContext(listenerRequest, provider(),
+                listenerAttributes);
         listeners().forEach((listener) -> {
             try {
                 listener.onRequest(chatModelRequestContext);
@@ -174,9 +172,11 @@ public class VertexAiGeminiChatModelCustom extends VertexAiGeminiChatModel {
 
         GenerateContentResponse response = null;
         try {
-            response = withRetryMappingExceptions(() -> finalModel.generateContent(instructionAndContent.contents), 2);
+            int maxRetries = 2;
+            response = withRetryMappingExceptions(
+                    () -> finalModel.generateContent(instructionAndContent.contents), maxRetries);
         } catch (Exception e) {
-            listeners().forEach((listener) -> {
+            listeners().forEach(listener -> {
                 try {
                     ChatModelErrorContext chatModelErrorContext = new ChatModelErrorContext(e, listenerRequest,
                             provider(), listenerAttributes);
@@ -223,8 +223,8 @@ public class VertexAiGeminiChatModelCustom extends VertexAiGeminiChatModel {
                         .finishReason(finalResponse.finishReason())
                         .build())
                 .build();
-        ChatModelResponseContext chatModelResponseContext = new ChatModelResponseContext(
-                listenerResponse, listenerRequest, provider(), listenerAttributes);
+        ChatModelResponseContext chatModelResponseContext = new ChatModelResponseContext(listenerResponse,
+                listenerRequest, provider(), listenerAttributes);
         listeners().forEach((listener) -> {
             try {
                 listener.onResponse(chatModelResponseContext);
