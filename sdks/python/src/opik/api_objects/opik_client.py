@@ -901,28 +901,37 @@ class Opik:
             truncate: Whether to truncate image data stored in input, output or metadata
         """
 
-        page_size = 100
         traces: List[trace_public.TracePublic] = []
 
-        filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
+        filter_expressions = opik_query_language.OpikQueryLanguage(
+            filter_string
+        ).get_filter_expressions()
+        filters_ = helpers.parse_search_span_expressions(filter_expressions)
 
-        page = 1
+        # this is the constant for maximum object sent from backend side
+        max_endpoint_batch_size = 2_000
+
         while len(traces) < max_results:
-            page_traces = self._rest_client.traces.get_traces_by_project(
+            spans_amount_left = max_results - len(traces)
+            current_batch_size = min(spans_amount_left, max_endpoint_batch_size)
+
+            traces_stream = self._rest_client.traces.search_traces(
                 project_name=project_name or self._project_name,
-                filters=filters,
-                page=page,
-                size=page_size,
+                filters=filters_,
+                limit=current_batch_size,
                 truncate=truncate,
+                last_retrieved_id=traces[-1].id if len(traces) > 0 else None,
             )
 
-            if len(page_traces.content) == 0:
+            new_traces = rest_stream_parser.read_and_parse_stream(
+                stream=traces_stream, item_class=trace_public.TracePublic
+            )
+            traces.extend(new_traces)
+
+            if current_batch_size > len(new_traces):
                 break
 
-            traces.extend(page_traces.content)
-            page += 1
-
-        return traces[:max_results]
+        return traces
 
     def search_spans(
         self,
