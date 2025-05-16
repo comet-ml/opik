@@ -31,6 +31,7 @@ class SpanWrite(UniversalBaseModel):
     tags: typing.Optional[typing.List[str]] = None
     usage: typing.Optional[typing.Dict[str, int]] = None
     error_info: typing.Optional[ErrorInfoWrite] = None
+    last_updated_at: typing.Optional[dt.datetime] = None
     total_estimated_cost: typing.Optional[float] = None
     total_estimated_cost_version: typing.Optional[str] = None
 
