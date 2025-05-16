@@ -3,6 +3,7 @@ from typing import Literal, List, Dict, Any
 from .. import utils
 from datasets import load_dataset
 import traceback
+import random
 
 
 class HaltError(Exception):
@@ -116,51 +117,61 @@ def get_or_create_dataset(
 
 
 def _load_hotpot_500(test_mode: bool = False) -> List[Dict[str, Any]]:
-    from dspy.datasets import HotPotQA
-
-    seed = 2024
-    size = 500 if not test_mode else 5
-
+    """Load HotpotQA dataset with 500 examples using the same seed as DSPy."""
     try:
-        trainset = [
-            x.with_inputs("question")
-            for x in HotPotQA(train_seed=seed, train_size=size).train
-        ]
-    except Exception:
+        # Use streaming to avoid downloading the entire dataset
+        dataset = load_dataset("vincentkoc/hotpot_qa_archive", "distractor", streaming=True)
+        seed = 2024  # Same seed as DSPy
+        size = 500 if not test_mode else 5
+        
+        # Convert streaming dataset to list and apply seed
+        data = []
+        for i, item in enumerate(dataset["train"]):
+            if i >= size:
+                break
+            data.append({
+                "question": item["question"],
+                "answer": item["answer"],
+                "context": item["context"],
+            })
+            
+        # Apply the same seed as DSPy to ensure consistent ordering
+        random.seed(seed)
+        random.shuffle(data)
+        
+        return data
+    except Exception as e:
+        print(f"Error loading HotpotQA dataset: {e}")
         raise Exception("Unable to download HotPotQA; please try again") from None
-
-    data = []
-    for row in reversed(trainset):
-        d = row.toDict()
-        del d["dspy_uuid"]
-        del d["dspy_split"]
-        data.append(d)
-
-    return data
 
 
 def _load_hotpot_300(test_mode: bool = False) -> List[Dict[str, Any]]:
-    from dspy.datasets import HotPotQA
-
-    seed = 42
-    size = 300 if not test_mode else 3
-
+    """Load HotpotQA dataset with 300 examples using the same seed as DSPy."""
     try:
-        trainset = [
-            x.with_inputs("question")
-            for x in HotPotQA(train_seed=seed, train_size=size).train
-        ]
-    except Exception:
+        # Use streaming to avoid downloading the entire dataset
+        dataset = load_dataset("vincentkoc/hotpot_qa_archive", "distractor", streaming=True)
+        seed = 42  # Same seed as DSPy
+        size = 300 if not test_mode else 3
+        
+        # Convert streaming dataset to list and apply seed
+        data = []
+        for i, item in enumerate(dataset["train"]):
+            if i >= size:
+                break
+            data.append({
+                "question": item["question"],
+                "answer": item["answer"],
+                "context": item["context"],
+            })
+            
+        # Apply the same seed as DSPy to ensure consistent ordering
+        random.seed(seed)
+        random.shuffle(data)
+        
+        return data
+    except Exception as e:
+        print(f"Error loading HotpotQA dataset: {e}")
         raise Exception("Unable to download HotPotQA; please try again") from None
-
-    data = []
-    for row in trainset:
-        d = row.toDict()
-        del d["dspy_uuid"]
-        del d["dspy_split"]
-        data.append(d)
-
-    return data
 
 
 def _load_halu_eval_300(test_mode: bool = False) -> List[Dict[str, Any]]:
@@ -249,7 +260,7 @@ def _load_hotpot_qa(test_mode: bool = False) -> List[Dict[str, Any]]:
     """Load HotpotQA dataset with 300 examples."""
     try:
         # Use streaming to avoid downloading the entire dataset
-        dataset = load_dataset("hotpot_qa", "distractor", streaming=True)
+        dataset = load_dataset("vincentkoc/hotpot_qa_archive", "distractor", streaming=True)
         n_samples = 5 if test_mode else 300
         
         # Convert streaming dataset to list
