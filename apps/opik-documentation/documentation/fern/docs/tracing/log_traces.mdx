@@ -448,7 +448,7 @@ method allows you to move traces from one project to another without having to r
 ```python
 from opik import Opik
 
-client = Opik()
+client = Opik(_use_batching=True)
 
 client.copy_traces(
     project_name="<name of the project where the traces were created>",

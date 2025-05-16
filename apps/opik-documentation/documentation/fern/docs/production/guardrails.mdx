@@ -95,7 +95,7 @@ The call is blocking, since the main purpose of the guardrail is to prevent the 
 You can call `guardrail.validate` repeatedly to validate the response chunk by chunk, or their parts or combinations.
 The results will be added as additional spans to the same trace.
 
-```python
+```python {pytest_codeblocks_skip=true}
 for chunk in response:
     try:
         guardrail.validate(chunk)
