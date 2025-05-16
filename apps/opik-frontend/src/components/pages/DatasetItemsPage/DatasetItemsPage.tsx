@@ -10,6 +10,8 @@ import Loader from "@/components/shared/Loader/Loader";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import { useDatasetIdFromURL } from "@/hooks/useDatasetIdFromURL";
+import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useDatasetById from "@/api/datasets/useDatasetById";
@@ -41,7 +43,6 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
-import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 
 const getRowId = (d: DatasetItem) => d.id;
 
@@ -56,6 +57,8 @@ const SELECTED_COLUMNS_KEY = "dataset-items-selected-columns";
 const COLUMNS_WIDTH_KEY = "dataset-items-columns-width";
 const COLUMNS_ORDER_KEY = "dataset-items-columns-order";
 const DYNAMIC_COLUMNS_KEY = "dataset-items-dynamic-columns";
+const PAGINATION_SIZE_KEY = "dataset-items-pagination-size";
+const ROW_HEIGHT_KEY = "dataset-items-row-height";
 
 const DatasetItemsPage = () => {
   const datasetId = useDatasetIdFromURL();
@@ -68,19 +71,27 @@ const DatasetItemsPage = () => {
     updateType: "replaceIn",
   });
 
-  const [size = 10, setSize] = useQueryParam("size", NumberParam, {
-    updateType: "replaceIn",
+  const [size, setSize] = useQueryParamAndLocalStorageState<
+    number | null | undefined
+  >({
+    localStorageKey: PAGINATION_SIZE_KEY,
+    queryKey: "size",
+    defaultValue: 10,
+    queryParamConfig: NumberParam,
+    syncQueryWithLocalStorageOnInit: true,
   });
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const [height = ROW_HEIGHT.small, setHeight] = useQueryParam(
-    "height",
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
+  const [height, setHeight] = useQueryParamAndLocalStorageState<
+    string | null | undefined
+  >({
+    localStorageKey: ROW_HEIGHT_KEY,
+    queryKey: "height",
+    defaultValue: ROW_HEIGHT.small,
+    queryParamConfig: StringParam,
+    syncQueryWithLocalStorageOnInit: true,
+  });
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
