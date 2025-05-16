@@ -17,11 +17,11 @@ export const trackOpenAI = <SDKType extends object>(
       const config = {
         ...opikConfig,
         generationName,
+        client: opikConfig?.client ?? OpikSingleton.getInstance(),
       };
 
       if (propKey === "flush") {
-        const opikClient = OpikSingleton.getInstance(config.clientOptions);
-        return opikClient.flush.bind(opikClient);
+        return config.client.flush.bind(config.client);
       }
 
       if (typeof originalProperty === "function") {

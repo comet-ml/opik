@@ -1,6 +1,5 @@
 import type OpenAI from "openai";
 
-import { OpikSingleton } from "./singleton";
 import {
   getToolCallOutput,
   parseChunk,
@@ -16,7 +15,7 @@ import {
   OpikParent,
   TrackOpikConfig,
 } from "./types";
-import { OpikSpanType, Span, Trace } from "opik";
+import { Opik, OpikSpanType, Span, Trace } from "opik";
 import { flattenObject } from "./utils";
 
 const handleError = (
@@ -37,9 +36,12 @@ const handleError = (
   rootTracer.end();
 };
 
+type TracingConfig = TrackOpikConfig &
+  Required<{ generationName: string; client: Opik }>;
+
 export const withTracing = <T extends GenericMethod>(
   tracedMethod: T,
-  config: TrackOpikConfig & Required<{ generationName: string }>
+  config: TracingConfig
 ): ((
   ...args: Parameters<T>
 ) => Promise<ReturnType<T>> | ReturnType<T> | AsyncIterable<unknown>) => {
@@ -48,7 +50,7 @@ export const withTracing = <T extends GenericMethod>(
 
 const wrapMethod = <T extends GenericMethod>(
   tracedMethod: T,
-  config: TrackOpikConfig & Required<{ generationName: string }>,
+  config: TracingConfig,
   ...args: Parameters<T>
 ): Promise<ReturnType<T>> | ReturnType<T> | AsyncIterable<unknown> => {
   const { tags = [], ...configMetadata } = config?.traceMetadata ?? {};
@@ -80,8 +82,7 @@ const wrapMethod = <T extends GenericMethod>(
   if (config?.parent) {
     rootTracer = config.parent;
   } else {
-    const opik = OpikSingleton.getInstance(config);
-    rootTracer = opik.trace(observationData);
+    rootTracer = config.client.trace(observationData);
   }
 
   try {
