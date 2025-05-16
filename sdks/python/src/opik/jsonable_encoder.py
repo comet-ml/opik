@@ -73,7 +73,6 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
             return encoded_dict
 
         if isinstance(obj, (list, set, frozenset, GeneratorType, tuple)):
-            print(obj)
             encoded_list = []
             for item in obj:
                 encoded_list.append(encode(item, seen))
@@ -83,7 +82,7 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
             return encode(obj.tolist(), seen)
 
         if _is_pydantic_iterator_validator(obj):
-            return "<Pydantic Iterator Validator serialization is not supported>"
+            return "<Pydantic ValidatorIterator serialization is not supported>"
 
     except Exception:
         LOGGER.debug("Failed to serialize object.", exc_info=True)
