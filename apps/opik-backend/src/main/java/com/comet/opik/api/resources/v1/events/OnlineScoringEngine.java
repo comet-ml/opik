@@ -37,7 +37,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Spliterator;
 import java.util.Spliterators;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -57,7 +56,6 @@ public class OnlineScoringEngine {
     private static final String DEFAULT_SCHEMA_NAME = "scoring_schema";
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final String MATCHING_CODE_BLOCK = "(?s)^\\`\\`\\`json(.*?)\\`\\`\\`$";
 
     /**
      * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering the template messages with
@@ -213,11 +211,6 @@ public class OnlineScoringEngine {
         var content = chatResponse.aiMessage().text();
         JsonNode structuredResponse;
         try {
-            var matcher = Pattern.compile(MATCHING_CODE_BLOCK).matcher(content);
-            if (matcher.find()) {
-                content = matcher.group(1);
-            }
-
             structuredResponse = OBJECT_MAPPER.readTree(content);
             if (!structuredResponse.isObject()) {
                 log.info("ChatResponse content returned into an empty JSON result");
