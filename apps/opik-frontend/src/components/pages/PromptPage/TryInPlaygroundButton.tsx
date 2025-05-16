@@ -87,7 +87,7 @@ const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
         }}
       >
         <Play className="mr-2 size-3.5" />
-        Try in Playground
+        Try in the Playground
       </Button>
       <ConfirmDialog
         key={resetKeyRef.current}
