@@ -1490,32 +1490,32 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17,
       label: "Gemini 2.5 Pro Preview 04.17",
-      structuredOutput: false,
+      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_05_06,
       label: "Gemini 2.5 Pro Preview 05.06",
-      structuredOutput: false,
+      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO_PREVIEW_03_25,
       label: "Gemini 2.5 Pro Preview 03.25",
-      structuredOutput: false,
+      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO_EXP_03_25,
       label: "Gemini 2.5 Pro Exp 03.25",
-      structuredOutput: false,
+      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH,
       label: "Gemini 2.0 Flash",
-      structuredOutput: false,
+      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH_LITE,
       label: "Gemini 2.0 Flash Lite",
-      structuredOutput: false,
+      structuredOutput: true,
     },
   ],
 
