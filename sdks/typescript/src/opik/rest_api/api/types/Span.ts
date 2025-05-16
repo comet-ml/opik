@@ -15,8 +15,8 @@ export interface Span {
     type: OpikApi.SpanType;
     startTime: Date;
     endTime?: Date;
-    input?: OpikApi.JsonNode;
-    output?: OpikApi.JsonNode;
+    input?: OpikApi.JsonListString;
+    output?: OpikApi.JsonListString;
     metadata?: OpikApi.JsonNode;
     model?: string;
     provider?: string;

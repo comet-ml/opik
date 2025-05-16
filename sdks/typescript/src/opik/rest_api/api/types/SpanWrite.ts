@@ -14,8 +14,8 @@ export interface SpanWrite {
     type: OpikApi.SpanWriteType;
     startTime: Date;
     endTime?: Date;
-    input?: OpikApi.JsonNodeWrite;
-    output?: OpikApi.JsonNodeWrite;
+    input?: OpikApi.JsonListStringWrite;
+    output?: OpikApi.JsonListStringWrite;
     metadata?: OpikApi.JsonNodeWrite;
     model?: string;
     provider?: string;

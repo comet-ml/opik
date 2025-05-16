@@ -7,7 +7,7 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .comment import Comment
 from .feedback_score import FeedbackScore
-from .json_node import JsonNode
+from .json_list_string import JsonListString
 
 
 class ExperimentItem(UniversalBaseModel):
@@ -15,8 +15,8 @@ class ExperimentItem(UniversalBaseModel):
     experiment_id: str
     dataset_item_id: str
     trace_id: str
-    input: typing.Optional[JsonNode] = None
-    output: typing.Optional[JsonNode] = None
+    input: typing.Optional[JsonListString] = None
+    output: typing.Optional[JsonListString] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScore]] = None
     comments: typing.Optional[typing.List[Comment]] = None
     total_estimated_cost: typing.Optional[float] = None

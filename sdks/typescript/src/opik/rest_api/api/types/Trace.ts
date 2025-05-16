@@ -12,8 +12,8 @@ export interface Trace {
     name?: string;
     startTime: Date;
     endTime?: Date;
-    input?: OpikApi.JsonNode;
-    output?: OpikApi.JsonNode;
+    input?: OpikApi.JsonListString;
+    output?: OpikApi.JsonListString;
     metadata?: OpikApi.JsonNode;
     tags?: string[];
     errorInfo?: OpikApi.ErrorInfo;

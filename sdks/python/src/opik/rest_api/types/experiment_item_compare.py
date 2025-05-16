@@ -7,7 +7,7 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .comment_compare import CommentCompare
 from .feedback_score_compare import FeedbackScoreCompare
-from .json_node_compare import JsonNodeCompare
+from .json_list_string_compare import JsonListStringCompare
 
 
 class ExperimentItemCompare(UniversalBaseModel):
@@ -15,8 +15,8 @@ class ExperimentItemCompare(UniversalBaseModel):
     experiment_id: str
     dataset_item_id: str
     trace_id: str
-    input: typing.Optional[JsonNodeCompare] = None
-    output: typing.Optional[JsonNodeCompare] = None
+    input: typing.Optional[JsonListStringCompare] = None
+    output: typing.Optional[JsonListStringCompare] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreCompare]] = None
     comments: typing.Optional[typing.List[CommentCompare]] = None
     total_estimated_cost: typing.Optional[float] = None

@@ -6,6 +6,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .error_info_write import ErrorInfoWrite
+from .json_list_string_write import JsonListStringWrite
 from .json_node_write import JsonNodeWrite
 
 
@@ -19,8 +20,8 @@ class TraceWrite(UniversalBaseModel):
     name: typing.Optional[str] = None
     start_time: dt.datetime
     end_time: typing.Optional[dt.datetime] = None
-    input: typing.Optional[JsonNodeWrite] = None
-    output: typing.Optional[JsonNodeWrite] = None
+    input: typing.Optional[JsonListStringWrite] = None
+    output: typing.Optional[JsonListStringWrite] = None
     metadata: typing.Optional[JsonNodeWrite] = None
     tags: typing.Optional[typing.List[str]] = None
     error_info: typing.Optional[ErrorInfoWrite] = None

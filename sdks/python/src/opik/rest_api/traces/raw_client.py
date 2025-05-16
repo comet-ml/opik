@@ -20,6 +20,8 @@ from ..types.error_info import ErrorInfo
 from ..types.error_info_write import ErrorInfoWrite
 from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
 from ..types.feedback_score_source import FeedbackScoreSource
+from ..types.json_list_string import JsonListString
+from ..types.json_list_string_write import JsonListStringWrite
 from ..types.json_node import JsonNode
 from ..types.json_node_write import JsonNodeWrite
 from ..types.project_stats_public import ProjectStatsPublic
@@ -256,8 +258,8 @@ class RawTracesClient:
         project_name: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
-        input: typing.Optional[JsonNodeWrite] = OMIT,
-        output: typing.Optional[JsonNodeWrite] = OMIT,
+        input: typing.Optional[JsonListStringWrite] = OMIT,
+        output: typing.Optional[JsonListStringWrite] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
@@ -281,9 +283,9 @@ class RawTracesClient:
 
         end_time : typing.Optional[dt.datetime]
 
-        input : typing.Optional[JsonNodeWrite]
+        input : typing.Optional[JsonListStringWrite]
 
-        output : typing.Optional[JsonNodeWrite]
+        output : typing.Optional[JsonListStringWrite]
 
         metadata : typing.Optional[JsonNodeWrite]
 
@@ -311,8 +313,12 @@ class RawTracesClient:
                 "name": name,
                 "start_time": start_time,
                 "end_time": end_time,
-                "input": input,
-                "output": output,
+                "input": convert_and_respect_annotation_metadata(
+                    object_=input, annotation=JsonListStringWrite, direction="write"
+                ),
+                "output": convert_and_respect_annotation_metadata(
+                    object_=output, annotation=JsonListStringWrite, direction="write"
+                ),
                 "metadata": metadata,
                 "tags": tags,
                 "error_info": convert_and_respect_annotation_metadata(
@@ -450,8 +456,8 @@ class RawTracesClient:
         project_id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
-        input: typing.Optional[JsonNode] = OMIT,
-        output: typing.Optional[JsonNode] = OMIT,
+        input: typing.Optional[JsonListString] = OMIT,
+        output: typing.Optional[JsonListString] = OMIT,
         metadata: typing.Optional[JsonNode] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
@@ -475,9 +481,9 @@ class RawTracesClient:
 
         end_time : typing.Optional[dt.datetime]
 
-        input : typing.Optional[JsonNode]
+        input : typing.Optional[JsonListString]
 
-        output : typing.Optional[JsonNode]
+        output : typing.Optional[JsonListString]
 
         metadata : typing.Optional[JsonNode]
 
@@ -502,8 +508,12 @@ class RawTracesClient:
                 "project_id": project_id,
                 "name": name,
                 "end_time": end_time,
-                "input": input,
-                "output": output,
+                "input": convert_and_respect_annotation_metadata(
+                    object_=input, annotation=JsonListString, direction="write"
+                ),
+                "output": convert_and_respect_annotation_metadata(
+                    object_=output, annotation=JsonListString, direction="write"
+                ),
                 "metadata": metadata,
                 "tags": tags,
                 "error_info": convert_and_respect_annotation_metadata(
@@ -1392,8 +1402,8 @@ class AsyncRawTracesClient:
         project_name: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
-        input: typing.Optional[JsonNodeWrite] = OMIT,
-        output: typing.Optional[JsonNodeWrite] = OMIT,
+        input: typing.Optional[JsonListStringWrite] = OMIT,
+        output: typing.Optional[JsonListStringWrite] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
@@ -1417,9 +1427,9 @@ class AsyncRawTracesClient:
 
         end_time : typing.Optional[dt.datetime]
 
-        input : typing.Optional[JsonNodeWrite]
+        input : typing.Optional[JsonListStringWrite]
 
-        output : typing.Optional[JsonNodeWrite]
+        output : typing.Optional[JsonListStringWrite]
 
         metadata : typing.Optional[JsonNodeWrite]
 
@@ -1447,8 +1457,12 @@ class AsyncRawTracesClient:
                 "name": name,
                 "start_time": start_time,
                 "end_time": end_time,
-                "input": input,
-                "output": output,
+                "input": convert_and_respect_annotation_metadata(
+                    object_=input, annotation=JsonListStringWrite, direction="write"
+                ),
+                "output": convert_and_respect_annotation_metadata(
+                    object_=output, annotation=JsonListStringWrite, direction="write"
+                ),
                 "metadata": metadata,
                 "tags": tags,
                 "error_info": convert_and_respect_annotation_metadata(
@@ -1586,8 +1600,8 @@ class AsyncRawTracesClient:
         project_id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
-        input: typing.Optional[JsonNode] = OMIT,
-        output: typing.Optional[JsonNode] = OMIT,
+        input: typing.Optional[JsonListString] = OMIT,
+        output: typing.Optional[JsonListString] = OMIT,
         metadata: typing.Optional[JsonNode] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
@@ -1611,9 +1625,9 @@ class AsyncRawTracesClient:
 
         end_time : typing.Optional[dt.datetime]
 
-        input : typing.Optional[JsonNode]
+        input : typing.Optional[JsonListString]
 
-        output : typing.Optional[JsonNode]
+        output : typing.Optional[JsonListString]
 
         metadata : typing.Optional[JsonNode]
 
@@ -1638,8 +1652,12 @@ class AsyncRawTracesClient:
                 "project_id": project_id,
                 "name": name,
                 "end_time": end_time,
-                "input": input,
-                "output": output,
+                "input": convert_and_respect_annotation_metadata(
+                    object_=input, annotation=JsonListString, direction="write"
+                ),
+                "output": convert_and_respect_annotation_metadata(
+                    object_=output, annotation=JsonListString, direction="write"
+                ),
                 "metadata": metadata,
                 "tags": tags,
                 "error_info": convert_and_respect_annotation_metadata(
