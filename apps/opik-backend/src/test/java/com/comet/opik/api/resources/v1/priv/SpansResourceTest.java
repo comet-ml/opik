@@ -27,6 +27,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.RandomTestUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
@@ -95,7 +96,6 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.com.google.common.collect.Lists;
-import org.testcontainers.shaded.org.apache.commons.lang3.RandomUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -144,7 +144,6 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NAME_NOT_FOUND_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
-import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.spans.SpanAssertions.IGNORED_FIELDS;
 import static com.comet.opik.api.resources.utils.spans.SpanAssertions.IGNORED_FIELDS_SCORES;
@@ -290,7 +289,7 @@ class SpansResourceTest {
                 .id();
     }
 
-    private UUID createProject(String projectName, String workspaceName, String apiKey) {
+    private void createProject(String projectName, String workspaceName, String apiKey) {
         try (Response response = client.target("%s/v1/private/projects".formatted(baseURI))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -298,7 +297,6 @@ class SpansResourceTest {
                 .post(Entity.json(Project.builder().name(projectName).build()))) {
 
             assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(201);
-            return getIdFromLocation(response.getLocation());
         }
     }
 
@@ -4719,10 +4717,11 @@ class SpansResourceTest {
             var metadata = JsonUtils
                     .getJsonNodeFromString(
                             "{\"created_from\":\"openai\",\"type\":\"openai_chat\",\"model\":\"gpt-3.5-turbo\"}");
-            String metadataWithCost = "{\"cost\": {\n" +
-                    "    \"total_tokens\": %s,\n" +
-                    "    \"currency\": \"%s\"\n" +
-                    "  }}";
+            String metadataWithCost = """
+                    {"cost": {
+                        "total_tokens": %s,
+                        "currency": "%s"
+                      }}""";
 
             return Stream.of(
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
@@ -5160,7 +5159,7 @@ class SpansResourceTest {
                             .id(generator.generate())
                             .traceId(generator.generate())
                             .name("name-00-" + RandomStringUtils.secure().nextAlphanumeric(32))
-                            .type(SpanType.values()[RandomUtils.nextInt(0, SpanType.values().length)])
+                            .type(RandomTestUtils.randomEnumValue(SpanType.class))
                             .startTime(Instant.now())
                             .createdAt(Instant.now())
                             .build())
@@ -5183,8 +5182,9 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .id(expectedSpans0.get(i).id())
                             .traceId(expectedSpans0.get(i).traceId())
-                            .parentSpanId(null)
+                            .parentSpanId(expectedSpans0.get(i).parentSpanId())
                             .name("name-01-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                            .type(expectedSpans0.get(i).type())
                             .startTime(expectedSpans0.get(i).startTime())
                             .lastUpdatedAt(null)
                             .usage(null)
@@ -5209,8 +5209,9 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .id(expectedSpans0.get(i).id())
                             .traceId(expectedSpans0.get(i).traceId())
-                            .parentSpanId(null)
+                            .parentSpanId(expectedSpans0.get(i).parentSpanId())
                             .name("name-02-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                            .type(expectedSpans0.get(i).type())
                             .startTime(expectedSpans0.get(i).startTime())
                             .lastUpdatedAt(Instant.now().plus(1, ChronoUnit.DAYS))
                             .usage(null)
@@ -5235,8 +5236,9 @@ class SpansResourceTest {
                             .projectName(projectName)
                             .id(expectedSpans0.get(i).id())
                             .traceId(expectedSpans0.get(i).traceId())
-                            .parentSpanId(null)
+                            .parentSpanId(expectedSpans0.get(i).parentSpanId())
                             .name("name-03-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                            .type(expectedSpans0.get(i).type())
                             .startTime(expectedSpans0.get(i).startTime())
                             .lastUpdatedAt(Instant.now().minus(1, ChronoUnit.DAYS))
                             .usage(null)
@@ -5295,7 +5297,9 @@ class SpansResourceTest {
         assertThat(actualSpan.projectId()).isNotNull();
         assertThat(actualSpan.projectName()).isEqualTo(expectedSpan.projectName());
         assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
-        assertThat(actualSpan.lastUpdatedAt()).isAfterOrEqualTo(expectedSpan.lastUpdatedAt());
+        assertThat(actualSpan.lastUpdatedAt())
+                // Some JVMs can resolve higher than microseconds, such as nanoseconds in the Ubuntu AMD64 JVM
+                .isAfterOrEqualTo(expectedSpan.lastUpdatedAt().truncatedTo(ChronoUnit.MICROS));
         assertThat(actualSpan.createdBy()).isEqualTo(USER);
         assertThat(actualSpan.lastUpdatedBy()).isEqualTo(USER);
         var expected = DurationUtils.getDurationInMillisWithSubMilliPrecision(
@@ -5489,10 +5493,11 @@ class SpansResourceTest {
         }
 
         Stream<Arguments> update__whenCostIsChanged__thenAcceptUpdate() {
-            String metadataWithCost = "{\"cost\": {\n" +
-                    "    \"total_tokens\": %s,\n" +
-                    "    \"currency\": \"%s\"\n" +
-                    "  }}";
+            String metadataWithCost = """
+                    {"cost": {
+                        "total_tokens": %s,
+                        "currency": "%s"
+                      }}""";
 
             return Stream.of(
                     arguments(SpanUpdate.builder().model("gpt-4o-2024-05-13").totalEstimatedCost(null).build(), null),
