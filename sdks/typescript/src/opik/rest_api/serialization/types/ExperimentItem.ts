@@ -5,7 +5,7 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
-import { JsonNode } from "./JsonNode";
+import { JsonListString } from "./JsonListString";
 import { FeedbackScore } from "./FeedbackScore";
 import { Comment } from "./Comment";
 
@@ -15,8 +15,8 @@ export const ExperimentItem: core.serialization.ObjectSchema<serializers.Experim
         experimentId: core.serialization.property("experiment_id", core.serialization.string()),
         datasetItemId: core.serialization.property("dataset_item_id", core.serialization.string()),
         traceId: core.serialization.property("trace_id", core.serialization.string()),
-        input: JsonNode.optional(),
-        output: JsonNode.optional(),
+        input: JsonListString.optional(),
+        output: JsonListString.optional(),
         feedbackScores: core.serialization.property(
             "feedback_scores",
             core.serialization.list(FeedbackScore).optional(),
@@ -37,8 +37,8 @@ export declare namespace ExperimentItem {
         experiment_id: string;
         dataset_item_id: string;
         trace_id: string;
-        input?: JsonNode.Raw | null;
-        output?: JsonNode.Raw | null;
+        input?: JsonListString.Raw | null;
+        output?: JsonListString.Raw | null;
         feedback_scores?: FeedbackScore.Raw[] | null;
         comments?: Comment.Raw[] | null;
         total_estimated_cost?: number | null;

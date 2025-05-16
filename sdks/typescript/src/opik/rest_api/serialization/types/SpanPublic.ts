@@ -6,6 +6,7 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { SpanPublicType } from "./SpanPublicType";
+import { JsonListStringPublic } from "./JsonListStringPublic";
 import { JsonNodePublic } from "./JsonNodePublic";
 import { ErrorInfoPublic } from "./ErrorInfoPublic";
 import { FeedbackScorePublic } from "./FeedbackScorePublic";
@@ -22,8 +23,8 @@ export const SpanPublic: core.serialization.ObjectSchema<serializers.SpanPublic.
         type: SpanPublicType,
         startTime: core.serialization.property("start_time", core.serialization.date()),
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
-        input: JsonNodePublic.optional(),
-        output: JsonNodePublic.optional(),
+        input: JsonListStringPublic.optional(),
+        output: JsonListStringPublic.optional(),
         metadata: JsonNodePublic.optional(),
         model: core.serialization.string().optional(),
         provider: core.serialization.string().optional(),
@@ -58,8 +59,8 @@ export declare namespace SpanPublic {
         type: SpanPublicType.Raw;
         start_time: string;
         end_time?: string | null;
-        input?: JsonNodePublic.Raw | null;
-        output?: JsonNodePublic.Raw | null;
+        input?: JsonListStringPublic.Raw | null;
+        output?: JsonListStringPublic.Raw | null;
         metadata?: JsonNodePublic.Raw | null;
         model?: string | null;
         provider?: string | null;
