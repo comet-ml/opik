@@ -131,7 +131,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           onOpenChange={setIsHoldActionsVisible}
         />
       </div>
-      <TooltipWrapper content="Discurd changes">
+      <TooltipWrapper content="Discard changes">
         <Button
           variant="outline"
           size="icon-sm"

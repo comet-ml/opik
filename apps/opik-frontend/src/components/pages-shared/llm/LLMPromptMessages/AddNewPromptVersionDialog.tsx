@@ -152,9 +152,9 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           </div>
           {isEdit ? (
             <p className="comet-body-s whitespace-pre-wrap break-words pb-4 text-muted-slate">
-              By saving your changes to {selectedPrompt?.name ?? ""}, a new
-              commit will be created automatically. You can view and access
-              previous versions of your prompt on the
+              Saving your changes to {selectedPrompt?.name ?? ""} will
+              automatically create a new commit. You can view previous versions
+              anytime in the
               <Link
                 onClick={(event) => event.stopPropagation()}
                 to="/$workspaceName/prompts/$promptId"
@@ -169,7 +169,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
             </p>
           ) : (
             <p className="comet-body-s pb-4 text-muted-slate">
-              Prompt Save as a new prompt A new prompt will be created in the
+              A new prompt and first commit will be created in the
               <Link
                 onClick={(event) => event.stopPropagation()}
                 to="/$workspaceName/prompts"
