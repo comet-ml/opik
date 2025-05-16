@@ -3,15 +3,16 @@ package com.comet.opik.infrastructure.llm.vertexai;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import com.comet.opik.infrastructure.llm.vertexai.internal.VertexAiGeminiChatModelCustom;
 import com.google.auth.oauth2.ServiceAccountCredentials;
+import com.google.cloud.vertexai.Transport;
 import com.google.cloud.vertexai.VertexAI;
 import com.google.cloud.vertexai.api.GenerationConfig;
 import com.google.cloud.vertexai.generativeai.GenerativeModel;
 import com.google.common.base.Preconditions;
-import dev.ai4j.openai4j.chat.ChatCompletionRequest;
-import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.langchain4j.model.chat.StreamingChatLanguageModel;
-import dev.langchain4j.model.vertexai.VertexAiGeminiChatModel;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.StreamingChatModel;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.vertexai.VertexAiGeminiStreamingChatModel;
 import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
@@ -28,11 +29,11 @@ import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeMod
 
 @RequiredArgsConstructor
 @Slf4j
-public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatLanguageModel> {
+public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatModel> {
 
     private final @NonNull LlmProviderClientConfig clientConfig;
 
-    private ChatLanguageModel newVertexAIClient(@NonNull LlmProviderClientApiConfig apiKey,
+    private ChatModel newVertexAIClient(@NonNull LlmProviderClientApiConfig apiKey,
             @NonNull ChatCompletionRequest request) {
 
         VertexAI vertexAI = getVertexAI(apiKey);
@@ -41,7 +42,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
 
         GenerativeModel generativeModel = getGenerativeModel(request, vertexAI, generationConfig);
 
-        return new VertexAiGeminiChatModel(generativeModel, generationConfig);
+        return new VertexAiGeminiChatModelCustom(generativeModel, generationConfig);
     }
 
     private GenerativeModel getGenerativeModel(@NotNull ChatCompletionRequest request, VertexAI vertexAI,
@@ -53,7 +54,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
                 .withGenerationConfig(generationConfig);
     }
 
-    public StreamingChatLanguageModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
+    public StreamingChatModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
             @NonNull ChatCompletionRequest request) {
 
         VertexAI vertexAI = getVertexAI(apiKey);
@@ -113,6 +114,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
             return builder
                     .setProjectId(credentials.getProjectId())
                     .setCredentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
+                    .setTransport(Transport.REST)
                     .build();
 
         } catch (Exception e) {
@@ -121,7 +123,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
     }
 
     @Override
-    public ChatLanguageModel generate(LlmProviderClientApiConfig config, Object... params) {
+    public ChatModel generate(LlmProviderClientApiConfig config, Object... params) {
         Preconditions.checkArgument(params.length >= 1, "Expected at least 1 parameter, got " + params.length);
         ChatCompletionRequest request = (ChatCompletionRequest) Objects.requireNonNull(params[0],
                 "ChatCompletionRequest is required");
@@ -130,7 +132,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatL
     }
 
     @Override
-    public ChatLanguageModel generateChat(LlmProviderClientApiConfig apiKey,
+    public ChatModel generateChat(LlmProviderClientApiConfig apiKey,
             LlmAsJudgeModelParameters modelParameters) {
         return newVertexAIClient(apiKey, ChatCompletionRequest.builder()
                 .model(modelParameters.name())

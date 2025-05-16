@@ -22,10 +22,10 @@ import com.comet.opik.podam.manufacturer.anthropic.AnthropicCreateMessageRespons
 import com.comet.opik.podam.manufacturer.anthropic.AnthropicUsageManufacturer;
 import com.comet.opik.podam.manufacturer.anthropic.ChatCompletionRequestManufacturer;
 import com.fasterxml.jackson.databind.JsonNode;
-import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageResponse;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicUsage;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Pattern;
