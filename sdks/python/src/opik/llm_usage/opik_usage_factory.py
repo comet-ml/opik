@@ -5,7 +5,10 @@ from opik.types import LLMProvider
 from . import opik_usage
 
 
-_PROVIDER_TO_OPIK_USAGE_BUILDER: Dict[
+# One provider can have multiple formats of usage dicts, so it could be many build functions
+# if provider's name specified as string and not as LLMProvider enum value -
+# it means that we do not support cost tracking for this provider (but support usage info)
+_PROVIDER_TO_OPIK_USAGE_BUILDERS: Dict[
     Union[str, LLMProvider],
     List[Callable[[Dict[str, Any]], opik_usage.OpikUsage]],
 ] = {
@@ -24,7 +27,7 @@ def build_opik_usage(
     provider: Union[str, LLMProvider],
     usage: Dict[str, Any],
 ) -> opik_usage.OpikUsage:
-    build_functions = _PROVIDER_TO_OPIK_USAGE_BUILDER[provider]
+    build_functions = _PROVIDER_TO_OPIK_USAGE_BUILDERS[provider]
 
     for build_function in build_functions:
         try:
@@ -41,7 +44,7 @@ def build_opik_usage(
 def build_opik_usage_from_unknown_provider(
     usage: Dict[str, Any],
 ) -> opik_usage.OpikUsage:
-    for build_functions in _PROVIDER_TO_OPIK_USAGE_BUILDER.values():
+    for build_functions in _PROVIDER_TO_OPIK_USAGE_BUILDERS.values():
         for build_function in build_functions:
             try:
                 opik_usage_ = build_function(usage)
