@@ -121,7 +121,7 @@ def _parse_response_span_content(span_data: tracing.ResponseSpanData) -> ParsedS
 
     if response.usage is not None:
         opik_usage = llm_usage.try_build_opik_usage_or_log_error(
-            provider="_openai_responses",
+            provider=LLMProvider.OPENAI,
             usage=response.usage.model_dump(),
             logger=LOGGER,
             error_message="Failed to log usage in openai agent run",
