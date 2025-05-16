@@ -320,9 +320,15 @@
   font-weight: 400;
   letter-spacing: 0.02em;
   max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
 
   pre code {
     font-size: 0.875rem !important;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: break-word;
   }
 }
 

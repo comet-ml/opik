@@ -278,7 +278,7 @@ const PromptModelSelect = ({
           })}
         >
           <SelectValue
-            placeholder="Select a LLM model"
+            placeholder="Select an LLM model"
             data-testid="select-a-llm-model"
           >
             <div className="flex items-center gap-2">

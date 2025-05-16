@@ -13,6 +13,7 @@ import EditPromptVersionDialog from "@/components/pages/PromptPage/PromptTab/Edi
 import CommitHistory from "@/components/pages/PromptPage/PromptTab/CommitHistory";
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import usePromptVersionById from "@/api/prompts/usePromptVersionById";
+import TryInPlaygroundButton from "@/components/pages/PromptPage/TryInPlaygroundButton";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -76,7 +77,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   return (
     <>
       <div>
-        <div className="flex w-full items-center">
+        <div className="flex w-full items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -85,7 +86,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             <Info className="mr-2 size-3.5" />
             Use this prompt
           </Button>
-
+          <TryInPlaygroundButton prompt={prompt} />
           <Button
             className="ml-auto"
             variant="secondary"
@@ -97,7 +98,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           </Button>
         </div>
 
-        <div className="mt-6 flex gap-6 rounded-md border bg-white p-6">
+        <div className="mt-4 flex gap-6 rounded-md border bg-white p-6">
           <div className="flex grow flex-col gap-2">
             <p className="comet-body-s-accented text-foreground">Prompt</p>
             <code className="comet-code flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
