@@ -8,6 +8,7 @@ import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguratio
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import static com.comet.opik.api.Span.SpanPage;
@@ -73,7 +74,13 @@ public class SpanAssertions {
             }
 
             if (actualSpan.lastUpdatedAt() != null) {
-                assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
+                if (expectedSpan.lastUpdatedAt() != null) {
+                    assertThat(actualSpan.lastUpdatedAt())
+                            // Some JVMs can resolve higher than microseconds, such as nanoseconds in the Ubuntu AMD64 JVM
+                            .isAfterOrEqualTo(expectedSpan.lastUpdatedAt().truncatedTo(ChronoUnit.MICROS));
+                } else {
+                    assertThat(actualSpan.lastUpdatedAt()).isCloseTo(Instant.now(), within(2, ChronoUnit.SECONDS));
+                }
             }
 
             assertThat(actualSpan.feedbackScores())

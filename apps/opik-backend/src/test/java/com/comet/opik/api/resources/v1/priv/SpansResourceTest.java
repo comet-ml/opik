@@ -27,6 +27,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.RandomTestUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
@@ -143,7 +144,6 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NAME_NOT_FOUND_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
-import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.spans.SpanAssertions.IGNORED_FIELDS;
 import static com.comet.opik.api.resources.utils.spans.SpanAssertions.IGNORED_FIELDS_SCORES;
@@ -289,7 +289,7 @@ class SpansResourceTest {
                 .id();
     }
 
-    private UUID createProject(String projectName, String workspaceName, String apiKey) {
+    private void createProject(String projectName, String workspaceName, String apiKey) {
         try (Response response = client.target("%s/v1/private/projects".formatted(baseURI))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -297,7 +297,6 @@ class SpansResourceTest {
                 .post(Entity.json(Project.builder().name(projectName).build()))) {
 
             assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(201);
-            return getIdFromLocation(response.getLocation());
         }
     }
 
@@ -4718,10 +4717,11 @@ class SpansResourceTest {
             var metadata = JsonUtils
                     .getJsonNodeFromString(
                             "{\"created_from\":\"openai\",\"type\":\"openai_chat\",\"model\":\"gpt-3.5-turbo\"}");
-            String metadataWithCost = "{\"cost\": {\n" +
-                    "    \"total_tokens\": %s,\n" +
-                    "    \"currency\": \"%s\"\n" +
-                    "  }}";
+            String metadataWithCost = """
+                    {"cost": {
+                        "total_tokens": %s,
+                        "currency": "%s"
+                      }}""";
 
             return Stream.of(
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
@@ -5149,6 +5149,115 @@ class SpansResourceTest {
                     API_KEY, List.of(), List.of());
         }
 
+        @Test
+        void upsert() {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            // Ingesting spans with the minimum required fields
+            var expectedSpans0 = IntStream.range(0, 5)
+                    .mapToObj(i -> Span.builder()
+                            .projectName(projectName)
+                            .id(generator.generate())
+                            .traceId(generator.generate())
+                            .name("name-00-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                            .type(RandomTestUtils.randomEnumValue(SpanType.class))
+                            .startTime(Instant.now())
+                            .createdAt(Instant.now())
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(expectedSpans0, API_KEY, TEST_WORKSPACE);
+            getAndAssertPage(
+                    TEST_WORKSPACE,
+                    projectName,
+                    List.of(),
+                    List.of(),
+                    expectedSpans0.reversed(),
+                    List.of(),
+                    API_KEY,
+                    List.of(),
+                    List.of());
+
+            // The spans are overwritten, by using a server side generated last_updated_at
+            var expectedSpans1 = IntStream.range(0, 5)
+                    .mapToObj(i -> podamFactory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .id(expectedSpans0.get(i).id())
+                            .traceId(expectedSpans0.get(i).traceId())
+                            .parentSpanId(expectedSpans0.get(i).parentSpanId())
+                            .name("name-01-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                            .type(expectedSpans0.get(i).type())
+                            .startTime(expectedSpans0.get(i).startTime())
+                            .lastUpdatedAt(null)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(expectedSpans1, API_KEY, TEST_WORKSPACE);
+            getAndAssertPage(
+                    TEST_WORKSPACE,
+                    projectName,
+                    List.of(),
+                    List.of(),
+                    expectedSpans1.reversed(), // Finds the updated
+                    expectedSpans0, // Does not find the previous
+                    API_KEY,
+                    List.of(),
+                    List.of());
+
+            // The spans are overwritten, by using a client side generated last_updated_at
+            var expectedSpans2 = IntStream.range(0, 5)
+                    .mapToObj(i -> podamFactory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .id(expectedSpans0.get(i).id())
+                            .traceId(expectedSpans0.get(i).traceId())
+                            .parentSpanId(expectedSpans0.get(i).parentSpanId())
+                            .name("name-02-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                            .type(expectedSpans0.get(i).type())
+                            .startTime(expectedSpans0.get(i).startTime())
+                            .lastUpdatedAt(Instant.now().plus(1, ChronoUnit.DAYS))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(expectedSpans2, API_KEY, TEST_WORKSPACE);
+            getAndAssertPage(
+                    TEST_WORKSPACE,
+                    projectName,
+                    List.of(),
+                    List.of(),
+                    expectedSpans2.reversed(), // Finds the updated
+                    expectedSpans1, // Does not find the previous
+                    API_KEY,
+                    List.of(),
+                    List.of());
+
+            // The span is not overwritten, the client side last_updated_at is older
+            var unexpectedSpans = IntStream.range(0, 5)
+                    .mapToObj(i -> podamFactory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .id(expectedSpans0.get(i).id())
+                            .traceId(expectedSpans0.get(i).traceId())
+                            .parentSpanId(expectedSpans0.get(i).parentSpanId())
+                            .name("name-03-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                            .type(expectedSpans0.get(i).type())
+                            .startTime(expectedSpans0.get(i).startTime())
+                            .lastUpdatedAt(Instant.now().minus(1, ChronoUnit.DAYS))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(unexpectedSpans, API_KEY, TEST_WORKSPACE);
+            getAndAssertPage(
+                    TEST_WORKSPACE,
+                    projectName,
+                    List.of(),
+                    List.of(),
+                    expectedSpans2.reversed(), // finds the previous
+                    unexpectedSpans, // Does not find the update attempt
+                    API_KEY,
+                    List.of(),
+                    List.of());
+        }
+
         @ParameterizedTest
         @MethodSource("com.comet.opik.api.resources.utils.QuotaLimitTestUtils#quotaLimitsTestProvider")
         void testQuotasLimit_whenLimitIsEmptyOrNotReached_thenAcceptCreation(
@@ -5188,7 +5297,9 @@ class SpansResourceTest {
         assertThat(actualSpan.projectId()).isNotNull();
         assertThat(actualSpan.projectName()).isEqualTo(expectedSpan.projectName());
         assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
-        assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
+        assertThat(actualSpan.lastUpdatedAt())
+                // Some JVMs can resolve higher than microseconds, such as nanoseconds in the Ubuntu AMD64 JVM
+                .isAfterOrEqualTo(expectedSpan.lastUpdatedAt().truncatedTo(ChronoUnit.MICROS));
         assertThat(actualSpan.createdBy()).isEqualTo(USER);
         assertThat(actualSpan.lastUpdatedBy()).isEqualTo(USER);
         var expected = DurationUtils.getDurationInMillisWithSubMilliPrecision(
@@ -5382,10 +5493,11 @@ class SpansResourceTest {
         }
 
         Stream<Arguments> update__whenCostIsChanged__thenAcceptUpdate() {
-            String metadataWithCost = "{\"cost\": {\n" +
-                    "    \"total_tokens\": %s,\n" +
-                    "    \"currency\": \"%s\"\n" +
-                    "  }}";
+            String metadataWithCost = """
+                    {"cost": {
+                        "total_tokens": %s,
+                        "currency": "%s"
+                      }}""";
 
             return Stream.of(
                     arguments(SpanUpdate.builder().model("gpt-4o-2024-05-13").totalEstimatedCost(null).build(), null),
