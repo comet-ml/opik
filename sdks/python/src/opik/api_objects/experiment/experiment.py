@@ -99,8 +99,8 @@ class Experiment:
         from the backend. If truncation is enabled, the backend may return truncated details for each item.
 
         Args:
-            max_results: Maximum number of experiment items to retrieve. Defaults to None (unlimited).
-            truncate: Whether to truncate the items returned by the backend. Defaults to True.
+            max_results: Maximum number of experiment items to retrieve.
+            truncate: Whether to truncate the items returned by the backend.
 
         """
         result: List[experiment_item.ExperimentItemContent] = []
