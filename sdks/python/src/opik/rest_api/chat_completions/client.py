@@ -54,6 +54,10 @@ class ChatCompletionsClient:
         tools: typing.Optional[typing.Sequence[Tool]] = OMIT,
         tool_choice: typing.Optional[typing.Dict[str, typing.Optional[typing.Any]]] = OMIT,
         parallel_tool_calls: typing.Optional[bool] = OMIT,
+        store: typing.Optional[bool] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        reasoning_effort: typing.Optional[str] = OMIT,
+        service_tier: typing.Optional[str] = OMIT,
         functions: typing.Optional[typing.Sequence[Function]] = OMIT,
         function_call: typing.Optional[FunctionCall] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -101,6 +105,14 @@ class ChatCompletionsClient:
 
         parallel_tool_calls : typing.Optional[bool]
 
+        store : typing.Optional[bool]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
+
+        reasoning_effort : typing.Optional[str]
+
+        service_tier : typing.Optional[str]
+
         functions : typing.Optional[typing.Sequence[Function]]
 
         function_call : typing.Optional[FunctionCall]
@@ -139,6 +151,10 @@ class ChatCompletionsClient:
             tools=tools,
             tool_choice=tool_choice,
             parallel_tool_calls=parallel_tool_calls,
+            store=store,
+            metadata=metadata,
+            reasoning_effort=reasoning_effort,
+            service_tier=service_tier,
             functions=functions,
             function_call=function_call,
             request_options=request_options,
@@ -183,6 +199,10 @@ class AsyncChatCompletionsClient:
         tools: typing.Optional[typing.Sequence[Tool]] = OMIT,
         tool_choice: typing.Optional[typing.Dict[str, typing.Optional[typing.Any]]] = OMIT,
         parallel_tool_calls: typing.Optional[bool] = OMIT,
+        store: typing.Optional[bool] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        reasoning_effort: typing.Optional[str] = OMIT,
+        service_tier: typing.Optional[str] = OMIT,
         functions: typing.Optional[typing.Sequence[Function]] = OMIT,
         function_call: typing.Optional[FunctionCall] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -230,6 +250,14 @@ class AsyncChatCompletionsClient:
 
         parallel_tool_calls : typing.Optional[bool]
 
+        store : typing.Optional[bool]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
+
+        reasoning_effort : typing.Optional[str]
+
+        service_tier : typing.Optional[str]
+
         functions : typing.Optional[typing.Sequence[Function]]
 
         function_call : typing.Optional[FunctionCall]
@@ -271,6 +299,10 @@ class AsyncChatCompletionsClient:
             tools=tools,
             tool_choice=tool_choice,
             parallel_tool_calls=parallel_tool_calls,
+            store=store,
+            metadata=metadata,
+            reasoning_effort=reasoning_effort,
+            service_tier=service_tier,
             functions=functions,
             function_call=function_call,
             request_options=request_options,

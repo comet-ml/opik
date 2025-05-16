@@ -22,6 +22,7 @@ export interface SpanWrite {
     tags?: string[];
     usage?: Record<string, number>;
     errorInfo?: OpikApi.ErrorInfoWrite;
+    lastUpdatedAt?: Date;
     totalEstimatedCost?: number;
     totalEstimatedCostVersion?: string;
 }

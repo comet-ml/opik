@@ -4,13 +4,12 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .delta_role import DeltaRole
 from .function_call import FunctionCall
 from .tool_call import ToolCall
 
 
 class Delta(UniversalBaseModel):
-    role: typing.Optional[DeltaRole] = None
+    role: typing.Optional[str] = None
     content: typing.Optional[str] = None
     tool_calls: typing.Optional[typing.List[ToolCall]] = None
     function_call: typing.Optional[FunctionCall] = None

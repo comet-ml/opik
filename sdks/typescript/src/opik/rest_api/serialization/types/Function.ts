@@ -5,14 +5,18 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
-import { JsonObjectSchema } from "./JsonObjectSchema";
 
 export const Function: core.serialization.ObjectSchema<serializers.Function.Raw, OpikApi.Function> =
     core.serialization.object({
         name: core.serialization.string().optional(),
         description: core.serialization.string().optional(),
         strict: core.serialization.boolean().optional(),
-        parameters: JsonObjectSchema.optional(),
+        parameters: core.serialization
+            .record(
+                core.serialization.string(),
+                core.serialization.record(core.serialization.string(), core.serialization.unknown()),
+            )
+            .optional(),
     });
 
 export declare namespace Function {
@@ -20,6 +24,6 @@ export declare namespace Function {
         name?: string | null;
         description?: string | null;
         strict?: boolean | null;
-        parameters?: JsonObjectSchema.Raw | null;
+        parameters?: Record<string, Record<string, unknown>> | null;
     }
 }
