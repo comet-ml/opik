@@ -3,7 +3,7 @@ import { Play } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 import useAppStore from "@/store/AppStore";
-import { useSetPromptMap } from "@/store/PlaygroundStore";
+import { usePromptMap, useSetPromptMap } from "@/store/PlaygroundStore";
 import { PromptWithLatestVersion } from "@/types/prompts";
 import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
@@ -26,7 +26,9 @@ const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
 
+  const promptMap = usePromptMap();
   const setPromptMap = useSetPromptMap();
+
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
   });
@@ -37,6 +39,16 @@ const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
     useProviderKeys({
       workspaceName,
     });
+
+  const isPlaygroundEmpty = useMemo(() => {
+    const keys = Object.keys(promptMap);
+
+    return (
+      keys.length === 1 &&
+      promptMap[keys[0]]?.messages?.length === 1 &&
+      promptMap[keys[0]]?.messages[0]?.content === ""
+    );
+  }, [promptMap]);
 
   const providerKeys = useMemo(() => {
     return providerKeysData?.content?.map((c) => c.provider) || [];
@@ -82,8 +94,12 @@ const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
         size="sm"
         disabled={!prompt || isPendingProviderKeys}
         onClick={() => {
-          resetKeyRef.current = resetKeyRef.current + 1;
-          setOpen(true);
+          if (isPlaygroundEmpty) {
+            loadPlayground();
+          } else {
+            resetKeyRef.current = resetKeyRef.current + 1;
+            setOpen(true);
+          }
         }}
       >
         <Play className="mr-2 size-3.5" />

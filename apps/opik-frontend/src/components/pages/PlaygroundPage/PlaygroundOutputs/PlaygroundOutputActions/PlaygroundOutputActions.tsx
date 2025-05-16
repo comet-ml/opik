@@ -131,8 +131,8 @@ const PlaygroundOutputActions = ({
 
     const selectLLMModelMessage =
       promptCount === 1
-        ? "Please select a LLM model for your prompt"
-        : "Please select a LLM model for your prompts";
+        ? "Please select an LLM model for your prompt"
+        : "Please select an LLM model for your prompts";
 
     const datasetRemovedMessage = isDatasetRemoved
       ? "Your dataset has been removed. Select another one"
