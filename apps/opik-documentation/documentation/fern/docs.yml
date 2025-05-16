@@ -304,6 +304,9 @@ navigation:
           - page: Gateway
             path: docs/production/gateway.mdx
             slug: gateway
+          - page: Guardrails
+            path: docs/production/guardrails.mdx
+            slug: guardrails
   - tab: agent-optimization
     layout:
       - page: Overview
@@ -469,6 +472,18 @@ navigation:
           - page: Overview
             path: docs/reference/typescript-sdk/overview.mdx
             slug: overview
+          - section: Integrations
+            slug: integrations
+            contents:
+              - page: Overview
+                path: docs/reference/typescript-sdk/integrations/overview.mdx
+                slug: overview
+              - page: Vercel AI SDK
+                path: docs/reference/typescript-sdk/integrations/vercel-ai-sdk.mdx
+                slug: vercel-ai-sdk
+              - page: LangChain
+                path: docs/reference/typescript-sdk/integrations/langchain.mdx
+                slug: langchain
       - section: Rest API
         slug: rest-api
         contents:
@@ -478,6 +493,12 @@ navigation:
           - api: API Reference
             slug: /
             display-errors: true
+      - section: Ruby OpenTelemetry SDK docs
+        slug: ruby-otel-sdk
+        contents:
+          - page: Overview
+            path: docs/reference/ruby-otel-sdk/overview.mdx
+            slug: overview
 redirects:
   - source: "/docs/opik/playground"
     destination: "/docs/opik/prompt_engineering/playground"
@@ -494,11 +515,14 @@ redirects:
   - source: "/docs/opik/reference/rest_api/opik-rest-api/:slug/:slug"
     destination: "/docs/opik/reference/rest-api/overview"
     permanent: true
-  - source: "docs/prompt_engineering/managing_prompts_in_code"
+  - source: "/docs/opik/prompt_engineering/managing_prompts_in_code"
     destination: "/docs/opik/prompt_engineering/prompt_management"
     permanent: true
-  - source: "docs/prompt_engineering/prompt_optimization"
-    destination: "docs/agent_optimization/best-practices/prompt_engineering"
+  - source: "/docs/opik/prompt_engineering/prompt_optimization"
+    destination: "/docs/opik/agent_optimization/best-practices/prompt_engineering"
+    permanent: true
+  - source: "/docs/opik/prompt_engineering/agent_optimization"
+    destination: "/docs/opik/agent_optimization/overview"
     permanent: true
   - source: "docs/prompt_engineering/agent_optimization"
     destination: "docs/agent_optimization/overview"
