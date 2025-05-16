@@ -279,6 +279,7 @@ class RawSpansClient:
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
         total_estimated_cost: typing.Optional[float] = OMIT,
         total_estimated_cost_version: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -321,6 +322,8 @@ class RawSpansClient:
 
         error_info : typing.Optional[ErrorInfoWrite]
 
+        last_updated_at : typing.Optional[dt.datetime]
+
         total_estimated_cost : typing.Optional[float]
 
         total_estimated_cost_version : typing.Optional[str]
@@ -354,6 +357,7 @@ class RawSpansClient:
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfoWrite, direction="write"
                 ),
+                "last_updated_at": last_updated_at,
                 "total_estimated_cost": total_estimated_cost,
                 "total_estimated_cost_version": total_estimated_cost_version,
             },
@@ -1309,6 +1313,7 @@ class AsyncRawSpansClient:
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
         total_estimated_cost: typing.Optional[float] = OMIT,
         total_estimated_cost_version: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1351,6 +1356,8 @@ class AsyncRawSpansClient:
 
         error_info : typing.Optional[ErrorInfoWrite]
 
+        last_updated_at : typing.Optional[dt.datetime]
+
         total_estimated_cost : typing.Optional[float]
 
         total_estimated_cost_version : typing.Optional[str]
@@ -1384,6 +1391,7 @@ class AsyncRawSpansClient:
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfoWrite, direction="write"
                 ),
+                "last_updated_at": last_updated_at,
                 "total_estimated_cost": total_estimated_cost,
                 "total_estimated_cost_version": total_estimated_cost_version,
             },

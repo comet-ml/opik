@@ -5,11 +5,13 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { PromptTokensDetails } from "./PromptTokensDetails";
 import { CompletionTokensDetails } from "./CompletionTokensDetails";
 
 export const Usage: core.serialization.ObjectSchema<serializers.Usage.Raw, OpikApi.Usage> = core.serialization.object({
     totalTokens: core.serialization.property("total_tokens", core.serialization.number().optional()),
     promptTokens: core.serialization.property("prompt_tokens", core.serialization.number().optional()),
+    promptTokensDetails: core.serialization.property("prompt_tokens_details", PromptTokensDetails.optional()),
     completionTokens: core.serialization.property("completion_tokens", core.serialization.number().optional()),
     completionTokensDetails: core.serialization.property(
         "completion_tokens_details",
@@ -21,6 +23,7 @@ export declare namespace Usage {
     export interface Raw {
         total_tokens?: number | null;
         prompt_tokens?: number | null;
+        prompt_tokens_details?: PromptTokensDetails.Raw | null;
         completion_tokens?: number | null;
         completion_tokens_details?: CompletionTokensDetails.Raw | null;
     }

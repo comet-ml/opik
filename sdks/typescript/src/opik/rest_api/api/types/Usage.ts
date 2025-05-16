@@ -7,6 +7,7 @@ import * as OpikApi from "../index";
 export interface Usage {
     totalTokens?: number;
     promptTokens?: number;
+    promptTokensDetails?: OpikApi.PromptTokensDetails;
     completionTokens?: number;
     completionTokensDetails?: OpikApi.CompletionTokensDetails;
 }

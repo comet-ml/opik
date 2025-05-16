@@ -27,6 +27,7 @@ export const SpanWrite: core.serialization.ObjectSchema<serializers.SpanWrite.Ra
         tags: core.serialization.list(core.serialization.string()).optional(),
         usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
         errorInfo: core.serialization.property("error_info", ErrorInfoWrite.optional()),
+        lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
         totalEstimatedCostVersion: core.serialization.property(
             "total_estimated_cost_version",
@@ -52,6 +53,7 @@ export declare namespace SpanWrite {
         tags?: string[] | null;
         usage?: Record<string, number> | null;
         error_info?: ErrorInfoWrite.Raw | null;
+        last_updated_at?: string | null;
         total_estimated_cost?: number | null;
         total_estimated_cost_version?: string | null;
     }

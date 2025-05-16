@@ -5,19 +5,23 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
-import { JsonObjectSchema } from "./JsonObjectSchema";
 
 export const JsonSchema: core.serialization.ObjectSchema<serializers.JsonSchema.Raw, OpikApi.JsonSchema> =
     core.serialization.object({
         name: core.serialization.string().optional(),
         strict: core.serialization.boolean().optional(),
-        schema: JsonObjectSchema.optional(),
+        schema: core.serialization
+            .record(
+                core.serialization.string(),
+                core.serialization.record(core.serialization.string(), core.serialization.unknown()),
+            )
+            .optional(),
     });
 
 export declare namespace JsonSchema {
     export interface Raw {
         name?: string | null;
         strict?: boolean | null;
-        schema?: JsonObjectSchema.Raw | null;
+        schema?: Record<string, Record<string, unknown>> | null;
     }
 }

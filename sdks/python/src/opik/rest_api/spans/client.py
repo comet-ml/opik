@@ -255,6 +255,7 @@ class SpansClient:
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
         total_estimated_cost: typing.Optional[float] = OMIT,
         total_estimated_cost_version: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -297,6 +298,8 @@ class SpansClient:
 
         error_info : typing.Optional[ErrorInfoWrite]
 
+        last_updated_at : typing.Optional[dt.datetime]
+
         total_estimated_cost : typing.Optional[float]
 
         total_estimated_cost_version : typing.Optional[str]
@@ -332,6 +335,7 @@ class SpansClient:
             tags=tags,
             usage=usage,
             error_info=error_info,
+            last_updated_at=last_updated_at,
             total_estimated_cost=total_estimated_cost,
             total_estimated_cost_version=total_estimated_cost_version,
             request_options=request_options,
@@ -1052,6 +1056,7 @@ class AsyncSpansClient:
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
         total_estimated_cost: typing.Optional[float] = OMIT,
         total_estimated_cost_version: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1094,6 +1099,8 @@ class AsyncSpansClient:
 
         error_info : typing.Optional[ErrorInfoWrite]
 
+        last_updated_at : typing.Optional[dt.datetime]
+
         total_estimated_cost : typing.Optional[float]
 
         total_estimated_cost_version : typing.Optional[str]
@@ -1132,6 +1139,7 @@ class AsyncSpansClient:
             tags=tags,
             usage=usage,
             error_info=error_info,
+            last_updated_at=last_updated_at,
             total_estimated_cost=total_estimated_cost,
             total_estimated_cost_version=total_estimated_cost_version,
             request_options=request_options,
