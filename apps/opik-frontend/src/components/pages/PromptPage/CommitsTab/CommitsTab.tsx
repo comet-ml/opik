@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { RowSelectionState } from "@tanstack/react-table";
+import useLocalStorageState from "use-local-storage-state";
 import get from "lodash/get";
 import isObject from "lodash/isObject";
 
@@ -26,6 +27,8 @@ export const getRowId = (p: PromptVersion) => p.id;
 interface CommitsTabInterface {
   prompt?: PromptWithLatestVersion;
 }
+
+const PAGINATION_SIZE_KEY = "prompt-commits-pagination-size";
 
 export const COMMITS_DEFAULT_COLUMNS = [
   generateSelectColumDef<PromptVersion>(),
@@ -84,7 +87,9 @@ export const COMMITS_DEFAULT_COLUMNS = [
 
 const CommitsTab = ({ prompt }: CommitsTabInterface) => {
   const [page, setPage] = useState(1);
-  const [size, setSize] = useState(10);
+  const [size, setSize] = useLocalStorageState<number>(PAGINATION_SIZE_KEY, {
+    defaultValue: 10,
+  });
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
