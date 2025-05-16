@@ -1,7 +1,6 @@
 <Tip>
-  If you are just getting started with Opik, we recommend first checking out the
-  [Quickstart](/quickstart) guide that will walk you through the process of
-  logging your first LLM call.
+  If you are just getting started with Opik, we recommend first checking out the [Quickstart](/quickstart) guide that
+  will walk you through the process of logging your first LLM call.
 </Tip>
 
 LLM applications are complex systems that do more than just call an LLM API, they will often involve retrieval, pre-processing and post-processing steps.
@@ -51,9 +50,8 @@ opik.configure(use_local=False)
 </Tabs>
 
 <Tip>
-  Opik is open-source and can be hosted locally using Docker, please refer to
-  the [self-hosting guide](/self-host/overview) to get started. Alternatively,
-  you can use our hosted platform by creating an account on
+  Opik is open-source and can be hosted locally using Docker, please refer to the [self-hosting
+  guide](/self-host/overview) to get started. Alternatively, you can use our hosted platform by creating an account on
   [Comet](https://www.comet.com/signup?from=llm).
 </Tip>
 
@@ -158,9 +156,8 @@ query_engine.query("What is LlamaIndex used for?")
 </Tabs>
 
 <Tip>
-  If you are using a framework that Opik does not integrate with, you can raise
-  a feature request on our [Github](https://github.com/comet-ml/opik)
-  repository.
+  If you are using a framework that Opik does not integrate with, you can raise a feature request on our
+  [Github](https://github.com/comet-ml/opik) repository.
 </Tip>
 
 If you are using a framework that Opik does not integrate with, we recommed you use the `opik.track` function decorator.
@@ -391,8 +388,8 @@ trace.end()
 ```
 
 <Note>
-  It is recommended to call `trace.end()` and `span.end()` when you are finished
-  with the trace and span to ensure that the end time is logged correctly.
+  It is recommended to call `trace.end()` and `span.end()` when you are finished with the trace and span to ensure that
+  the end time is logged correctly.
 </Note>
 
 #### Logging feedback scores
@@ -424,9 +421,8 @@ client.log_spans_feedback_scores(
 ```
 
 <Tip>
-  If you want to log scores to traces or spans from within a decorated function,
-  you can use the `update_current_trace` and `update_current_span` methods
-  instead.
+  If you want to log scores to traces or spans from within a decorated function, you can use the `update_current_trace`
+  and `update_current_span` methods instead.
 </Tip>
 
 #### Ensuring all traces are logged
@@ -449,10 +445,10 @@ client.flush()
 You can copy traces between projects using the [`copy_traces`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.copy_traces) method. This
 method allows you to move traces from one project to another without having to re-log them.
 
-```python
+```python {pytest_codeblocks_skip=true}
 from opik import Opik
 
-client = Opik()
+client = Opik(_use_batching=True)
 
 client.copy_traces(
     project_name="<name of the project where the traces were created>",
@@ -568,13 +564,10 @@ const translate = track({ name: "translate" }, async (text: string) => {
   return `Translated: ${text}`;
 });
 
-const process = track(
-  { name: "process", projectName: "translation-service" },
-  async () => {
-    const text = await generateText();
-    return translate(text);
-  }
-);
+const process = track({ name: "process", projectName: "translation-service" }, async () => {
+  const text = await generateText();
+  return translate(text);
+});
 ```
 
 On calling `process()` it'll create a trace and create all the spans for each tracked function called in this function
@@ -611,8 +604,7 @@ class TranslationService {
 ### Using the REST API
 
 <Warning>
-  The Opik REST API is currently in beta and subject to change, if you encounter
-  any issues please report them to the
+  The Opik REST API is currently in beta and subject to change, if you encounter any issues please report them to the
   [Github](https://github.com/comet-ml/opik).
 </Warning>
 

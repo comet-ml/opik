@@ -1,0 +1,160 @@
+[AG2](https://ag2.ai/) is an open-source programming framework for building AI agents and facilitating cooperation among multiple agents to solve tasks. AG2 aims to streamline the development and research of agentic AI. It offers features such as agents capable of interacting with each other, facilitates the use of various large language models (LLMs) and tool use support, autonomous and human-in-the-loop workflows, and multi-agent conversation patterns.
+
+Opik's integration with AG2 relies on OpenTelemetry. You can learn more about Opik's OpenTelemetry features
+in our [get started guide](/tracing/opentelemetry/overview).
+
+## Getting started
+
+To use the AG2 integration with Opik, you will need to have the following
+packages installed:
+
+```bash
+pip install -U "ag2[openai]" opik opentelemetry-sdk opentelemetry-instrumentation-openai opentelemetry-instrumentation-threading opentelemetry-exporter-otlp
+```
+
+In addition, you will need to set the following environment variables to
+configure the OpenTelemetry integration:
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        If you are using Opik Cloud, you will need to set the following
+        environment variables:
+            
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+
+    If you are self-hosting Opik, you will need to set the following environment
+    variables:
+
+    ```bash
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+    ```
+
+    <Tip>
+        To log the traces to a specific project, you can add the `projectName`
+        parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
+
+        ```bash
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+
+    </Tip>
+    </Tab>
+
+</Tabs>
+
+## Using Opik with AG2
+
+The example below shows how to use the AG2 integration with Opik:
+
+```python {pytest_codeblocks_skip=true}
+## First we will configure the OpenTelemetry
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.instrumentation.openai import OpenAIInstrumentor
+from opentelemetry.instrumentation.threading import ThreadingInstrumentor
+
+
+def setup_telemetry():
+    """Configure OpenTelemetry with HTTP exporter"""
+    # Create a resource with service name and other metadata
+    resource = Resource.create(
+        {
+            "service.name": "ag2-demo",
+            "service.version": "1.0.0",
+            "deployment.environment": "development",
+        }
+    )
+
+    # Create TracerProvider with the resource
+    provider = TracerProvider(resource=resource)
+
+    # Create BatchSpanProcessor with OTLPSpanExporter
+    processor = BatchSpanProcessor(OTLPSpanExporter())
+    provider.add_span_processor(processor)
+
+    # Set the TracerProvider
+    trace.set_tracer_provider(provider)
+
+    tracer = trace.get_tracer(__name__)
+
+    # Instrument OpenAI calls
+    OpenAIInstrumentor().instrument(tracer_provider=provider)
+
+    # AG2 calls OpenAI in background threads, propagate the context so all spans ends up in the same trace
+    ThreadingInstrumentor().instrument()
+
+    return tracer, provider
+
+
+# 1. Import our agent class
+from autogen import ConversableAgent, LLMConfig
+
+# 2. Define our LLM configuration for OpenAI's GPT-4o mini
+#    uses the OPENAI_API_KEY environment variable
+llm_config = LLMConfig(api_type="openai", model="gpt-4o-mini")
+
+# 3. Create our LLM agent within the parent span context
+with llm_config:
+    my_agent = ConversableAgent(
+        name="helpful_agent",
+        system_message="You are a poetic AI assistant, respond in rhyme.",
+    )
+
+
+def main(message):
+    response = my_agent.run(message=message, max_turns=2, user_input=True)
+
+    # 5. Iterate through the chat automatically with console output
+    response.process()
+
+    # 6. Print the chat
+    print(response.messages)
+
+    return response.messages
+
+
+if __name__ == "__main__":
+    tracer, provider = setup_telemetry()
+
+    # 4. Run the agent with a prompt
+    with tracer.start_as_current_span(my_agent.name) as agent_span:
+        message = "In one sentence, what's the big deal about AI?"
+
+        agent_span.set_attribute("input", message)  # Manually log the question
+
+        response = main(message)
+
+        # Manually log the response
+        agent_span.set_attribute("output", response)
+
+    # Force flush all spans to ensure they are exported
+    provider = trace.get_tracer_provider()
+    provider.force_flush()
+```
+
+Once the integration is set-up, you will see the trace in Opik:
+
+<Frame>
+  <img src="/img/tracing/ag2_integration.png" />
+</Frame>
