@@ -71,7 +71,9 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
                     encoded_value = encode(value, seen)
                     encoded_dict[encoded_key] = encoded_value
             return encoded_dict
+
         if isinstance(obj, (list, set, frozenset, GeneratorType, tuple)):
+            print(obj)
             encoded_list = []
             for item in obj:
                 encoded_list.append(encode(item, seen))
@@ -79,6 +81,9 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
 
         if np is not None and isinstance(obj, np.ndarray):
             return encode(obj.tolist(), seen)
+
+        if _is_pydantic_iterator_validator(obj):
+            return "<Pydantic Iterator Validator serialization is not supported>"
 
     except Exception:
         LOGGER.debug("Failed to serialize object.", exc_info=True)
@@ -93,3 +98,15 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
     data = str(obj)
 
     return data
+
+
+def _is_pydantic_iterator_validator(obj: Any) -> bool:
+    if "ValidatorIterator" == obj.__class__.__name__ and "pydantic" in obj.__module__:
+        # ValidatorIterator is not defined in python code and is added to the pydantic-core
+        # namespace during the runtime.
+        # This class fully replaces the original generator object, so it is not possible
+        # to extract any extra information from the object.
+
+        return True
+
+    return False
