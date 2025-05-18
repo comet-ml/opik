@@ -123,7 +123,7 @@ def _load_hotpot_500(test_mode: bool = False) -> List[Dict[str, Any]]:
     try:
         # Use streaming to avoid downloading the entire dataset
         dataset = load_dataset(
-            "vincentkoc/hotpot_qa_archive", "distractor", streaming=True
+            "vincentkoc/hotpot_qa_archive", "distractor", streaming=True, trust_remote_code=True
         )
         seed = 2024  # Same seed as DSPy
         size = 500 if not test_mode else 5
@@ -156,7 +156,7 @@ def _load_hotpot_300(test_mode: bool = False) -> List[Dict[str, Any]]:
     try:
         # Use streaming to avoid downloading the entire dataset
         dataset = load_dataset(
-            "vincentkoc/hotpot_qa_archive", "distractor", streaming=True
+            "vincentkoc/hotpot_qa_archive", "distractor", streaming=True, trust_remote_code=True
         )
         seed = 42  # Same seed as DSPy
         size = 300 if not test_mode else 3
@@ -273,7 +273,7 @@ def _load_hotpot_qa(test_mode: bool = False) -> List[Dict[str, Any]]:
     try:
         # Use streaming to avoid downloading the entire dataset
         dataset = load_dataset(
-            "vincentkoc/hotpot_qa_archive", "distractor", streaming=True
+            "vincentkoc/hotpot_qa_archive", "distractor", streaming=True, trust_remote_code=True
         )
         n_samples = 5 if test_mode else 300
 
