@@ -2,34 +2,26 @@ The MetaPrompter is a specialized optimizer designed for meta-prompt optimizatio
 
 ## How It Works
 
-1. **Template Analysis**
+The `MetaPromptOptimizer` automates the process of prompt refinement by using a "reasoning" LLM to critique and improve your initial prompt. Here's a conceptual breakdown:
 
-   - Deconstructs prompts into components
-   - Identifies key structural elements
-   - Analyzes component relationships
+1.  **Initial Prompt Evaluation**: Your starting `instruction_prompt` is first evaluated on the dataset using the specified `metric_config` to establish a baseline score.
 
-2. **Instruction Optimization**
+2.  **Reasoning and Candidate Generation**: 
+    *   The optimizer takes your current best prompt and detailed context about the task (derived from `task_config` and `metric_config`).
+    *   It then queries a `reasoning_model` (which can be the same as the evaluation `model` or a different, potentially more powerful one). This `reasoning_model` is guided by a system prompt (the "meta-prompt") that instructs it to act as an expert prompt engineer.
+    *   The `reasoning_model` analyzes the provided prompt and task context, then generates a set of new candidate prompts. Each candidate is designed to improve upon the previous best, with specific reasoning for the suggested changes (e.g., "added more specific constraints," "rephrased for clarity").
 
-   - Refines task instructions
-   - Improves clarity and specificity
-   - Enhances task understanding
+3.  **Candidate Evaluation**: 
+    *   These newly generated candidate prompts are then evaluated on the dataset.
+    *   The optimizer uses an adaptive trial strategy: promising candidates (based on initial trials) may receive more evaluation trials up to `max_trials_per_candidate`.
 
-3. **Example Selection**
+4.  **Selection and Iteration**:
+    *   The best-performing candidate from the current round becomes the new "current best prompt."
+    *   This process repeats for a configured number of `max_rounds` or until the improvement in score falls below `improvement_threshold`.
 
-   - Evaluates example relevance
-   - Optimizes example ordering
-   - Balances diversity and relevance
+5.  **Result**: The highest-scoring prompt found throughout all rounds is returned as the optimized prompt.
 
-4. **Structural Refinement**
-
-   - Improves prompt organization
-   - Enhances readability
-   - Optimizes information flow
-
-5. **Validation and Testing**
-   - Multi-metric evaluation
-   - A/B testing of variations
-   - Performance tracking
+This iterative loop of generation, evaluation, and selection allows the `MetaPromptOptimizer` to explore different phrasings and structures, guided by the reasoning capabilities of an LLM.
 
 ## Configuration Options
 
