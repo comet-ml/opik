@@ -93,12 +93,6 @@ jobs:
           python_version: ${{ matrix.python_version }}
           library_name: adk
 
-      - name: Stop opik server
-        run: |
-          cd ${{ github.workspace }}/deployment/docker-compose
-          docker compose down
-
-
       - name: LiteLLM Tests Python ${{ matrix.python_version }}
         if: contains(fromJSON('["litellm", "all"]'), env.LIBS)
         env:
@@ -108,3 +102,8 @@ jobs:
         with:
           python_version: ${{ matrix.python_version }}
           library_name: litellm
+
+      - name: Stop opik server
+        run: |
+          cd ${{ github.workspace }}/deployment/docker-compose
+          docker compose down
