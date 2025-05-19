@@ -41,30 +41,31 @@ from opik_optimizer import MetaPromptOptimizer
 prompter = MetaPromptOptimizer(
     model="openai/gpt-4",  # or "azure/gpt-4"
     project_name="my-project",
+    # LLM parameters like temperature, max_tokens are passed as keyword arguments
     temperature=0.1,
     max_tokens=5000,
+    # Optimizer-specific parameters
+    reasoning_model="openai/gpt-4-turbo", # Optional: model for generating prompt suggestions
+    max_rounds=3,
+    num_prompts_per_round=4,
     num_threads=8,
-    seed=42
+    seed=42 # Seed for LLM calls if supported by the model
 )
 ```
 
 ### Advanced Configuration
 
-```python
-prompter = MetaPromptOptimizer(
-    model="openai/gpt-4",
-    project_name="my-project",
-    temperature=0.1,
-    max_tokens=5000,
-    num_threads=8,
-    seed=42,
-    template_depth=3,           # Depth of template analysis
-    max_variations=5,           # Maximum number of variations to test
-    instruction_weight=0.6,     # Weight of instruction optimization
-    example_weight=0.4,         # Weight of example optimization
-    readability_threshold=0.8   # Minimum readability score
-)
-```
+The `MetaPromptOptimizer` primarily uses the constructor parameters listed above for its configuration.
+Key parameters include:
+- `model`: The LLM used for evaluating generated prompts.
+- `reasoning_model`: (Optional) A separate, potentially more powerful LLM used by the optimizer to analyze and generate new prompt candidates. If not provided, `model` is used.
+- `max_rounds`: The number of optimization iterations.
+- `num_prompts_per_round`: How many new prompt candidates are generated in each round.
+- `initial_trials_per_candidate` / `max_trials_per_candidate`: Control the number of evaluations for each candidate.
+
+Additional LLM call parameters (e.g., `temperature`, `max_tokens`, `top_p`) for both the evaluation model and the reasoning model can be passed as keyword arguments (`**model_kwargs`) to the constructor. These will be used when making calls to the respective LLMs.
+
+The optimizer works by iteratively generating new prompt suggestions using its `reasoning_model` based on the performance of previous prompts and then evaluating these suggestions.
 
 ## Example Usage
 
@@ -100,7 +101,6 @@ metric_config = MetricConfig(
     }
 )
 task_config = TaskConfig(
-    type="text_generation",
     instruction_prompt="Provide an answer to the question.",
     input_dataset_fields=["question"],
     output_dataset_field="answer",

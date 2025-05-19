@@ -44,21 +44,18 @@ optimizer = MiproOptimizer(
 
 ### Advanced Configuration
 
-```python
-optimizer = MiproOptimizer(
-    model="openai/gpt-4",
-    project_name="my-project",
-    temperature=0.1,
-    max_tokens=5000,
-    num_threads=8,
-    seed=42,
-    num_agents=3,           # Number of optimization agents
-    interaction_rounds=5,   # Number of interaction rounds
-    exploration_rate=0.3,   # Exploration vs exploitation balance
-    feedback_weight=0.7,    # Weight of feedback in optimization
-    convergence_threshold=0.01  # Optimization convergence threshold
-)
-```
+The `MiproOptimizer` leverages the [DSPy](https://dspy.ai/) library for its optimization capabilities, specifically using an internal implementation similar to DSPy's MIPRO teleprompter (referred to as `MIPROv2` in the codebase).
+
+The constructor for `MiproOptimizer` is simple (`model`, `project_name`, `**model_kwargs`). The complexity of the optimization is managed within the DSPy framework when `optimize_prompt` is called.
+
+Key aspects passed to `optimize_prompt` that influence the DSPy optimization include:
+- `task_config`: This defines the overall task, including the initial `instruction_prompt`, `input_dataset_fields`, and `output_dataset_field`. If `task_config.tools` are provided, `MiproOptimizer` will attempt to build and optimize a DSPy agent that uses these tools.
+- `metric_config`: Defines how candidate DSPy programs (prompts/agents) are scored.
+- `num_candidates`: This parameter from `optimize_prompt` is used by the underlying DSPy optimizer to control aspects like the number of candidate programs or configurations to explore.
+
+LLM call parameters (e.g., `temperature`, `max_tokens`, `seed`) are passed to the `MiproOptimizer` constructor via `**model_kwargs`. These are then used to configure the Language Model (`LM`) within DSPy.
+
+For fine-grained control over the DSPy optimization process itself (e.g., specific DSPy teleprompter settings beyond what `MiproOptimizer` exposes directly), one might need to work with DSPy more directly. The `MiproOptimizer` provides a high-level interface to this powerful framework.
 
 ## Example Usage
 
@@ -92,7 +89,6 @@ metric_config = MetricConfig(
     }
 )
 task_config = TaskConfig(
-    type="text_generation",
     instruction_prompt="Provide an answer to the question.",
     input_dataset_fields=["question"],
     output_dataset_field="answer"
