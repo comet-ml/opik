@@ -4,7 +4,6 @@ subtitle: Describes how to run Opik on a Kubernetes cluster
 
 > **Important:** If you're using or looking to use Opik or Comet enterprise version please reach out to Sales@comet.com to gain access to the correct deployment documentation.
 
-
 For production deployments, we recommend using our Kubernetes Helm chart. This chart is designed to be highly configurable and has been battle-tested in Comet's managed cloud offering.
 
 # Prerequisites
@@ -27,6 +26,7 @@ helm repo update
 ```
 
 You can set VERSION to the specific Opik version or leave it as 'latest'
+
 ```bash
 VERSION=latest
 helm upgrade --install opik -n opik --create-namespace opik/opik \
@@ -54,7 +54,7 @@ You can find a full list the configuration options in the [helm chart documentat
 
 ### Configure ingress for opik-frontend
 
-```yaml 
+```yaml
 component:
     frontend:
       ingress:
@@ -79,8 +79,7 @@ component:
 clickhouse:
   service:
     serviceTemplate: clickhouse-cluster-svc-lb-template
-    annotations:
-      <your clickhouse LB service annotations>
+    annotations: <your clickhouse LB service annotations>
 ```
 
 ## Configure Clickhouse backup on S3 (or minio)
@@ -88,11 +87,14 @@ clickhouse:
 ### With AWS Key and Secret key
 
 You will need to create a secret with the credentials for the S3 bucket you want to use for backup with following values:
+
 ```yaml
 access_key_id: <your access key id>
 access_key_secret: <your access key secret>
 ```
+
 Add to your configuration
+
 ```yaml
 clickhouse:
   backup:
@@ -103,19 +105,19 @@ clickhouse:
     baseBackup: ""
 ```
 
-### With IAM Role 
+### With IAM Role
 
 ```yaml
 clickhouse:
-    backup:
-      serviceAccount:
-        enabled: true
-        annotations:
-          eks.amazonaws.com/role-arn: <your IAM role arn>
+  backup:
+    serviceAccount:
       enabled: true
-      bucketURL: https://<your bucket.s3.<region>.amazonaws.com
-      schedule: <your cron schedule, like "00 03 * * *">
-      baseBackup: ""
+      annotations:
+        eks.amazonaws.com/role-arn: <your IAM role arn>
+    enabled: true
+    bucketURL: https://<your bucket.s3.<region>.amazonaws.com
+    schedule: <your cron schedule, like "00 03 * * *">
+    baseBackup: ""
 ```
 
 ## Configure replication for Clickhouse
@@ -123,12 +125,12 @@ clickhouse:
 <Warning>
 
 **Important Limitation:**  
-You must have Opik running *before* you enable replication for ClickHouse.  
+You must have Opik running _before_ you enable replication for ClickHouse.  
 Attempting to set up replication before Opik is running may result in errors or misconfiguration.
 
 </Warning>
 
-```yaml 
+```yaml
 clickhouse:
   replicasCount: 2
 ```
@@ -143,7 +145,7 @@ component:
     env:
       IS_MINIO: "false"
       S3_BUCKET: <your_bucket_name>
-      S3_REGION: <aws_region> 
+      S3_REGION: <aws_region>
       AWS_ACCESS_KEY_ID: <your AWS Key>
       AWS_SECRET_ACCESS_KEY: <your AWS Secret>
 ```
@@ -156,11 +158,11 @@ If your IAM role is configured for the k8s nodes, the only things you will need 
 component:
   backend:
     env:
-        IS_MINIO: "false"
-        S3_BUCKET: <your_bucket_name>
-        S3_REGION: <aws_region> 
-        AWS_ACCESS_KEY_ID: ""
-        AWS_SECRET_ACCESS_KEY: ""
+      IS_MINIO: "false"
+      S3_BUCKET: <your_bucket_name>
+      S3_REGION: <aws_region>
+      AWS_ACCESS_KEY_ID: ""
+      AWS_SECRET_ACCESS_KEY: ""
 ```
 
 If your role should be used by opik-backend serviceAccount, in addition you need to set:
@@ -168,11 +170,10 @@ If your role should be used by opik-backend serviceAccount, in addition you need
 ```yaml
 component:
   backend:
-
     serviceAccount:
-        enabled: true
-        annotations:
-            eks.amazonaws.com/role-arn: <your IAM Role arn>
+      enabled: true
+      annotations:
+        eks.amazonaws.com/role-arn: <your IAM Role arn>
 ```
 
 ## Use external Clickhouse installation
@@ -180,6 +181,7 @@ component:
 Supported from Opik chart version 1.4.2
 
 Configuration snippet for using external Clickhouse:
+
 ```yaml
 component:
     backend:
@@ -196,6 +198,7 @@ component:
 clickhouse:
     enabled: false
 ```
+
 The passwords can be handled in the secret, and then you should configure it as following
 
 ```yaml
@@ -221,7 +224,9 @@ clickhouse:
 # Troubleshooting
 
 If you get this error when running helm
+
 ```bash
 ERROR: Exception Primary Reason:  Code: 225. DB::Exception: Can't create replicated table without ZooKeeper. (NO_ZOOKEEPER) (version 24.3.5.47.altinitystable (altinity build))
 ```
+
 Please make sure you use the latest Opik helm chart version that runs zookeeper by default

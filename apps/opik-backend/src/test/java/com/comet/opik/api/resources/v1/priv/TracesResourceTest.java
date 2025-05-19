@@ -158,7 +158,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.UUID.randomUUID;
 import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @DisplayName("Traces Resource Test")
@@ -168,7 +167,6 @@ class TracesResourceTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/traces";
     private static final String URL_TEMPLATE_SPANS = "%s/v1/private/spans";
-    private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -5402,47 +5400,12 @@ class TracesResourceTest {
             assertThat(actualSpans)
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(SpanAssertions.IGNORED_FIELDS)
                     .containsExactlyElementsOf(expectedSpans);
-            assertIgnoredFieldsSpans(actualSpans, expectedSpans);
+            SpanAssertions.assertIgnoredFields(actualSpans, expectedSpans, USER);
 
             if (!unexpectedSpans.isEmpty()) {
                 assertThat(actualSpans)
                         .usingRecursiveFieldByFieldElementComparatorIgnoringFields(SpanAssertions.IGNORED_FIELDS)
                         .doesNotContainAnyElementsOf(unexpectedSpans);
-            }
-        }
-    }
-
-    private void assertIgnoredFieldsSpans(List<Span> actualSpans, List<Span> expectedSpans) {
-        for (int i = 0; i < actualSpans.size(); i++) {
-            var actualSpan = actualSpans.get(i);
-            var expectedSpan = expectedSpans.get(i);
-            assertThat(actualSpan.projectId()).isNotNull();
-            assertThat(actualSpan.projectName()).isNull();
-            assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
-            assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
-            var expected = DurationUtils.getDurationInMillisWithSubMilliPrecision(
-                    expectedSpan.startTime(), expectedSpan.endTime());
-
-            if (actualSpan.duration() == null || expected == null) {
-                assertThat(actualSpan.duration()).isEqualTo(expected);
-            } else {
-                assertThat(actualSpan.duration()).isEqualTo(expected, within(0.001));
-            }
-
-            assertThat(actualSpan.feedbackScores())
-                    .usingRecursiveComparison()
-                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                    .ignoringFields(IGNORED_FIELDS_SCORES)
-                    .ignoringCollectionOrder()
-                    .isEqualTo(expectedSpan.feedbackScores());
-
-            if (actualSpan.feedbackScores() != null) {
-                actualSpan.feedbackScores().forEach(feedbackScore -> {
-                    assertThat(feedbackScore.createdAt()).isAfter(expectedSpan.createdAt());
-                    assertThat(feedbackScore.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
-                    assertThat(feedbackScore.createdBy()).isEqualTo(USER);
-                    assertThat(feedbackScore.lastUpdatedBy()).isEqualTo(USER);
-                });
             }
         }
     }

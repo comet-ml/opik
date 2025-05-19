@@ -22,6 +22,7 @@ Let's make sure we have the correct version:
 
 ```python
 import opik_optimizer
+
 opik_optimizer.__version__
 ```
 
@@ -47,6 +48,7 @@ For this example, we'll use OpenAI models, so we need to set our OpenAI API key:
 ```python
 import os
 import getpass
+
 if "OPENAI_API_KEY" not in os.environ:
     os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
 ```
@@ -111,6 +113,7 @@ We'll use "Edit Distance" AKA "Levenshtein Distance":
 
 ```python
 from opik.evaluation.metrics import LevenshteinRatio
+
 metric = LevenshteinRatio(project_name=project_name)
 ```
 
@@ -133,7 +136,6 @@ The edit distance between "Hello!" and "Hello" is 1. Here is how the .91 is comp
 edit_distance = 1
 
 1 - edit_distance / (len("Hello1") + len("Hello"))
-
 ```
 
 For more information see: [Levenshtein Distance](https://en.wikipedia.org/wiki/Levenshtein_distance)
@@ -236,11 +238,7 @@ Ok, let's optimize that prompt!
 
 ```python
 result = optimizer.optimize_prompt(
-    opik_dataset,
-    metric_config,
-    task_config,
-    n_trials=3,
-    n_samples=50
+    opik_dataset, metric_config, task_config, n_trials=3, n_samples=50
 )
 ```
 
@@ -291,13 +289,15 @@ Once we have the "chat_messages", we can do the following:
 ```python
 from litellm.integrations.opik.opik import OpikLogger
 import litellm
+
 opik_logger = OpikLogger()
 litellm.callbacks = [opik_logger]
 
+
 def query(question, chat_messages):
-    messages = chat_messages[:-1] # Cut off the last one
+    messages = chat_messages[:-1]  # Cut off the last one
     # replace it with question in proper format:
-    messages.append({'role': 'user', 'content': '{"question": "%s"}"}' % question})
+    messages.append({"role": "user", "content": '{"question": "%s"}"}' % question})
 
     response = litellm.completion(
         model="gpt-4o-mini",

@@ -106,7 +106,6 @@ from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEnti
 from .delete_feedback_score import DeleteFeedbackScore
 from .delete_ids_holder import DeleteIdsHolder
 from .delta import Delta
-from .delta_role import DeltaRole
 from .error_info import ErrorInfo
 from .error_info_public import ErrorInfoPublic
 from .error_info_write import ErrorInfoWrite
@@ -157,14 +156,15 @@ from .guardrail_write_name import GuardrailWriteName
 from .guardrail_write_result import GuardrailWriteResult
 from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
+from .json_list_string import JsonListString
+from .json_list_string_compare import JsonListStringCompare
+from .json_list_string_public import JsonListStringPublic
+from .json_list_string_write import JsonListStringWrite
 from .json_node import JsonNode
-from .json_node_compare import JsonNodeCompare
 from .json_node_detail import JsonNodeDetail
 from .json_node_public import JsonNodePublic
 from .json_node_write import JsonNodeWrite
-from .json_object_schema import JsonObjectSchema
 from .json_schema import JsonSchema
-from .json_schema_element import JsonSchemaElement
 from .llm_as_judge_code import LlmAsJudgeCode
 from .llm_as_judge_code_public import LlmAsJudgeCodePublic
 from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
@@ -229,6 +229,7 @@ from .prompt import Prompt
 from .prompt_detail import PromptDetail
 from .prompt_page_public import PromptPagePublic
 from .prompt_public import PromptPublic
+from .prompt_tokens_details import PromptTokensDetails
 from .prompt_type import PromptType
 from .prompt_version import PromptVersion
 from .prompt_version_detail import PromptVersionDetail
@@ -372,7 +373,6 @@ __all__ = [
     "DeleteFeedbackScore",
     "DeleteIdsHolder",
     "Delta",
-    "DeltaRole",
     "ErrorInfo",
     "ErrorInfoPublic",
     "ErrorInfoWrite",
@@ -429,14 +429,15 @@ __all__ = [
     "GuardrailWriteResult",
     "GuardrailsValidation",
     "GuardrailsValidationPublic",
+    "JsonListString",
+    "JsonListStringCompare",
+    "JsonListStringPublic",
+    "JsonListStringWrite",
     "JsonNode",
-    "JsonNodeCompare",
     "JsonNodeDetail",
     "JsonNodePublic",
     "JsonNodeWrite",
-    "JsonObjectSchema",
     "JsonSchema",
-    "JsonSchemaElement",
     "LlmAsJudgeCode",
     "LlmAsJudgeCodePublic",
     "LlmAsJudgeCodeWrite",
@@ -499,6 +500,7 @@ __all__ = [
     "PromptDetail",
     "PromptPagePublic",
     "PromptPublic",
+    "PromptTokensDetails",
     "PromptType",
     "PromptVersion",
     "PromptVersionDetail",

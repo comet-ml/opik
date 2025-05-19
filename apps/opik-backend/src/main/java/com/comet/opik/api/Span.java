@@ -1,7 +1,6 @@
 package com.comet.opik.api;
 
 import com.comet.opik.domain.SpanType;
-import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -42,8 +41,10 @@ public record Span(
         @JsonView({Span.View.Public.class, Span.View.Write.class}) @NotNull SpanType type,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) @NotNull Instant startTime,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) Instant endTime,
-        @JsonView({Span.View.Public.class, Span.View.Write.class}) JsonNode input,
-        @JsonView({Span.View.Public.class, Span.View.Write.class}) JsonNode output,
+        @Schema(implementation = JsonListString.class) @JsonView({Span.View.Public.class,
+                Span.View.Write.class}) JsonNode input,
+        @Schema(implementation = JsonListString.class) @JsonView({Span.View.Public.class,
+                Span.View.Write.class}) JsonNode output,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) JsonNode metadata,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) String model,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) String provider,
@@ -51,9 +52,7 @@ public record Span(
         @JsonView({Span.View.Public.class, Span.View.Write.class}) Map<String, Integer> usage,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) ErrorInfo errorInfo,
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
-        // ISO 8601 Instant with microseconds precision
-        @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX", timezone = "UTC") @JsonView({
-                Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
+        @JsonView({Span.View.Public.class, Span.View.Write.class}) Instant lastUpdatedAt,
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
         @JsonView({

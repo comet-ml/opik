@@ -2,4 +2,6 @@
 
 import typing
 
-LlmAsJudgeMessageWriteRole = typing.Union[typing.Literal["SYSTEM", "USER", "AI", "TOOL_EXECUTION_RESULT"], typing.Any]
+LlmAsJudgeMessageWriteRole = typing.Union[
+    typing.Literal["SYSTEM", "USER", "AI", "TOOL_EXECUTION_RESULT", "CUSTOM"], typing.Any
+]

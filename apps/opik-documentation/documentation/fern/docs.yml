@@ -142,6 +142,9 @@ navigation:
               - page: AIsuite
                 path: docs/tracing/integrations/aisuite.mdx
                 slug: aisuite
+              - page: AG2
+                path: docs/tracing/integrations/ag2.mdx
+                slug: ag2
               - page: Autogen
                 path: docs/tracing/integrations/autogen.mdx
                 slug: autogen

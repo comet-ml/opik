@@ -6,7 +6,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import jakarta.inject.Named;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,7 +29,7 @@ class VertextAILlmServiceProvider implements LlmServiceProvider {
     }
 
     @Override
-    public ChatLanguageModel getLanguageModel(LlmProviderClientApiConfig apiKey,
+    public ChatModel getLanguageModel(LlmProviderClientApiConfig apiKey,
             AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters) {
         return clientGenerator.generateChat(apiKey, modelParameters);
     }

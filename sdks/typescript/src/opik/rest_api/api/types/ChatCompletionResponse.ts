@@ -11,4 +11,5 @@ export interface ChatCompletionResponse {
     choices?: OpikApi.ChatCompletionChoice[];
     usage?: OpikApi.Usage;
     systemFingerprint?: string;
+    serviceTier?: string;
 }

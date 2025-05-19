@@ -15,6 +15,7 @@ class ChatCompletionResponse(UniversalBaseModel):
     choices: typing.Optional[typing.List[ChatCompletionChoice]] = None
     usage: typing.Optional[Usage] = None
     system_fingerprint: typing.Optional[str] = None
+    service_tier: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

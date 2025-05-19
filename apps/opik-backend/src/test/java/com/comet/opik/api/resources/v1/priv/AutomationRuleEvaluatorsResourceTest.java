@@ -37,6 +37,7 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.HttpMethod;
@@ -596,7 +597,7 @@ class AutomationRuleEvaluatorsResourceTest {
                 throws JsonProcessingException {
             var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
             when(llmProviderFactory.getLanguageModel(anyString(), any())
-                    .chat(any()))
+                    .chat(any(ChatRequest.class)))
                     .thenAnswer(invocationOnMock -> chatResponse);
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
@@ -891,7 +892,7 @@ class AutomationRuleEvaluatorsResourceTest {
         void getLogsLlmAsJudgeScorer(LlmProviderFactory llmProviderFactory) throws JsonProcessingException {
             var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
             when(llmProviderFactory.getLanguageModel(anyString(), any())
-                    .chat(any()))
+                    .chat(any(ChatRequest.class)))
                     .thenAnswer(invocationOnMock -> chatResponse);
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
