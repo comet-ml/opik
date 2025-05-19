@@ -31,7 +31,7 @@
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
         <wiremock.version>3.13.0</wiremock.version>
         <redisson.version>3.46.0</redisson.version>
-        <opentelmetry.version>2.15.0</opentelmetry.version>
+        <opentelmetry.version>2.16.0</opentelmetry.version>
         <aws.java.sdk.version>2.31.1</aws.java.sdk.version>
         <json-path.version>2.9.0</json-path.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
