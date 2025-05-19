@@ -51,9 +51,10 @@ class MessageSender(BaseMessageProcessor):
             messages.UpdateTraceMessage: self._process_update_trace_message,  # type: ignore
             messages.AddTraceFeedbackScoresBatchMessage: self._process_add_trace_feedback_scores_batch_message,  # type: ignore
             messages.AddSpanFeedbackScoresBatchMessage: self._process_add_span_feedback_scores_batch_message,  # type: ignore
-            messages.CreateSpansBatchMessage: self._process_create_span_batch_message,  # type: ignore
-            messages.CreateTraceBatchMessage: self._process_create_trace_batch_message,  # type: ignore
+            messages.CreateSpansBatchMessage: self._pre_process_create_span_batch_message,  # type: ignore
+            messages.CreateTraceBatchMessage: self._pre_process_create_trace_batch_message,  # type: ignore
             messages.GuardrailBatchMessage: self._process_guardrail_batch_message,  # type: ignore
+            messages.MiniBatchMessage: self._process_mini_batch_message,  # type: ignore
         }
 
     def process(
@@ -209,7 +210,7 @@ class MessageSender(BaseMessageProcessor):
         )
         LOGGER.debug("Sent batch of traces feedbacks scores of size %d", len(scores))
 
-    def _process_create_span_batch_message(
+    def _pre_process_create_span_batch_message(
         self,
         message: messages.CreateSpansBatchMessage,
         push_back_callback: Callable[[messages.BaseMessage], None],
@@ -230,14 +231,13 @@ class MessageSender(BaseMessageProcessor):
         )
 
         for batch in memory_limited_batches:
-            self._send_create_spans_batch(batch)
+            push_back_callback(
+                messages.MiniBatchMessage(
+                    batch=batch, rest_operation_name="spans.create_spans"
+                )
+            )
 
-    def _send_create_spans_batch(self, batch: List[span_write.SpanWrite]) -> None:
-        LOGGER.debug("Create spans batch request of size %d", len(batch))
-        self._rest_client.spans.create_spans(spans=batch)
-        LOGGER.debug("Sent spans batch of size %d", len(batch))
-
-    def _process_create_trace_batch_message(
+    def _pre_process_create_trace_batch_message(
         self,
         message: messages.CreateTraceBatchMessage,
         push_back_callback: Callable[[messages.BaseMessage], None],
@@ -258,7 +258,26 @@ class MessageSender(BaseMessageProcessor):
         )
 
         for batch in memory_limited_batches:
-            self._send_create_traces_batch(batch)
+            push_back_callback(
+                messages.MiniBatchMessage(
+                    batch=batch, rest_operation_name="traces.create_traces"
+                )
+            )
+
+    def _process_mini_batch_message(
+        self,
+        message: messages.MiniBatchMessage,
+        _: Callable[[messages.BaseMessage], None],
+    ) -> None:
+        if message.rest_operation_name == "spans.create_spans":
+            self._send_create_spans_batch(batch=message.batch)
+        elif message.rest_operation_name == "traces.create_traces":
+            self._send_create_traces_batch(batch=message.batch)
+
+    def _send_create_spans_batch(self, batch: List[span_write.SpanWrite]) -> None:
+        LOGGER.debug("Create spans batch request of size %d", len(batch))
+        self._rest_client.spans.create_spans(spans=batch)
+        LOGGER.debug("Sent spans batch of size %d", len(batch))
 
     def _send_create_traces_batch(self, batch: List[trace_write.TraceWrite]) -> None:
         LOGGER.debug("Create trace batch request of size %d", len(batch))

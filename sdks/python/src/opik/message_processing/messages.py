@@ -196,3 +196,13 @@ class CreateAttachmentMessage(BaseMessage):
     entity_id: str
     project_name: str
     encoded_url_override: str
+
+
+@dataclasses.dataclass
+class MiniBatchMessage(BaseMessage):
+    """The specific type of message to hold mini batches created from bigger ones when the batch size limit is reached
+    and batching is enabled. It is used to store raw data created from the bigger batch messages along with REST API
+    operation name to be used to send the mini batches to the backend."""
+
+    batch: List[Any]
+    rest_operation_name: str
