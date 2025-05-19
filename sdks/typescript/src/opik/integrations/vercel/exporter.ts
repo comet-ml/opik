@@ -21,17 +21,31 @@ type OpikExporterSettings = TelemetrySettings & {
   name?: string;
 };
 
+type OpikExporterOptions = {
+  client?: Opik;
+  tags?: string[];
+  metadata?: Record<string, AttributeValue>;
+};
+
 const aiSDKClient = new Opik();
 
 export class OpikExporter implements SpanExporter {
   // <otelTraceId, opikTrace>
-  private traces = new Map<string, Trace>();
+  private readonly traces = new Map<string, Trace>();
   // <otelSpanId, opikSpan>
-  private spans = new Map<string, Span>();
-  private client: Opik;
+  private readonly spans = new Map<string, Span>();
+  private readonly client: Opik;
+  private readonly tags: string[];
+  private readonly metadata: Record<string, AttributeValue>;
 
-  constructor({ client = aiSDKClient }: { client?: Opik } = {}) {
+  constructor({
+    client = aiSDKClient,
+    tags = [],
+    metadata = {},
+  }: OpikExporterOptions = {}) {
     this.client = client;
+    this.tags = [...tags];
+    this.metadata = { ...metadata };
   }
 
   private getSpanInput = (otelSpan: ReadableSpan): Record<string, unknown> => {
@@ -175,7 +189,7 @@ export class OpikExporter implements SpanExporter {
 
   export: ExportFunction = async (allOtelSpans, resultCallback) => {
     const aiSDKOtelSpans = allOtelSpans.filter(
-      (span) => span.instrumentationLibrary.name === "ai"
+      (span) => span.instrumentationScope.name === "ai"
     );
     const diffCount = allOtelSpans.length - aiSDKOtelSpans.length;
 
@@ -208,14 +222,17 @@ export class OpikExporter implements SpanExporter {
           ]?.toString() ?? rootOtelSpan.name,
         input: this.getSpanInput(rootOtelSpan),
         output: this.getSpanOutput(rootOtelSpan),
-        metadata: this.getSpanMetadata(rootOtelSpan),
+        metadata: { ...this.getSpanMetadata(rootOtelSpan), ...this.metadata },
+        tags: this.tags,
         usage: this.getSpanUsage(rootOtelSpan),
       });
 
       this.traces.set(otelTraceId, trace);
 
       otherOtelSpans.forEach((otelSpan) => {
-        const parentSpan = this.spans.get(otelSpan.parentSpanId ?? "");
+        const parentSpan = this.spans.get(
+          otelSpan.parentSpanContext?.spanId ?? ""
+        );
         const span = this.processSpan({ parentSpan, otelSpan, trace });
 
         this.spans.set(otelSpan.spanContext().spanId, span);
@@ -322,18 +339,21 @@ function sortSpansLevelOrder(otelSpans: ReadableSpan[]): ReadableSpan[] {
 
   for (const otelSpan of otelSpans) {
     const { spanId } = otelSpan.spanContext();
+    const parentSpanId = otelSpan.parentSpanContext?.spanId ?? "";
     idMap.set(spanId, otelSpan);
 
-    if (otelSpan.parentSpanId) {
-      if (!childrenMap.has(otelSpan.parentSpanId)) {
-        childrenMap.set(otelSpan.parentSpanId, []);
+    if (parentSpanId) {
+      if (!childrenMap.has(parentSpanId)) {
+        childrenMap.set(parentSpanId, []);
       }
-      childrenMap.get(otelSpan.parentSpanId)!.push(otelSpan);
+      childrenMap.get(parentSpanId)!.push(otelSpan);
     }
   }
 
   const roots = otelSpans.filter(
-    (span) => !span.parentSpanId || !idMap.has(span.parentSpanId)
+    (span) =>
+      !span.parentSpanContext?.spanId ||
+      !idMap.has(span.parentSpanContext.spanId)
   );
 
   const result: ReadableSpan[] = [];

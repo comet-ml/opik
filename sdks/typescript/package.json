@@ -61,7 +61,7 @@
     "@eslint/js": "^9.20.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.56.0",
-    "@opentelemetry/sdk-node": "^0.57.1",
+    "@opentelemetry/sdk-node": "^0.201.1",
     "@types/ini": "^4.1.1",
     "@types/node-fetch": "^2.6.12",
     "@types/qs": "^6.9.17",
