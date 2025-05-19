@@ -5,6 +5,10 @@ trying again.
 
 **Prompt optimization** is the process of automating the prompt engineering process.
 
+<Warning>
+  The Agent Optimization toolkit, including the optimizers described below, is currently in **Public Beta**. We are actively working on improving these features and welcome your [feedback on GitHub](https://github.com/comet-ml/opik/issues)!
+</Warning>
+
 <Frame>
   <img src="/img/agent_optimization/concept.png" alt="Agent Optimization" />
 </Frame>
@@ -49,9 +53,10 @@ The following algorithms have been implemented:
 
 | **Algorithm**                  | **Description**                                                                                                                                                                                                  | **Guide**                                                                        |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| MetaPrompt Optimization        | A prompt engineering algorithm that uses a meta-prompt to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt.                                       | [MetaPrompt Optimization](/agent_optimization/metaprompt_optimizer)              |
-| Few-shot Bayesian Optimization | A prompt engineering algorithm that uses a few-shot learning approach to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt.                        | [Few-shot Bayesian Optimization](/agent_optimization/fewshot_bayesian_optimizer) |
-| MIPRO Optimization             | A prompt engineering algorithm that uses a MIPRO (Multi-Instance Prompt Refinement) approach to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt. | [Mipro Optimization](/agent_optimization/mipro_optimizer)                        |
+| MetaPrompt Optimization        | A prompt engineering algorithm that uses a meta-prompt to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt.                                       | [MetaPrompt Optimization](/agent_optimization/algorithms/metaprompt_optimizer)              |
+| Few-shot Bayesian Optimization | A prompt engineering algorithm that uses a few-shot learning approach to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt.                        | [Few-shot Bayesian Optimization](/agent_optimization/algorithms/fewshot_bayesian_optimizer) |
+| MIPRO Optimization             | A prompt engineering algorithm that uses a MIPRO (Multi-Instance Prompt Refinement) approach to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt. | [MIPRO Optimization](/agent_optimization/algorithms/mipro_optimizer)                        |
+| Evolutionary Optimization      | Optimizes prompts using genetic algorithms, evolving a population of prompts through selection, crossover, and mutation. Supports multi-objective optimization and LLM-driven genetic operators.                   | [Evolutionary Optimization](/agent_optimization/algorithms/evolutionary_optimizer)          |
 
 <Tip>
   If you would like us to implement another optimization algorithm, reach out to us on
@@ -76,6 +81,7 @@ Each optimization algorithm is evaluated against different use-cases and dataset
 | 1    | Few-shot Bayesian Optimization | 0.6733        | 0.2809      | 0.5926        | 0.9180           | 0.9015   |
 | 2    | Mipro Optimization             | 0.5591        | 0.0197      | 0.3970        | 0.9270           | 0.8928   |
 | 3    | MetaPrompt Optimization        | 0.5201        | 0.2500      | 0.2693        | 0.9179           | 0.6431   |
+| *tbd*| Evolutionary Optimization      | *tbd*         | *tbd*       | *tbd*         | *tbd*            | *tbd*    |
 | 4    | No optimization                | 0.1199        | 0.0169      | 0.2406        | 0.1238           | 0.0981   |
 
 The results above are for `gpt-4o-mini`, the results might change if you use a different model.
