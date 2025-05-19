@@ -5,6 +5,7 @@
 import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
+import { JsonListString } from "../../../../types/JsonListString";
 import { JsonNode } from "../../../../types/JsonNode";
 import { ErrorInfo } from "../../../../types/ErrorInfo";
 
@@ -14,8 +15,8 @@ export const TraceUpdate: core.serialization.Schema<serializers.TraceUpdate.Raw,
         projectId: core.serialization.property("project_id", core.serialization.string().optional()),
         name: core.serialization.string().optional(),
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
-        input: JsonNode.optional(),
-        output: JsonNode.optional(),
+        input: JsonListString.optional(),
+        output: JsonListString.optional(),
         metadata: JsonNode.optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
         errorInfo: core.serialization.property("error_info", ErrorInfo.optional()),
@@ -28,8 +29,8 @@ export declare namespace TraceUpdate {
         project_id?: string | null;
         name?: string | null;
         end_time?: string | null;
-        input?: JsonNode.Raw | null;
-        output?: JsonNode.Raw | null;
+        input?: JsonListString.Raw | null;
+        output?: JsonListString.Raw | null;
         metadata?: JsonNode.Raw | null;
         tags?: string[] | null;
         error_info?: ErrorInfo.Raw | null;

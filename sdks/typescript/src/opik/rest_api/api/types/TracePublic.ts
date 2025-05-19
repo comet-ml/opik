@@ -10,8 +10,8 @@ export interface TracePublic {
     name?: string;
     startTime: Date;
     endTime?: Date;
-    input?: OpikApi.JsonNodePublic;
-    output?: OpikApi.JsonNodePublic;
+    input?: OpikApi.JsonListStringPublic;
+    output?: OpikApi.JsonListStringPublic;
     metadata?: OpikApi.JsonNodePublic;
     tags?: string[];
     errorInfo?: OpikApi.ErrorInfoPublic;

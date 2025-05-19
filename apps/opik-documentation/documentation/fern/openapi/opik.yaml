@@ -4659,9 +4659,9 @@ components:
           type: string
           format: uuid
         input:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
         output:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
         feedback_scores:
           type: array
           readOnly: true
@@ -4740,8 +4740,14 @@ components:
           type: string
           readOnly: true
       readOnly: true
-    JsonNode:
+    JsonListString:
       type: object
+      anyOf:
+      - type: object
+      - type: array
+        items:
+          type: object
+      - type: string
     DatasetItemBatch_Write:
       required:
       - items
@@ -4941,9 +4947,9 @@ components:
           type: string
           format: uuid
         input:
-          $ref: "#/components/schemas/JsonNode_Compare"
+          $ref: "#/components/schemas/JsonListString_Compare"
         output:
-          $ref: "#/components/schemas/JsonNode_Compare"
+          $ref: "#/components/schemas/JsonListString_Compare"
         feedback_scores:
           type: array
           readOnly: true
@@ -5023,9 +5029,15 @@ components:
           type: string
           readOnly: true
       readOnly: true
-    JsonNode_Compare:
+    JsonListString_Compare:
       type: object
       readOnly: true
+      anyOf:
+      - type: object
+      - type: array
+        items:
+          type: object
+      - type: string
     DatasetPage_Public:
       type: object
       properties:
@@ -5386,6 +5398,8 @@ components:
           type: string
         value:
           type: number
+    JsonNode:
+      type: object
     PercentageValues:
       type: object
       properties:
@@ -7255,9 +7269,9 @@ components:
           type: string
           format: date-time
         input:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
         output:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
         metadata:
           $ref: "#/components/schemas/JsonNode"
         model:
@@ -7323,6 +7337,14 @@ components:
           type: string
         traceback:
           type: string
+    JsonListString_Write:
+      type: object
+      anyOf:
+      - type: object
+      - type: array
+        items:
+          type: object
+      - type: string
     Span_Write:
       required:
       - name
@@ -7360,9 +7382,9 @@ components:
           type: string
           format: date-time
         input:
-          $ref: "#/components/schemas/JsonNode_Write"
+          $ref: "#/components/schemas/JsonListString_Write"
         output:
-          $ref: "#/components/schemas/JsonNode_Write"
+          $ref: "#/components/schemas/JsonListString_Write"
         metadata:
           $ref: "#/components/schemas/JsonNode_Write"
         model:
@@ -7471,6 +7493,14 @@ components:
           type: string
           readOnly: true
       readOnly: true
+    JsonListString_Public:
+      type: object
+      anyOf:
+      - type: object
+      - type: array
+        items:
+          type: object
+      - type: string
     Span_Public:
       required:
       - name
@@ -7512,9 +7542,9 @@ components:
           type: string
           format: date-time
         input:
-          $ref: "#/components/schemas/JsonNode_Public"
+          $ref: "#/components/schemas/JsonListString_Public"
         output:
-          $ref: "#/components/schemas/JsonNode_Public"
+          $ref: "#/components/schemas/JsonListString_Public"
         metadata:
           $ref: "#/components/schemas/JsonNode_Public"
         model:
@@ -7766,9 +7796,9 @@ components:
           type: string
           format: date-time
         input:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
         output:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
         metadata:
           $ref: "#/components/schemas/JsonNode"
         model:
@@ -7840,9 +7870,9 @@ components:
           type: string
           format: date-time
         input:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
         output:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
         metadata:
           $ref: "#/components/schemas/JsonNode"
         tags:
@@ -7923,9 +7953,9 @@ components:
           type: string
           format: date-time
         input:
-          $ref: "#/components/schemas/JsonNode_Write"
+          $ref: "#/components/schemas/JsonListString_Write"
         output:
-          $ref: "#/components/schemas/JsonNode_Write"
+          $ref: "#/components/schemas/JsonListString_Write"
         metadata:
           $ref: "#/components/schemas/JsonNode_Write"
         tags:
@@ -8026,9 +8056,9 @@ components:
           type: string
           format: date-time
         input:
-          $ref: "#/components/schemas/JsonNode_Public"
+          $ref: "#/components/schemas/JsonListString_Public"
         output:
-          $ref: "#/components/schemas/JsonNode_Public"
+          $ref: "#/components/schemas/JsonListString_Public"
         metadata:
           $ref: "#/components/schemas/JsonNode_Public"
         tags:
@@ -8235,9 +8265,9 @@ components:
           type: string
           format: date-time
         input:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
         output:
-          $ref: "#/components/schemas/JsonNode"
+          $ref: "#/components/schemas/JsonListString"
         metadata:
           $ref: "#/components/schemas/JsonNode"
         tags:

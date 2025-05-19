@@ -9,6 +9,7 @@ from .comment import Comment
 from .error_info import ErrorInfo
 from .feedback_score import FeedbackScore
 from .guardrails_validation import GuardrailsValidation
+from .json_list_string import JsonListString
 from .json_node import JsonNode
 
 
@@ -23,8 +24,8 @@ class Trace(UniversalBaseModel):
     name: typing.Optional[str] = None
     start_time: dt.datetime
     end_time: typing.Optional[dt.datetime] = None
-    input: typing.Optional[JsonNode] = None
-    output: typing.Optional[JsonNode] = None
+    input: typing.Optional[JsonListString] = None
+    output: typing.Optional[JsonListString] = None
     metadata: typing.Optional[JsonNode] = None
     tags: typing.Optional[typing.List[str]] = None
     error_info: typing.Optional[ErrorInfo] = None

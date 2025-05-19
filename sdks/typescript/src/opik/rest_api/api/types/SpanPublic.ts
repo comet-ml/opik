@@ -15,8 +15,8 @@ export interface SpanPublic {
     type: OpikApi.SpanPublicType;
     startTime: Date;
     endTime?: Date;
-    input?: OpikApi.JsonNodePublic;
-    output?: OpikApi.JsonNodePublic;
+    input?: OpikApi.JsonListStringPublic;
+    output?: OpikApi.JsonListStringPublic;
     metadata?: OpikApi.JsonNodePublic;
     model?: string;
     provider?: string;
