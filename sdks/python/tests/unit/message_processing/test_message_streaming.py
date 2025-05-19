@@ -75,7 +75,10 @@ def test_streamer__happy_flow(batched_streamer_and_mock_message_processor):
     assert tested.flush(timeout=0.0001) is True
 
     mock_message_processor.process.assert_has_calls(
-        [mock.call(test_messages[0]), mock.call(test_messages[1])]
+        [
+            mock.call(test_messages[0], push_back_callback=mock.ANY),
+            mock.call(test_messages[1], push_back_callback=mock.ANY),
+        ]
     )
 
 
@@ -109,9 +112,9 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
 
         mock_message_processor.process.assert_has_calls(
             [
-                mock.call(CREATE_MESSAGE),
-                mock.call(CREATE_MESSAGE),
-                mock.call(CREATE_MESSAGE),
+                mock.call(CREATE_MESSAGE, push_back_callback=mock.ANY),
+                mock.call(CREATE_MESSAGE, push_back_callback=mock.ANY),
+                mock.call(CREATE_MESSAGE, push_back_callback=mock.ANY),
             ]
         )
     finally:
@@ -132,7 +135,8 @@ def test_streamer__span__batching_enabled__messages_that_support_batching_are_pr
     assert tested.flush(1.1) is True
 
     mock_message_processor.process.assert_called_once_with(
-        messages.CreateSpansBatchMessage(batch=[CREATE_SPAN_MESSAGE] * 3)
+        messages.CreateSpansBatchMessage(batch=[CREATE_SPAN_MESSAGE] * 3),
+        push_back_callback=mock.ANY,
     )
 
 
@@ -149,5 +153,6 @@ def test_streamer__trace__batching_enabled__messages_that_support_batching_are_p
     assert tested.flush(1.1) is True
 
     mock_message_processor.process.assert_called_once_with(
-        messages.CreateTraceBatchMessage(batch=[CREATE_TRACE_MESSAGE] * 3)
+        messages.CreateTraceBatchMessage(batch=[CREATE_TRACE_MESSAGE] * 3),
+        push_back_callback=mock.ANY,
     )
