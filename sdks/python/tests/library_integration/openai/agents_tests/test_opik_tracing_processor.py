@@ -34,6 +34,8 @@ def test_opik_tracing_processor__happy_flow(fake_backend):
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
+        input=ANY_DICT,
+        output=ANY_DICT,
         name="Agent workflow",
         project_name=project_name,
         end_time=ANY_BUT_NONE,
@@ -42,7 +44,6 @@ def test_opik_tracing_processor__happy_flow(fake_backend):
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
                 name="Assistant",
-                output={"output": "str"},
                 metadata=ANY_DICT,
                 type="general",
                 end_time=ANY_BUT_NONE,
@@ -116,13 +117,14 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
         start_time=ANY_BUT_NONE,
         name="Agent workflow",
         project_name=project_name,
+        input=ANY_DICT,
+        output=ANY_DICT,
         end_time=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
                 name="Triage agent",
-                output={"output": "str"},
                 metadata=ANY_DICT,
                 type="general",
                 end_time=ANY_BUT_NONE,
@@ -163,7 +165,6 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
                 name="Spanish agent",
-                output={"output": "str"},
                 metadata={
                     "type": "agent",
                     "name": "Spanish agent",
@@ -226,6 +227,8 @@ async def test_opik_tracing_processor__functions(fake_backend):
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
+        input=ANY_DICT,
+        output=ANY_DICT,
         name="Agent workflow",
         project_name=project_name,
         end_time=ANY_BUT_NONE,
@@ -234,7 +237,6 @@ async def test_opik_tracing_processor__functions(fake_backend):
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
                 name="Hello world",
-                output={"output": "str"},
                 metadata={
                     "type": "agent",
                     "name": "Hello world",
