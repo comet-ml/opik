@@ -1,35 +1,29 @@
-The FewShotBayesianOptimizer is a sophisticated prompt optimization tool that combines few-shot learning with Bayesian optimization techniques. It's designed to iteratively improve prompts by learning from examples and systematically exploring the optimization space.
+The FewShotBayesianOptimizer is a sophisticated prompt optimization tool that combines few-shot learning with Bayesian optimization techniques. It's designed to iteratively improve prompts by learning from examples and systematically exploring the optimization space, specifically for chat-based prompts.
 
 ## How It Works
 
-1. **Initialization**
+This optimizer focuses on finding the optimal set and number of few-shot examples to include with your base instruction prompt for chat models. It uses [Optuna](https://optuna.org/), a hyperparameter optimization framework, to guide this search:
 
-   - Takes a dataset of input-output pairs
-   - Configures optimization parameters
-   - Sets up evaluation metrics
+1.  **Problem Definition**: The core task is to select the best combination of few-shot examples from your provided dataset to append to the `instruction_prompt` (defined in `TaskConfig`). The number of examples to select can range from `min_examples` to `max_examples`.
 
-2. **Bayesian Optimization**
+2.  **Search Space**: For each trial, Optuna suggests:
+    *   `n_examples`: The number of few-shot examples to use for this particular trial (within the `min_examples` and `max_examples` range).
+    *   `example_indices`: A list of specific indices pointing to items in your dataset that will serve as these `n_examples`.
 
-   - Uses Gaussian Process to model the optimization space
-   - Selects promising prompt configurations
-   - Balances exploration and exploitation
+3.  **Prompt Construction**: For each trial, a complete chat prompt is constructed:
+    *   The system message is your `TaskConfig.instruction_prompt`.
+    *   A sequence of user/assistant turn pairs is created using the selected `n_examples` from the dataset. Each example typically maps to a user message (e.g., from `input_dataset_fields`) and an assistant message (from `output_dataset_field`).
 
-3. **Few-shot Learning**
+4.  **Evaluation**: This constructed few-shot prompt (system instruction + example turns) is then evaluated against a portion (or all) of your dataset using the specified `metric_config`. The evaluation measures how well this particular combination of few-shot examples helps the model perform the task.
 
-   - Dynamically selects relevant examples
-   - Adapts to different problem types
-   - Optimizes example selection
+5.  **Bayesian Optimization (via Optuna)**:
+    *   Optuna uses a Bayesian optimization algorithm (typically TPESampler - Tree-structured Parzen Estimator Sampler) to decide which combinations of `n_examples` and `example_indices` to try next.
+    *   It builds a probabilistic model of how different example choices affect the evaluation score and uses this model to balance exploration (trying new, uncertain combinations) and exploitation (focusing on combinations likely to yield high scores).
+    *   This process is repeated for `n_iterations` (number of trials).
 
-4. **Evaluation**
+6.  **Result**: After all trials, the optimizer returns the `instruction_prompt` paired with the combination of few-shot examples that achieved the best score.
 
-   - Multi-threaded performance testing
-   - Comprehensive metrics tracking
-   - Validation against test set
-
-5. **Refinement**
-   - Iterative improvement based on results
-   - Adaptive parameter adjustment
-   - Convergence monitoring
+Essentially, the `FewShotBayesianOptimizer` intelligently searches through the vast space of possible few-shot example combinations to find the set that best primes your chat model for the task.
 
 ## Configuration Options
 
