@@ -100,7 +100,7 @@ jobs:
 
 
       - name: LiteLLM Tests Python ${{ matrix.python_version }}
-        if: contains(fromJSON('["litellm", "all"'), env.LIBS)
+        if: contains(fromJSON('["litellm", "all"]'), env.LIBS)
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
