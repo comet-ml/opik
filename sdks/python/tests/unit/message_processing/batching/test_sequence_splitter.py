@@ -1,25 +1,10 @@
 import json
-import dataclasses
 
 import pytest
 
 from opik.message_processing.batching import sequence_splitter
 
-
-@dataclasses.dataclass
-class LongStr:
-    value: str
-
-    def __str__(self) -> str:
-        return self.value[1] + ".." + self.value[-1]
-
-    def __repr__(self) -> str:
-        return str(self)
-
-
-ONE_MEGABYTE_OBJECT_A = LongStr("a" * 1024 * 1024)
-ONE_MEGABYTE_OBJECT_B = LongStr("b" * 1024 * 1024)
-ONE_MEGABYTE_OBJECT_C = LongStr("c" * 1024 * 1024)
+from ..common import ONE_MEGABYTE_OBJECT_A, ONE_MEGABYTE_OBJECT_B, ONE_MEGABYTE_OBJECT_C
 
 
 def test_split_list_into_batches__by_size_only():

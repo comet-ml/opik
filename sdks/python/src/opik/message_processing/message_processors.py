@@ -22,8 +22,6 @@ from .batching import sequence_splitter
 
 LOGGER = logging.getLogger(__name__)
 
-BATCH_MEMORY_LIMIT_MB = 50
-
 
 MessageProcessingHandler = Callable[
     [messages.BaseMessage, Callable[[messages.BaseMessage], None]], None
@@ -41,8 +39,11 @@ class BaseMessageProcessor(abc.ABC):
 
 
 class MessageSender(BaseMessageProcessor):
-    def __init__(self, rest_client: rest_api_client.OpikApi):
+    def __init__(
+        self, rest_client: rest_api_client.OpikApi, batch_memory_limit_mb: int = 50
+    ):
         self._rest_client = rest_client
+        self._batch_memory_limit_mb = batch_memory_limit_mb
 
         self._handlers: Dict[Type, MessageProcessingHandler] = {
             messages.CreateSpanMessage: self._process_create_span_message,  # type: ignore
@@ -227,7 +228,7 @@ class MessageSender(BaseMessageProcessor):
 
         memory_limited_batches = sequence_splitter.split_into_batches(
             items=rest_spans,
-            max_payload_size_MB=BATCH_MEMORY_LIMIT_MB,
+            max_payload_size_MB=self._batch_memory_limit_mb,
         )
 
         for batch in memory_limited_batches:
@@ -254,7 +255,7 @@ class MessageSender(BaseMessageProcessor):
 
         memory_limited_batches = sequence_splitter.split_into_batches(
             items=rest_traces,
-            max_payload_size_MB=BATCH_MEMORY_LIMIT_MB,
+            max_payload_size_MB=self._batch_memory_limit_mb,
         )
 
         for batch in memory_limited_batches:
