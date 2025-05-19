@@ -5,15 +5,16 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
-import dev.langchain4j.model.openai.internal.DefaultOpenAiClient;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Optional;
 
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters;
+import static dev.langchain4j.model.openai.internal.OpenAiUtils.DEFAULT_OPENAI_URL;
 
 @RequiredArgsConstructor
 public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiClient> {
@@ -21,7 +22,11 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
 
     public OpenAiClient newOpenAiClient(@NonNull LlmProviderClientApiConfig config) {
-        var openAiClientBuilder = DefaultOpenAiClient.builder();
+        var openAiClientBuilder = OpenAiClient.builder()
+                .baseUrl(DEFAULT_OPENAI_URL)
+                .logRequests(llmProviderClientConfig.getLogRequests())
+                .logResponses(llmProviderClientConfig.getLogResponses());
+
         Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
                 .map(LlmProviderClientConfig.OpenAiClientConfig::url)
                 .filter(StringUtils::isNotBlank)
@@ -31,9 +36,9 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
             openAiClientBuilder.baseUrl(config.baseUrl());
         }
 
-        if (config.headers() != null) {
-            openAiClientBuilder.customHeaders(config.headers());
-        }
+        Optional.ofNullable(config.headers())
+                .filter(MapUtils::isNotEmpty)
+                .ifPresent(openAiClientBuilder::customHeaders);
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> openAiClientBuilder.connectTimeout(connectTimeout.toJavaDuration()));
@@ -65,9 +70,9 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
             builder.baseUrl(config.baseUrl());
         }
 
-        if (config.headers() != null) {
-            builder.customHeaders(config.headers());
-        }
+        Optional.ofNullable(config.headers())
+                .filter(MapUtils::isNotEmpty)
+                .ifPresent(builder::customHeaders);
 
         Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
 
