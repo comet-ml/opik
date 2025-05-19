@@ -16,9 +16,9 @@ def _get_expected_payload_size_MB(item: T) -> float:
 def _get_json_size(obj: Any) -> Any:
     """
     Compute the size of the resulting JSON without actually doing the JSON
-    encoding which is CPU and memory consuming. This assumes that we only
-    receives basic Python objects, strings, boolean, numbers, list and dicts
-    and that the object do not contains any cyclic reference.
+    encoding, which is CPU and memory consuming. This assumes that we only
+    receive basic Python objects, strings, booleans, numbers, list and dicts
+    and that the object does not contain any cyclic reference.
     """
     try:
         if isinstance(obj, str):

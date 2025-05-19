@@ -25,9 +25,18 @@ LOGGER = logging.getLogger(__name__)
 BATCH_MEMORY_LIMIT_MB = 50
 
 
+MessageProcessingHandler = Callable[
+    [messages.BaseMessage, Callable[[messages.BaseMessage], None]], None
+]
+
+
 class BaseMessageProcessor(abc.ABC):
     @abc.abstractmethod
-    def process(self, message: messages.BaseMessage) -> None:
+    def process(
+        self,
+        message: messages.BaseMessage,
+        push_back_callback: Callable[[messages.BaseMessage], None],
+    ) -> None:
         pass
 
 
@@ -35,7 +44,7 @@ class MessageSender(BaseMessageProcessor):
     def __init__(self, rest_client: rest_api_client.OpikApi):
         self._rest_client = rest_client
 
-        self._handlers: Dict[Type, Callable[[messages.BaseMessage], None]] = {
+        self._handlers: Dict[Type, MessageProcessingHandler] = {
             messages.CreateSpanMessage: self._process_create_span_message,  # type: ignore
             messages.CreateTraceMessage: self._process_create_trace_message,  # type: ignore
             messages.UpdateSpanMessage: self._process_update_span_message,  # type: ignore
@@ -47,7 +56,11 @@ class MessageSender(BaseMessageProcessor):
             messages.GuardrailBatchMessage: self._process_guardrail_batch_message,  # type: ignore
         }
 
-    def process(self, message: messages.BaseMessage) -> None:
+    def process(
+        self,
+        message: messages.BaseMessage,
+        push_back_callback: Callable[[messages.BaseMessage], None],
+    ) -> None:
         message_type = type(message)
         handler = self._handlers.get(message_type)
         if handler is None:
@@ -55,11 +68,11 @@ class MessageSender(BaseMessageProcessor):
             return
 
         try:
-            handler(message)
+            handler(message, push_back_callback)
         except rest_api_core.ApiError as exception:
             if exception.status_code == 409:
                 # sometimes a retry mechanism works in a way that it sends the same request 2 times.
-                # the second request is rejected by the backend, we don't want users to an error.
+                # if the backend rejects the second request, we don't want users to see an error.
                 return
             elif exception.status_code == 429:
                 if exception.headers is not None:
@@ -107,7 +120,11 @@ class MessageSender(BaseMessageProcessor):
                 extra={"error_tracking_extra": error_tracking_extra},
             )
 
-    def _process_create_span_message(self, message: messages.CreateSpanMessage) -> None:
+    def _process_create_span_message(
+        self,
+        message: messages.CreateSpanMessage,
+        _: Callable[[messages.BaseMessage], None],
+    ) -> None:
         create_span_kwargs = message.as_payload_dict()
         cleaned_create_span_kwargs = dict_utils.remove_none_from_dict(
             create_span_kwargs
@@ -117,7 +134,9 @@ class MessageSender(BaseMessageProcessor):
         self._rest_client.spans.create_span(**cleaned_create_span_kwargs)
 
     def _process_create_trace_message(
-        self, message: messages.CreateTraceMessage
+        self,
+        message: messages.CreateTraceMessage,
+        _: Callable[[messages.BaseMessage], None],
     ) -> None:
         create_trace_kwargs = message.as_payload_dict()
         cleaned_create_trace_kwargs = dict_utils.remove_none_from_dict(
@@ -127,7 +146,11 @@ class MessageSender(BaseMessageProcessor):
         LOGGER.debug("Create trace request: %s", cleaned_create_trace_kwargs)
         self._rest_client.traces.create_trace(**cleaned_create_trace_kwargs)
 
-    def _process_update_span_message(self, message: messages.UpdateSpanMessage) -> None:
+    def _process_update_span_message(
+        self,
+        message: messages.UpdateSpanMessage,
+        _: Callable[[messages.BaseMessage], None],
+    ) -> None:
         update_span_kwargs = message.as_payload_dict()
 
         cleaned_update_span_kwargs = dict_utils.remove_none_from_dict(
@@ -138,7 +161,9 @@ class MessageSender(BaseMessageProcessor):
         self._rest_client.spans.update_span(**cleaned_update_span_kwargs)
 
     def _process_update_trace_message(
-        self, message: messages.UpdateTraceMessage
+        self,
+        message: messages.UpdateTraceMessage,
+        _: Callable[[messages.BaseMessage], None],
     ) -> None:
         update_trace_kwargs = message.as_payload_dict()
 
@@ -151,7 +176,9 @@ class MessageSender(BaseMessageProcessor):
         LOGGER.debug("Sent trace %s", message.trace_id)
 
     def _process_add_span_feedback_scores_batch_message(
-        self, message: messages.AddSpanFeedbackScoresBatchMessage
+        self,
+        message: messages.AddSpanFeedbackScoresBatchMessage,
+        _: Callable[[messages.BaseMessage], None],
     ) -> None:
         scores = [
             feedback_score_batch_item.FeedbackScoreBatchItem(**score_message.__dict__)
@@ -166,7 +193,9 @@ class MessageSender(BaseMessageProcessor):
         LOGGER.debug("Sent batch of spans feedback scores %d", len(scores))
 
     def _process_add_trace_feedback_scores_batch_message(
-        self, message: messages.AddTraceFeedbackScoresBatchMessage
+        self,
+        message: messages.AddTraceFeedbackScoresBatchMessage,
+        _: Callable[[messages.BaseMessage], None],
     ) -> None:
         scores = [
             feedback_score_batch_item.FeedbackScoreBatchItem(**score_message.__dict__)
@@ -181,7 +210,9 @@ class MessageSender(BaseMessageProcessor):
         LOGGER.debug("Sent batch of traces feedbacks scores of size %d", len(scores))
 
     def _process_create_span_batch_message(
-        self, message: messages.CreateSpansBatchMessage
+        self,
+        message: messages.CreateSpansBatchMessage,
+        push_back_callback: Callable[[messages.BaseMessage], None],
     ) -> None:
         rest_spans: List[span_write.SpanWrite] = []
 
@@ -199,12 +230,17 @@ class MessageSender(BaseMessageProcessor):
         )
 
         for batch in memory_limited_batches:
-            LOGGER.debug("Create spans batch request of size %d", len(batch))
-            self._rest_client.spans.create_spans(spans=batch)
-            LOGGER.debug("Sent spans batch of size %d", len(batch))
+            self._send_create_spans_batch(batch)
+
+    def _send_create_spans_batch(self, batch: List[span_write.SpanWrite]) -> None:
+        LOGGER.debug("Create spans batch request of size %d", len(batch))
+        self._rest_client.spans.create_spans(spans=batch)
+        LOGGER.debug("Sent spans batch of size %d", len(batch))
 
     def _process_create_trace_batch_message(
-        self, message: messages.CreateTraceBatchMessage
+        self,
+        message: messages.CreateTraceBatchMessage,
+        push_back_callback: Callable[[messages.BaseMessage], None],
     ) -> None:
         rest_traces: List[trace_write.TraceWrite] = []
 
@@ -222,12 +258,17 @@ class MessageSender(BaseMessageProcessor):
         )
 
         for batch in memory_limited_batches:
-            LOGGER.debug("Create trace batch request of size %d", len(batch))
-            self._rest_client.traces.create_traces(traces=batch)
-            LOGGER.debug("Sent trace batch of size %d", len(batch))
+            self._send_create_traces_batch(batch)
+
+    def _send_create_traces_batch(self, batch: List[trace_write.TraceWrite]) -> None:
+        LOGGER.debug("Create trace batch request of size %d", len(batch))
+        self._rest_client.traces.create_traces(traces=batch)
+        LOGGER.debug("Sent trace batch of size %d", len(batch))
 
     def _process_guardrail_batch_message(
-        self, message: messages.GuardrailBatchMessage
+        self,
+        message: messages.GuardrailBatchMessage,
+        _: Callable[[messages.BaseMessage], None],
     ) -> None:
         batch = []
 

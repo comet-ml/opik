@@ -1,5 +1,5 @@
 from opik.message_processing import message_processors, messages
-from typing import List, Tuple, Type, Dict, Union, Optional
+from typing import List, Tuple, Type, Dict, Union, Optional, Callable
 
 from .models import TraceModel, SpanModel, FeedbackScoreModel
 from opik import dict_utils
@@ -204,7 +204,11 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
 
         self.processed_messages.append(message)
 
-    def process(self, message: messages.BaseMessage) -> None:
+    def process(
+        self,
+        message: messages.BaseMessage,
+        push_back_callback: Optional[Callable[[messages.BaseMessage], None]] = None,
+    ) -> None:
         try:
             self._dispatch_message(message)
         except Exception as exception:
