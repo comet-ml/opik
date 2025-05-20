@@ -38,7 +38,7 @@ def get_distributed_trace_headers() -> DistributedTraceHeadersDict:
     current_span_data = context_storage.top_span_data()
 
     if current_span_data is None:
-        raise Exception("There is no span in the context.")
+        raise exceptions.OpikException("There is no span in the context.")
 
     return DistributedTraceHeadersDict(
         opik_trace_id=current_span_data.trace_id,
