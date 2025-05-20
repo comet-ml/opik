@@ -114,24 +114,22 @@ Selecting the most appropriate optimizer depends heavily on your specific task a
 
 <Warning>
   We are currently working on the benchmarking results, these are early preliminary results and are subject to change.
+  You can learn more about our benchmarks [here](https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/benchmarks/run_benchmark.py).
 </Warning>
 
 Each optimization algorithm is evaluated against different use-cases and datasets:
 
 1. Arc: The [ai2_arc](https://huggingface.co/datasets/allenai/ai2_arc) dataset contains a set of multiple choice science questions
 2. GSM8K: The [gsm8k](https://huggingface.co/datasets/gsm8k) dataset contains a set of math problems
-3. Medhallucination: The [medhallucination](https://huggingface.co/datasets/medhallucination) dataset contains a set of medical questions
-4. RagBench: The [ragbench](https://huggingface.co/datasets/ragbench) dataset contains a set of questions and answers
+3. medhallu: The [medhallu](https://huggingface.co/datasets/UTAustin-AIHealth/MedHallu) dataset contains a set of medical questions
+4. RagBench: The [ragbench](https://huggingface.co/datasets/wandb/ragbench-sentence-relevance-balanced/discussions) dataset contains a set of questions and sentences to test a RAG environment.
 
-| Rank | Algorithm                      | Average Score | Arc dataset | GSM8K dataset | Medhallucination | RagBench |
+| Rank | Algorithm                      | Average Score | Arc dataset | GSM8K dataset | medhallu dataset | RagBench |
 | ---- | ------------------------------ | ------------- | ----------- | ------------- | ---------------- | -------- |
-| 1    | Few-shot Bayesian Optimization | 0.6733        | 0.2809      | 0.5926        | 0.9180           | 0.9015   |
-| 2    | Mipro Optimization             | 0.5591        | 0.0197      | 0.3970        | 0.9270           | 0.8928   |
-| 3    | MetaPrompt Optimization        | 0.5201        | 0.2500      | 0.2693        | 0.9179           | 0.6431   |
+| 1    | Few-shot Bayesian Optimization | 67.33%        | 28.09%      | 59.26%        | 91.80%           | 90.15%   |
+| 2    | Mipro Optimization             | 55.91%        | 19.70%      | 39.70%        | 92.70%           | 89.28%   |
+| 3    | MetaPrompt Optimization        | 52.01%        | 25.00%      | 26.93%        | 91.79%           | 64.31%   |
 | *tbd*| Evolutionary Optimization      | *tbd*         | *tbd*       | *tbd*         | *tbd*            | *tbd*    |
-| 4    | No optimization                | 0.1199        | 0.0169      | 0.2406        | 0.1238           | 0.0981   |
+| 4    | No optimization                | 11.99%        |  1.69%      | 24.06%        | 12.38%           |  9.81%   |
 
-The results above are for `gpt-4o-mini`, the results might change if you use a different model.
-
-Note: This results are preliminary and subject to change, you can learn more about
-our benchmarks [here](https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/benchmarks/run_benchmark.py).\_
+The results above are benchmarks tested against `gpt-4o-mini`, we are using various metrics depending on the dataset including Levenshtein Ratio, Answer Relevance and Hallucination. The results might change if you use a different model, configuration, dataset and starting prompt(s).
