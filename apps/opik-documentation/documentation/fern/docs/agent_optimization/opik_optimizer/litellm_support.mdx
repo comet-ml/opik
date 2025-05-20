@@ -19,7 +19,7 @@ This builds upon Opik's existing [tracing integration with LiteLLM](/tracing/int
 You pass the LiteLLM model identifier string directly to the `model` parameter in the optimizer's constructor. Here are some common examples:
 
 ### OpenAI
-```python
+```python {pytest_codeblocks_skip=true}
 from opik_optimizer import MetaPromptOptimizer
 
 optimizer = MetaPromptOptimizer(
@@ -29,7 +29,7 @@ optimizer = MetaPromptOptimizer(
 ```
 
 ### Azure OpenAI
-```python
+```python {pytest_codeblocks_skip=true}
 from opik_optimizer import FewShotBayesianOptimizer
 
 optimizer = FewShotBayesianOptimizer(
@@ -40,7 +40,7 @@ optimizer = FewShotBayesianOptimizer(
 ```
 
 ### Anthropic
-```python
+```python {pytest_codeblocks_skip=true}
 from opik_optimizer import MiproOptimizer
 
 optimizer = MiproOptimizer(
@@ -51,7 +51,7 @@ optimizer = MiproOptimizer(
 ```
 
 ### Google Gemini
-```python
+```python {pytest_codeblocks_skip=true}
 from opik_optimizer import EvolutionaryOptimizer
 
 optimizer = EvolutionaryOptimizer(
@@ -75,7 +75,7 @@ LiteLLM allows you to connect to models served locally through tools like Ollama
 <Step title="Use the LiteLLM convention for Ollama models">
   The format is typically `ollama/model_name` or `ollama_chat/model_name` for chat-tuned models.
 
-  ```python
+  ```python {pytest_codeblocks_skip=true}
   from opik_optimizer import MetaPromptOptimizer
 
   optimizer = MetaPromptOptimizer(
@@ -93,7 +93,7 @@ LiteLLM allows you to connect to models served locally through tools like Ollama
 LiteLLM supports numerous other providers like Cohere, Mistral AI, Bedrock, Vertex AI, Hugging Face Inference Endpoints, etc. Refer to the [LiteLLM documentation on Providers](https://docs.litellm.ai/docs/providers) for the correct model identifier strings and required environment variables for API keys.
 
 Example for a generic Hugging Face Inference Endpoint:
-```python
+```python {pytest_codeblocks_skip=true}
 optimizer = MetaPromptOptimizer(
     model="huggingface/meta-llama/Llama-2-7b-chat-hf",
     # Ensure HUGGINGFACE_API_KEY is set and potentially API_BASE if self-hosted
@@ -105,7 +105,7 @@ optimizer = MetaPromptOptimizer(
 
 Any keyword arguments you pass to the optimizer's constructor that are not its own defined parameters (e.g., `temperature`, `max_tokens`, `top_p`, provider-specific arguments like `api_base` or `api_version`) are collected into `**model_kwargs`. These are then passed by LiteLLM to the underlying model call.
 
-```python
+```python {pytest_codeblocks_skip=true}
 optimizer = MetaPromptOptimizer(
     model="openai/gpt-4o-mini",
     project_name="MyOptimization",
