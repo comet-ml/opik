@@ -69,7 +69,22 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-          
+
+      - name: Get pip cache dir
+        id: pip-cache
+        run: |
+          echo "pip_cache_dir=$(pip cache dir)" >> $GITHUB_OUTPUT
+        working-directory: apps/opik-documentation/documentation
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.pip-cache.outputs.pip_cache_dir }}
+          key: ${{ runner.os }}-python-${{ matrix.python-version }}-pip-${{ hashFiles('apps/opik-documentation/documentation/requirements.txt') }}-${{ hashFiles('sdks/opik_optimizer/**') }}
+          restore-keys: |
+            ${{ runner.os }}-python-${{ matrix.python-version }}-pip-${{ hashFiles('apps/opik-documentation/documentation/requirements.txt') }}-
+            ${{ runner.os }}-python-${{ matrix.python-version }}-pip-
+            
       - name: Install dependencies
         working-directory: apps/opik-documentation/documentation
         run: |
@@ -79,6 +94,8 @@ jobs:
           
       - name: Run tests
         working-directory: apps/opik-documentation/documentation
+        env:
+          PYTHONPATH: ${{ github.workspace }}/sdks/opik_optimizer/src:${{ github.workspace }}/sdks/python/src
         run: |
           if [ -n "${{ matrix.path }}" ]; then
             pytest ${{ matrix.path }} -v --suppress-no-test-exit-code --default-package=../../../sdks/python

@@ -2,3 +2,4 @@ jupyter
 markdown-analysis
 pytest-asyncio
 pytest-custom_exit_code
+-e ../../../sdks/opik_optimizer

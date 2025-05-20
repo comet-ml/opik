@@ -16,6 +16,8 @@ js:
     strategy: afterInteractive
   - path: ./dify_chatbot.js
     strategy: lazyOnload
+css: ./styles.css
+
 layout:
   searchbar-placement: header
   tabs-placement: header
@@ -318,51 +320,77 @@ navigation:
             slug: guardrails
   - tab: agent-optimization
     layout:
-      - page: Overview
+      - page: Agent & Prompt Optimization
         icon: fa-regular fa-house
         path: docs/agent_optimization/overview.mdx
         slug: overview
-      - section: Opik Optimizer
+      - section: Opik Optimizer Guide
         slug: /opik_optimizer
         contents:
-          - page: Quickstart
+          - page: Optimizer Quickstart
             icon: fa-regular fa-bolt
             path: docs/agent_optimization/opik_optimizer/quickstart.mdx
             slug: quickstart
-          - page: Concepts
+          - page: Core Concepts
             icon: fa-regular fa-lightbulb
             path: docs/agent_optimization/opik_optimizer/concepts.mdx
             slug: concepts
-          - page: Datasets and testing
+          - page: Datasets for Optimization
             icon: fa-regular fa-database
             path: docs/agent_optimization/opik_optimizer/datasets.mdx
             slug: datasets
-          - page: Reference
+          - page: LiteLLM Model Support
+            icon: fa-regular fa-rocket
+            path: docs/agent_optimization/opik_optimizer/litellm_support.mdx
+            slug: litellm_support
+          - page: API Reference
             icon: fa-regular fa-square-terminal
             path: docs/agent_optimization/opik_optimizer/reference.mdx
             slug: reference
-          - page: FAQ
+          - page: Optimizer & SDK FAQ
             icon: fa-regular fa-question
             path: docs/agent_optimization/opik_optimizer/faq.mdx
             slug: faq
-      - section: Best Practices
+      - section: Prompt Optimization Algorithms
+        slug: /algorithms
         contents:
-          - page: Prompt engineering
+          - page: Evolutionary Optimizer
+            path: docs/agent_optimization/algorithms/evolutionary_optimizer.mdx
+            slug: evolutionary_optimizer
+          - page: Few-Shot Bayesian Optimizer
+            path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
+            slug: fewshot_bayesian_optimizer
+          - page: MetaPrompt Optimizer
+            path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
+            slug: metaprompt_optimizer
+          - page: MIPRO Optimizer
+            path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
+            slug: mipro_optimizer
+      - section: Optimization Best Practices
+        slug: /best_practices
+        contents:
+          - page: Prompt Engineering
             icon: fa-regular fa-book
             path: docs/agent_optimization/best_practices/prompt_engineering.mdx
             slug: prompt_engineering
-      - section: Prompt Optimization algorithms
-        slug: /algorithms
+      - section: Example Projects and Cookbooks
+        slug: /optimizer-cookbooks
         contents:
-          - page: MetaPrompt Optimization
-            path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
-            slug: metaprompt_optimizer
-          - page: Few-shot Bayesian Optimization
-            path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
-            slug: fewshot_bayesian_optimizer
-          - page: Mipro Optimization
-            path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
-            slug: mipro_optimizer
+          - page: Introduction Example
+            icon: fa-regular fa-book
+            path: docs/agent_optimization/cookbook/optimizer_introduction_cookbook.mdx
+            slug: optimizer_introduction_cookbook
+          - page: Synthetic Data
+            icon: fa-regular fa-book
+            path: docs/agent_optimization/cookbook/synthetic_data_optimizer_cookbook.mdx
+            slug: synthetic_data_optimizer_cookbook
+      - section: Advanced Topics
+        slug: /advanced
+        contents:
+          - page: Extending Opik Optimizer
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/extending_optimizer.mdx
+            slug: extending_optimizer
   - tab: self-host
     layout:
       - page: Overview
