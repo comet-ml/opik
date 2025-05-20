@@ -68,7 +68,7 @@ The `EvolutionaryOptimizer` is built upon the [DEAP](https://deap.readthedocs.io
 
 The `EvolutionaryOptimizer` offers a rich set of parameters to control the genetic algorithm:
 
-```python
+```python {pytest_codeblocks_skip=true}
 from opik_optimizer import EvolutionaryOptimizer
 
 optimizer = EvolutionaryOptimizer(
@@ -110,7 +110,7 @@ Key parameters include:
 
 ## Example Usage
 
-```python
+```python {pytest_codeblocks_skip=true}
 from opik_optimizer import EvolutionaryOptimizer, TaskConfig, MetricConfig, from_llm_response_text, from_dataset_field
 from opik.evaluation.metrics import LevenshteinRatio # or any other suitable metric
 from opik_optimizer.demo import get_or_create_dataset
@@ -198,3 +198,53 @@ Genetic algorithms and evolutionary computation are well-established fields. You
 -   [DEAP Library](https://deap.readthedocs.io/en/master/): The underlying evolutionary computation framework used.
 
 This optimizer draws inspiration from applying these classical techniques to the domain of prompt engineering, with enhancements using LLMs for more intelligent genetic operations. 
+
+```python {pytest_codeblocks_skip=true}
+# Create an instance of the EvolutionaryOptimizer
+# This assumes you have your data prepared as shown in the "Preparing Your Data" section
+# and your evaluation function defined as in "Defining an Evaluation Function"
+optimizer = EvolutionaryOptimizer(
+    model="openai/gpt-4",
+    project_name="evolutionary_opt_project",
+    population_size=30,
+    num_generations=15,
+    mutation_rate=0.2,
+    crossover_rate=0.8,
+    tournament_size=4,
+    elitism_size=3,
+    adaptive_mutation=True,
+    enable_moo=True,
+    enable_llm_crossover=True,
+    output_style_guidance=None,
+    infer_output_style=True,
+    num_threads=12,
+    seed=42,
+    temperature=0.5,
+    max_tokens=1024
+)
+```
+
+### Advanced Configuration
+```python {pytest_codeblocks_skip=true}
+# Example of advanced configuration
+advanced_optimizer = EvolutionaryOptimizer(
+    config=optimizer_config,
+    model="openai/gpt-4",
+    project_name="evolutionary_opt_project",
+    population_size=30,
+    num_generations=15,
+    mutation_rate=0.2,
+    crossover_rate=0.8,
+    tournament_size=4,
+    elitism_size=3,
+    adaptive_mutation=True,
+    enable_moo=True,
+    enable_llm_crossover=True,
+    output_style_guidance=None,
+    infer_output_style=True,
+    num_threads=12,
+    seed=42,
+    temperature=0.5,
+    max_tokens=1024
+)
+```

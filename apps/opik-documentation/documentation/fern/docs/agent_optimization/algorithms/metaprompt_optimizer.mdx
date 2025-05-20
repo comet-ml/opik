@@ -52,7 +52,7 @@ This iterative loop of generation, evaluation, and selection allows the `MetaPro
 
 ### Basic Configuration
 
-```python
+```python {pytest_codeblocks_skip=true}
 from opik_optimizer import MetaPromptOptimizer
 
 prompter = MetaPromptOptimizer(
@@ -86,7 +86,7 @@ The optimizer works by iteratively generating new prompt suggestions using its `
 
 ## Example Usage
 
-```python
+```python {pytest_codeblocks_skip=true}
 from opik_optimizer import MetaPromptOptimizer
 from opik.evaluation.metrics import LevenshteinRatio
 from opik_optimizer import (
@@ -143,7 +143,7 @@ For detailed instructions on how to specify different models and configure provi
 
 ### Configuration Example using LiteLLM model string
 
-```python
+```python {pytest_codeblocks_skip=true}
 optimizer = MetaPromptOptimizer(
     model="google/gemini-pro",  # or any LiteLLM supported model
     project_name="my-project",

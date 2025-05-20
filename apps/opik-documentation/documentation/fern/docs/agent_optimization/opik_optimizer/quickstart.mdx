@@ -102,7 +102,7 @@ Here's a complete example of optimizing a prompt using the Few-Shot Bayesian Opt
   </Step>
   <Step title="7. Run the optimization">
     The `optimizer.optimize_prompt(...)` method is called with the dataset, metric configuration, and task configuration to start the optimization process.
-    ```python
+    ```python {pytest_codeblocks_skip=true}
     print("Starting optimization...")
     result = optimizer.optimize_prompt(
         dataset=dataset,
