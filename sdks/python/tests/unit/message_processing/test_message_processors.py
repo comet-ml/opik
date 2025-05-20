@@ -5,7 +5,7 @@ from opik.message_processing import message_processors
 from . import common
 
 
-def test_process__CreateTraceBatchMessage__mini_batches_created():
+def test_process__CreateTraceBatchMessage__mini_batches_created_and_pushed_back_into_callback():
     batch_message = common.create_fake_trace_batch(
         count=100, approximate_trace_size=common.ONE_MEGABYTE
     )
@@ -27,7 +27,7 @@ def test_process__CreateTraceBatchMessage__mini_batches_created():
     assert size >= 10
 
 
-def test_process__CreateSpanBatchMessage__mini_batches_created():
+def test_process__CreateSpanBatchMessage__mini_batches_created_and_pushed_back_into_callback():
     batch_message = common.create_fake_span_batch(
         count=100, approximate_span_size=common.ONE_MEGABYTE
     )
