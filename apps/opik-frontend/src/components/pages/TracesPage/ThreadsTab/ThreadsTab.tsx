@@ -22,6 +22,7 @@ import {
 } from "@/types/shared";
 import { Thread } from "@/types/traces";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
 import NoThreadsPage from "@/components/pages/TracesPage/ThreadsTab/NoThreadsPage";
@@ -146,6 +147,8 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 const SELECTED_COLUMNS_KEY = "threads-selected-columns";
 const COLUMNS_WIDTH_KEY = "threads-columns-width";
 const COLUMNS_ORDER_KEY = "threads-columns-order";
+const PAGINATION_SIZE_KEY = "threads-pagination-size";
+const ROW_HEIGHT_KEY = "threads-row-height";
 
 type ThreadsTabProps = {
   projectId: string;
@@ -180,17 +183,25 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     updateType: "replaceIn",
   });
 
-  const [size = 100, setSize] = useQueryParam("threads_size", NumberParam, {
-    updateType: "replaceIn",
+  const [size, setSize] = useQueryParamAndLocalStorageState<
+    number | null | undefined
+  >({
+    localStorageKey: PAGINATION_SIZE_KEY,
+    queryKey: "size",
+    defaultValue: 100,
+    queryParamConfig: NumberParam,
+    syncQueryWithLocalStorageOnInit: true,
   });
 
-  const [height = ROW_HEIGHT.small, setHeight] = useQueryParam(
-    "threads_height",
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
+  const [height, setHeight] = useQueryParamAndLocalStorageState<
+    string | null | undefined
+  >({
+    localStorageKey: ROW_HEIGHT_KEY,
+    queryKey: "threads_height",
+    defaultValue: ROW_HEIGHT.small,
+    queryParamConfig: StringParam,
+    syncQueryWithLocalStorageOnInit: true,
+  });
 
   const [filters = [], setFilters] = useQueryParam(
     `threads_filters`,

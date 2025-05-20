@@ -21,6 +21,7 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import Loader from "@/components/shared/Loader/Loader";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
@@ -91,6 +92,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 const SELECTED_COLUMNS_KEY = "project-rules-selected-columns";
 const COLUMNS_WIDTH_KEY = "project-rules-columns-width";
 const COLUMNS_ORDER_KEY = "project-rules-columns-order";
+const PAGINATION_SIZE_KEY = "project-rules-pagination-size";
 
 type RulesTabProps = {
   projectId: string;
@@ -108,8 +110,14 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
     updateType: "replaceIn",
   });
 
-  const [size = 10, setSize] = useQueryParam("size", NumberParam, {
-    updateType: "replaceIn",
+  const [size, setSize] = useQueryParamAndLocalStorageState<
+    number | null | undefined
+  >({
+    localStorageKey: PAGINATION_SIZE_KEY,
+    queryKey: "size",
+    defaultValue: 10,
+    queryParamConfig: NumberParam,
+    syncQueryWithLocalStorageOnInit: true,
   });
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
