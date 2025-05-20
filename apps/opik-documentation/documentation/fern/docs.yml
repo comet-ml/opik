@@ -330,10 +330,14 @@ navigation:
             icon: fa-regular fa-lightbulb
             path: docs/agent_optimization/opik_optimizer/concepts.mdx
             slug: concepts
-          - page: Datasets and testing
+          - page: Datasets and Testing
             icon: fa-regular fa-database
             path: docs/agent_optimization/opik_optimizer/datasets.mdx
             slug: datasets
+          - page: LiteLLM Support
+            icon: fa-regular fa-rocket 
+            path: docs/agent_optimization/opik_optimizer/litellm_support.mdx
+            slug: litellm_support
           - page: Reference
             icon: fa-regular fa-square-terminal
             path: docs/agent_optimization/opik_optimizer/reference.mdx
@@ -343,21 +347,25 @@ navigation:
             path: docs/agent_optimization/opik_optimizer/faq.mdx
             slug: faq
       - section: Best Practices
+        slug: /best_practices 
         contents:
-          - page: Prompt engineering
+          - page: Prompt Engineering
             icon: fa-regular fa-book
             path: docs/agent_optimization/best_practices/prompt_engineering.mdx
             slug: prompt_engineering
       - section: Prompt Optimization algorithms
         slug: /algorithms
         contents:
-          - page: MetaPrompt Optimization
-            path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
-            slug: metaprompt_optimizer
-          - page: Few-shot Bayesian Optimization
+          - page: Evolutionary Optimizer
+            path: docs/agent_optimization/algorithms/evolutionary_optimizer.mdx
+            slug: evolutionary_optimizer
+          - page: Few-shot Bayesian Optimizer
             path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
             slug: fewshot_bayesian_optimizer
-          - page: Mipro Optimization
+          - page: MetaPrompt Optimizer 
+            path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
+            slug: metaprompt_optimizer
+          - page: MIPRO Optimizer 
             path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
             slug: mipro_optimizer
   - tab: self-host
