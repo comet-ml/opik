@@ -1,5 +1,7 @@
 ---
-title: LiteLLM Model Support for Optimizers (OpenAI, Azure, Local Models)
+title: "Agent Optimizer LiteLLM Support"
+subtitle: "LiteLLM Model Support for Optimizers (OpenAI, Azure, Local Models)"
+description: "Learn how to use any model with Opik Agent Optimizer, LiteLLMs supports various LLM providers including OpenAI, Azure, Anthropic, Google, and local models."
 pytest_codeblocks_skip: true
 ---
 
@@ -94,34 +96,4 @@ LiteLLM allows you to connect to models served locally through tools like Ollama
 LiteLLM supports numerous other providers like Cohere, Mistral AI, Bedrock, Vertex AI, Hugging Face Inference Endpoints, etc. Refer to the [LiteLLM documentation on Providers](https://docs.litellm.ai/docs/providers) for the correct model identifier strings and required environment variables for API keys.
 
 Example for a generic Hugging Face Inference Endpoint:
-```python
-optimizer = MetaPromptOptimizer(
-    model="huggingface/meta-llama/Llama-2-7b-chat-hf",
-    # Ensure HUGGINGFACE_API_KEY is set and potentially API_BASE if self-hosted
-    # ... other parameters
-)
 ```
-
-## Passing Additional Model Arguments
-
-Any keyword arguments you pass to the optimizer's constructor that are not its own defined parameters (e.g., `temperature`, `max_tokens`, `top_p`, provider-specific arguments like `api_base` or `api_version`) are collected into `**model_kwargs`. These are then passed by LiteLLM to the underlying model call.
-
-```python
-optimizer = MetaPromptOptimizer(
-    model="openai/gpt-4o-mini",
-    project_name="MyOptimization",
-    temperature=0.7,
-    max_tokens=1500,
-    seed=42, # some models accept a seed for reproducibility
-    # custom_provider_arg="value" # if LiteLLM supports passing it to the provider
-)
-```
-
-<Warning>
-  Ensure that the keyword arguments you pass are supported by the specific LLM and provider you are using. Unsupported arguments might be ignored or could cause errors.
-</Warning>
-
-## Next Steps
-- Review the documentation for individual [optimizers](/agent_optimization/overview#optimization-algorithms) to see how the `model` parameter is used.
-- Consult the main [LiteLLM integration guide](/tracing/integrations/litellm) for setting up tracing of these calls.
-- Visit the official [LiteLLM documentation](https://docs.litellm.ai/) for comprehensive details on model support and configuration. 

@@ -1,5 +1,7 @@
 ---
-title: "Opik Agent Optimizer FAQ: Your Questions Answered"
+title: "Optimizer Frequently Asked Questions"
+subtitle: "Your FAQ on Opik Agent Optimizer"
+description: "Find answers to common questions about Opik Agent Optimizer, including optimizer selection, configuration, usage, and best practices."
 ---
 
 This FAQ section addresses common questions and concerns about the Opik
@@ -9,6 +11,8 @@ the tool.
 <Tip>
   Many general questions about model support (OpenAI, Azure, local models, etc.) and passing LLM parameters like `temperature` are covered in our [LiteLLM Support for Optimizers](/agent_optimization/opik_optimizer/litellm_support) guide.
 </Tip>
+
+## General Questions
 
 <AccordionGroup>
   <Accordion title="Q: How do I choose the right optimizer for my task?">
@@ -101,7 +105,58 @@ the tool.
   </Accordion>
 </AccordionGroup>
 
-### MetaPromptOptimizer
+<AccordionGroup>
+  <Accordion title="Q: Is there any document which explains how these optimization algorithms work?">
+    A: Yes, we have detailed documentation:
+    1.  **Core Concepts**: See our [Core Concepts](/agent_optimization/opik_optimizer/concepts) documentation.
+    2.  **Optimizer Details**: Each optimizer has its own page under [Optimization Algorithms](/agent_optimization/overview#optimization-algorithms), explaining how it works, configuration, and examples.
+    3.  **Research Papers**: Many optimizer pages include links to relevant research papers.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: What should I do if the optimization isn't improving results?">
+  A: Try these steps:
+  1.  **Check Dataset**:
+      - Ensure sufficient examples (50+ recommended, 100-500 optimal).
+      - Verify data quality (accurate ground truth, diverse inputs).
+      - Check for representation of edge cases and common scenarios.
+  2.  **Review `MetricConfig`**:
+      - Is the metric appropriate for your task? (e.g., exact match vs. semantic similarity).
+      - Are the `inputs` to the metric correctly mapped from the dataset and LLM output?
+  3.  **Review `TaskConfig`**:
+      - Is the `instruction_prompt` a good starting point?
+      - Are `input_dataset_fields` and `output_dataset_field` correctly specified?
+      - Is `use_chat_prompt` set correctly for your model type?
+  4.  **Adjust Optimizer Parameters**:
+      - Try more iterations/rounds/generations/candidates.
+      - For `MetaPromptOptimizer`, consider a more powerful `reasoning_model`.
+      - For `FewShotBayesianOptimizer`, ensure `min_examples` and `max_examples` cover a reasonable range.
+      - For `EvolutionaryOptimizer`, experiment with `population_size`, `mutation_rate`, and LLM-driven operators.
+      - For `MiproOptimizer`, if using tools, ensure the tools themselves are robust.
+  5.  **Adjust LLM Parameters**:
+      - Experiment with `temperature` (lower for more deterministic, higher for more creative).
+      - Ensure `max_tokens` is sufficient for the desired output.
+  6.  **Increase `n_samples`**: If you're using a small `n_samples` for `optimize_prompt`, try increasing it for more stable evaluations per candidate, or evaluate the final prompt on the full dataset.
+  7.  **Analyze Optimizer History**: The `OptimizationResult.history` can provide insights into how scores changed over iterations.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: How can I optimize for specific use cases?">
+  A:
+  1.  **Custom Metrics**: Define your own metric by subclassing `opik.evaluation.metrics.BaseMetric` if standard metrics aren't sufficient. This allows you to score prompt performance based on domain-specific criteria.
+  2.  **Dataset Curation**: Tailor your dataset to reflect the specific nuances, vocabulary, and desired outputs of your use case. Include challenging examples and edge cases.
+  3.  **`TaskConfig.instruction_prompt`**: Craft your initial instruction prompt to be highly relevant to the use case. Even with optimization, a good starting point helps.
+  4.  **Optimizer Selection**: Choose the optimizer best suited for the *type* of optimization your use case needs (e.g., few-shot examples, complex agent logic, general wording).
+  5.  **Parameter Tuning**: Adjust optimizer and LLM parameters based on experimentation to fine-tune performance for your specific scenario. For example, if optimizing for code generation, you might use a lower temperature.
+  </Accordion>
+</AccordionGroup>
+
+
+## Optimizer Specific Questions
+
+### `MetaPromptOptimizer`
 
 <AccordionGroup>
   <Accordion title="Q: When is `MetaPromptOptimizer` a good choice?">
@@ -131,7 +186,7 @@ the tool.
   </Accordion>
 </AccordionGroup>
 
-### FewShotBayesianOptimizer
+### `FewShotBayesianOptimizer`
 
 <AccordionGroup>
   <Accordion title="Q: When should I use `FewShotBayesianOptimizer`?">
@@ -153,7 +208,7 @@ the tool.
   </Accordion>
 </AccordionGroup>
 
-### MiproOptimizer
+### `MiproOptimizer`
 
 <AccordionGroup>
   <Accordion title="Q: When is `MiproOptimizer` suitable?">
@@ -219,58 +274,6 @@ the tool.
     A:
     - **Standard operators**: Perform syntactic changes (e.g., swapping words, combining sentence chunks from two parent prompts).
     - **LLM-driven operators**: Use an LLM to perform more intelligent, semantic changes. For example, an LLM-driven crossover might try to blend the core ideas of two parent prompts into a new, coherent child prompt, rather than just mixing parts. This often leads to higher quality offspring but incurs more LLM calls.
-  </Accordion>
-</AccordionGroup>
-
-### Algorithm Understanding
-
-<AccordionGroup>
-  <Accordion title="Q: Is there any document which explains how these optimization algorithms work?">
-    A: Yes, we have detailed documentation:
-    1.  **Core Concepts**: See our [Core Concepts](/agent_optimization/opik_optimizer/concepts) documentation.
-    2.  **Optimizer Details**: Each optimizer has its own page under [Optimization Algorithms](/agent_optimization/overview#optimization-algorithms), explaining how it works, configuration, and examples.
-    3.  **Research Papers**: Many optimizer pages include links to relevant research papers.
-  </Accordion>
-</AccordionGroup>
-
-### Troubleshooting
-
-<AccordionGroup>
-  <Accordion title="Q: What should I do if the optimization isn't improving results?">
-  A: Try these steps:
-  1.  **Check Dataset**:
-      - Ensure sufficient examples (50+ recommended, 100-500 optimal).
-      - Verify data quality (accurate ground truth, diverse inputs).
-      - Check for representation of edge cases and common scenarios.
-  2.  **Review `MetricConfig`**:
-      - Is the metric appropriate for your task? (e.g., exact match vs. semantic similarity).
-      - Are the `inputs` to the metric correctly mapped from the dataset and LLM output?
-  3.  **Review `TaskConfig`**:
-      - Is the `instruction_prompt` a good starting point?
-      - Are `input_dataset_fields` and `output_dataset_field` correctly specified?
-      - Is `use_chat_prompt` set correctly for your model type?
-  4.  **Adjust Optimizer Parameters**:
-      - Try more iterations/rounds/generations/candidates.
-      - For `MetaPromptOptimizer`, consider a more powerful `reasoning_model`.
-      - For `FewShotBayesianOptimizer`, ensure `min_examples` and `max_examples` cover a reasonable range.
-      - For `EvolutionaryOptimizer`, experiment with `population_size`, `mutation_rate`, and LLM-driven operators.
-      - For `MiproOptimizer`, if using tools, ensure the tools themselves are robust.
-  5.  **Adjust LLM Parameters**:
-      - Experiment with `temperature` (lower for more deterministic, higher for more creative).
-      - Ensure `max_tokens` is sufficient for the desired output.
-  6.  **Increase `n_samples`**: If you're using a small `n_samples` for `optimize_prompt`, try increasing it for more stable evaluations per candidate, or evaluate the final prompt on the full dataset.
-  7.  **Analyze Optimizer History**: The `OptimizationResult.history` can provide insights into how scores changed over iterations.
-  </Accordion>
-</AccordionGroup>
-
-<AccordionGroup>
-  <Accordion title="Q: How can I optimize for specific use cases?">
-  A:
-  1.  **Custom Metrics**: Define your own metric by subclassing `opik.evaluation.metrics.BaseMetric` if standard metrics aren't sufficient. This allows you to score prompt performance based on domain-specific criteria.
-  2.  **Dataset Curation**: Tailor your dataset to reflect the specific nuances, vocabulary, and desired outputs of your use case. Include challenging examples and edge cases.
-  3.  **`TaskConfig.instruction_prompt`**: Craft your initial instruction prompt to be highly relevant to the use case. Even with optimization, a good starting point helps.
-  4.  **Optimizer Selection**: Choose the optimizer best suited for the *type* of optimization your use case needs (e.g., few-shot examples, complex agent logic, general wording).
-  5.  **Parameter Tuning**: Adjust optimizer and LLM parameters based on experimentation to fine-tune performance for your specific scenario. For example, if optimizing for code generation, you might use a lower temperature.
   </Accordion>
 </AccordionGroup>
 
