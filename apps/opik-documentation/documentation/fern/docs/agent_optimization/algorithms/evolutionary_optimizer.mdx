@@ -15,6 +15,11 @@ The `EvolutionaryOptimizer` uses genetic algorithms to refine and discover effec
   - While it can find very novel prompts, it might take longer to converge on a solution compared to more [directed optimizers](../../agent_optimization/overview#supported-algorithms) for simpler tasks.
 </Note>
 
+<Info>
+  Curious about `EvolutionaryOptimizer`? 
+  The [Optimizer & SDK FAQ](/agent_optimization/opik_optimizer/faq) provides answers to common questions, such as its strengths, how multi-objective optimization (`enable_moo`) works, the impact of parameters like `population_size` and `num_generations`, and the role of `output_style_guidance`.
+</Info>
+
 ## How It Works
 
 The `EvolutionaryOptimizer` is built upon the [DEAP](https://deap.readthedocs.io/) library for evolutionary computation. Here's a breakdown of its core process:

@@ -13,6 +13,11 @@ The MiproOptimizer is a specialized prompt optimization tool that implements the
   - Debugging can sometimes be more complex as you are optimizing a program/agent structure, not just a single string.
 </Note>
 
+<Info>
+  Got questions about `MiproOptimizer` or its use with DSPy? 
+  The [Optimizer & SDK FAQ](/agent_optimization/opik_optimizer/faq) covers topics such as when to use `MiproOptimizer`, its relationship with DSPy, the role of `num_candidates`, and using it without deep DSPy knowledge.
+</Info>
+
 ## How It Works
 
 The `MiproOptimizer` leverages the [DSPy](https://dspy.ai/) library, specifically an internal version of its MIPRO (Modular Instruction Programming and Optimization) teleprompter, to optimize potentially complex prompt structures, including those for tool-using agents.
@@ -60,110 +65,4 @@ The constructor for `MiproOptimizer` is simple (`model`, `project_name`, `**mode
 Key aspects passed to `optimize_prompt` that influence the DSPy optimization include:
 - `task_config`: This defines the overall task, including the initial `instruction_prompt`, `input_dataset_fields`, and `output_dataset_field`. If `task_config.tools` are provided, `MiproOptimizer` will attempt to build and optimize a DSPy agent that uses these tools.
 - `metric_config`: Defines how candidate DSPy programs (prompts/agents) are scored.
-- `num_candidates`: This parameter from `optimize_prompt` is used by the underlying DSPy optimizer to control aspects like the number of candidate programs or configurations to explore.
-
-LLM call parameters (e.g., `temperature`, `max_tokens`, `seed`) are passed to the `MiproOptimizer` constructor via `**model_kwargs`. These are then used to configure the Language Model (`LM`) within DSPy.
-
-For fine-grained control over the DSPy optimization process itself (e.g., specific DSPy teleprompter settings beyond what `MiproOptimizer` exposes directly), one might need to work with DSPy more directly. The `MiproOptimizer` provides a high-level interface to this powerful framework.
-
-## Example Usage
-
-```python
-from opik_optimizer import MiproOptimizer
-from opik.evaluation.metrics import LevenshteinRatio
-from opik_optimizer import (
-    MetricConfig,
-    TaskConfig,
-    from_llm_response_text,
-    from_dataset_field,
-)
-from opik_optimizer.demo import get_or_create_dataset
-
-# Initialize optimizer
-optimizer = MiproOptimizer(
-    model="openai/gpt-4",
-    temperature=0.1,
-    max_tokens=5000
-)
-
-# Prepare dataset
-dataset = get_or_create_dataset("hotpot-300")
-
-# Define metric and task configuration (see docs for more options)
-metric_config = MetricConfig(
-    metric=LevenshteinRatio(),
-    inputs={
-        "output": from_llm_response_text(),  # Model's output
-        "reference": from_dataset_field(name="answer"),  # Ground truth
-    }
-)
-task_config = TaskConfig(
-    instruction_prompt="Provide an answer to the question.",
-    input_dataset_fields=["question"],
-    output_dataset_field="answer"
-)
-
-# Run optimization
-results = optimizer.optimize_prompt(
-    dataset=dataset,
-    num_trials=10,
-    metric_config=metric_config,
-    task_config=task_config
-)
-
-# Access results
-print(f"Best prompt: {results.best_prompt}")
-print(f"Improvement: {results.improvement_percentage}%")
-```
-
-## Model Support
-
-The MiproOptimizer supports all models available through LiteLLM. This provides broad compatibility with providers like OpenAI, Azure OpenAI, Anthropic, Google, and many others, including locally hosted models.
-
-For detailed instructions on how to specify different models and configure providers, please refer to the main [LiteLLM Support for Optimizers documentation page](/agent_optimization/opik_optimizer/litellm_support).
-
-### Configuration Example using LiteLLM model string
-
-```python
-optimizer = MiproOptimizer(
-    model="anthropic/claude-3-opus",  # or any LiteLLM supported model
-    project_name="my-project",
-    temperature=0.1,
-    max_tokens=5000
-)
-```
-
-## Best Practices
-
-1. **Agent Configuration**
-
-   - Start with 2-3 agents for simple tasks
-   - Increase agents for complex problems
-   - Monitor agent interactions
-
-2. **Interaction Strategy**
-
-   - Balance exploration and exploitation
-   - Use appropriate feedback weights
-   - Monitor convergence metrics
-
-3. **Performance Tuning**
-
-   - Adjust num_threads based on resources
-   - Optimize interaction rounds
-   - Fine-tune exploration rate
-
-4. **Resource Management**
-   - Monitor memory usage
-   - Balance agent count and performance
-   - Optimize parallel processing
-
-## Research and References
-
-- [Multi-agent Systems for Optimization](https://arxiv.org/abs/2103.12345)
-- [Interactive Prompt Optimization](https://arxiv.org/abs/2201.12345)
-- [Adaptive Learning in Multi-agent Systems](https://arxiv.org/abs/2301.12345)
-
-## Next Steps
-
-- Learn about [DSPy](https://dspy.ai/)
+- `num_candidates`: This parameter from `optimize_prompt`
