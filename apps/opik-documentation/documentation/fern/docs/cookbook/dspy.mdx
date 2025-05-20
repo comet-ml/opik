@@ -43,7 +43,7 @@ from opik.integrations.dspy.callback import OpikCallback
 lm = dspy.LM("openai/gpt-4o-mini")
 
 project_name = "DSPY"
-opik_callback = OpikCallback(project_name=project_name)
+opik_callback = OpikCallback(project_name=project_name, log_graph=True)
 
 dspy.configure(lm=lm, callbacks=[opik_callback])
 ```
@@ -57,3 +57,7 @@ cot(question="What is the meaning of life?")
 The trace is now logged to the Opik platform:
 
 ![DSPy trace](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/fern/img/cookbook/dspy_trace_cookbook.png)
+
+If you set `log_graph` to `True` in the `OpikCallback`, then each module graph is also displayed in the "Agent graph" tab:
+
+![DSPy trace with graph](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/fern/img/cookbook/dspy_trace_cookbook_with_agent_graph.png)
