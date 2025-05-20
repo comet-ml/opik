@@ -320,11 +320,11 @@ navigation:
             slug: guardrails
   - tab: agent-optimization
     layout:
-      - page: Agent & Prompt Optimization
+      - page: Opik Agent Optimizer
         icon: fa-regular fa-house
         path: docs/agent_optimization/overview.mdx
         slug: overview
-      - section: Opik Optimizer Guide
+      - section: Opik Agent Optimizer Guide
         slug: /opik_optimizer
         contents:
           - page: Optimizer Quickstart
@@ -387,10 +387,10 @@ navigation:
       - section: Advanced Topics
         slug: /advanced
         contents:
-          - page: Extending Opik Optimizer
+          - page: Extending Optimizers
             icon: fa-regular fa-puzzle-piece
-            path: docs/agent_optimization/algorithms/extending_optimizer.mdx
-            slug: extending_optimizer
+            path: docs/agent_optimization/algorithms/extending_optimizers.mdx
+            slug: extending_optimizers
   - tab: self-host
     layout:
       - page: Overview
