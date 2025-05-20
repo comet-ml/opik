@@ -16,6 +16,8 @@ js:
     strategy: afterInteractive
   - path: ./dify_chatbot.js
     strategy: lazyOnload
+css: ./styles.css
+
 layout:
   searchbar-placement: header
   tabs-placement: header
