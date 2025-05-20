@@ -322,6 +322,7 @@ navigation:
       - section: "Opik Optimizer Guide"
         slug: /opik_optimizer
         contents:
+          - page: "Optimizer Quickstart"
             icon: fa-regular fa-bolt
             path: docs/agent_optimization/opik_optimizer/quickstart.mdx
             slug: quickstart
