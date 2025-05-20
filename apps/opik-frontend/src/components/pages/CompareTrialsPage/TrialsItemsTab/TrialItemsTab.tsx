@@ -50,6 +50,7 @@ import {
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsColumns";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import ExperimentsFeedbackScoresSelect from "@/components/pages-shared/experiments/ExperimentsFeedbackScoresSelect/ExperimentsFeedbackScoresSelect";
 import { calculateHeightStyle } from "@/components/shared/DataTable/utils";
@@ -74,6 +75,8 @@ const COLUMNS_ORDER_KEY = "compare-trials-columns-order";
 const DYNAMIC_COLUMNS_KEY = "compare-trials-dynamic-columns";
 const COLUMNS_SCORES_ORDER_KEY = "compare-trials-scores-columns-order";
 const COLUMNS_OUTPUT_ORDER_KEY = "compare-trials-output-columns-order";
+const PAGINATION_SIZE_KEY = "compare-trials-pagination-size";
+const ROW_HEIGHT_KEY = "compare-trials-row-height";
 
 export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
@@ -122,17 +125,25 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
     updateType: "replaceIn",
   });
 
-  const [size = 100, setSize] = useQueryParam("size", NumberParam, {
-    updateType: "replaceIn",
+  const [size, setSize] = useQueryParamAndLocalStorageState<
+    number | null | undefined
+  >({
+    localStorageKey: PAGINATION_SIZE_KEY,
+    queryKey: "size",
+    defaultValue: 100,
+    queryParamConfig: NumberParam,
+    syncQueryWithLocalStorageOnInit: true,
   });
 
-  const [height = ROW_HEIGHT.small, setHeight] = useQueryParam(
-    "height",
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
+  const [height, setHeight] = useQueryParamAndLocalStorageState<
+    string | null | undefined
+  >({
+    localStorageKey: ROW_HEIGHT_KEY,
+    queryKey: "height",
+    defaultValue: ROW_HEIGHT.small,
+    queryParamConfig: StringParam,
+    syncQueryWithLocalStorageOnInit: true,
+  });
 
   const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
     updateType: "replaceIn",

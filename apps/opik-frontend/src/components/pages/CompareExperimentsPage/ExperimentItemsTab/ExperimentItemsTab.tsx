@@ -55,6 +55,7 @@ import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList"
 import useAppStore from "@/store/AppStore";
 import { Experiment, ExperimentsCompare } from "@/types/datasets";
 import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { formatDate } from "@/lib/date";
 import {
   convertColumnDataToColumn,
@@ -94,6 +95,8 @@ const COLUMNS_ORDER_KEY = "compare-experiments-columns-order";
 const DYNAMIC_COLUMNS_KEY = "compare-experiments-dynamic-columns";
 const COLUMNS_SCORES_ORDER_KEY = "compare-experiments-scores-columns-order";
 const COLUMNS_OUTPUT_ORDER_KEY = "compare-experiments-output-columns-order";
+const PAGINATION_SIZE_KEY = "compare-experiments-pagination-size";
+const ROW_HEIGHT_KEY = "compare-experiments-row-height";
 
 export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
@@ -151,17 +154,25 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     updateType: "replaceIn",
   });
 
-  const [size = 100, setSize] = useQueryParam("size", NumberParam, {
-    updateType: "replaceIn",
+  const [size, setSize] = useQueryParamAndLocalStorageState<
+    number | null | undefined
+  >({
+    localStorageKey: PAGINATION_SIZE_KEY,
+    queryKey: "size",
+    defaultValue: 100,
+    queryParamConfig: NumberParam,
+    syncQueryWithLocalStorageOnInit: true,
   });
 
-  const [height = ROW_HEIGHT.small, setHeight] = useQueryParam(
-    "height",
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
+  const [height, setHeight] = useQueryParamAndLocalStorageState<
+    string | null | undefined
+  >({
+    localStorageKey: ROW_HEIGHT_KEY,
+    queryKey: "height",
+    defaultValue: ROW_HEIGHT.small,
+    queryParamConfig: StringParam,
+    syncQueryWithLocalStorageOnInit: true,
+  });
 
   const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
     updateType: "replaceIn",
