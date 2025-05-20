@@ -52,6 +52,8 @@ result = optimizer.optimize_prompt(
     dataset=opik_dataset,
     metric_config=metric_config,
     task_config=task_config,
+    n_samples=50,
+    auto=None,
 )
 
 result.display()

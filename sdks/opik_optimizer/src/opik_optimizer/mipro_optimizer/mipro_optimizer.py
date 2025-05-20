@@ -197,6 +197,8 @@ class MiproOptimizer(BaseOptimizer):
         num_candidates: int = 10,
         experiment_config: Optional[Dict] = None,
         num_trials: Optional[int] = 3,
+        n_samples: Optional[int] = 10,
+        auto: Optional[Literal["light", "medium", "heavy"]] = "light",
         **kwargs,
     ) -> OptimizationResult:
         self._opik_client = opik.Opik()
@@ -224,6 +226,8 @@ class MiproOptimizer(BaseOptimizer):
                 experiment_config=experiment_config,
                 optimization_id=optimization.id if optimization is not None else None,
                 num_trials=num_trials,
+                n_samples=n_samples,
+                auto=auto,
                 **kwargs,
             )
             if optimization:
@@ -244,6 +248,8 @@ class MiproOptimizer(BaseOptimizer):
         experiment_config: Optional[Dict] = None,
         optimization_id: Optional[str] = None,
         num_trials: Optional[int] = 3,
+        n_samples: Optional[int] = 10,
+        auto: Optional[Literal["light", "medium", "heavy"]] = "light",
         **kwargs,
     ) -> OptimizationResult:
         logger.info("Preparing MIPRO optimization...")
@@ -255,6 +261,8 @@ class MiproOptimizer(BaseOptimizer):
             experiment_config=experiment_config,
             optimization_id=optimization_id,
             num_trials=num_trials,
+            n_samples=n_samples,
+            auto=auto,
             **kwargs,
         )
         logger.info("Starting MIPRO compilation...")
@@ -271,7 +279,8 @@ class MiproOptimizer(BaseOptimizer):
         experiment_config: Optional[Dict] = None,
         optimization_id: Optional[str] = None,
         num_trials: Optional[int] = 3,
-        auto: Optional[Literal["light", "medium", "heavy"]] = "medium",
+        n_samples: Optional[int] = 10,
+        auto: Optional[Literal["light", "medium", "heavy"]] = "light",
         **kwargs,
     ) -> None:
         # FIXME: Intermediate values:
@@ -286,6 +295,7 @@ class MiproOptimizer(BaseOptimizer):
         self.output_key = output_key
         self.prompt = prompt
         self.num_trials = num_trials
+        self.n_samples = n_samples
         self.auto = auto
 
         # Convert to values for MIPRO:
@@ -302,7 +312,7 @@ class MiproOptimizer(BaseOptimizer):
             if self.output_key not in row:
                 raise Exception("row does not contain output_key: %r" % self.output_key)
 
-        self.trainset = create_dspy_training_set(self.dataset, self.input_key)
+        self.trainset = create_dspy_training_set(self.dataset, self.input_key, self.n_samples)
         self.data_signature = create_dspy_signature(
             self.input_key, self.output_key, self.prompt
         )
