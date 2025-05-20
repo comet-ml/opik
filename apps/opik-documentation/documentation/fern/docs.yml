@@ -322,7 +322,6 @@ navigation:
       - section: "Opik Optimizer Guide"
         slug: /opik_optimizer
         contents:
-          - page: "Opik Optimizer Quickstart"
             icon: fa-regular fa-bolt
             path: docs/agent_optimization/opik_optimizer/quickstart.mdx
             slug: quickstart
@@ -368,6 +367,18 @@ navigation:
             icon: fa-regular fa-book
             path: docs/agent_optimization/best_practices/prompt_engineering.mdx
             slug: prompt_engineering
+      - section: "Example Projects & Cookbooks"
+        slug: /cookbook
+        description: "End-to-end, runnable Colab notebooks showing real-world Opik Optimizer workflows."
+        contents:
+          - page: "Opik Optimizer Introduction: HotPotQA Example (Colab)"
+            icon: fa-regular fa-graduation-cap
+            path: docs/agent_optimization/cookbook/optimizer_introduction_cookbook.mdx
+            slug: optimizer_introduction_cookbook
+          - page: "Synthetic Data Optimizer Cookbook (Colab)"
+            icon: fa-regular fa-flask
+            path: docs/agent_optimization/cookbook/synthetic_data_optimizer_cookbook.mdx
+            slug: synthetic_data_optimizer_cookbook
       - section: "Advanced Topics"
         slug: /advanced
         contents:
