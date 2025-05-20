@@ -14,7 +14,7 @@ Opik integrates with DSPy to allow you to log your DSPy runs to the Opik platfor
     dspy.configure(lm=lm)
 
 
-    opik_callback = OpikCallback(project_name=project_name)
+    opik_callback = OpikCallback(project_name=project_name, log_graph=True)
     dspy.settings.configure(
         callbacks=[opik_callback],
     )
