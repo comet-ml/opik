@@ -31,8 +31,8 @@ interface ParsedOpenAIArguments {
   modelParameters: Record<string, unknown>;
 }
 
-interface CompletionUsageObject {
-  usage: OpenAI.CompletionUsage;
+interface CompletionUsageObject<T> {
+  usage: T;
 }
 
 type ChunkResult =
@@ -236,21 +236,30 @@ const extractFromChoices = (res: {
 export const parseUsage = (
   res: unknown
 ): Record<string, number> | undefined => {
-  if (!hasCompletionUsage(res)) {
-    return undefined;
+  if (hasCompletionUsage(res)) {
+    return {
+      completion_tokens: res.usage.completion_tokens,
+      prompt_tokens: res.usage.prompt_tokens,
+      total_tokens: res.usage.total_tokens,
+      ...flattenObject(res.usage, "original_usage"),
+    };
   }
 
-  const { prompt_tokens, completion_tokens, total_tokens } = res.usage;
+  if (hasResponseUsage(res)) {
+    return {
+      completion_tokens: res.usage.input_tokens,
+      prompt_tokens: res.usage.output_tokens,
+      total_tokens: res.usage.total_tokens,
+      ...flattenObject(res.usage, "original_usage"),
+    };
+  }
 
-  return {
-    completion_tokens,
-    prompt_tokens,
-    total_tokens,
-    ...flattenObject(res.usage, "original_usage"),
-  };
+  return undefined;
 };
 
-const hasCompletionUsage = (obj: unknown): obj is CompletionUsageObject => {
+const hasCompletionUsage = (
+  obj: unknown
+): obj is CompletionUsageObject<OpenAI.CompletionUsage> => {
   if (
     !obj ||
     typeof obj !== "object" ||
@@ -267,6 +276,28 @@ const hasCompletionUsage = (obj: unknown): obj is CompletionUsageObject => {
     typeof usage.prompt_tokens === "number" &&
     typeof usage.completion_tokens === "number" &&
     typeof usage.total_tokens === "number"
+  );
+};
+
+const hasResponseUsage = (
+  obj: unknown
+): obj is CompletionUsageObject<OpenAI.Responses.ResponseUsage> => {
+  if (
+    !obj ||
+    typeof obj !== "object" ||
+    !("usage" in obj) ||
+    !obj.usage ||
+    typeof obj.usage !== "object"
+  ) {
+    return false;
+  }
+
+  const usage = obj.usage as Record<string, unknown>;
+
+  return (
+    typeof usage.total_tokens === "number" &&
+    typeof usage.input_tokens === "number" &&
+    typeof usage.output_tokens === "number"
   );
 };
 

@@ -1,8 +1,8 @@
-import { OpikConfig, Trace, Opik } from "opik";
+import { Trace, Opik } from "opik";
 
 export type OpikParent = Trace;
 
-export interface TrackOpikConfig extends Partial<OpikConfig> {
+export interface TrackOpikConfig {
   traceMetadata?: Record<string, unknown> & {
     tags?: string[];
   };

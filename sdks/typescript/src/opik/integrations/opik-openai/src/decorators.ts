@@ -15,8 +15,7 @@ import {
   OpikParent,
   TrackOpikConfig,
 } from "./types";
-import { Opik, OpikSpanType, Span, Trace } from "opik";
-import { flattenObject } from "./utils";
+import { Opik, OpikSpanType, Trace } from "opik";
 
 const handleError = (
   error: Error,
@@ -75,7 +74,7 @@ const wrapMethod = <T extends GenericMethod>(
     metadata: finalMetadata,
   };
 
-  let rootTracer: Trace | Span;
+  let rootTracer: Trace;
 
   const hasUserProvidedParent = Boolean(config?.parent);
 
@@ -153,12 +152,18 @@ const wrapMethod = <T extends GenericMethod>(
   }
 };
 
+type ChunkUsage =
+  | OpenAI.CompletionUsage
+  | OpenAI.Responses.ResponseUsage
+  | undefined
+  | null;
+
 const processResponseChunk = (
   rawChunk: unknown,
   observationData: ObservationData
 ): {
   output?: Record<string, unknown>;
-  usage: OpenAI.CompletionUsage | undefined;
+  usage: ChunkUsage;
   chunkData: {
     isToolCall: boolean;
     data:
@@ -168,7 +173,7 @@ const processResponseChunk = (
   updatedObservationData: ObservationData;
 } => {
   let output;
-  let usage: OpenAI.CompletionUsage | undefined = undefined;
+  let usage: ChunkUsage = undefined;
   const updatedObservationData = { ...observationData };
 
   if (typeof rawChunk === "object" && rawChunk && "response" in rawChunk) {
@@ -187,6 +192,10 @@ const processResponseChunk = (
       ...modelParametersFromResponse,
       ...metadataFromResponse,
     };
+
+    if (typeof result === "object" && result && "usage" in result) {
+      usage = result.usage as ChunkUsage;
+    }
   }
 
   if (typeof rawChunk === "object" && rawChunk != null && "usage" in rawChunk) {
@@ -218,7 +227,7 @@ function wrapAsyncIterable<T>(
     let toolCallChunks: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta.ToolCall[] =
       [];
     let completionStartTime: Date | null = null;
-    let usage: OpenAI.CompletionUsage | undefined = undefined;
+    let usage: ChunkUsage = undefined;
     let outputFromChunks = null;
     let observationData = { ...initialObservationData };
 
@@ -254,17 +263,14 @@ function wrapAsyncIterable<T>(
         ? getToolCallOutput(toolCallChunks)
         : { message: textChunks.join("") });
 
+    const usageData = parseUsage({ usage });
+
     rootTracer.span({
       ...observationData,
       output: finalOutput,
       endTime: new Date(),
       type: OpikSpanType.General,
-      usage: {
-        completion_tokens: usage?.completion_tokens ?? 0,
-        prompt_tokens: usage?.prompt_tokens ?? 0,
-        total_tokens: usage?.total_tokens ?? 0,
-        ...(usage ? flattenObject(usage, "original_usage") : {}),
-      },
+      usage: usageData,
     });
 
     if (!hasUserProvidedParent) {
