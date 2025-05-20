@@ -1,11 +1,12 @@
-# Opik Optimizer
+# Opik Agent Optimizer SDK
 
-The Opik Opitmizer can refine your prompts to get better performance
+The Opik Agent Opitmizer can refine your prompts to get better performance
 from your LLMs. You can use a variety of algorithms, including:
 
 * FewShotBayesianOptimizer
 * MiproOptimizer
 * MetaPromptOptimizer
+* EvolutionaryOptimizer
 
 ## Quickstart
 
@@ -118,7 +119,7 @@ pip install opik-optimizer
 
 ## Development
 
-To use the Opik Optimizer from source:
+To use the Opik Agent Optimizer from source:
 
 ```bash
 git clone git clone git@github.com:comet-ml/opik
