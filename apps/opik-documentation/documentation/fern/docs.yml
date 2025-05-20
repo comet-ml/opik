@@ -315,59 +315,59 @@ navigation:
             slug: guardrails
   - tab: agent-optimization
     layout:
-      - page: "Agent & Prompt Optimization Overview" 
+      - page: "Agent & Prompt Optimization Overview"
         icon: fa-regular fa-house
         path: docs/agent_optimization/overview.mdx
         slug: overview
-      - section: "Opik Optimizer Guide" 
+      - section: "Opik Optimizer Guide"
         slug: /opik_optimizer
         contents:
-          - page: "Opik Optimizer Quickstart" 
+          - page: "Opik Optimizer Quickstart"
             icon: fa-regular fa-bolt
             path: docs/agent_optimization/opik_optimizer/quickstart.mdx
             slug: quickstart
-          - page: "Core Optimization Concepts" 
+          - page: "Core Optimization Concepts"
             icon: fa-regular fa-lightbulb
             path: docs/agent_optimization/opik_optimizer/concepts.mdx
             slug: concepts
-          - page: "Datasets for Optimization" 
+          - page: "Datasets for Optimization"
             icon: fa-regular fa-database
             path: docs/agent_optimization/opik_optimizer/datasets.mdx
             slug: datasets
-          - page: "LiteLLM Model Support" 
-            icon: fa-regular fa-rocket 
+          - page: "LiteLLM Model Support"
+            icon: fa-regular fa-rocket
             path: docs/agent_optimization/opik_optimizer/litellm_support.mdx
             slug: litellm_support
-          - page: "API Reference" 
+          - page: "API Reference"
             icon: fa-regular fa-square-terminal
             path: docs/agent_optimization/opik_optimizer/reference.mdx
             slug: reference
-          - page: "Optimizer & SDK FAQ" 
+          - page: "Optimizer & SDK FAQ"
             icon: fa-regular fa-question
             path: docs/agent_optimization/opik_optimizer/faq.mdx
             slug: faq
-      - section: "Optimization Best Practices" 
-        slug: /best_practices 
+      - section: "Prompt Optimization Algorithms"
+        slug: /algorithms
         contents:
-          - page: "Prompt Engineering Techniques" 
+          - page: "Evolutionary Optimizer"
+            path: docs/agent_optimization/algorithms/evolutionary_optimizer.mdx
+            slug: evolutionary_optimizer
+          - page: "Few-Shot Bayesian Optimizer"
+            path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
+            slug: fewshot_bayesian_optimizer
+          - page: "MetaPrompt Optimizer"
+            path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
+            slug: metaprompt_optimizer
+          - page: "MIPRO Optimizer"
+            path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
+            slug: mipro_optimizer
+      - section: "Optimization Best Practices"
+        slug: /best_practices
+        contents:
+          - page: "Prompt Engineering Techniques"
             icon: fa-regular fa-book
             path: docs/agent_optimization/best_practices/prompt_engineering.mdx
             slug: prompt_engineering
-      - section: "Prompt Optimization Algorithms" 
-        slug: /algorithms
-        contents:
-          - page: "Evolutionary Optimizer" 
-            path: docs/agent_optimization/algorithms/evolutionary_optimizer.mdx
-            slug: evolutionary_optimizer
-          - page: "Few-Shot Bayesian Optimizer" 
-            path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
-            slug: fewshot_bayesian_optimizer
-          - page: "MetaPrompt Optimizer" 
-            path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
-            slug: metaprompt_optimizer
-          - page: "MIPRO Optimizer" 
-            path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
-            slug: mipro_optimizer
   - tab: self-host
     layout:
       - page: Overview
