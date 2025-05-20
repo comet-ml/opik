@@ -364,7 +364,7 @@ navigation:
       - section: Optimization Best Practices
         slug: /best_practices
         contents:
-          - page: Prompt Engineering Techniques
+          - page: Prompt Engineering
             icon: fa-regular fa-book
             path: docs/agent_optimization/best_practices/prompt_engineering.mdx
             slug: prompt_engineering
@@ -372,11 +372,11 @@ navigation:
         slug: /optimizer-cookbooks
         contents:
           - page: Introduction Example
-            icon: fa-regular fa-graduation-cap
+            icon: fa-regular fa-book
             path: docs/agent_optimization/cookbook/optimizer_introduction_cookbook.mdx
             slug: optimizer_introduction_cookbook
           - page: Synthetic Data
-            icon: fa-regular fa-flask
+            icon: fa-regular fa-book
             path: docs/agent_optimization/cookbook/synthetic_data_optimizer_cookbook.mdx
             slug: synthetic_data_optimizer_cookbook
       - section: Advanced Topics
