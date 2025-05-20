@@ -18,28 +18,21 @@ trying again.
 
 ## Why optimize prompts ?
 
-Prompt engineering is a skill that can be difficult to master as highlighted by
-the [Anthropic ](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview#how-to-prompt-engineer),
-[OpenAI](https://help.openai.com/en/articles/6654000-best-practices-for-prompt-engineering-with-the-openai-api)
-and [Google](https://www.kaggle.com/whitepaper-prompt-engineering) prompt
-engineering guides. There are a lot of techniques that can be used to help
-LLMs generate the desired output.
+Prompt engineering is a skill that can be difficult to master as highlighted by the [Anthropic](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview#how-to-prompt-engineer), [OpenAI](https://help.openai.com/en/articles/6654000-best-practices-for-prompt-engineering-with-the-openai-api) and [Google](https://www.kaggle.com/whitepaper-prompt-engineering) prompt engineering guides. There are a lot of techniques that can be used to help LLMs generate the desired output.
 
 Prompt optimization solves many of the issues that come with prompt engineering:
 
 1. Prompt engineering is not easily repeatable or scalable alone
-2. Variations across models could lead to performance degration, you need to
-   tune prompts for each model
+2. Variations across models could lead to performance degration, you need to tune prompts for each model
 3. Optimization may unlock performance, cost and reliability improvements
-4. As systems evolve to be more interdependent, manually tuning multiple prompts
-   becomes increasingly difficult.
+4. As systems evolve to be more interdependent, manually tuning multiple prompts becomes increasingly difficult.
 
 <br />
 So when should you use prompt optimization?
 
 | **Aspect**    | **Prompt Engineering**                              | **Prompt Optimization**                           |
 | ------------- | --------------------------------------------------- | ------------------------------------------------- |
-| **Scope**     | Broad — includes designing, experimenting, refining | Narrow — improving already existing prompts       |
+| **Scope**     | Broad, includes designing, experimenting, refining  | Narrow,  improving already existing prompts       |
 | **Goal**      | Create a working prompt for a specific task         | Maximize performance (accuracy, efficiency, etc.) |
 | **Involves**  | Initial drafting, understanding model behavior      | Tweaking wording, structure, or context           |
 | **When used** | Early in task setup or experimentation              | After a baseline prompt is in place               |
@@ -48,9 +41,7 @@ So when should you use prompt optimization?
 
 ### Supported algorithms
 
-The [Opik Optimizer](https://pypi.org/project/opik-optimizer/) is an
-experimental Python library that aims at implementing Prompt and Agent
-Optimization algorithms in a consistent format.
+The [Opik Optimizer](https://pypi.org/project/opik-optimizer/) is an experimental Python library that aims at implementing Prompt and Agent Optimization algorithms in a consistent format.
 
 <Note>
   All Opik optimizers leverage **LiteLLM** for broad model compatibility. This means you can use models from OpenAI, Azure, Anthropic, Google, local Ollama instances, and many more. For details on how to specify different models, see the [LiteLLM Support for Optimizers](/agent_optimization/opik_optimizer/litellm_support) guide.
@@ -58,12 +49,12 @@ Optimization algorithms in a consistent format.
 
 The following algorithms have been implemented:
 
-| **Algorithm**                     | **Description**                                                                                                                                                                                                                            | **Guide**                                                                               |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| MetaPrompt Optimization           | Uses an LLM ("reasoning model") to critique and iteratively refine an initial instruction prompt. Good for general prompt wording, clarity, and structural improvements.                                                                 | [MetaPrompt Optimization](/agent_optimization/algorithms/metaprompt_optimizer)              |
-| Few-shot Bayesian Optimization    | Specifically for chat models, this optimizer uses Bayesian optimization (Optuna) to find the optimal number and combination of few-shot examples (demonstrations) to accompany a system prompt.                                                 | [Few-shot Bayesian Optimization](/agent_optimization/algorithms/fewshot_bayesian_optimizer) |
-| MIPRO Optimization                | A prompt engineering algorithm that uses a MIPRO (Multi-Instance Prompt Refinement) approach to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt.                                                 | [MIPRO Optimization](/agent_optimization/algorithms/mipro_optimizer)                        |
-| Evolutionary Optimization         | Employs genetic algorithms to evolve a population of prompts. Can discover novel prompt structures and supports multi-objective optimization (e.g., score vs. length). Can use LLMs for advanced mutation/crossover.                          | [Evolutionary Optimization](/agent_optimization/algorithms/evolutionary_optimizer)          |
+| **Algorithm**                     | **Description**                                                                                                                                                                                                                            | **Guide**                                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| MetaPrompt Optimization           | Uses an LLM ("reasoning model") to critique and iteratively refine an initial instruction prompt. Good for general prompt wording, clarity, and structural improvements.                                                                   | [MetaPrompt Optimization](/agent_optimization/algorithms/metaprompt_optimizer)              |
+| Few-shot Bayesian Optimization    | Specifically for chat models, this optimizer uses Bayesian optimization (Optuna) to find the optimal number and combination of few-shot examples (demonstrations) to accompany a system prompt.                                            | [Few-shot Bayesian Optimization](/agent_optimization/algorithms/fewshot_bayesian_optimizer) |
+| MIPRO Optimization                | A prompt engineering algorithm that uses a MIPRO (Multi-Instance Prompt Refinement) approach to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt.                           | [MIPRO Optimization](/agent_optimization/algorithms/mipro_optimizer)                        |
+| Evolutionary Optimization         | Employs genetic algorithms to evolve a population of prompts. Can discover novel prompt structures and supports multi-objective optimization (e.g., score vs. length). Can use LLMs for advanced mutation/crossover.                       | [Evolutionary Optimization](/agent_optimization/algorithms/evolutionary_optimizer)          |
 
 <Tip>
   If you would like us to implement another optimization algorithm, reach out to us on
@@ -124,12 +115,12 @@ Each optimization algorithm is evaluated against different use-cases and dataset
 3. medhallu: The [medhallu](https://huggingface.co/datasets/UTAustin-AIHealth/MedHallu) dataset contains a set of medical questions
 4. RagBench: The [ragbench](https://huggingface.co/datasets/wandb/ragbench-sentence-relevance-balanced/discussions) dataset contains a set of questions and sentences to test a RAG environment.
 
-| Rank | Algorithm                      | Average Score | Arc dataset | GSM8K dataset | medhallu dataset | RagBench |
-| ---- | ------------------------------ | ------------- | ----------- | ------------- | ---------------- | -------- |
-| 1    | Few-shot Bayesian Optimization | 67.33%        | 28.09%      | 59.26%        | 91.80%           | 90.15%   |
-| 2    | Mipro Optimization             | 55.91%        | 19.70%      | 39.70%        | 92.70%           | 89.28%   |
-| 3    | MetaPrompt Optimization        | 52.01%        | 25.00%      | 26.93%        | 91.79%           | 64.31%   |
-| *tbd*| Evolutionary Optimization      | *tbd*         | *tbd*       | *tbd*         | *tbd*            | *tbd*    |
-| 4    | No optimization                | 11.99%        |  1.69%      | 24.06%        | 12.38%           |  9.81%   |
+| Rank | Algorithm/Optimizer              | Average Score | Arc         | GSM8K         | medhallu         | RagBench |
+| ---- | -------------------------------- | ------------- | ----------- | ------------- | ---------------- | -------- |
+| 1    | Few-shot Bayesian Optimization   | 67.33%        | 28.09%      | 59.26%        | 91.80%           | 90.15%   |
+| 2    | Evolutionary Optimization        | 63.13%        | 40.00%      | 25.53%        | 95.00%           | 92.00%   |
+| 3    | Mipro Optimization (w/ no tools) | 55.91%        | 19.70%      | 39.70%        | 92.70%           | 89.28%   |
+| 4    | MetaPrompt Optimization          | 52.01%        | 25.00%      | 26.93%        | 91.79%           | 64.31%   |
+| 5    | No optimization                  | 11.99%        |  1.69%      | 24.06%        | 12.38%           |  9.81%   |
 
 The results above are benchmarks tested against `gpt-4o-mini`, we are using various metrics depending on the dataset including Levenshtein Ratio, Answer Relevance and Hallucination. The results might change if you use a different model, configuration, dataset and starting prompt(s).
