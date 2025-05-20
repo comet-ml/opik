@@ -1,5 +1,15 @@
 The MiproOptimizer is a specialized prompt optimization tool that implements the MIPRO (Multi-agent Interactive Prompt Optimization) algorithm. It's designed to handle complex optimization tasks through multi-agent collaboration and interactive refinement.
 
+<Note>
+  **When to Use This Optimizer:**
+  `MiproOptimizer` is the preferred choice for complex tasks, especially those involving **tool use** or requiring **multi-step reasoning**. If you are building an agent that needs to interact with external tools or follow a sophisticated chain of thought, and you want to optimize the underlying prompts and agent structure, `MiproOptimizer` (which leverages DSPy) is highly suitable.
+
+  **Key Trade-offs:**
+  - The optimization process can be more involved than single-prompt optimizers due to its reliance on the DSPy framework and compilation process.
+  - Understanding basic DSPy concepts (like Modules, Signatures, Teleprompters) can be beneficial for advanced customization and debugging, though Opik abstracts much of this.
+  - Debugging can sometimes be more complex as you are optimizing a program/agent structure, not just a single string.
+</Note>
+
 ## How It Works
 
 The `MiproOptimizer` leverages the [DSPy](https://dspy.ai/) library, specifically an internal version of its MIPRO (Modular Instruction Programming and Optimization) teleprompter, to optimize potentially complex prompt structures, including those for tool-using agents.

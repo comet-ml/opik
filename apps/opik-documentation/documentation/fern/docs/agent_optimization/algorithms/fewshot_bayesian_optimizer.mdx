@@ -1,5 +1,15 @@
 The FewShotBayesianOptimizer is a sophisticated prompt optimization tool that combines few-shot learning with Bayesian optimization techniques. It's designed to iteratively improve prompts by learning from examples and systematically exploring the optimization space, specifically for chat-based prompts.
 
+<Note>
+  **When to Use This Optimizer:**
+  Use `FewShotBayesianOptimizer` when your primary goal is to find the optimal number and combination of few-shot examples (demonstrations) to accompany your main instruction prompt, particularly for **chat models**. If your task performance heavily relies on the quality and relevance of in-context examples, this optimizer is ideal.
+
+  **Key Trade-offs:**
+  - Focuses exclusively on selecting examples from the provided dataset; it does *not* optimize the `instruction_prompt` text itself.
+  - The search space can be very large if the dataset for example selection is massive; `n_iterations` needs to be sufficient for adequate exploration.
+  - Effectiveness depends on the quality and diversity of the examples within your dataset.
+</Note>
+
 ## How It Works
 
 This optimizer focuses on finding the optimal set and number of few-shot examples to include with your base instruction prompt for chat models. It uses [Optuna](https://optuna.org/), a hyperparameter optimization framework, to guide this search:
@@ -167,5 +177,5 @@ optimizer = FewShotBayesianOptimizer(
 
 ## Next Steps
 
-- Learn about [MiproOptimizer](/agent_optimization/algorithms/mipro_optimizer)
+- Explore other [Optimization Algorithms](/agent_optimization/overview#optimization-algorithms)
 - Explore [Dataset Requirements](/agent_optimization/opik_optimizer/datasets)

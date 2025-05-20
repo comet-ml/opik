@@ -4,6 +4,17 @@ title: Evolutionary Optimizer
 
 The `EvolutionaryOptimizer` uses genetic algorithms to refine and discover effective prompts. It iteratively evolves a population of prompts, applying selection, crossover, and mutation operations to find prompts that maximize a given evaluation metric. This optimizer can also perform multi-objective optimization (e.g., maximizing score while minimizing prompt length) and leverage LLMs for more sophisticated genetic operations.
 
+<Note>
+  **When to Use This Optimizer:**
+  `EvolutionaryOptimizer` is a great choice when you want to explore a very diverse range of prompt structures or when you have multiple objectives to optimize for (e.g., performance score and prompt length). Its strength lies in its ability to escape local optima and discover novel prompt solutions through its evolutionary mechanisms, especially when enhanced with LLM-driven genetic operators.
+
+  **Key Trade-offs:**
+  - Can be computationally intensive due to the need to evaluate a population of prompts over multiple generations.
+  - The effectiveness of LLM-driven operators (`enable_llm_crossover`, LLM-based mutations) comes with additional LLM call costs.
+  - Tuning genetic algorithm parameters (population size, mutation/crossover rates) might require some experimentation for optimal results on a specific task.
+  - While it can find very novel prompts, it might take longer to converge on a solution compared to more directed optimizers for simpler tasks.
+</Note>
+
 ## How It Works
 
 The `EvolutionaryOptimizer` is built upon the [DEAP](https://deap.readthedocs.io/) library for evolutionary computation. Here's a breakdown of its core process:
