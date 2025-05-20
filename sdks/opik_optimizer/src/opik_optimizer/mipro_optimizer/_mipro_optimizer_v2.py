@@ -54,6 +54,16 @@ from opik_optimizer import task_evaluator
 from opik_optimizer.optimization_config.configs import MetricConfig, TaskConfig
 from opik_optimizer.optimization_config import mappers
 
+def get_prompt(program):
+    """
+    Get the system prompt from the program
+    """
+    if hasattr(program, "react"):
+        instructions = program.react.signature.instructions
+    else:
+        instructions = program.signature.instructions
+
+    return instructions
 
 class MIPROv2(Teleprompter):
     def __init__(
@@ -547,7 +557,7 @@ class MIPROv2(Teleprompter):
             for l in demo:
                 for example in l:
                     examples.append(example.toDict())
-        prompt = program.signature.instructions
+        prompt = get_prompt(program)
         experiment_config = {
             **self.experiment_config,
             **{"configuration": {
@@ -928,7 +938,7 @@ class MIPROv2(Teleprompter):
             for l in demo:
                 for example in l:
                     examples.append(example.toDict())
-        prompt = highest_mean_program.signature.instructions
+        prompt = get_prompt(highest_mean_program)
         experiment_config = {
             **self.experiment_config,
             **{"configuration": {
