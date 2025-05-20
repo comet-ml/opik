@@ -225,6 +225,17 @@ const DatasetItemsPage = () => {
     ];
   }, [columnsData, columnsOrder, handleRowClick, selectedColumns]);
 
+  const columnsToExport = useMemo(() => {
+    return columns
+      .map((c) => get(c, "accessorKey", ""))
+      .filter((c) =>
+        c === COLUMN_SELECT_ID
+          ? false
+          : selectedColumns.includes(c) ||
+            (DEFAULT_COLUMN_PINNING.left || []).includes(c),
+      );
+  }, [columns, selectedColumns]);
+
   const handleNewDatasetItemClick = useCallback(() => {
     setOpenDialog(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
@@ -265,7 +276,12 @@ const DatasetItemsPage = () => {
       <div className="mb-4 flex items-center justify-between gap-8">
         <div className="flex items-center gap-2"></div>
         <div className="flex items-center gap-2">
-          <DatasetItemsActionsPanel datasetItems={selectedRows} />
+          <DatasetItemsActionsPanel
+            datasetItems={selectedRows}
+            columnsToExport={columnsToExport}
+            datasetName={dataset?.name ?? "dataset"}
+            dynamicColumns={dynamicColumnsIds}
+          />
           <Separator orientation="vertical" className="mx-1 h-4" />
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
