@@ -154,19 +154,26 @@ Here's how it generally works:
 
 ## Best Practices
 
-1. **Dataset Quality is Key**
-   - Ensure datasets contain sufficient, diverse, and high-quality examples representative of your actual task.
-   - Maintain accurate ground truth and consistent formatting.
-2. **Start Simple, then Iterate**
-   - Begin with a reasonable baseline prompt and default optimizer settings.
-   - Iteratively adjust parameters, dataset, or even optimizer choice based on observed results.
-3. **Meaningful Evaluation**
-   - Use evaluation metrics that genuinely reflect success for _your_ specific task.
-   - Always validate final prompts on an unseen test set to check for generalization.
-4. **Understand Your Chosen Optimizer**
-   - Read its specific documentation to understand its mechanism, key parameters, and when it's most effective.
-5. **Log and Track Experiments**
-   - Leverage the Opik platform (via `project_name`) to keep your optimization runs organized and compare results effectively.
+<Steps>
+  <Step title="1. Ensure Dataset Quality is Key">
+    Ensure datasets contain sufficient, diverse, and high-quality examples representative of your actual task.
+    Maintain accurate ground truth and consistent formatting.
+  </Step>
+  <Step title="2. Start Simple, then Iterate">
+    Begin with a reasonable baseline prompt and default optimizer settings.
+    Iteratively adjust parameters, dataset, or even optimizer choice based on observed results.
+  </Step>
+  <Step title="3. Conduct Meaningful Evaluation">
+    Use evaluation metrics that genuinely reflect success for _your_ specific task.
+    Always validate final prompts on an unseen test set to check for generalization.
+  </Step>
+  <Step title="4. Understand Your Chosen Optimizer">
+    Read its specific documentation to understand its mechanism, key parameters, and when it's most effective.
+  </Step>
+  <Step title="5. Log and Track Experiments">
+    Leverage the Opik platform (via `project_name`) to keep your optimization runs organized and compare results effectively.
+  </Step>
+</Steps>
 
 ## Next Steps
 
