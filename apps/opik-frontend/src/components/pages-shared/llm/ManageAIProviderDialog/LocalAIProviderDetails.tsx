@@ -3,7 +3,7 @@ import { UseFormReturn } from "react-hook-form";
 import { Label } from "@/components/ui/label";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { PROVIDERS } from "@/constants/providers";
-import { AIProviderFormType } from "@/components/shared/AddEditAIProviderDialog/schema";
+import { AIProviderFormType } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
 import get from "lodash/get";
 import {
   FormControl,
