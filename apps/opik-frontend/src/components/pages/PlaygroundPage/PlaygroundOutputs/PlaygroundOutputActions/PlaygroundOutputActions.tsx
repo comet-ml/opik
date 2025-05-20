@@ -131,8 +131,8 @@ const PlaygroundOutputActions = ({
 
     const selectLLMModelMessage =
       promptCount === 1
-        ? "Please select a LLM model for your prompt"
-        : "Please select a LLM model for your prompts";
+        ? "Please select an LLM model for your prompt"
+        : "Please select an LLM model for your prompts";
 
     const datasetRemovedMessage = isDatasetRemoved
       ? "Your dataset has been removed. Select another one"
@@ -214,7 +214,7 @@ const PlaygroundOutputActions = ({
           placeholder={
             <div className="flex w-full items-center text-light-slate">
               <Database className="mr-2 size-4" />
-              <span className="truncate font-normal">Dataset</span>
+              <span className="truncate font-normal">Test over dataset</span>
             </div>
           }
           onChange={handleChangeDatasetId}
