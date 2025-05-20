@@ -82,7 +82,9 @@ const EditPromptVersionDialog: React.FunctionComponent<
       template,
       changeDescription,
       ...(metadata && { metadata: safelyParseJSON(metadata) }),
-      onSetActiveVersionId,
+      onSuccess: (data) => {
+        onSetActiveVersionId(data.id);
+      },
     });
 
     setOpen(false);
@@ -148,6 +150,15 @@ const EditPromptVersionDialog: React.FunctionComponent<
               {"{{variable}}"}.
             </p>
           </div>
+          <div className="flex flex-col gap-2 pb-4">
+            <Label htmlFor="promptMetadata">Commit message</Label>
+            <Textarea
+              className="comet-code min-h-20"
+              id="promptMetadata"
+              value={changeDescription}
+              onChange={(e) => setChangeDescription(e.target.value)}
+            />
+          </div>
           <div className="flex flex-col gap-2 border-t border-border pb-4">
             <Accordion type="multiple">
               <AccordionItem value="metadata">
@@ -162,7 +173,7 @@ const EditPromptVersionDialog: React.FunctionComponent<
                     />
                   </div>
                   <p className="comet-body-xs mt-2 text-light-slate">
-                    You can specify only valid JSON object.
+                    {`Enter a valid JSON object using key-value pairs inside curly braces (e.g. {"key": "value"}).`}
                   </p>
                 </AccordionContent>
               </AccordionItem>
@@ -171,17 +182,6 @@ const EditPromptVersionDialog: React.FunctionComponent<
                   <AlertTitle>Metadata field is not valid</AlertTitle>
                 </Alert>
               )}
-              <AccordionItem value="message">
-                <AccordionTrigger>Commit message</AccordionTrigger>
-                <AccordionContent>
-                  <Textarea
-                    className="comet-code min-h-20"
-                    id="promptMessage"
-                    value={changeDescription}
-                    onChange={(e) => setChangeDescription(e.target.value)}
-                  />
-                </AccordionContent>
-              </AccordionItem>
             </Accordion>
           </div>
         </DialogAutoScrollBody>

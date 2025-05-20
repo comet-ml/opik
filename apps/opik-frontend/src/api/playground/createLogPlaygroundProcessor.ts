@@ -117,6 +117,7 @@ const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
     metadata: {
       model: run.model,
       messages: JSON.stringify(run.providerMessages),
+      model_config: run.configs,
     },
   };
 };

@@ -21,6 +21,8 @@ export type LoadableSelectBoxProps = {
   value?: string;
   placeholder?: ReactElement | string;
   onChange: (value: string) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   options: DropdownOption<string>[];
   variant?: "outline" | "ghost";
   optionsCount?: number;
@@ -30,12 +32,16 @@ export type LoadableSelectBoxProps = {
   buttonSize?: ButtonProps["size"];
   buttonClassName?: string;
   renderTitle?: (option: DropdownOption<string>) => ReactElement;
+  actionPanel?: ReactElement;
+  minWidth?: number;
 };
 
 export const LoadableSelectBox = ({
   value = "",
   placeholder = "Select value",
   onChange,
+  open: controlledOpen,
+  onOpenChange,
   options,
   buttonSize = "default",
   buttonClassName = "w-full",
@@ -44,10 +50,15 @@ export const LoadableSelectBox = ({
   disabled,
   onLoadMore,
   renderTitle: parentRenderTitle,
+  actionPanel,
+  minWidth = 0,
 }: LoadableSelectBoxProps) => {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [width, setWidth] = useState<number | undefined>();
+
+  const isOpen =
+    controlledOpen !== undefined ? controlledOpen : uncontrolledOpen;
 
   const hasMore = isFunction(onLoadMore);
 
@@ -75,12 +86,21 @@ export const LoadableSelectBox = ({
     return options.filter((o) => toLower(o.label).includes(toLower(search)));
   }, [options, search]);
 
-  const openChangeHandler = useCallback((open: boolean) => {
-    if (!open) {
-      setSearch("");
-    }
-    setOpen(open);
-  }, []);
+  const openChangeHandler = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        setSearch("");
+      }
+      // Only update internal state if not controlled
+      if (controlledOpen === undefined) {
+        setUncontrolledOpen(open);
+      }
+      if (isFunction(onOpenChange)) {
+        onOpenChange(open);
+      }
+    },
+    [controlledOpen, onOpenChange],
+  );
 
   const { ref } = useObserveResizeNode<HTMLButtonElement>((node) =>
     setWidth(node.clientWidth),
@@ -88,9 +108,11 @@ export const LoadableSelectBox = ({
 
   const hasFilteredOptions = Boolean(filteredOptions.length);
   const hasMoreSection = hasFilteredOptions && hasMore;
+  const hasActionPanel = Boolean(actionPanel);
+  const hasBottomActions = hasMoreSection || hasActionPanel;
 
   return (
-    <Popover onOpenChange={openChangeHandler} open={open} modal>
+    <Popover onOpenChange={openChangeHandler} open={isOpen} modal>
       <PopoverTrigger asChild>
         <Button
           className={cn("justify-between", buttonClassName)}
@@ -105,11 +127,11 @@ export const LoadableSelectBox = ({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        align="start"
+        align="end"
         style={
           width
             ? {
-                width: `${width}px`,
+                width: `${Math.max(width, minWidth)}px`,
               }
             : {}
         }
@@ -155,14 +177,19 @@ export const LoadableSelectBox = ({
           )}
         </div>
 
-        {hasMoreSection && (
-          <div className="sticky inset-x-0 bottom-0 flex items-center justify-between px-4">
-            <div className="comet-body-s text-muted-slate">
-              {`Showing first ${optionsCount} items.`}
-            </div>
-            <Button variant="link" onClick={onLoadMore}>
-              Load more
-            </Button>
+        {hasBottomActions && (
+          <div className="sticky inset-x-0 bottom-0">
+            {hasMoreSection && (
+              <div className="flex items-center justify-between px-4">
+                <div className="comet-body-s text-muted-slate">
+                  {`Showing first ${optionsCount} items.`}
+                </div>
+                <Button variant="link" onClick={onLoadMore}>
+                  Load more
+                </Button>
+              </div>
+            )}
+            {hasActionPanel && actionPanel}
           </div>
         )}
       </PopoverContent>

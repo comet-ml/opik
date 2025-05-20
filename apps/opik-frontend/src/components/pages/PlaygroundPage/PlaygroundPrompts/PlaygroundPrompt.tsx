@@ -15,6 +15,7 @@ import {
   generateDefaultPrompt,
   getDefaultConfigByProvider,
 } from "@/lib/playground";
+import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
 import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import PromptModelSelect from "@/components/pages-shared/llm/PromptModelSelect/PromptModelSelect";
@@ -34,8 +35,6 @@ import {
   ModelResolver,
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
-
-export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
 
 interface PlaygroundPromptProps {
   workspaceName: string;
@@ -247,6 +246,7 @@ const PlaygroundPrompt = ({
         onChange={handleUpdateMessage}
         onAddMessage={handleAddMessage}
         hint={hintMessage}
+        hidePromptActions={false}
       />
     </div>
   );
