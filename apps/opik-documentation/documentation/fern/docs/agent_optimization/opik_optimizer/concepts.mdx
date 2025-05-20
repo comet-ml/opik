@@ -23,15 +23,15 @@ In Opik, **Agent Optimization** refers to the systematic process of refining and
     tracking.
   </Accordion>
   <Accordion title="Trial">
-    Often used interchangeably with "Run" in the context of Opik Optimizer documentation referring to a single
+    Often used interchangeably with "Run" in the context of Opik Agent Optimizer documentation referring to a single
     optimization execution. More broadly in experimental design, a trial might involve multiple runs to ensure
-    statistical significance, but for Opik Optimizer, focus on it as one complete `optimize_prompt` cycle. Within some
+    statistical significance, but for Opik Agent Optimizer, focus on it as one complete `optimize_prompt` cycle. Within some
     optimizers (e.g., `FewShotBayesianOptimizer` using Optuna, or `MetaPromptOptimizer`'s candidate evaluations),
     "trial" can also refer to an individual evaluation point within the larger optimization process (e.g., testing one
     specific set of few-shot examples).
   </Accordion>
   <Accordion title="Optimizer">
-    A specialized algorithm within the Opik Optimizer toolkit designed to enhance prompt effectiveness. Each optimizer
+    A specialized algorithm within the Opik Agent Optimizer SDK designed to enhance prompt effectiveness. Each optimizer
     (e.g., [`MetaPromptOptimizer`](/agent_optimization/algorithms/metaprompt_optimizer),
     [`FewShotBayesianOptimizer`](/agent_optimization/algorithms/fewshot_bayesian_optimizer),
     [`MiproOptimizer`](/agent_optimization/algorithms/mipro_optimizer),

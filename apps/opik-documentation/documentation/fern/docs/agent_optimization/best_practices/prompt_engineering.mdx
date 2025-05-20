@@ -1,16 +1,9 @@
 ---
-title: Advanced Prompt Engineering Best Practices with Opik Optimizer
+title: Advanced Prompt Engineering Best Practices
 pytest_codeblocks_skip: true
 ---
 Improving the performance of your LLM application and agent often requires improving the quality
-of the prompts you are using. While manual iteration is common, a structured approach combined with automated tools can yield significantly better and more consistent results.
-
-This guide covers foundational prompt engineering techniques and how Opik Optimizer can help you apply and automate them.
-
-<Tip>
-  If you would like to chat more about prompt optimization, feel free to book a chat with an Opik core contributor:
-  [Calendar link](https://calendly.com/jacques-comet/prompt-optimization)
-</Tip>
+of the prompts you are using. While manual iteration is common, a structured approach combined with automated tools can yield significantly better and more consistent results. This guide covers foundational prompt engineering techniques and how Opik Agent Optimizer can help you apply and automate them.
 
 ## Evaluating Prompt Quality: The First Step
 
@@ -34,7 +27,7 @@ This is the most fundamental principle. The LLM needs to understand precisely wh
 *   **Well-Defined Task**: Clearly articulate the objective. If it's a multi-step task, consider breaking it down.
 *   **Output Format**: Specify the desired output format (e.g., "Provide the answer as a JSON object with keys 'name' and 'age'.").
 
-*Opik Connection*: All Opik optimizers work by refining your `instruction_prompt` (defined in `TaskConfig`). A clear and specific starting prompt gives the optimizers a better foundation to build upon.
+*Opik Connection*: All optimizers work by refining your `instruction_prompt` (defined in `TaskConfig`). A clear and specific starting prompt gives the optimizers a better foundation to build upon.
 
 ### 2. Providing Persona, Audience, and Voice
 Guiding the LLM on its role, who it's addressing, and the desired tone can significantly improve output quality.
@@ -114,7 +107,7 @@ Forcing the model to return a structured output (e.g., JSON) simplifies data par
   </Step>
 </Steps>
 
-*Opik Connection*: While Opik Optimizers primarily focus on the natural language part of the prompt, ensuring your `instruction_prompt` guides the LLM towards generating content suitable for a specific schema is a key aspect of prompt design. The optimizers can help refine instructions that encourage structured output.
+*Opik Connection*: While Opik Agent Optimizers primarily focus on the natural language part of the prompt, ensuring your `instruction_prompt` guides the LLM towards generating content suitable for a specific schema is a key aspect of prompt design. The optimizers can help refine instructions that encourage structured output.
 
 ### 5. Iterative Refinement and Meta-Prompts
 Prompt engineering is rarely a one-shot process. Continuous iteration is key. A "meta-prompt" is a sophisticated prompt given to an LLM to help it critique, analyze, or rewrite another (user's) prompt.
@@ -173,12 +166,12 @@ Evolutionary or genetic algorithms can be applied to "evolve" prompts over gener
     ```
 
 
-## Systematic Prompt Optimization with Opik Optimizer
+## Systematic Prompt Optimization with Opik Agent Optimizer
 
-While the techniques above are valuable for manual prompt engineering, the [Opik Optimizer toolkit](/agent_optimization/opik_optimizer/quickstart) offers a systematic and data-driven way to automate and enhance this process. By leveraging a dataset and evaluation metrics, Opik optimizers can explore a vast design space to find high-performing prompts.
+While the techniques above are valuable for manual prompt engineering, the [Opik Agent Optimizer SDK](/agent_optimization/opik_optimizer/quickstart) offers a systematic and data-driven way to automate and enhance this process. By leveraging a dataset and evaluation metrics, optimizers can explore a vast design space to find high-performing prompts.
 
 <Note>
-All Opik optimizers require a `model` parameter during initialization, which specifies the LLM to be used. Thanks to **LiteLLM integration**, you can specify models from various providers (OpenAI, Azure, Anthropic, Gemini, local models, etc.) using the LiteLLM model string format. See the [LiteLLM Support for Optimizers](/agent_optimization/opik_optimizer/litellm_support) page for more details.
+All optimizers require a `model` parameter during initialization, which specifies the LLM to be used. Thanks to **LiteLLM integration**, you can specify models from various providers (OpenAI, Azure, Anthropic, Gemini, local models, etc.) using the LiteLLM model string format. See the [LiteLLM Support for Optimizers](/agent_optimization/opik_optimizer/litellm_support) page for more details.
 </Note>
 
 We provide several distinct optimization algorithms, each suited for different scenarios:
@@ -188,4 +181,4 @@ We provide several distinct optimization algorithms, each suited for different s
 3.  [**MIPRO Optimizer**](/agent_optimization/algorithms/mipro_optimizer): Optimizes complex prompt structures and agents using DSPy, suitable for multi-step reasoning and tool use.
 4.  [**Evolutionary Optimizer**](/agent_optimization/algorithms/evolutionary_optimizer): Evolves prompts using genetic algorithms, capable of multi-objective optimization (e.g., performance vs. length) and using LLMs for advanced genetic operations.
 
-Refer to each optimizer's specific documentation to understand its strengths and how it aligns with different prompt engineering challenges. For general guidance on getting started, see the [Opik Optimizer Quickstart](/agent_optimization/opik_optimizer/quickstart).
+Refer to each optimizer's specific documentation to understand its strengths and how it aligns with different prompt engineering challenges. For general guidance on getting started, see the [Opik Agent Optimizer Quickstart](/agent_optimization/opik_optimizer/quickstart).

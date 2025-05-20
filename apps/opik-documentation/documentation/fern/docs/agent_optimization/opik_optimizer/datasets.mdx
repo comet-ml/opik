@@ -4,17 +4,17 @@ pytest_codeblocks_skip: true
 ---
 ## Overview
 
-Datasets and testing are critical components of the Opik Optimizer's effectiveness. This section outlines the requirements for datasets and the methodologies for testing to ensure optimal performance.
+Datasets and testing are critical components of the Opik Agent Optimizer's effectiveness. This section outlines the requirements for datasets and the methodologies for testing to ensure optimal performance.
 
 <Info>
-  This page focuses on dataset requirements specifically for **Opik Optimizer**. For a general guide on creating, managing, and versioning your own datasets within the Opik platform (using the SDK or UI), please refer to the [Manage Datasets](/evaluation/manage_datasets) documentation.
+  This page focuses on dataset requirements specifically for **Opik Agent Optimizer**. For a general guide on creating, managing, and versioning your own datasets within the Opik platform (using the SDK or UI), please refer to the [Manage Datasets](/evaluation/manage_datasets) documentation.
 </Info>
 
 ## Dataset Requirements for Optimization
 
 ### Format
 
-For use with Opik Optimizer, datasets should generally be a list of dictionaries. Each dictionary represents a data point (an "item") and should contain key-value pairs that your chosen optimizer and configuration will use. Typically, this includes:
+For use with Opik Agent Optimizer, datasets should generally be a list of dictionaries. Each dictionary represents a data point (an "item") and should contain key-value pairs that your chosen optimizer and configuration will use. Typically, this includes:
 
 -   At least one field for **input** to the LLM (e.g., a question, a statement to complete).
 -   At least one field for the **expected output** or reference (e.g., the ground truth answer, a desired summary).
@@ -101,13 +101,13 @@ These demo datasets provide ready-to-use examples with various structures and ar
 -   The `opik_optimizer.demo.datasets` module is primarily for **loading pre-defined example datasets** provided with the SDK for demonstration and testing the optimizers.
 -   The general [Manage Datasets](/evaluation/manage_datasets) guide, on the other hand, explains how you can **create, upload, and manage your own custom datasets** using the Opik SDK (`client.create_dataset()`, `dataset.insert()`, etc.) or the Opik UI. These are the datasets you would typically curate with your own data for optimizing prompts for your specific applications.
 
-## Testing Methodology with Opik Optimizer
+## Testing Methodology with Opik Agent Optimizer
 
 While the optimizers primarily use a single dataset (passed to `optimize_prompt`) for both guiding the optimization (e.g., selecting few-shot examples or generating new prompts) and evaluating candidate prompts, a robust testing methodology often involves more.
 
 1.  **Optimization Dataset**: The dataset used during the `optimize_prompt` call. The optimizer will use this to score prompts and make decisions. Performance on this dataset shows how well the optimizer adapted to it.
 
-2.  **Hold-out / Test Dataset (Recommended)**: After optimization, it's crucial to evaluate the best prompt found by the optimizer on a separate dataset that was *not* seen during optimization. This gives a more realistic measure of how well the prompt generalizes.
+2.  **Hold-out / Test Dataset (Recommended)**: After optimization, it's crucial to evaluate the best prompt found by the optimizer on a separate dataset that was *not* seen during optimization. This gives a more realistic measure of how well the prompt generalizes. Note optimizers will not carry out an automatic "hold out" for you specifically.
     ```python
     # After running optimizer.optimize_prompt(dataset=optimization_dataset, ...)
     best_prompt = results.prompt

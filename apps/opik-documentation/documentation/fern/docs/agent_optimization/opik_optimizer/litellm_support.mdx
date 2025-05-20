@@ -1,18 +1,18 @@
 ---
-title: LiteLLM Model Support for Opik Optimizers (OpenAI, Azure, Local Models)
+title: LiteLLM Model Support for Optimizers (OpenAI, Azure, Local Models)
 pytest_codeblocks_skip: true
 ---
 
-Opik Optimizer leverages [LiteLLM](https://litellm.ai/) under the hood to provide comprehensive support for a wide array of Large Language Models (LLMs). This integration means you can use virtually any model provider or even locally hosted models with any of the Opik optimization algorithms.
+`Opik Agent Optimizer` leverages [LiteLLM](https://litellm.ai/) under the hood to provide comprehensive support for a wide array of Large Language Models (LLMs). This integration means you can use virtually any model provider or even locally hosted models with any of the Opik optimization algorithms.
 
 ## How it Works
 
-When you initialize an Opik Optimizer (e.g., `MetaPromptOptimizer`, `FewShotBayesianOptimizer`, `MiproOptimizer`, `EvolutionaryOptimizer`), the `model` parameter (and `reasoning_model` for `MetaPromptOptimizer`) accepts a LiteLLM model string. LiteLLM then handles the communication with the specified model provider or local endpoint.
+When you initialize an optimizer (e.g., `MetaPromptOptimizer`, `FewShotBayesianOptimizer`, `MiproOptimizer`, `EvolutionaryOptimizer`), the `model` parameter (and `reasoning_model` for `MetaPromptOptimizer`) accepts a LiteLLM model string. LiteLLM then handles the communication with the specified model provider or local endpoint.
 
 This builds upon Opik's existing [tracing integration with LiteLLM](/tracing/integrations/litellm), ensuring that not only are your optimization processes flexible in model choice, but calls made during optimization can also be seamlessly tracked if you have the `OpikLogger` callback configured in LiteLLM.
 
 <Info>
-  **Key Benefit**: You are not locked into a specific model provider. You can experiment with different models, including open-source ones running locally, to find the best fit for your task and budget, all while using the same Opik Optimizer codebase.
+  **Key Benefit**: You are not locked into a specific model provider. You can experiment with different models, including open-source ones running locally, to find the best fit for your task and budget, all while using the same Opik Agent Optimizer codebase.
 </Info>
 
 ## Specifying Models

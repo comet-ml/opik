@@ -1,9 +1,9 @@
 ---
-title: "Extending Opik Optimizer: Custom Algorithms & Contributions"
+title: "Extending Opik Agent Optimizer: Custom Algorithms & Contributions"
 pytest_codeblocks_skip: true
 ---
 
-Opik Optimizer is designed to be a flexible framework for prompt and agent optimization. While it provides a suite of powerful built-in algorithms, you might have unique optimization strategies or specialized needs. This guide discusses how you can conceptually think about building your own optimizer logic that integrates with Opik's evaluation ecosystem and how you can contribute to the broader Opik Optimizer project.
+Opik Agent Optimizer is designed to be a flexible framework for prompt and agent optimization. While it provides a suite of powerful built-in algorithms, you might have unique optimization strategies or specialized needs. This guide discusses how you can conceptually think about building your own optimizer logic that integrates with Opik's evaluation ecosystem and how you can contribute to the broader Opik Agent Optimizer project.
 
 <Note>
   Currently, direct inheritance and registration of custom optimizer classes into the `opik-optimizer` SDK by end-users is not a formally exposed feature. This guide provides a conceptual overview for advanced users and potential future development or contributions.
@@ -102,13 +102,13 @@ class CustomOptimizer:
   The `opik-optimizer` SDK already provides robust mechanisms for prompt evaluation that existing optimizers leverage. A custom optimizer would ideally reuse or adapt these internal evaluation utilities to ensure consistency with the Opik ecosystem.
 </Info>
 
-## How to Contribute to Opik Optimizer
+## How to Contribute to Opik Agent Optimizer
 
 Opik is continuously evolving, and community feedback and contributions are valuable!
 
 *   **Feature Requests & Ideas**: If you have ideas for new optimization algorithms, features, or improvements to existing ones, please share them through our community channels or by raising an issue on our GitHub repository (if available for `opik-optimizer`).
 *   **Bug Reports**: If you encounter issues or unexpected behavior, detailed bug reports are greatly appreciated.
-*   **Use Cases & Feedback**: Sharing your use cases and how Opik Optimizer is (or isn't) meeting your needs helps us prioritize development.
+*   **Use Cases & Feedback**: Sharing your use cases and how Opik Agent Optimizer is (or isn't) meeting your needs helps us prioritize development.
 *   **Code Contributions**: While direct pull requests for new optimizers might require significant coordination if the SDK isn't fully open for such extensions yet, expressing interest and discussing potential contributions with the development team is a good first step. Keep an eye on the project's contribution guidelines.
 
 ## Key Takeaways
