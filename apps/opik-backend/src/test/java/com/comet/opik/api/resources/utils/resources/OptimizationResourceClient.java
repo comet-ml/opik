@@ -14,6 +14,7 @@ import org.testcontainers.shaded.com.google.common.net.HttpHeaders;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
 
@@ -32,7 +33,8 @@ public class OptimizationResourceClient {
         return podamFactory.manufacturePojo(Optimization.class).toBuilder()
                 .status(OptimizationStatus.RUNNING)
                 .numTrials(0L)
-                .feedbackScores(null);
+                .feedbackScores(null)
+                .lastUpdatedAt(Instant.now());
     }
 
     public UUID create(Optimization optimization, String apiKey, String workspaceName) {
@@ -41,6 +43,18 @@ public class OptimizationResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(optimization))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
+            return TestUtils.getIdFromLocation(response.getLocation());
+        }
+    }
+
+    public UUID upsert(Optimization optimization, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("upsert")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(optimization))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
             return TestUtils.getIdFromLocation(response.getLocation());
         }
