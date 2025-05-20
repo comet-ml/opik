@@ -57,6 +57,13 @@ The `EvolutionaryOptimizer` is built upon the [DEAP](https://deap.readthedocs.io
 7.  **Result**:
     *   The best prompt found during the optimization (or the set of non-dominated solutions from the Pareto front in MOO) is returned as part of the `OptimizationResult`.
 
+<Tip>
+  Each prompt in the population is evaluated (Step 2) using your specified `MetricConfig` against the `dataset`. This fitness scoring is what drives the evolutionary selection process. To better understand this crucial step, refer to Opik's evaluation documentation:
+  - [Evaluation Overview](/evaluation/overview)
+  - [Evaluate Prompts](/evaluation/evaluate_prompt)
+  - [Metrics Overview](/evaluation/metrics/overview)
+</Tip>
+
 ## Configuration Options
 
 The `EvolutionaryOptimizer` offers a rich set of parameters to control the genetic algorithm:

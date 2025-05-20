@@ -43,6 +43,13 @@ This optimizer focuses on finding the optimal set and number of few-shot example
 
 Essentially, the `FewShotBayesianOptimizer` intelligently searches through the vast space of possible few-shot example combinations to find the set that best primes your chat model for the task.
 
+<Tip>
+  The core of this optimizer relies on robust evaluation (Step 4) where each combination of few-shot examples is assessed using your `MetricConfig` against the `dataset`. Understanding Opik's evaluation framework is key to effective use:
+  - [Evaluation Overview](/evaluation/overview)
+  - [Evaluate Prompts](/evaluation/evaluate_prompt)
+  - [Metrics Overview](/evaluation/metrics/overview)
+</Tip>
+
 ## Configuration Options
 
 ### Basic Configuration

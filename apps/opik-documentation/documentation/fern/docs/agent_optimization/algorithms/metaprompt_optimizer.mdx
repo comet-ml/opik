@@ -41,6 +41,13 @@ The `MetaPromptOptimizer` automates the process of prompt refinement by using a 
 
 This iterative loop of generation, evaluation, and selection allows the `MetaPromptOptimizer` to explore different phrasings and structures, guided by the reasoning capabilities of an LLM.
 
+<Tip>
+  The evaluation of each candidate prompt (Step 3) uses the `MetricConfig` you provide and runs against the `dataset`. This process is fundamental to how the optimizer determines which prompts are better. For a deeper understanding of Opik's evaluation capabilities, refer to:
+  - [Evaluation Overview](/evaluation/overview)
+  - [Evaluate Prompts](/evaluation/evaluate_prompt)
+  - [Metrics Overview](/evaluation/metrics/overview)
+</Tip>
+
 ## Configuration Options
 
 ### Basic Configuration
