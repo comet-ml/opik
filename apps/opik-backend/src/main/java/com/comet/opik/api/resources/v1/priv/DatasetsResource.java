@@ -27,6 +27,7 @@ import com.comet.opik.domain.Streamer;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.AsyncUtils;
+import com.comet.opik.utils.csv.DatasetCsvParser;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -63,6 +64,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ChunkedOutput;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.util.List;
 import java.util.Optional;
@@ -158,6 +161,37 @@ public class DatasetsResource {
 
         URI uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(savedDataset.id().toString())).build();
         return Response.created(uri).build();
+    }
+
+    @POST
+    @Path("upload-csv")
+    @Consumes("text/csv")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "uploadDatasetCsv", summary = "Upload dataset CSV", description = "Upload dataset CSV and create dataset with dataset items", responses = {
+            @ApiResponse(responseCode = "200", description = "Dataset resource", content = @Content(schema = @Schema(implementation = Dataset.class)))
+    })
+    public Response uploadDatasetCsv(InputStream inputStream,
+            @QueryParam("dataset_name") @NotNull @NotBlank String datasetName) throws IOException {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Uploading dataset csv for dataset '{}' on workspace_id '{}'", datasetName, workspaceId);
+
+        var items = DatasetCsvParser.parse(inputStream);
+
+        itemService.save(DatasetItemBatch.builder()
+                .datasetName(datasetName)
+                .items(items)
+                .build())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        Dataset dataset = service.findByName(workspaceId, datasetName, Visibility.PRIVATE);
+
+        log.info("Uploaded dataset csv for dataset '{}' with '{}' items on workspace_id '{}'", datasetName,
+                items.size(), workspaceId);
+
+        return Response.ok(dataset).build();
     }
 
     @PUT

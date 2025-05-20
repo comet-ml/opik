@@ -717,6 +717,32 @@ paths:
               schema:
                 type: string
               example: "${basePath}/api/v1/private/datasets/{id}"
+  /v1/private/datasets/upload-csv:
+    post:
+      tags:
+      - Datasets
+      summary: Upload dataset CSV
+      description: Upload dataset CSV and create dataset with dataset items
+      operationId: uploadDatasetCsv
+      parameters:
+      - name: dataset_name
+        in: query
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          text/csv:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: Dataset resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dataset_Public"
   /v1/private/datasets/items:
     put:
       tags:

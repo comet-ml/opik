@@ -59,6 +59,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull DatasetService datasetService;
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
+    private final @NonNull IdGenerator idGenerator;
 
     @Override
     @WithSpan
@@ -191,6 +192,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return batch.items()
                 .stream()
                 .map(item -> {
+                    if (item.id() == null) {
+                        return item.toBuilder().id(idGenerator.generateId()).build();
+                    }
                     IdGenerator.validateVersion(item.id(), "dataset_item");
                     return item;
                 })

@@ -11,6 +11,7 @@ import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { Dataset } from "@/types/datasets";
 import Loader from "@/components/shared/Loader/Loader";
 import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
+import UploadDatasetCsvDialog from "@/components/pages/DatasetsPage/UploadDatasetCsvDialog";
 import DatasetsActionsPanel from "@/components/pages/DatasetsPage/DatasetsActionsPanel";
 import { DatasetRowActionsCell } from "@/components/pages/DatasetsPage/DatasetRowActionsCell";
 import { Button } from "@/components/ui/button";
@@ -101,6 +102,7 @@ const DatasetsPage: React.FunctionComponent = () => {
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const [openUploadDialog, setOpenUploadDialog] = useState<boolean>(false);
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -189,6 +191,10 @@ const DatasetsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
+  const handleUploadDatasetClick = useCallback(() => {
+    setOpenUploadDialog(true);
+  }, []);
+
   const handleRowClick = useCallback(
     (row: Dataset) => {
       if (!row.id) return;
@@ -231,6 +237,9 @@ const DatasetsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
+          <Button variant="secondary" size="sm" onClick={handleUploadDatasetClick}>
+            Upload dataset CSV
+          </Button>
           <Button variant="default" size="sm" onClick={handleNewDatasetClick}>
             Create new dataset
           </Button>
@@ -270,6 +279,11 @@ const DatasetsPage: React.FunctionComponent = () => {
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
+        onDatasetCreated={handleRowClick}
+      />
+      <UploadDatasetCsvDialog
+        open={openUploadDialog}
+        setOpen={setOpenUploadDialog}
         onDatasetCreated={handleRowClick}
       />
     </div>
