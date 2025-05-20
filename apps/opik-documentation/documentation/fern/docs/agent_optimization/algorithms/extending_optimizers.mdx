@@ -1,0 +1,122 @@
+---
+title: "Extending Optimizers"
+subtitle: "Extend Opik with custom optimization algorithms and contributions."
+description: "Learn how to extend Opik's optimization framework with custom algorithms and contribute to the project's development."
+pytest_codeblocks_skip: true
+---
+
+Opik Agent Optimizer is designed to be a flexible framework for prompt and agent optimization. While it provides a suite of powerful built-in algorithms, you might have unique optimization strategies or specialized needs. This guide discusses how you can conceptually think about building your own optimizer logic that integrates with Opik's evaluation ecosystem and how you can contribute to the broader Opik Agent Optimizer project.
+
+<Note>
+  Currently, direct inheritance and registration of custom optimizer classes into the `opik-optimizer` SDK by end-users is not a formally exposed feature. This guide provides a conceptual overview for advanced users and potential future development or contributions.
+</Note>
+
+## Core Concepts for a Custom Optimizer
+
+If you were to design a new optimization algorithm to work within Opik's ecosystem, it would typically need to interact with several key components:
+
+1.  **Task Definition (`TaskConfig`)**: Your optimizer would take a `TaskConfig` object as input. This defines what needs to be optimized (the `instruction_prompt`), how inputs are mapped (`input_dataset_fields`), and what the target output is (`output_dataset_field`).
+
+2.  **Evaluation Mechanism (`MetricConfig` & Dataset)**: Your optimizer would need a way to score candidate prompts. This is achieved by using a `MetricConfig` (specifying the metric and its inputs) and an evaluation `dataset`.
+    *   Internally, your optimizer would likely call an evaluation function repeatedly, passing different generated prompts to be scored against the dataset samples based on the `MetricConfig`.
+
+3.  **Optimization Loop**: This is the heart of your custom optimizer. It would involve:
+    *   **Candidate Generation**: Logic for creating new prompt variations. This could be rule-based, LLM-driven, or based on any other heuristic.
+    *   **Candidate Evaluation**: Using the `MetricConfig` and `dataset` to get a score for each candidate.
+    *   **Selection/Progression**: Logic to decide which candidates to keep, refine further, or how to adjust the generation strategy based on scores.
+    *   **Termination Condition**: Criteria for when to stop the optimization (e.g., number of rounds, score threshold, no improvement).
+
+4.  **Returning Results (`OptimizationResult`)**: Upon completion, your optimizer should ideally structure its findings into an `OptimizationResult` object. This object standardizes how results are reported, including the best prompt found, its score, history of the optimization process, and any other relevant details.
+
+## Conceptual Structure of an Optimizer
+
+While the exact implementation would vary, a custom optimizer might conceptually have methods like:
+
+```python
+# Conceptual representation - not actual SDK code for direct implementation
+
+class CustomOptimizer:
+    def __init__(self, model: str, # and other relevant params like in existing optimizers
+                 project_name: Optional[str] = None, 
+                 **model_kwargs):
+        self.model = model
+        self.project_name = project_name
+        self.model_kwargs = model_kwargs
+        # Custom initialization for your algorithm
+
+    def optimize_prompt(
+        self,
+        dataset: Union[str, Dataset],
+        metric_config: MetricConfig,
+        task_config: TaskConfig,
+        # Custom parameters for your optimizer's control
+        max_iterations: int = 10,
+        # ... other params
+    ) -> OptimizationResult:
+        
+        history = []
+        current_best_prompt = task_config.instruction_prompt
+        current_best_score = -float('inf') # Assuming higher is better
+
+        for i in range(max_iterations):
+            # 1. Generate candidate prompts based on current_best_prompt
+            candidate_prompts = self._generate_candidates(current_best_prompt, task_config)
+
+            # 2. Evaluate candidates
+            scores = []
+            for candidate in candidate_prompts:
+                # This would involve an internal evaluation call
+                # conceptually similar to existing optimizers' evaluate_prompt methods
+                score = self._evaluate_single_prompt(candidate, dataset, metric_config, task_config)
+                scores.append(score)
+                history.append({"prompt": candidate, "score": score, "round": i})
+            
+            # 3. Select the best candidate from this round
+            # and update current_best_prompt and current_best_score
+            # ... (selection logic)
+
+            # 4. Check termination conditions
+            # ... (termination logic)
+
+        # 5. Prepare and return OptimizationResult
+        return OptimizationResult(
+            prompt=current_best_prompt,
+            score=current_best_score,
+            history=history,
+            # ... other fields
+        )
+
+    def _generate_candidates(self, base_prompt: str, task_config: TaskConfig) -> List[str]:
+        # Your custom logic to create new prompt variations
+        pass
+
+    def _evaluate_single_prompt(self, prompt_text: str, dataset, metric_config, task_config) -> float:
+        # Your logic to evaluate a single prompt
+        # This would likely involve setting up an LLM call with the prompt_text,
+        # running it against samples from the dataset, and then using the metric
+        # from metric_config to calculate a score.
+        # See existing optimizers for patterns of how they use `evaluate_prompt` internally.
+        pass
+
+```
+
+<Info>
+  The `opik-optimizer` SDK already provides robust mechanisms for prompt evaluation that existing optimizers leverage. A custom optimizer would ideally reuse or adapt these internal evaluation utilities to ensure consistency with the Opik ecosystem.
+</Info>
+
+## How to Contribute to Opik Agent Optimizer
+
+Opik is continuously evolving, and community feedback and contributions are valuable!
+
+*   **Feature Requests & Ideas**: If you have ideas for new optimization algorithms, features, or improvements to existing ones, please share them through our community channels or by raising an issue on our GitHub repository (if available for `opik-optimizer`).
+*   **Bug Reports**: If you encounter issues or unexpected behavior, detailed bug reports are greatly appreciated.
+*   **Use Cases & Feedback**: Sharing your use cases and how Opik Agent Optimizer is (or isn't) meeting your needs helps us prioritize development.
+*   **Code Contributions**: While direct pull requests for new optimizers might require significant coordination if the SDK isn't fully open for such extensions yet, expressing interest and discussing potential contributions with the development team is a good first step. Keep an eye on the project's contribution guidelines.
+
+## Key Takeaways
+
+-   Building a new optimizer involves defining a candidate generation strategy, an evaluation loop using Opik's `MetricConfig` and `dataset` paradigm, and a way to manage the optimization process.
+-   The `TaskConfig` and `OptimizationResult` objects are key for integration.
+-   While the SDK may not formally support pluggable custom optimizers by third parties at this moment, understanding these design principles is useful for advanced users and potential future contributions.
+
+We encourage you to explore the existing [optimizer algorithms](/agent_optimization/overview#optimization-algorithms) to see different approaches to these challenges. 
