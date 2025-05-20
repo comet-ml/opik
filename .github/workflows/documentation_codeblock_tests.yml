@@ -115,6 +115,9 @@ jobs:
           python -c "import sys; print(sys.path)"
           echo "--- End Debug Information ---"
 
+          echo "--- Checking opik_optimizer resolvability directly before pytest ---"
+          python -c "import sys; print('Sys.path for direct import test:'); print(sys.path); import opik_optimizer; print('Successfully imported opik_optimizer'); print(f'opik_optimizer path: {opik_optimizer.__path__}')" || echo "Failed to import opik_optimizer directly"
+
           if [ -n "${{ matrix.path }}" ]; then
             pytest ${{ matrix.path }} -v --suppress-no-test-exit-code --default-package=../../../sdks/python
           fi
