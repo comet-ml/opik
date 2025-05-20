@@ -95,7 +95,7 @@ jobs:
       - name: Run tests
         working-directory: apps/opik-documentation/documentation
         env:
-          PYTHONPATH: ${{ github.workspace }}/sdks
+          PYTHONPATH: ${{ github.workspace }}/sdks/opik_optimizer/src:${{ github.workspace }}/sdks/python/src
         run: |
           echo "--- Debug Information ---"
           echo "Current directory: $(pwd)"
