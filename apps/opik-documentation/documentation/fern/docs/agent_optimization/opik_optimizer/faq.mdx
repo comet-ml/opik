@@ -215,7 +215,7 @@ the tool.
 </AccordionGroup>
 
 <AccordionGroup>
-  <Accordion title="Q: What's the difference between standard genetic operators and LLM-driven ones (`enable_llm_crossover`) in `EvolutionaryOptimizer`?">
+  <Accordion title="Q: What's the difference between standard and LLM-driven operators (`enable_llm_crossover`) in `EvolutionaryOptimizer`?">
     A:
     - **Standard operators**: Perform syntactic changes (e.g., swapping words, combining sentence chunks from two parent prompts).
     - **LLM-driven operators**: Use an LLM to perform more intelligent, semantic changes. For example, an LLM-driven crossover might try to blend the core ideas of two parent prompts into a new, coherent child prompt, rather than just mixing parts. This often leads to higher quality offspring but incurs more LLM calls.
