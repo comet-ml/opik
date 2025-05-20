@@ -1,3 +1,6 @@
+---
+title: Datasets & Testing for Opik Prompt Optimization
+---
 ## Overview
 
 Datasets and testing are critical components of the Opik Optimizer's effectiveness. This section outlines the requirements for datasets and the methodologies for testing to ensure optimal performance.
@@ -106,16 +109,16 @@ While the optimizers primarily use a single dataset (passed to `optimize_prompt`
 2.  **Hold-out / Test Dataset (Recommended)**: After optimization, it's crucial to evaluate the best prompt found by the optimizer on a separate dataset that was *not* seen during optimization. This gives a more realistic measure of how well the prompt generalizes.
     ```python
     # After running optimizer.optimize_prompt(dataset=optimization_dataset, ...)
-    # best_prompt = results.prompt
-    # new_task_config = task_config.copy(update={"instruction_prompt": best_prompt})
+    best_prompt = results.prompt
+    new_task_config = task_config.copy(update={"instruction_prompt": best_prompt})
 
     # Evaluate on a separate test_dataset
-    # test_score = optimizer.evaluate_prompt(
-    #     dataset=my_holdout_test_dataset, 
-    #     metric_config=metric_config, 
-    #     task_config=new_task_config
-    # )
-    # print(f"Score on hold-out test set: {test_score}")
+    test_score = optimizer.evaluate_prompt(
+        dataset=my_holdout_test_dataset, 
+        metric_config=metric_config, 
+        task_config=new_task_config
+    )
+    print(f"Score on hold-out test set: {test_score}")
     ```
 
 3.  **Metrics**: Use a comprehensive set of metrics relevant to your task. While one metric might be used for optimization (`MetricConfig`), evaluating the final prompt with multiple metrics can provide a fuller picture.
