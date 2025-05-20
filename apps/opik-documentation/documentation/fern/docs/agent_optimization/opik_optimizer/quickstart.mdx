@@ -113,22 +113,27 @@ Here's a complete example of optimizing a prompt using the Few-Shot Bayesian Opt
     print("Optimization finished.")
     ```
   </Step>
-  <Step title="8. View the results">
-    Finally, `result.display()` is called to show a summary of the optimization, including the best prompt found and its score.
+  <Step title="8. View results in the CLI">
+    After optimization completes, call `result.display()` to see a summary of the optimization, including the best prompt found and its score, directly in your terminal.
     ```python
     print("Optimization Results:")
     result.display() 
     ```
     The `OptimizationResult` object also contains more details in `result.history` and `result.details`.
+
+    The optimization results will be displayed in your console, showing the progress and final scores.
+    <Frame>
+      <img src="/img/agent_optimization/sdk_cli_results.png" alt="Opik agent optimization progress in CLI" />
+    </Frame>
+  </Step>
+  <Step title="9. View results in the Opik dashboard">
+    In addition to the CLI output, your optimization results are also available in the Opik Agent Optimization dashboard for further analysis and visualization.
+
+    <Frame>
+      <img src="/img/agent_optimization/trial_dashboard.png" alt="Opik agent optimization results in dashboard" />
+    </Frame>
   </Step>
 </Steps>
-
-The optimization results will be displayed in your console and are also available in the
-Opik Agent Optimization dashboard:
-
-<Frame>
-  <img src="/img/agent_optimization/trial_dashboard.png" />
-</Frame>
 
 ## Next Steps
 
