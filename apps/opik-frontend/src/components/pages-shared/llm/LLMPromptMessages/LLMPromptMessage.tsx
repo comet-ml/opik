@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import { ChevronDown, CopyPlus, GripHorizontal, Trash } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
@@ -19,9 +19,11 @@ import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import Loader from "@/components/shared/Loader/Loader";
 import { mustachePlugin } from "@/constants/codeMirrorPlugins";
 import { DropdownOption } from "@/types/shared";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
+import LLMPromptMessageActions from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -58,9 +60,12 @@ const theme = EditorView.theme({
   },
 });
 
-interface LLMPromptMessageProps extends LLMMessage {
+interface LLMPromptMessageProps {
+  message: LLMMessage;
   hideRemoveButton: boolean;
   hideDragButton: boolean;
+  hidePromptActions: boolean;
+  showAlwaysActionsPanel?: boolean;
   onRemoveMessage: () => void;
   onDuplicateMessage: () => void;
   errorText?: string;
@@ -69,17 +74,21 @@ interface LLMPromptMessageProps extends LLMMessage {
 }
 
 const LLMPromptMessage = ({
-  id,
-  content,
-  role,
+  message,
   hideRemoveButton,
   hideDragButton,
+  hidePromptActions,
+  showAlwaysActionsPanel = false,
   errorText,
   possibleTypes = MESSAGE_TYPE_OPTIONS,
   onChangeMessage,
   onDuplicateMessage,
   onRemoveMessage,
 }: LLMPromptMessageProps) => {
+  const [isHoldActionsVisible, setIsHoldActionsVisible] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const { id, role, content } = message;
+
   const { active, attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
 
@@ -107,7 +116,20 @@ const LLMPromptMessage = ({
           },
         )}
       >
-        <div className="absolute right-2 top-2 hidden gap-1 group-hover:flex">
+        <div
+          className={cn(
+            "absolute right-2 top-2 gap-1 group-hover:flex",
+            showAlwaysActionsPanel || isHoldActionsVisible ? "flex" : "hidden",
+          )}
+        >
+          {!hidePromptActions && (
+            <LLMPromptMessageActions
+              message={message}
+              onChangeMessage={onChangeMessage}
+              setIsLoading={setIsLoading}
+              setIsHoldActionsVisible={setIsHoldActionsVisible}
+            />
+          )}
           {!hideRemoveButton && (
             <TooltipWrapper content="Delete a message">
               <Button
@@ -165,22 +187,26 @@ const LLMPromptMessage = ({
               })}
             </DropdownMenuContent>
           </DropdownMenu>
-          <CodeMirror
-            onCreateEditor={(view) => {
-              editorViewRef.current = view;
-            }}
-            theme={theme}
-            value={content}
-            onChange={(c) => onChangeMessage({ content: c })}
-            placeholder="Type your message"
-            basicSetup={{
-              foldGutter: false,
-              allowMultipleSelections: false,
-              lineNumbers: false,
-              highlightActiveLine: false,
-            }}
-            extensions={[EditorView.lineWrapping, mustachePlugin]}
-          />
+          {isLoading ? (
+            <Loader className="min-h-32" />
+          ) : (
+            <CodeMirror
+              onCreateEditor={(view) => {
+                editorViewRef.current = view;
+              }}
+              theme={theme}
+              value={content}
+              onChange={(c) => onChangeMessage({ content: c })}
+              placeholder="Type your message"
+              basicSetup={{
+                foldGutter: false,
+                allowMultipleSelections: false,
+                lineNumbers: false,
+                highlightActiveLine: false,
+              }}
+              extensions={[EditorView.lineWrapping, mustachePlugin]}
+            />
+          )}
         </CardContent>
       </Card>
       {errorText && (
