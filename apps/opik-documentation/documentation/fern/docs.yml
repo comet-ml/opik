@@ -151,6 +151,9 @@ navigation:
               - page: AG2
                 path: docs/tracing/integrations/ag2.mdx
                 slug: ag2
+              - page: Agno
+                path: docs/tracing/integrations/agno.mdx
+                slug: agno
               - page: Anthropic
                 path: docs/tracing/integrations/anthropic.mdx
                 slug: anthropic
