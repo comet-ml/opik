@@ -1,3 +1,6 @@
+---
+title: MetaPrompt Optimizer: LLM-Driven Prompt Refinement
+---
 The MetaPrompter is a specialized optimizer designed for meta-prompt optimization. It focuses on improving the structure and effectiveness of prompts through systematic analysis and refinement of prompt templates, instructions, and examples.
 
 <Note>
@@ -6,7 +9,7 @@ The MetaPrompter is a specialized optimizer designed for meta-prompt optimizatio
 
   **Key Trade-offs:**
   - Relies on the quality of the `reasoning_model` for generating good candidates.
-  - May be less suited than specialized optimizers if your primary goal is *only* few-shot example selection (see `FewShotBayesianOptimizer`) or *only* complex agent/tool-use optimization (see `MiproOptimizer`).
+  - May be less suited than specialized optimizers if your primary goal is *only* few-shot example selection (see [`FewShotBayesianOptimizer`](./fewshot_bayesian_optimizer.mdx)) or *only* complex agent/tool-use optimization (see [`MiproOptimizer`](./mipro_optimizer.mdx)).
   - Optimization process involves multiple LLM calls for both reasoning and evaluation, which can impact cost and time.
 </Note>
 

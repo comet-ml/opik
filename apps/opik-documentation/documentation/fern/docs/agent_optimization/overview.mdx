@@ -1,3 +1,6 @@
+---
+title: Agent & Prompt Optimization Overview with Opik
+---
 **Prompt engineering** is the practice of designing and refining prompts to help
 LLMs generate the desired output. Typically prompt engineering is a manual process
 that involves editing the prompt, evaluating it, reviewing the results and
@@ -41,7 +44,7 @@ So when should you use prompt optimization?
 | **Involves**  | Initial drafting, understanding model behavior      | Tweaking wording, structure, or context           |
 | **When used** | Early in task setup or experimentation              | After a baseline prompt is in place               |
 
-## Optimization algorithms
+## Optimization Algorithms
 
 ### Supported algorithms
 
@@ -55,17 +58,57 @@ Optimization algorithms in a consistent format.
 
 The following algorithms have been implemented:
 
-| **Algorithm**                  | **Description**                                                                                                                                                                                                  | **Guide**                                                                        |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| MetaPrompt Optimization        | A prompt engineering algorithm that uses a meta-prompt to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt.                                       | [MetaPrompt Optimization](/agent_optimization/algorithms/metaprompt_optimizer)              |
-| Few-shot Bayesian Optimization | A prompt engineering algorithm that uses a few-shot learning approach to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt.                        | [Few-shot Bayesian Optimization](/agent_optimization/algorithms/fewshot_bayesian_optimizer) |
-| MIPRO Optimization             | A prompt engineering algorithm that uses a MIPRO (Multi-Instance Prompt Refinement) approach to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt. | [MIPRO Optimization](/agent_optimization/algorithms/mipro_optimizer)                        |
-| Evolutionary Optimization      | Optimizes prompts using genetic algorithms, evolving a population of prompts through selection, crossover, and mutation. Supports multi-objective optimization and LLM-driven genetic operators.                   | [Evolutionary Optimization](/agent_optimization/algorithms/evolutionary_optimizer)          |
+| **Algorithm**                     | **Description**                                                                                                                                                                                                                            | **Guide**                                                                               |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| MetaPrompt Optimization           | Uses an LLM ("reasoning model") to critique and iteratively refine an initial instruction prompt. Good for general prompt wording, clarity, and structural improvements.                                                                 | [MetaPrompt Optimization](/agent_optimization/algorithms/metaprompt_optimizer)              |
+| Few-shot Bayesian Optimization    | Specifically for chat models, this optimizer uses Bayesian optimization (Optuna) to find the optimal number and combination of few-shot examples (demonstrations) to accompany a system prompt.                                                 | [Few-shot Bayesian Optimization](/agent_optimization/algorithms/fewshot_bayesian_optimizer) |
+| MIPRO Optimization                | A prompt engineering algorithm that uses a MIPRO (Multi-Instance Prompt Refinement) approach to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt.                                                 | [MIPRO Optimization](/agent_optimization/algorithms/mipro_optimizer)                        |
+| Evolutionary Optimization         | Employs genetic algorithms to evolve a population of prompts. Can discover novel prompt structures and supports multi-objective optimization (e.g., score vs. length). Can use LLMs for advanced mutation/crossover.                          | [Evolutionary Optimization](/agent_optimization/algorithms/evolutionary_optimizer)          |
 
 <Tip>
   If you would like us to implement another optimization algorithm, reach out to us on
   [Github](https://github.com/comet-ml/opik).
 </Tip>
+
+## Choosing the Right Optimizer & Example Use Cases
+
+Selecting the most appropriate optimizer depends heavily on your specific task and what aspect of your LLM application you're trying to improve.
+
+<AccordionGroup>
+  <Accordion title="Scenario 1: Improving a General Instruction Prompt">
+    **Goal:** You have a single instruction prompt for a task (e.g., summarization, classification, general question answering) and you want to improve its clarity, effectiveness, or how well it guides the LLM.
+    
+    **Recommended Optimizer(s):**
+    - **[`MetaPromptOptimizer`](/agent_optimization/algorithms/metaprompt_optimizer):** Ideal for this. It uses an LLM to suggest and evaluate changes to your existing prompt text.
+    - **[`EvolutionaryOptimizer`](/agent_optimization/algorithms/evolutionary_optimizer):** Can also be used if you want to explore a wider range of structural changes or have multiple objectives like also minimizing prompt length.
+
+    **Example:** Your current summarization prompt sometimes produces summaries that are too verbose. You could use `MetaPromptOptimizer` to refine it for conciseness and accuracy, or `EvolutionaryOptimizer` to explicitly optimize for both a summarization quality metric and shorter prompt length.
+  </Accordion>
+  <Accordion title="Scenario 2: Optimizing Few-Shot Examples for a Chatbot">
+    **Goal:** Your chatbot's performance relies heavily on providing good few-shot examples (user/assistant turn pairs) in the initial system message to guide its responses, and you want to find the best set of examples from a larger pool.
+
+    **Recommended Optimizer(s):**
+    - **[`FewShotBayesianOptimizer`](/agent_optimization/algorithms/fewshot_bayesian_optimizer):** Specifically designed for this. It will test different numbers and combinations of examples from your dataset to find the optimal set for your chat model.
+
+    **Example:** You have a customer service chatbot and a dataset of 100 high-quality past interactions. `FewShotBayesianOptimizer` can help you select the best 3-5 interactions to use as few-shot examples to improve the chatbot's helpfulness and tone.
+  </Accordion>
+  <Accordion title="Scenario 3: Enhancing a Tool-Using Agent or Complex Reasoning Task">
+    **Goal:** You are building an agent that needs to use external tools (e.g., a search engine, a calculator, an API) or perform multi-step reasoning to arrive at an answer. The agent's internal logic and prompts for tool interaction need improvement.
+
+    **Recommended Optimizer(s):**
+    - **[`MiproOptimizer`](/agent_optimization/algorithms/mipro_optimizer):** This is the best choice. It uses DSPy to optimize the entire agent structure, including the prompts that define how the agent reasons and uses tools.
+
+    **Example:** You have a RAG (Retrieval Augmented Generation) system where the LLM needs to first generate a good search query, then process the retrieved documents, and finally synthesize an answer. `MiproOptimizer` can help refine the prompts for each of these stages within a DSPy program.
+  </Accordion>
+  <Accordion title="Scenario 4: Discovering Novel Prompts or Multi-Objective Needs">
+    **Goal:** You want to explore fundamentally different ways of prompting for a task, or you need to balance multiple competing objectives (e.g., maximizing factual accuracy while minimizing response latency, which might correlate with prompt/response length).
+
+    **Recommended Optimizer(s):**
+    - **[`EvolutionaryOptimizer`](/agent_optimization/algorithms/evolutionary_optimizer):** Its genetic algorithm approach can explore a wide design space. With `enable_moo=True`, it can handle multi-objective optimization, providing a Pareto front of solutions that offer different trade-offs.
+
+    **Example:** You want to find the shortest possible prompt for an information extraction task that still maintains at least 90% accuracy. `EvolutionaryOptimizer` with multi-objective optimization could help find such prompts.
+  </Accordion>
+</AccordionGroup>
 
 ### Benchmark results
 

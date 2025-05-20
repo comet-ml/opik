@@ -1,5 +1,5 @@
 ---
-title: Evolutionary Optimizer
+title: Evolutionary Optimizer: Genetic Algorithms for Prompt & Agent Discovery
 ---
 
 The `EvolutionaryOptimizer` uses genetic algorithms to refine and discover effective prompts. It iteratively evolves a population of prompts, applying selection, crossover, and mutation operations to find prompts that maximize a given evaluation metric. This optimizer can also perform multi-objective optimization (e.g., maximizing score while minimizing prompt length) and leverage LLMs for more sophisticated genetic operations.
@@ -12,7 +12,7 @@ The `EvolutionaryOptimizer` uses genetic algorithms to refine and discover effec
   - Can be computationally intensive due to the need to evaluate a population of prompts over multiple generations.
   - The effectiveness of LLM-driven operators (`enable_llm_crossover`, LLM-based mutations) comes with additional LLM call costs.
   - Tuning genetic algorithm parameters (population size, mutation/crossover rates) might require some experimentation for optimal results on a specific task.
-  - While it can find very novel prompts, it might take longer to converge on a solution compared to more directed optimizers for simpler tasks.
+  - While it can find very novel prompts, it might take longer to converge on a solution compared to more [directed optimizers](../../agent_optimization/overview#supported-algorithms) for simpler tasks.
 </Note>
 
 ## How It Works
