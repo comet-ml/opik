@@ -97,27 +97,6 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/sdks/opik_optimizer/src:${{ github.workspace }}/sdks/python/src
         run: |
-          echo "--- Debug Information ---"
-          echo "Current directory: $(pwd)"
-          echo "PYTHONPATH: $PYTHONPATH"
-          
-          echo "\\nListing contents of ${{ github.workspace }}/sdks:"
-          ls -R ${{ github.workspace }}/sdks
-          
-          echo "\\nListing contents of site-packages (checking for opik_optimizer.pth or similar):"
-          ls -R $(python -c "import site; print(site.getsitepackages()[0])") | grep opik || echo "No opik related files in site-packages root"
-          ls -R $(python -c "import site; print(site.getsitepackages()[0])") | grep optimizer || echo "No optimizer related files in site-packages root"
-
-          echo "\\nRunning pip list:"
-          pip list
-          
-          echo "\\nPython sys.path from direct execution:"
-          python -c "import sys; print(sys.path)"
-          echo "--- End Debug Information ---"
-
-          echo "--- Checking opik_optimizer resolvability directly before pytest ---"
-          python -c "import sys; print('Sys.path for direct import test:'); print(sys.path); import opik_optimizer; print('Successfully imported opik_optimizer'); print(f'opik_optimizer path: {opik_optimizer.__path__}')" || echo "Failed to import opik_optimizer directly"
-
           if [ -n "${{ matrix.path }}" ]; then
             pytest ${{ matrix.path }} -v --suppress-no-test-exit-code --default-package=../../../sdks/python
           fi
