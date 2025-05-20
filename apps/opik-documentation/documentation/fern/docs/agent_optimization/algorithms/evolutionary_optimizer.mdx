@@ -152,16 +152,11 @@ if optimizer.enable_moo and "pareto_front_solutions" in optimization_result.deta
 
 ## Model Support
 
-The `EvolutionaryOptimizer` uses LiteLLM for model interactions. Therefore, it supports all models available through LiteLLM. This includes models from:
-- OpenAI
-- Azure OpenAI
-- Anthropic
-- Google (Vertex AI / AI Studio)
-- Mistral AI
-- Cohere
-- And many others.
+The `EvolutionaryOptimizer` uses LiteLLM for model interactions. Therefore, it supports all models available through LiteLLM. This includes models from OpenAI, Azure OpenAI, Anthropic, Google (Vertex AI / AI Studio), Mistral AI, Cohere, locally hosted models (e.g., via Ollama), and many others.
 
-Refer to the [LiteLLM documentation](https://docs.litellm.ai/docs/providers) for a complete list and how to configure them. The `model` parameter in the constructor should be the LiteLLM model string (e.g., `"openai/gpt-4o-mini"`, `"azure/your-deployment"`, `"gemini/gemini-1.5-pro-latest"`).
+Refer to the [LiteLLM documentation](https://docs.litellm.ai/docs/providers) for a complete list and how to configure them. The `model` parameter in the constructor should be the LiteLLM model string (e.g., `"openai/gpt-4o-mini"`, `"azure/your-deployment"`, `"gemini/gemini-1.5-pro-latest"`, `"ollama_chat/llama3"`).
+
+For detailed instructions on how to specify different models and configure providers, please refer to the main [LiteLLM Support for Optimizers documentation page](/agent_optimization/opik_optimizer/litellm_support).
 
 ## Best Practices
 

@@ -119,22 +119,15 @@ results.display()
 
 ## Model Support
 
-The FewShotBayesianOptimizer supports all models available through LiteLLM. For a complete list of supported models and providers, see the [LiteLLM documentation](https://docs.litellm.ai/docs/providers) documentation.
+The FewShotBayesianOptimizer supports all models available through LiteLLM. This provides broad compatibility with providers like OpenAI, Azure OpenAI, Anthropic, Google, and many others, including locally hosted models.
 
-### Common Providers
+For detailed instructions on how to specify different models and configure providers, please refer to the main [LiteLLM Support for Optimizers documentation page](/agent_optimization/opik_optimizer/litellm_support).
 
-- OpenAI (gpt-4, gpt-3.5-turbo, etc.)
-- Azure OpenAI
-- Anthropic (Claude)
-- Google (Gemini)
-- Mistral
-- Cohere
-
-### Configuration Example
+### Configuration Example using LiteLLM model string
 
 ```python
 optimizer = FewShotBayesianOptimizer(
-    model="openai/gpt-4",  # or any LiteLLM supported model
+    model="openai/gpt-4o-mini",  # Example: Using OpenAI via LiteLLM
     project_name="my-project",
     temperature=0.1,
     max_tokens=5000
