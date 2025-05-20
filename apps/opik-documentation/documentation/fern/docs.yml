@@ -315,7 +315,7 @@ navigation:
             slug: guardrails
   - tab: agent-optimization
     layout:
-      - page: "Agent & Prompt Optimization Overview"
+      - page: "Agent & Prompt Optimization"
         icon: fa-regular fa-house
         path: docs/agent_optimization/overview.mdx
         slug: overview
@@ -326,7 +326,7 @@ navigation:
             icon: fa-regular fa-bolt
             path: docs/agent_optimization/opik_optimizer/quickstart.mdx
             slug: quickstart
-          - page: "Core Optimization Concepts"
+          - page: "Core Concepts"
             icon: fa-regular fa-lightbulb
             path: docs/agent_optimization/opik_optimizer/concepts.mdx
             slug: concepts
@@ -368,6 +368,13 @@ navigation:
             icon: fa-regular fa-book
             path: docs/agent_optimization/best_practices/prompt_engineering.mdx
             slug: prompt_engineering
+      - section: "Advanced Topics"
+        slug: /advanced
+        contents:
+          - page: "Extending Opik Optimizer"
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/extending_optimizer.mdx
+            slug: extending_optimizer
   - tab: self-host
     layout:
       - page: Overview
