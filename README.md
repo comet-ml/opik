@@ -10,7 +10,7 @@
         <br>
         Opik
     </div>
-    Open source LLM evaluation platform<br>
+    Open-source LLM evaluation platform<br>
 </h1>
 
 <p align="center">
@@ -49,14 +49,12 @@ Opik helps you build, evaluate, and optimize LLM systems that run better, faster
 
 ## 🚀 What is Opik?
 
-Opik is an open-source platform designed to streamline the entire lifecycle of LLM applications. It empowers developers to evaluate, test, monitor, and optimize their models and agentic systems. Key offerings include:
+Opik (built by [Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=github&utm_content=what_is_opik_link&utm_campaign=opik)) is an open-source platform designed to streamline the entire lifecycle of LLM applications. It empowers developers to evaluate, test, monitor, and optimize their models and agentic systems. Key offerings include:
 * **Comprehensive Observability**: Deep tracing of LLM calls, conversation logging, and agent activity.
 * **Advanced Evaluation**: Robust tools for prompt evaluation, LLM-as-a-judge metrics, and experiment management.
 * **Production-Ready**: Scalable monitoring dashboards and online evaluation rules for production environments.
 * **Opik Optimizer**: A dedicated SDK and set of tools to enhance your model's performance, speed, and cost-efficiency.
 * **Opik Guardrails**: Features to help you implement safe and responsible AI practices.
-
-Built by [Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=github&utm_content=what_is_opik_link&utm_campaign=opik).
 
 <br>
 
