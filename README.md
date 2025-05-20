@@ -19,23 +19,6 @@ Opik helps you build, evaluate, and optimize LLM systems that run better, faster
 
 <div align="center">
 
-**Navigation**
-
-[🚀 What is Opik?](#-what-is-opik) •
-[🛠️ Opik Server Installation](#️-opik-server-installation) •
-[💻 Opik Client SDK](#-opik-client-sdk) •
-[📝 Logging Traces](#-logging-traces-with-integrations) •
-[🧑‍⚖️ LLM as a Judge](#️-llm-as-a-judge-metrics) •
-[🔍 Evaluating your Application](#-evaluating-your-llm-application) •
-[⭐ Star Us](#-star-us-on-github) •
-[🤝 Contributing](#-contributing)
-
-</div>
-
-<br>
-
-<div align="center">
-
 [![Python SDK](https://img.shields.io/pypi/v/opik)](https://pypi.org/project/opik/)
 [![License](https://img.shields.io/github/license/comet-ml/opik)](https://github.com/comet-ml/opik/blob/main/LICENSE)
 [![Build](https://github.com/comet-ml/opik/actions/workflows/build_apps.yml/badge.svg)](https://github.com/comet-ml/opik/actions/workflows/build_apps.yml)
@@ -48,15 +31,18 @@ Opik helps you build, evaluate, and optimize LLM systems that run better, faster
 
 <p align="center">
     <a href="https://www.comet.com/site/products/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=website_button&utm_campaign=opik"><b>Website</b></a> •
-    <a href="https://chat.comet.com"><b>Slack community</b></a> •
+    <a href="https://chat.comet.com"><b>Slack Community</b></a> •
     <a href="https://x.com/Cometml"><b>Twitter</b></a> •
+    <a href="https://www.comet.com/docs/opik/changelog">><b>Changelog</b></a>
     <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>Documentation</b></a>
 </p>
 
-![Opik thumbnail](readme-thumbnail.png)
+<div align="center" style="margin-top: 1em; margin-bottom: 1em;">
+[🚀 What is Opik?](#-what-is-opik) • [🛠️ Opik Server Installation](#️-opik-server-installation) • [💻 Opik Client SDK](#-opik-client-sdk) • [📝 Logging Traces](#-logging-traces-with-integrations)<br>
+[🧑‍⚖️ LLM as a Judge](#️-llm-as-a-judge-metrics) • [🔍 Evaluating your Application](#-evaluating-your-llm-application) • [⭐ Star Us](#-star-us-on-github) • [🤝 Contributing](#-contributing)
+</div>
 
-## Important: Changelog
-**For the latest updates and detailed changes, please refer to our [official changelog](https://www.comet.com/docs/opik/changelog).**
+![Opik thumbnail](readme-thumbnail.png)
 
 ## 🚀 What is Opik?
 
@@ -249,8 +235,6 @@ You can also run evaluations as part of your CI/CD pipeline using our [PyTest in
 If you find Opik useful, please consider giving us a star! Your support helps us grow our community and continue improving the product.
 
 [![Star History Chart](https://api.star-history.com/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
-
-
 
 ## 🤝 Contributing
 
