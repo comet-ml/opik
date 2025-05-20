@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple, Union, Optional
+from typing import Any, Dict, List, Tuple, Union, Optional, Literal
 import os
 import random
 
@@ -271,6 +271,7 @@ class MiproOptimizer(BaseOptimizer):
         experiment_config: Optional[Dict] = None,
         optimization_id: Optional[str] = None,
         num_trials: Optional[int] = 3,
+        auto: Optional[Literal["light", "medium", "heavy"]] = "medium",
         **kwargs,
     ) -> None:
         # FIXME: Intermediate values:
@@ -285,6 +286,7 @@ class MiproOptimizer(BaseOptimizer):
         self.output_key = output_key
         self.prompt = prompt
         self.num_trials = num_trials
+        self.auto = auto
 
         # Convert to values for MIPRO:
         if isinstance(dataset, str):
@@ -333,7 +335,7 @@ class MiproOptimizer(BaseOptimizer):
         # Initialize the optimizer:
         self.optimizer = MIPROv2(
             metric=self.metric_function,
-            auto="light",
+            auto=self.auto,
             num_threads=self.num_threads,
             verbose=False,
             num_candidates=self.num_candidates,
