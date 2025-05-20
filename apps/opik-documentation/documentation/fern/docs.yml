@@ -351,19 +351,23 @@ navigation:
             icon: fa-regular fa-question
             path: docs/agent_optimization/opik_optimizer/faq.mdx
             slug: faq
-      - section: Prompt Optimization Algorithms
+      - section: Optimization Algorithms
         slug: /algorithms
         contents:
           - page: Evolutionary Optimizer
+            icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/evolutionary_optimizer.mdx
             slug: evolutionary_optimizer
           - page: Few-Shot Bayesian Optimizer
+            icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
             slug: fewshot_bayesian_optimizer
           - page: MetaPrompt Optimizer
+            icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
             slug: metaprompt_optimizer
           - page: MIPRO Optimizer
+            icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
             slug: mipro_optimizer
       - section: Optimization Best Practices
