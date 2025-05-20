@@ -1,13 +1,10 @@
 ---
-title: Core Concepts of Opik Prompt & Agent Optimization
+title: Core Concepts of Opik Agent Optimizer
 ---
 
 ## Overview
 
-Understanding the core concepts of the Opik Optimizer is essential for unlocking
-its full potential in LLM evaluation and optimization. This section explains the
-foundational terms, processes, and strategies that underpin effective agent and
-prompt optimization within Opik.
+Understanding the core concepts of the Opik Agent Optimizer is essential for unlocking its full potential in LLM evaluation and optimization. This section explains the foundational terms, processes, and strategies that underpin effective agent and prompt optimization within Opik.
 
 ## What is Agent Optimization (and Prompt Optimization)?
 
@@ -15,7 +12,7 @@ In Opik, **Agent Optimization** refers to the systematic process of refining and
 
 **Prompt Optimization** is a crucial subset of Agent Optimization. It focuses specifically on improving the instructions (prompts) given to Large Language Models (LLMs) to achieve desired outputs more accurately, consistently, and efficiently. Since prompts are the primary way to interact with and guide LLMs, optimizing them is fundamental to enhancing any LLM-powered agent or application.
 
-Opik Optimizer provides tools for both: directly optimizing individual prompt strings and also for optimizing more complex agentic structures that might involve multiple prompts, few-shot examples, or tool interactions.
+`Opik Agent Optimizer` provides tools for both: directly optimizing individual prompt strings and also for optimizing more complex agentic structures that might involve multiple prompts, few-shot examples, or tool interactions.
 
 ## Key Terms
 
@@ -86,7 +83,7 @@ Opik Optimizer provides tools for both: directly optimizing individual prompt st
 
 ## The Role of Evaluation in Optimization
 
-At the core of every Opik Optimizer is a robust evaluation process. The optimizers don't just guess what makes a good prompt; they systematically test candidate prompts using the same underlying evaluation principles and tools available elsewhere in the Opik platform.
+At the core of every optimizer is a robust evaluation process. The optimizers don't just guess what makes a good prompt; they systematically test candidate prompts using the same underlying evaluation principles and tools available elsewhere in the Opik platform.
 
 Here's how it generally works:
 
@@ -131,26 +128,16 @@ Here's how it generally works:
 
 <AccordionGroup>
   <Accordion title="Iterative Refinement">
-    Most optimizers work by repeatedly trying variations of a prompt (or prompt components), evaluating them, and using
-    the results to guide the next set of variations. This is a core loop of generate/evaluate/select.
+    Most optimizers work by repeatedly trying variations of a prompt (or prompt components), evaluating them, and using the results to guide the next set of variations. This is a core loop of generate/evaluate/select.
   </Accordion>
   <Accordion title="Few-shot Learning (Example-driven prompting)">
-    Providing examples of the desired input/output behavior directly within the prompt can significantly improve LLM
-    performance. The [`FewShotBayesianOptimizer`](/agent_optimization/algorithms/fewshot_bayesian_optimizer) automates
-    finding the best examples for chat models. Other optimizers like `MiproOptimizer` (via DSPy) also leverage
-    demonstrations.
+    Providing examples of the desired input/output behavior directly within the prompt can significantly improve LLM performance. The [`FewShotBayesianOptimizer`](/agent_optimization/algorithms/fewshot_bayesian_optimizer) automates finding the best examples for chat models Other optimizers like `MiproOptimizer` (via DSPy) also leverage demonstrations.
   </Accordion>
   <Accordion title="LLM-driven Generation/Critique (Meta-Prompting)">
-    Using an LLM itself to suggest improvements to a prompt, or to generate new candidate prompts based on some
-    analysis. The [`MetaPromptOptimizer`](/agent_optimization/algorithms/metaprompt_optimizer) is a prime example. The
-    [`EvolutionaryOptimizer`](/agent_optimization/algorithms/evolutionary_optimizer) can also use LLMs for its genetic
-    operators.
+    Using an LLM itself to suggest improvements to a prompt, or to generate new candidate prompts based on some analysis. The [`MetaPromptOptimizer`](/agent_optimization/algorithms/metaprompt_optimizer) is a prime example. The [`EvolutionaryOptimizer`](/agent_optimization/algorithms/evolutionary_optimizer) can also use LLMs for its genetic operators.
   </Accordion>
   <Accordion title="Bayesian Optimization">
-    A strategy for efficiently searching large parameter spaces by building a probabilistic model of how different
-    parameter choices affect the outcome. Used by
-    [`FewShotBayesianOptimizer`](/agent_optimization/algorithms/fewshot_bayesian_optimizer) (via Optuna) to select
-    few-shot examples.
+    A strategy for efficiently searching large parameter spaces by building a probabilistic model of how different parameter choices affect the outcome. Used by [`FewShotBayesianOptimizer`](/agent_optimization/algorithms/fewshot_bayesian_optimizer) (via Optuna) to select few-shot examples.
   </Accordion>
   <Accordion title="Evolutionary Algorithms">
     Techniques inspired by biological evolution, involving a population of solutions (prompts) that undergo selection,
@@ -187,6 +174,5 @@ Here's how it generally works:
 - Refer to the [FAQ](/agent_optimization/opik_optimizer/faq) for common questions and troubleshooting.
 
 <Info>
-  📓 Want to see these concepts in action? Check out our [Example Projects & Cookbooks](/agent_optimization/cookbook)
-  for step-by-step, runnable Colab notebooks.
+  📓 Want to see these concepts in action? Check out our [Example Projects & Cookbooks](/agent_optimization/cookbook) for step-by-step, runnable Colab notebooks.
 </Info>
