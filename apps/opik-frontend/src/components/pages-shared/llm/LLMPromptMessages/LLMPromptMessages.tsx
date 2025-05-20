@@ -28,6 +28,7 @@ interface LLMPromptMessagesProps {
   messages: LLMMessage[];
   validationErrors?: MessageValidationError[];
   possibleTypes?: DropdownOption<LLM_MESSAGE_ROLE>[];
+  hidePromptActions?: boolean;
   onChange: (messages: LLMMessage[]) => void;
   onAddMessage: () => void;
   hint?: string;
@@ -37,6 +38,7 @@ const LLMPromptMessages = ({
   messages,
   validationErrors,
   possibleTypes,
+  hidePromptActions = true,
   onChange,
   onAddMessage,
   hint = "",
@@ -118,6 +120,8 @@ const LLMPromptMessages = ({
                 errorText={validationErrors?.[messageIdx]?.content?.message}
                 hideRemoveButton={messages?.length === 1}
                 hideDragButton={messages?.length === 1}
+                hidePromptActions={hidePromptActions}
+                showAlwaysActionsPanel={messageIdx === messages.length - 1}
                 onRemoveMessage={() => handleRemoveMessage(message.id)}
                 onDuplicateMessage={() =>
                   handleDuplicateMessage(message, messageIdx + 1)
@@ -125,7 +129,7 @@ const LLMPromptMessages = ({
                 onChangeMessage={(changes) =>
                   handleChangeMessage(message.id, changes)
                 }
-                {...message}
+                message={message}
               />
             ))}
           </div>
