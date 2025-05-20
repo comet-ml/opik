@@ -38,8 +38,8 @@ Opik helps you build, evaluate, and optimize LLM systems that run better, faster
 </p>
 
 <div align="center" style="margin-top: 1em; margin-bottom: 1em;">
-[🚀 What is Opik?](#-what-is-opik) • [🛠️ Opik Server Installation](#️-opik-server-installation) • [💻 Opik Client SDK](#-opik-client-sdk) • [📝 Logging Traces](#-logging-traces-with-integrations)<br>
-[🧑‍⚖️ LLM as a Judge](#️-llm-as-a-judge-metrics) • [🔍 Evaluating your Application](#-evaluating-your-llm-application) • [⭐ Star Us](#-star-us-on-github) • [🤝 Contributing](#-contributing)
+<a href="#-what-is-opik">🚀 What is Opik?</a> • <a href="#️-opik-server-installation">🛠️ Opik Server Installation</a> • <a href="#-opik-client-sdk">💻 Opik Client SDK</a> • <a href="#-logging-traces-with-integrations">📝 Logging Traces</a><br>
+<a href="#️-llm-as-a-judge-metrics">🧑‍⚖️ LLM as a Judge</a> • <a href="#-evaluating-your-llm-application">🔍 Evaluating your Application</a> • <a href="#-star-us-on-github">⭐ Star Us</a> • <a href="#-contributing">🤝 Contributing</a>
 </div>
 
 ![Opik thumbnail](readme-thumbnail.png)
