@@ -368,25 +368,24 @@ navigation:
             icon: fa-regular fa-book
             path: docs/agent_optimization/best_practices/prompt_engineering.mdx
             slug: prompt_engineering
-      # - section: Example Projects & Cookbooks
-      #   slug: /cookbook
-      #   description: End-to-end, runnable Colab notebooks showing real-world Opik Optimizer workflows.
-      #   contents:
-      #     - page: Introduction Example
-      #       icon: fa-regular fa-graduation-cap
-      #       path: docs/agent_optimization/cookbook/optimizer_introduction_cookbook.mdx
-      #       slug: optimizer_introduction_cookbook
-      #     - page: Synthetic Data
-      #       icon: fa-regular fa-flask
-      #       path: docs/agent_optimization/cookbook/synthetic_data_optimizer_cookbook.mdx
-      #       slug: synthetic_data_optimizer_cookbook
-      # - section: Advanced Topics
-      #   slug: /advanced
-      #   contents:
-      #     - page: Extending Opik Optimizer
-      #       icon: fa-regular fa-puzzle-piece
-      #       path: docs/agent_optimization/algorithms/extending_optimizer.mdx
-      #       slug: extending_optimizer
+      - section: Example Projects and Cookbooks
+        slug: /optimizer-cookbooks
+        contents:
+          - page: Introduction Example
+            icon: fa-regular fa-graduation-cap
+            path: docs/agent_optimization/cookbook/optimizer_introduction_cookbook.mdx
+            slug: optimizer_introduction_cookbook
+          - page: Synthetic Data
+            icon: fa-regular fa-flask
+            path: docs/agent_optimization/cookbook/synthetic_data_optimizer_cookbook.mdx
+            slug: synthetic_data_optimizer_cookbook
+      - section: Advanced Topics
+        slug: /advanced
+        contents:
+          - page: Extending Opik Optimizer
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/extending_optimizer.mdx
+            slug: extending_optimizer
   - tab: self-host
     layout:
       - page: Overview
