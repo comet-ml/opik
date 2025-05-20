@@ -14,12 +14,9 @@ const useSpanCommentsBatchDeleteMutation = () => {
 
   return useMutation({
     mutationFn: async ({ ids }: UseSpanCommentsBatchDeleteMutationParams) => {
-      const { data } = await api.post(
-        `${SPANS_REST_ENDPOINT}/comments/delete`,
-        {
-          ids: ids,
-        },
-      );
+      const { data } = await api.post(`${SPANS_REST_ENDPOINT}comments/delete`, {
+        ids: ids,
+      });
       return data;
     },
     onError: (error) => {
