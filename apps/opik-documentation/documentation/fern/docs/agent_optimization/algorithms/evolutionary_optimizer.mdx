@@ -67,7 +67,7 @@ The `EvolutionaryOptimizer` is built upon the [DEAP](https://deap.readthedocs.io
 
 ## Configuration Options
 
-The `EvolutionaryOptimizer` offers a rich set of parameters to control the genetic algorithm:
+### Basic Configuration
 
 ```python
 from opik_optimizer import EvolutionaryOptimizer
@@ -98,6 +98,8 @@ optimizer = EvolutionaryOptimizer(
     max_tokens=1024
 )
 ```
+
+### Advanced Configuration
 
 Key parameters include:
 -   `model`: The primary LLM used for evaluating prompts and, by default, for LLM-driven genetic operations (mutation, crossover, population initialization).
@@ -171,7 +173,6 @@ if optimizer.enable_moo and "pareto_front_solutions" in optimization_result.deta
     print("\n--- Pareto Front Solutions ---")
     for sol in optimization_result.details["pareto_front_solutions"]:
         print(f"Score: {sol['score']:.4f}, Length: {sol['length']:.0f}, Prompt: '{sol['prompt'][:100]}...'")
-
 ```
 
 ## Model Support
@@ -197,6 +198,12 @@ For detailed instructions on how to specify different models and configure provi
 
 Genetic algorithms and evolutionary computation are well-established fields. This optimizer draws inspiration from applying these classical techniques to the domain of prompt engineering, with enhancements using LLMs for more intelligent genetic operations. You can see some additional resources:
 -  [DEAP Library](https://deap.readthedocs.io/en/master/): The underlying evolutionary computation framework used.
+
+## Next Steps
+
+- Explore other [Optimization Algorithms](/agent_optimization/overview#optimization-algorithms)
+- Explore [Dataset Requirements](/agent_optimization/opik_optimizer/datasets)
+- Try the [Example Projects & Cookbooks](/agent_optimization/cookbook) for runnable Colab notebooks using this optimizer
 
 ```python
 # Create an instance of the EvolutionaryOptimizer
