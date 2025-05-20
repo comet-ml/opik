@@ -11,7 +11,7 @@ const getDatasetByName = async (
   { datasetName }: UseDatasetByNameParams,
 ) => {
   const response = await api.post<Dataset>(
-    `${DATASETS_REST_ENDPOINT}/retrieve`,
+    `${DATASETS_REST_ENDPOINT}retrieve`,
     {
       dataset_name: datasetName,
     },
