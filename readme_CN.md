@@ -1,5 +1,5 @@
 > 注意：此文件为机器翻译版本。欢迎对翻译进行改进！
-<div align="center"><b><a href="readme.md">英文版</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_JP.md">日本語</a> | <a href="readme_KO.md">한국어</a></b></div>
+<div align="center"><b><a href="README.md">英文版</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_JP.md">日本語</a> | <a href="readme_KO.md">한국어</a></b></div>
 
 <h1 align="center" style="border-bottom: none">
     <div>
