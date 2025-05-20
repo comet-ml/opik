@@ -1,5 +1,6 @@
 ---
 title: Advanced Prompt Engineering Best Practices with Opik Optimizer
+pytest_codeblocks_skip: true
 ---
 Improving the performance of your LLM application and agent often requires improving the quality
 of the prompts you are using. While manual iteration is common, a structured approach combined with automated tools can yield significantly better and more consistent results.
@@ -58,7 +59,7 @@ LLMs perform better when given relevant context and examples of the desired inpu
     ```
     *Opik Connection*: The [FewShotBayesianOptimizer](/agent_optimization/algorithms/fewshot_bayesian_optimizer) is specifically designed to automate the selection of the optimal number and combination of few-shot examples from your dataset for **chat models**.
 
-    ```python {pytest_codeblocks_skip=true}
+    ```python
     # Example: Initializing FewShotBayesianOptimizer
     from opik_optimizer import FewShotBayesianOptimizer
 
@@ -122,7 +123,7 @@ Prompt engineering is rarely a one-shot process. Continuous iteration is key. A 
 *   **Meta-Prompting**: Use an LLM to help you improve your prompts. For example, "Critique this prompt for clarity and suggest 3 ways to make it more effective for a customer service chatbot."
     *   *Opik Connection*: The [MetaPrompt Optimizer](/agent_optimization/algorithms/metaprompt_optimizer) directly automates this concept. It uses an LLM (the "reasoning model"), guided by an internal meta-prompt, to iteratively generate and evaluate improved versions of your initial prompt.
 
-    ```python {pytest_codeblocks_skip=true}
+    ```python
     # Example: Initializing MetaPromptOptimizer
     from opik_optimizer import MetaPromptOptimizer
 

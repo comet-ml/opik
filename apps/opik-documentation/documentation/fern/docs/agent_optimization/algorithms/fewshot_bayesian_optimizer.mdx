@@ -1,5 +1,6 @@
 ---
 title: "Few-Shot Bayesian Optimizer: Example-Based Chat Prompt Tuning"
+pytest_codeblocks_skip: true
 ---
 The FewShotBayesianOptimizer is a sophisticated prompt optimization tool that combines few-shot learning with Bayesian optimization techniques. It's designed to iteratively improve prompts by learning from examples and systematically exploring the optimization space, specifically for chat-based prompts.
 
@@ -54,7 +55,7 @@ Essentially, the `FewShotBayesianOptimizer` intelligently searches through the v
 
 ### Basic Configuration
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik_optimizer import FewShotBayesianOptimizer
 
 optimizer = FewShotBayesianOptimizer(
@@ -82,7 +83,7 @@ The optimizer works by letting Optuna suggest the number of examples (`n_example
 
 ## Example Usage
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik_optimizer import FewShotBayesianOptimizer
 from opik.evaluation.metrics import LevenshteinRatio
 from opik_optimizer import (
@@ -141,7 +142,7 @@ For detailed instructions on how to specify different models and configure provi
 
 ### Configuration Example using LiteLLM model string
 
-```python {pytest_codeblocks_skip=true}
+```python
 optimizer = FewShotBayesianOptimizer(
     model="openai/gpt-4o-mini",  # Example: Using OpenAI via LiteLLM
     project_name="my-project",

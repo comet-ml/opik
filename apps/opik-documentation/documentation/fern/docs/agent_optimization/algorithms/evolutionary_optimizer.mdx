@@ -1,5 +1,6 @@
 ---
 title: "Evolutionary Optimizer: Genetic Algorithms for Prompt & Agent Discovery"
+pytest_codeblocks_skip: true
 ---
 
 The `EvolutionaryOptimizer` uses genetic algorithms to refine and discover effective prompts. It iteratively evolves a population of prompts, applying selection, crossover, and mutation operations to find prompts that maximize a given evaluation metric. This optimizer can also perform multi-objective optimization (e.g., maximizing score while minimizing prompt length) and leverage LLMs for more sophisticated genetic operations.
@@ -68,7 +69,7 @@ The `EvolutionaryOptimizer` is built upon the [DEAP](https://deap.readthedocs.io
 
 The `EvolutionaryOptimizer` offers a rich set of parameters to control the genetic algorithm:
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik_optimizer import EvolutionaryOptimizer
 
 optimizer = EvolutionaryOptimizer(
@@ -110,7 +111,7 @@ Key parameters include:
 
 ## Example Usage
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik_optimizer import EvolutionaryOptimizer, TaskConfig, MetricConfig, from_llm_response_text, from_dataset_field
 from opik.evaluation.metrics import LevenshteinRatio # or any other suitable metric
 from opik_optimizer.demo import get_or_create_dataset
@@ -197,7 +198,7 @@ For detailed instructions on how to specify different models and configure provi
 Genetic algorithms and evolutionary computation are well-established fields. This optimizer draws inspiration from applying these classical techniques to the domain of prompt engineering, with enhancements using LLMs for more intelligent genetic operations. You can see some additional resources:
 -  [DEAP Library](https://deap.readthedocs.io/en/master/): The underlying evolutionary computation framework used.
 
-```python {pytest_codeblocks_skip=true}
+```python
 # Create an instance of the EvolutionaryOptimizer
 # This assumes you have your data prepared as shown in the "Preparing Your Data" section
 # and your evaluation function defined as in "Defining an Evaluation Function"
@@ -223,7 +224,7 @@ optimizer = EvolutionaryOptimizer(
 ```
 
 ### Advanced Configuration
-```python {pytest_codeblocks_skip=true}
+```python
 # Example of advanced configuration
 advanced_optimizer = EvolutionaryOptimizer(
     config=optimizer_config,

@@ -1,5 +1,6 @@
 ---
 title: "Opik Optimizer API Reference: Detailed Guide"
+pytest_codeblocks_skip: true
 ---
 The Opik Optimizer provides a set of tools for optimizing LLM prompts. This
 reference guide will help you understand the available APIs and how to use them
@@ -24,7 +25,7 @@ opik configure
 
 ### MetaPromptOptimizer
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 class opik_optimizer.MetaPromptOptimizer(
     model: str,
     reasoning_model: str = None,
@@ -90,7 +91,7 @@ class opik_optimizer.MetaPromptOptimizer(
 
 Optimizes a prompt using meta-reasoning.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 def opik_optimizer.MetaPromptOptimizer.optimize_prompt(
     self,
     dataset: Union[str, Dataset],
@@ -133,7 +134,7 @@ Returns: [OptimizationResult](#optimizationresult)
 
 Evaluates a specific prompt on a dataset.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 def opik_optimizer.MetaPromptOptimizer.evaluate_prompt(
     self,
     dataset: Dataset,
@@ -183,7 +184,7 @@ Returns: `float` - The evaluation score
 
 ### EvolutionaryOptimizer
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 class opik_optimizer.EvolutionaryOptimizer(
     model: str,
     project_name: Optional[str] = None,
@@ -280,7 +281,7 @@ Optimizes prompts using a genetic algorithm. Evolves prompt text, supporting sin
 
 Optimizes a prompt using an evolutionary algorithm.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 def opik_optimizer.EvolutionaryOptimizer.optimize_prompt(
     self,
     dataset: Union[str, opik.Dataset],
@@ -323,7 +324,7 @@ Returns: [OptimizationResult](#optimizationresult)
 
 Evaluates a specific prompt on a dataset.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 def opik_optimizer.EvolutionaryOptimizer.evaluate_prompt(
     self,
     dataset: Union[str, opik.Dataset],
@@ -378,7 +379,7 @@ Returns: `float` - The evaluation score
 
 ### MiproOptimizer
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 class opik_optimizer.MiproOptimizer(
     model: str,
     project_name: Optional[str] = None,
@@ -407,7 +408,7 @@ The MiproOptimizer uses DSPy's MIPRO (Modular Instruction Programming and Optimi
 
 Optimizes a prompt using MIPRO (Modular Instruction Programming and Optimization).
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 def opik_optimizer.MiproOptimizer.optimize_prompt(
     self,
     dataset: Union[str, Dataset],
@@ -446,7 +447,7 @@ Returns: [OptimizationResult](#optimizationresult)
 
 Evaluates a specific prompt on a dataset.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 def opik_optimizer.MiproOptimizer.evaluate_prompt(
     self,
     dataset: Dataset,
@@ -494,7 +495,7 @@ Returns: `float` - The evaluation score
 
 Load a previously optimized module from a checkpoint file.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 def opik_optimizer.MiproOptimizer.load_from_checkpoint(
     self,
     filename: str
@@ -509,7 +510,7 @@ def opik_optimizer.MiproOptimizer.load_from_checkpoint(
 
 Continue the optimization process after preparing with `prepare_optimize_prompt`. This method runs the actual MIPRO compilation and optimization.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 def opik_optimizer.MiproOptimizer.continue_optimize_prompt(
     self
 ) -> OptimizationResult
@@ -519,7 +520,7 @@ Returns: [OptimizationResult](#optimizationresult)
 
 ### FewShotBayesianOptimizer
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 class opik_optimizer.FewShotBayesianOptimizer(
     model: str,
     project_name: Optional[str] = None,
@@ -574,7 +575,7 @@ class opik_optimizer.FewShotBayesianOptimizer(
 
 Optimizes a prompt using few-shot examples and Bayesian optimization.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 def opik_optimizer.FewShotBayesianOptimizer.optimize_prompt(
     self,
     dataset: Union[str, Dataset],
@@ -652,7 +653,7 @@ Returns: `float` - The evaluation score
 
 Configuration for a prompt task, specifying how to use the prompt with input data and tools.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 class opik_optimizer.TaskConfig(
     instruction_prompt: Union[str, List[Dict[Literal["role", "content"], str]]],
     use_chat_prompt: bool = False,
@@ -686,7 +687,7 @@ class opik_optimizer.TaskConfig(
 
 Configuration for a metric used in optimization. This class specifies how to evaluate prompts during optimization.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 class opik_optimizer.MetricConfig(
     metric: BaseMetric,
     inputs: Dict[str, Union[str, Callable[[Any], Any]]]
@@ -705,7 +706,7 @@ class opik_optimizer.MetricConfig(
 
 ### OptimizationResult
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 class opik_optimizer.OptimizationResult(
     prompt: Union[str, List[Dict[Literal["role", "content"], str]]],
     score: float,
