@@ -45,6 +45,8 @@ class OpikContextStorage:
         return stack[-1]
 
     def pop_span_data(self) -> Optional[span.SpanData]:
+        if self.span_data_stack_empty():
+            return None
         stack = self._get_data_stack()
         self._spans_data_stack_context.set(stack[:-1])
         return stack[-1]
@@ -97,7 +99,7 @@ def temporary_context(
     span_data: span.SpanData, trace_data: Optional[trace.TraceData]
 ) -> Generator[None, None, None]:
     """
-    Temporary adds span and trace data to the context.
+    Temporarily adds span and trace data to the context.
     If trace_data is None, it has no effect on the current trace in the context.
     """
     try:
