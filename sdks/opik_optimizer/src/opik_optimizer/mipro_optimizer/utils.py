@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Tuple, Union, Optional
 import uuid
 import dspy
 import re
+import random
 
 from dspy.signatures.signature import make_signature
 
@@ -78,11 +79,17 @@ def opik_metric_to_dspy(metric, output):
     return opik_metric_score_wrapper
 
 
-def create_dspy_training_set(data: list[dict], input: str) -> list[dspy.Example]:
+def create_dspy_training_set(
+    data: list[dict], input: str, n_samples: Optional[int] = None
+) -> list[dspy.Example]:
     """
     Turn a list of dicts into a list of dspy Examples
     """
     output = []
+
+    if n_samples is not None:
+        data = random.sample(data, n_samples)
+
     for example in data:
         example_obj = dspy.Example(
             **example, dspy_uuid=str(uuid.uuid4()), dspy_split="train"
