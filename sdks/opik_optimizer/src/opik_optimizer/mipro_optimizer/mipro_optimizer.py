@@ -196,6 +196,7 @@ class MiproOptimizer(BaseOptimizer):
         task_config: TaskConfig,
         num_candidates: int = 10,
         experiment_config: Optional[Dict] = None,
+        num_trials: Optional[int] = 3,
         **kwargs,
     ) -> OptimizationResult:
         self._opik_client = opik.Opik()
@@ -222,6 +223,7 @@ class MiproOptimizer(BaseOptimizer):
                 num_candidates=num_candidates,
                 experiment_config=experiment_config,
                 optimization_id=optimization.id if optimization is not None else None,
+                num_trials=num_trials,
                 **kwargs,
             )
             if optimization:
@@ -241,6 +243,7 @@ class MiproOptimizer(BaseOptimizer):
         num_candidates: int = 10,
         experiment_config: Optional[Dict] = None,
         optimization_id: Optional[str] = None,
+        num_trials: Optional[int] = 3,
         **kwargs,
     ) -> OptimizationResult:
         logger.info("Preparing MIPRO optimization...")
@@ -251,6 +254,7 @@ class MiproOptimizer(BaseOptimizer):
             num_candidates=num_candidates,
             experiment_config=experiment_config,
             optimization_id=optimization_id,
+            num_trials=num_trials,
             **kwargs,
         )
         logger.info("Starting MIPRO compilation...")
@@ -266,6 +270,7 @@ class MiproOptimizer(BaseOptimizer):
         num_candidates: int = 10,
         experiment_config: Optional[Dict] = None,
         optimization_id: Optional[str] = None,
+        num_trials: Optional[int] = 3,
         **kwargs,
     ) -> None:
         # FIXME: Intermediate values:
@@ -279,6 +284,7 @@ class MiproOptimizer(BaseOptimizer):
         self.input_key = input_key
         self.output_key = output_key
         self.prompt = prompt
+        self.num_trials = num_trials
 
         # Convert to values for MIPRO:
         if isinstance(dataset, str):
@@ -319,6 +325,7 @@ class MiproOptimizer(BaseOptimizer):
                 "metric": metric.name,
                 "num_threads": self.num_threads,
                 "num_candidates": self.num_candidates,
+                "num_trails": self.num_trails,
                 "dataset": dataset.name,
             },
         }
@@ -359,7 +366,7 @@ class MiproOptimizer(BaseOptimizer):
             trainset=self.trainset,
             provide_traceback=True,
             requires_permission_to_run=False,
-            num_trials=3,
+            num_trials=self.num_trials,
         )
         self.best_programs = sorted(
             self.results.candidate_programs,
