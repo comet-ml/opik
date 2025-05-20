@@ -96,7 +96,7 @@ Selecting the most appropriate optimizer depends heavily on your specific task a
     **Goal:** You are building an agent that needs to use external tools (e.g., a search engine, a calculator, an API) or perform multi-step reasoning to arrive at an answer. The agent's internal logic and prompts for tool interaction need improvement.
 
     **Recommended Optimizer(s):**
-    - **[`MiproOptimizer`](/agent_optimization/algorithms/mipro_optimizer):** This is the best choice. It uses DSPy to optimize the entire agent structure, including the prompts that define how the agent reasons and uses tools.
+    - **[`MiproOptimizer`](/agent_optimization/algorithms/mipro_optimizer):** This is the best choice. It uses DSPy's MIPRO algorithm to optimize the entire agent structure, including the prompts that define how the agent reasons and uses tools.
 
     **Example:** You have a RAG (Retrieval Augmented Generation) system where the LLM needs to first generate a good search query, then process the retrieved documents, and finally synthesize an answer. `MiproOptimizer` can help refine the prompts for each of these stages within a DSPy program.
   </Accordion>

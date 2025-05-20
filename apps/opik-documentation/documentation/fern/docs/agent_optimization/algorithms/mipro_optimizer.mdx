@@ -1,5 +1,5 @@
 ---
-title: MIPRO Optimizer: DSPy-Powered Agent & Complex Prompt Optimization
+title: MIPRO Optimizer: Agent & Complex Prompt Optimization
 ---
 The MiproOptimizer is a specialized prompt optimization tool that implements the MIPRO (Multi-agent Interactive Prompt Optimization) algorithm. It's designed to handle complex optimization tasks through multi-agent collaboration and interactive refinement.
 
@@ -29,15 +29,15 @@ Here's a simplified overview of the process:
 2.  **Candidate Generation (Compilation)**: The core of MIPRO involves compiling this DSPy program. This "compilation" is an optimization process itself:
     *   It explores different ways to formulate the instructions within the DSPy program's modules (e.g., the main instruction, tool usage instructions if applicable).
     *   It also optimizes the selection of few-shot demonstrations to include within the prompts for these modules, if the DSPy program structure uses them.
-    *   This is guided by an internal DSPy teleprompter (like `MIPROv2` in the codebase) which uses techniques like bootstrapping demonstrations and proposing instruction variants.
+    *   This is guided by an internal DSPy teleprompter algorithm (like `MIPROv2` in the codebase) which uses techniques like bootstrapping demonstrations and proposing instruction variants.
 
-3.  **Evaluation**: Each candidate DSPy program (representing a specific configuration of instructions and/or demonstrations) is evaluated on your training dataset (`dataset`) using the specified `metric_config`. The `MiproOptimizer` uses DSPy's evaluation mechanisms, which can handle complex interactions, especially for tool-using agents.
+3.  **Evaluation**: Each candidate program (representing a specific configuration of instructions and/or demonstrations) is evaluated on your training dataset (`dataset`) using the specified `metric_config`. The `MiproOptimizer` uses DSPy's evaluation mechanisms, which can handle complex interactions, especially for tool-using agents.
 
-4.  **Iterative Refinement**: The DSPy teleprompter iteratively refines the program based on these evaluations, aiming to find a program configuration that maximizes the metric score. The `num_candidates` parameter in `optimize_prompt` influences how many of these configurations are explored.
+4.  **Iterative Refinement**: The teleprompter iteratively refines the program based on these evaluations, aiming to find a program configuration that maximizes the metric score. The `num_candidates` parameter in `optimize_prompt` influences how many of these configurations are explored.
 
 5.  **Result**: The `MiproOptimizer` returns an `OptimizationResult` containing the best-performing DSPy program structure found. This might be a single optimized prompt string or, for more complex agents, a collection of optimized prompts that make up the agent's internal logic (e.g., `tool_prompts` in the `OptimizationResult`).
 
-Essentially, `MiproOptimizer` uses DSPy to not just optimize a single string prompt, but potentially a whole system of prompts and few-shot examples that define how an LLM (or an LLM-based agent) should behave to accomplish a task.
+Essentially, `MiproOptimizer` uses MIPRO algorithm to not just optimize a single string prompt, but potentially a whole system of prompts and few-shot examples that define how an LLM (or an LLM-based agent) should behave to accomplish a task.
 
 ## Configuration Options
 
