@@ -173,7 +173,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
                       />
                     </div>
                     <p className="comet-body-xs mt-2 text-light-slate">
-                      You can specify only valid JSON object.
+                      {`Enter a valid JSON object using key-value pairs inside curly braces (e.g. {"key": "value"}).`}
                     </p>
                   </AccordionContent>
                 </AccordionItem>
