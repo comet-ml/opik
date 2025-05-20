@@ -10,11 +10,11 @@
         <br>
         Opik
     </div>
-    Open source LLM evaluation framework<br>
+    Open source LLM evaluation platform<br>
 </h1>
 
 <p align="center">
-From RAG chatbots to code assistants to complex agentic pipelines and beyond, build LLM systems that run better, faster, and cheaper with tracing, evaluations, and dashboards.
+From RAG chatbots to code assistants to complex agentic pipelines and beyond, build LLM systems that run better, faster, and cheaper with tracing, evaluations, dashboards, and optimization.
 </p>
 
 <div align="center">
