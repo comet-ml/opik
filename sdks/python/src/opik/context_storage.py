@@ -54,7 +54,7 @@ class OpikContextStorage:
         self._spans_data_stack_context.set(stack + [span])
 
     def span_data_stack_empty(self) -> bool:
-        return len(self._get_data_stack()) == 0
+        return len(self._spans_data_stack_context.get()) == 0
 
     def _get_data_stack(self) -> List[span.SpanData]:
         return self._spans_data_stack_context.get().copy()
