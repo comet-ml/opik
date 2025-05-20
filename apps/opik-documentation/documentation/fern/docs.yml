@@ -315,75 +315,75 @@ navigation:
             slug: guardrails
   - tab: agent-optimization
     layout:
-      - page: "Agent & Prompt Optimization"
+      - page: Agent & Prompt Optimization
         icon: fa-regular fa-house
         path: docs/agent_optimization/overview.mdx
         slug: overview
-      - section: "Opik Optimizer Guide"
+      - section: Opik Optimizer Guide
         slug: /opik_optimizer
         contents:
-          - page: "Optimizer Quickstart"
+          - page: Optimizer Quickstart
             icon: fa-regular fa-bolt
             path: docs/agent_optimization/opik_optimizer/quickstart.mdx
             slug: quickstart
-          - page: "Core Concepts"
+          - page: Core Concepts
             icon: fa-regular fa-lightbulb
             path: docs/agent_optimization/opik_optimizer/concepts.mdx
             slug: concepts
-          - page: "Datasets for Optimization"
+          - page: Datasets for Optimization
             icon: fa-regular fa-database
             path: docs/agent_optimization/opik_optimizer/datasets.mdx
             slug: datasets
-          - page: "LiteLLM Model Support"
+          - page: LiteLLM Model Support
             icon: fa-regular fa-rocket
             path: docs/agent_optimization/opik_optimizer/litellm_support.mdx
             slug: litellm_support
-          - page: "API Reference"
+          - page: API Reference
             icon: fa-regular fa-square-terminal
             path: docs/agent_optimization/opik_optimizer/reference.mdx
             slug: reference
-          - page: "Optimizer & SDK FAQ"
+          - page: Optimizer & SDK FAQ
             icon: fa-regular fa-question
             path: docs/agent_optimization/opik_optimizer/faq.mdx
             slug: faq
-      - section: "Prompt Optimization Algorithms"
+      - section: Prompt Optimization Algorithms
         slug: /algorithms
         contents:
-          - page: "Evolutionary Optimizer"
+          - page: Evolutionary Optimizer
             path: docs/agent_optimization/algorithms/evolutionary_optimizer.mdx
             slug: evolutionary_optimizer
-          - page: "Few-Shot Bayesian Optimizer"
+          - page: Few-Shot Bayesian Optimizer
             path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
             slug: fewshot_bayesian_optimizer
-          - page: "MetaPrompt Optimizer"
+          - page: MetaPrompt Optimizer
             path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
             slug: metaprompt_optimizer
-          - page: "MIPRO Optimizer"
+          - page: MIPRO Optimizer
             path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
             slug: mipro_optimizer
-      - section: "Optimization Best Practices"
+      - section: Optimization Best Practices
         slug: /best_practices
         contents:
-          - page: "Prompt Engineering Techniques"
+          - page: Prompt Engineering Techniques
             icon: fa-regular fa-book
             path: docs/agent_optimization/best_practices/prompt_engineering.mdx
             slug: prompt_engineering
-      - section: "Example Projects & Cookbooks"
+      - section: Example Projects & Cookbooks
         slug: /cookbook
-        description: "End-to-end, runnable Colab notebooks showing real-world Opik Optimizer workflows."
+        description: End-to-end, runnable Colab notebooks showing real-world Opik Optimizer workflows.
         contents:
-          - page: "Opik Optimizer Introduction: HotPotQA Example (Colab)"
+          - page: Introduction Example
             icon: fa-regular fa-graduation-cap
             path: docs/agent_optimization/cookbook/optimizer_introduction_cookbook.mdx
             slug: optimizer_introduction_cookbook
-          - page: "Synthetic Data Optimizer Cookbook (Colab)"
+          - page: Synthetic Data
             icon: fa-regular fa-flask
             path: docs/agent_optimization/cookbook/synthetic_data_optimizer_cookbook.mdx
             slug: synthetic_data_optimizer_cookbook
-      - section: "Advanced Topics"
+      - section: Advanced Topics
         slug: /advanced
         contents:
-          - page: "Extending Opik Optimizer"
+          - page: Extending Opik Optimizer
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/extending_optimizer.mdx
             slug: extending_optimizer
