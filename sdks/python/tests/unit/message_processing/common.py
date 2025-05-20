@@ -18,21 +18,25 @@ class LongStr:
         return str(self)
 
 
-ONE_MEGABYTE_OBJECT_A = LongStr("a" * 1024 * 1024)
-ONE_MEGABYTE_OBJECT_B = LongStr("b" * 1024 * 1024)
-ONE_MEGABYTE_OBJECT_C = LongStr("c" * 1024 * 1024)
+ONE_MEGABYTE = 1024 * 1024
+ONE_MEGABYTE_OBJECT_A = LongStr("a" * ONE_MEGABYTE)
+ONE_MEGABYTE_OBJECT_B = LongStr("b" * ONE_MEGABYTE)
+ONE_MEGABYTE_OBJECT_C = LongStr("c" * ONE_MEGABYTE)
 
 
-def create_dummy_trace_batch(count: int = 100) -> messages.CreateTraceBatchMessage:
+def create_fake_trace_batch(
+    count: int = 1000, approximate_trace_size: int = ONE_MEGABYTE
+) -> messages.CreateTraceBatchMessage:
     """
     Factory method to create a CreateTraceBatchMessage with a specified number of
-    CreateTraceMessage objects initialized with dummy data.
+    CreateTraceMessage objects initialized with fake data.
 
     Args:
+        approximate_trace_size: The approximate size of each trace in megabytes
         count: Number of CreateTraceMessage objects to include in the batch (default: 1000)
 
     Returns:
-        CreateTraceBatchMessage containing the specified number of dummy CreateTraceMessage objects
+        CreateTraceBatchMessage containing the specified number of fake CreateTraceMessage objects
     """
     dummy_traces = []
 
@@ -61,7 +65,7 @@ def create_dummy_trace_batch(count: int = 100) -> messages.CreateTraceBatchMessa
             "parameters": {
                 "temperature": round(random.uniform(0.1, 1.0), 2),
                 "max_tokens": random.randint(10, 1000),
-                "long_string": LongStr("a" * 1024 * 1024),
+                "long_string": LongStr("a" * approximate_trace_size),
             },
         }
 
@@ -134,16 +138,19 @@ def create_dummy_trace_batch(count: int = 100) -> messages.CreateTraceBatchMessa
     return messages.CreateTraceBatchMessage(batch=dummy_traces)
 
 
-def create_dummy_span_batch(count: int = 100) -> messages.CreateSpansBatchMessage:
+def create_fake_span_batch(
+    count: int = 1000, approximate_span_size: int = ONE_MEGABYTE
+) -> messages.CreateSpansBatchMessage:
     """
     Factory method to create a CreateSpansBatchMessage with a specified number of
-    CreateSpanMessage objects initialized with dummy data.
+    CreateSpanMessage objects initialized with fake data.
 
     Args:
+        approximate_span_size: The approximate size of each span in megabytes
         count: Number of CreateSpanMessage objects to include in the batch (default: 1000)
 
     Returns:
-        CreateSpansBatchMessage containing the specified number of dummy CreateSpanMessage objects
+        CreateSpansBatchMessage containing the specified number of fake CreateSpanMessage objects
     """
     dummy_spans = []
 
@@ -172,7 +179,7 @@ def create_dummy_span_batch(count: int = 100) -> messages.CreateSpansBatchMessag
             "parameters": {
                 "temperature": round(random.uniform(0.1, 1.0), 2),
                 "max_tokens": random.randint(10, 1000),
-                "long_string": LongStr("a" * 1024 * 1024),
+                "long_string": LongStr("a" * approximate_span_size),
             },
         }
 

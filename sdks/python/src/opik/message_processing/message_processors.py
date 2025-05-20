@@ -38,7 +38,7 @@ class BaseMessageProcessor(abc.ABC):
         pass
 
 
-class MessageSender(BaseMessageProcessor):
+class OpikMessageProcessor(BaseMessageProcessor):
     def __init__(
         self, rest_client: rest_api_client.OpikApi, batch_memory_limit_mb: int = 50
     ):
@@ -52,8 +52,8 @@ class MessageSender(BaseMessageProcessor):
             messages.UpdateTraceMessage: self._process_update_trace_message,  # type: ignore
             messages.AddTraceFeedbackScoresBatchMessage: self._process_add_trace_feedback_scores_batch_message,  # type: ignore
             messages.AddSpanFeedbackScoresBatchMessage: self._process_add_span_feedback_scores_batch_message,  # type: ignore
-            messages.CreateSpansBatchMessage: self._pre_process_create_span_batch_message,  # type: ignore
-            messages.CreateTraceBatchMessage: self._pre_process_create_trace_batch_message,  # type: ignore
+            messages.CreateSpansBatchMessage: self._split_into_span_minibatches_and_push_them_back,  # type: ignore
+            messages.CreateTraceBatchMessage: self._split_into_trace_minibatches_and_push_them_back,  # type: ignore
             messages.GuardrailBatchMessage: self._process_guardrail_batch_message,  # type: ignore
             messages.MiniBatchMessage: self._process_mini_batch_message,  # type: ignore
         }
@@ -211,7 +211,7 @@ class MessageSender(BaseMessageProcessor):
         )
         LOGGER.debug("Sent batch of traces feedbacks scores of size %d", len(scores))
 
-    def _pre_process_create_span_batch_message(
+    def _split_into_span_minibatches_and_push_them_back(
         self,
         message: messages.CreateSpansBatchMessage,
         push_back_callback: Callable[[messages.BaseMessage], None],
@@ -238,7 +238,7 @@ class MessageSender(BaseMessageProcessor):
                 )
             )
 
-    def _pre_process_create_trace_batch_message(
+    def _split_into_trace_minibatches_and_push_them_back(
         self,
         message: messages.CreateTraceBatchMessage,
         push_back_callback: Callable[[messages.BaseMessage], None],

@@ -16,7 +16,7 @@ def construct_online_streamer(
     n_consumers: int,
     max_queue_size: int,
 ) -> streamer.Streamer:
-    message_processor = message_processors.MessageSender(rest_client=rest_client)
+    message_processor = message_processors.OpikMessageProcessor(rest_client=rest_client)
 
     file_uploader = upload_manager.FileUploadManager(
         rest_client=rest_client,
