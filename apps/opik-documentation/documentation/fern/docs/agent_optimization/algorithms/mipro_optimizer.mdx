@@ -39,6 +39,14 @@ Here's a simplified overview of the process:
 
 Essentially, `MiproOptimizer` uses MIPRO algorithm to not just optimize a single string prompt, but potentially a whole system of prompts and few-shot examples that define how an LLM (or an LLM-based agent) should behave to accomplish a task.
 
+<Tip>
+  The evaluation of each candidate program (Step 3) is crucial. It uses your `MetricConfig` and `dataset` to score how well a particular set of agent instructions or prompts performs. Since `MiproOptimizer` often deals with agentic behavior, understanding Opik's broader evaluation tools is beneficial:
+  - [Evaluation Overview](/evaluation/overview)
+  - [Evaluate Agents](/evaluation/evaluate_agents) (particularly relevant)
+  - [Evaluate Prompts](/evaluation/evaluate_prompt)
+  - [Metrics Overview](/evaluation/metrics/overview)
+</Tip>
+
 ## Configuration Options
 
 ### Basic Configuration
