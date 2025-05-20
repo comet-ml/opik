@@ -327,7 +327,7 @@ class MiproOptimizer(BaseOptimizer):
                 "metric": metric.name,
                 "num_threads": self.num_threads,
                 "num_candidates": self.num_candidates,
-                "num_trails": self.num_trials,
+                "num_trials": self.num_trials,
                 "dataset": dataset.name,
             },
         }
