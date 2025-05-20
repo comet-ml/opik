@@ -19,6 +19,23 @@ Opik helps you build, evaluate, and optimize LLM systems that run better, faster
 
 <div align="center">
 
+**Navigation**
+
+[🚀 What is Opik?](#-what-is-opik) •
+[🛠️ Opik Server Installation](#️-opik-server-installation) •
+[💻 Opik Client SDK](#-opik-client-sdk) •
+[📝 Logging Traces](#-logging-traces-with-integrations) •
+[🧑‍⚖️ LLM as a Judge](#️-llm-as-a-judge-metrics) •
+[🔍 Evaluating your Application](#-evaluating-your-llm-application) •
+[⭐ Star Us](#-star-us-on-github) •
+[🤝 Contributing](#-contributing)
+
+</div>
+
+<br>
+
+<div align="center">
+
 [![Python SDK](https://img.shields.io/pypi/v/opik)](https://pypi.org/project/opik/)
 [![License](https://img.shields.io/github/license/comet-ml/opik)](https://github.com/comet-ml/opik/blob/main/LICENSE)
 [![Build](https://github.com/comet-ml/opik/actions/workflows/build_apps.yml/badge.svg)](https://github.com/comet-ml/opik/actions/workflows/build_apps.yml)
@@ -81,17 +98,17 @@ Key capabilities include:
 
 ## 🛠️ Opik Server Installation
 
-Opik can be used either as a fully open-source, self-hosted platform or as a managed cloud solution via Comet.com.
+Get your Opik server running in minutes. Choose the option that best suits your needs:
 
-### Option 1: Use Comet.com (Recommended for Most Users)
-The fastest way to get started is to sign up for a free Comet account:
-👉 [Create your free account at comet.com](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=github&utm_content=install&utm_campaign=opik)
+### Option 1: Comet.com Cloud (Easiest & Recommended)
+Access Opik instantly without any setup. Ideal for quick starts and hassle-free maintenance.
 
-### Option 2: Self-Host the Opik Server
+👉 [Create your free Comet account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=github&utm_content=install&utm_campaign=opik)
 
-If you prefer to self-host, Opik offers several methods:
+### Option 2: Self-Host Opik for Full Control
+Deploy Opik in your own environment. Choose between Docker for local setups or Kubernetes for scalability.
 
-#### Using Docker Compose (Recommended for Local Self-Hosting)
+#### Self-Hosting with Docker Compose (for Local Development & Testing)
 This is the simplest way to get a local Opik instance running. Note the new `.opik.sh` installation script:
 
 On Linux or Mac do:
@@ -124,12 +141,12 @@ Once all is up and running, you can now visit [localhost:5173](http://localhost:
 
 For detailed instructions, see the [Local Deployment Guide](https://www.comet.com/docs/opik/self-host/local_deployment?from=llm&utm_source=opik&utm_medium=github&utm_content=self_host_link&utm_campaign=opik).
 
-#### Using Kubernetes (for Scalable Self-Hosting)
-For more scalable deployments, you can install Opik on a Kubernetes cluster using Helm.
+#### Self-Hosting with Kubernetes & Helm (for Scalable Deployments)
+For production or larger-scale self-hosted deployments, Opik can be installed on a Kubernetes cluster using our Helm chart.
 
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-%23326ce5.svg?&logo=kubernetes&logoColor=white)](https://www.comet.com/docs/opik/self-host/kubernetes/#kubernetes-installation?from=llm&utm_source=opik&utm_medium=github&utm_content=kubernetes_link&utm_campaign=opik) Click the badge for the [Kubernetes Installation Guide](https://www.comet.com/docs/opik/self-host/kubernetes/#kubernetes-installation?from=llm&utm_source=opik&utm_medium=github&utm_content=kubernetes_link&utm_campaign=opik).
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-%23326ce5.svg?&logo=kubernetes&logoColor=white)](https://www.comet.com/docs/opik/self-host/kubernetes/#kubernetes-installation?from=llm&utm_source=opik&utm_medium=github&utm_content=kubernetes_link&utm_campaign=opik) Click the badge for the full [Kubernetes Installation Guide using Helm](https://www.comet.com/docs/opik/self-host/kubernetes/#kubernetes-installation?from=llm&utm_source=opik&utm_medium=github&utm_content=kubernetes_link&utm_campaign=opik).
 
-## Opik Client SDK
+## 💻 Opik Client SDK
 
 Opik provides a suite of client libraries and a REST API to interact with the Opik server. This includes SDKs for Python, TypeScript, and Ruby (via OpenTelemetry), allowing for seamless integration into your workflows. For detailed API and SDK references, see the [Opik Client Reference Documentation](apps/opik-documentation/documentation/fern/docs/reference/overview.mdx).
 
@@ -156,7 +173,7 @@ You are now ready to start logging traces using the [Python SDK](https://www.com
 The easiest way to log traces is to use one of our direct integrations. Opik supports a wide array of frameworks, including recent additions like **Google ADK**, **Autogen**, and **Flowise AI**:
 
 | Integration | Description                                                                  | Documentation                                                                                                                                                      | Try in Colab                                                                                                                                                                                                                      |
-|-------------|------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|\
+|-------------|------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Anthropic   | Log traces for all Anthropic LLM calls                                       | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/anthropic?utm_source=opik&utm_medium=github&utm_content=anthropic_link&utm_campaign=opik)     | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/anthropic.ipynb)   |
 | Autogen     | Log traces for Autogen agentic workflows (via OpenTelemetry)                 | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/autogen?utm_source=opik&utm_medium=github&utm_content=autogen_link&utm_campaign=opik)       | (*New*) |
 | Bedrock     | Log traces for all Bedrock LLM calls                                         | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/bedrock?utm_source=opik&utm_medium=github&utm_content=bedrock_link&utm_campaign=opik)         | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/bedrock.ipynb)     |
