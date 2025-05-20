@@ -57,6 +57,29 @@ Opik Optimizer provides tools for both: directly optimizing individual prompt st
   </Accordion>
 </AccordionGroup>
 
+## The Role of Evaluation in Optimization
+
+At the core of every Opik Optimizer is a robust evaluation process. The optimizers don't just guess what makes a good prompt; they systematically test candidate prompts using the same underlying evaluation principles and tools available elsewhere in the Opik platform.
+
+Here's how it generally works:
+
+1.  **Dataset as Ground Truth**: The `dataset` you provide, with its input samples and expected outputs (ground truth), serves as the benchmark.
+2.  **`MetricConfig` as Judge**: The `MetricConfig` defines *how* a candidate prompt's performance is measured. It specifies the metric (e.g., `LevenshteinRatio`, `Accuracy`, or a custom metric) and how to map the LLM's output and dataset fields to that metric's inputs.
+3.  **Iterative Evaluation**: As an optimizer generates or selects new candidate prompts (or prompt components), it internally runs evaluations. For each candidate, it typically:
+    *   Uses the candidate prompt to get responses from the specified LLM for a selection of samples from your dataset.
+    *   Compares these LLM responses against the ground truth in the dataset using the logic defined in your `MetricConfig`.
+    *   Calculates a score based on this comparison.
+4.  **Guided Search**: The scores obtained from these internal evaluations guide the optimizer's search strategy. It learns which types of prompts perform better and focuses its efforts accordingly, whether it's refining wording, selecting different few-shot examples, or evolving prompt structures.
+
+<Info>
+  Understanding Opik's broader evaluation capabilities can help you better configure and interpret optimizer results.
+
+  - For a general overview of evaluation, see: **[Evaluation Overview](/evaluation/overview)**
+  - For details on evaluating individual prompts (similar to what optimizers do internally): **[Evaluate Prompts](/evaluation/evaluate_prompt)**
+  - For evaluating more complex agentic systems (relevant if your optimization target is an agent): **[Evaluate Agents](/evaluation/evaluate_agents)**
+  - To learn about available metrics: **[Metrics Overview](/evaluation/metrics/overview)**
+</Info>
+
 ## Optimization Workflow
 
 1. **Initialization**
