@@ -210,7 +210,7 @@ def my_llm_function(user_question: str) -> str:
 > [!TIP]  
 > `track` 데코레이터는 통합과 함께 사용 가능하며, 중첩된 함수 호출도 추적합니다.
 
-### 🧑‍⚖️ LLM을 심판으로 메트릭
+### 🧑‍⚖️ LLM을 심판으로
 
 Python Opik SDK에는 LLM-as-a-judge 메트릭이 포함되어 있어 애플리케이션 평가에 유용합니다. 자세한 내용은 [메트릭 문서](https://www.comet.com/docs/opik/evaluation/metrics/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_2_link&utm_campaign=opik) 참조.
 
