@@ -98,7 +98,6 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backup.serviceAccount.annotations | object | `{}` |  |
 | clickhouse.backup.serviceAccount.create | bool | `true` |  |
 | clickhouse.backup.serviceAccount.enabled | bool | `false` |  |
-| clickhouse.backup.serviceAccount.name | string | `"clickhouse-backup"` |  |
 | clickhouse.backup.successfulJobsHistoryLimit | int | `1` |  |
 | clickhouse.enabled | bool | `true` |  |
 | clickhouse.image | string | `"altinity/clickhouse-server:24.3.5.47.altinitystable"` |  |
