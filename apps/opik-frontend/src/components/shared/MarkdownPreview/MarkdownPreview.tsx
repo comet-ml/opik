@@ -27,7 +27,11 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
       </ReactMarkdown>
     );
   } else {
-    return <div className={cn("comet-markdown", className)}>{children}</div>;
+    return (
+      <div className={cn("comet-markdown whitespace-pre-wrap", className)}>
+        {children}
+      </div>
+    );
   }
 };
 

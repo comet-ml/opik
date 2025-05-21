@@ -1,123 +1,186 @@
+---
+title: "Advanced Prompt Engineering Best Practices"
+subtitle: "Learn the best approaches to prompt engineering"
+description: "Learn advanced prompt engineering techniques and how to apply them systematically using Opik Agent Optimizer for improved LLM performance."
+pytest_codeblocks_skip: true
+---
 Improving the performance of your LLM application and agent often requires improving the quality
-of the prompts you are using.
+of the prompts you are using. While manual iteration is common, a structured approach combined with automated tools can yield significantly better and more consistent results. This guide covers foundational prompt engineering techniques and how Opik Agent Optimizer can help you apply and automate them.
 
-While you can make changes and review them one by one, we recommend taking a more structured approach.
+## Evaluating Prompt Quality: The First Step
 
-<Tip>
-  If you would like to chat more about prompt optimization, feel free to book a chat with an Opik core contributor:
-  [Calendar link](https://calendly.com/jacques-comet/prompt-optimization)
-</Tip>
+Before attempting to improve prompts, it's crucial to establish how you'll measure success. Without a clear evaluation strategy, it's impossible to know if your changes are beneficial.
 
-## Techniques for prompt optimization
+<Info>
+We strongly recommend using an [LLM evaluation platform](/evaluation/evaluate_prompt). By defining:
+- A relevant **dataset** of test cases.
+- A set of **metrics** (e.g., accuracy, ROUGE, Levenshtein distance, custom business metrics).
+You can objectively assess whether changes to your prompts lead to genuine improvements.
+</Info>
 
-Before we cover techniques to improve prompts, it's worth considering how we will know that a prompt
-is better than another. For this we recommend using an [LLM evaluation framework](/evaluation/evaluate_prompt),
-by defining a dataset and a set of metrics to evaluate the prompts you will be able to know when you've
-improved a prompt.
+## Core Prompt Engineering Techniques
 
-Once you have an evaluation framework in place, you can start improving your prompt. There are three main
-ways to optimize a prompt:
+Once evaluation is in place, you can apply various techniques to enhance your prompts. Many of these can be further refined or automated using Opik's optimizers.
 
-1. Following prompt best practices
-2. Utilizing response schemas
-3. Automated improvements with Meta-prompts
-4. Advanced techniques like DSPy
+### 1. Clarity and Specificity
+This is the most fundamental principle. The LLM needs to understand precisely what you want it to do.
 
-### Prompt best-practices
+*   **Clear Instructions**: Use simple language. Avoid jargon unless the LLM is expected to understand it (e.g., when persona is set to an expert).
+*   **Well-Defined Task**: Clearly articulate the objective. If it's a multi-step task, consider breaking it down.
+*   **Output Format**: Specify the desired output format (e.g., "Provide the answer as a JSON object with keys 'name' and 'age'.").
 
-Writing prompts is a bit of an art-form and is something that is ever evolving as new models are released.
-There are however a few best practices that are worth following:
+*Opik Connection*: All optimizers work by refining your `instruction_prompt` (defined in `TaskConfig`). A clear and specific starting prompt gives the optimizers a better foundation to build upon.
 
-1. Providing a "persona" or "voice" to the prompt. For example:
+### 2. Providing Persona, Audience, and Voice
+Guiding the LLM on its role, who it's addressing, and the desired tone can significantly improve output quality.
 
-> You are an expert developer with 10 years of experience in building real-time observability tools.
+*   **Persona**: "You are an expert astrophysicist." / "You are a helpful travel assistant."
+    *   *Opik Connection*: The `instruction_prompt` is the primary place to set the persona. Optimizers like `MetaPromptOptimizer` and `EvolutionaryOptimizer` can refine prompts that include persona definitions.
+*   **Audience**: "Explain this concept to a 5-year-old." / "Write a technical summary for a PhD-level audience."
+*   **Voice/Tone**: "Respond in a formal and academic tone." / "Use a friendly and encouraging voice."
 
-> You are a product manager for an open-source platform and have a deep understanding of what it
-> takes to build LLM products.
+### 3. Supplying Context and Few-Shot Examples
+LLMs perform better when given relevant context and examples of the desired input/output behavior (few-shot prompting).
 
-2. Be specific about your task. For example:
+*   **Context**: Provide necessary background information within the prompt or through retrieved documents (RAG).
+*   **Few-Shot Examples**: Include 2-5 examples directly in the prompt demonstrating the task.
+    ```
+    User: Translate "hello" to French.
+    Assistant: Bonjour
+    User: Translate "goodbye" to French.
+    Assistant: Au revoir
+    User: Translate "thank you" to French.
+    Assistant:
+    ```
+    *Opik Connection*: The [FewShotBayesianOptimizer](/agent_optimization/algorithms/fewshot_bayesian_optimizer) is specifically designed to automate the selection of the optimal number and combination of few-shot examples from your dataset for **chat models**.
 
-> Review this React component and identify any performance issues or anti-patterns that could lead to memory leaks.
+    ```python
+    # Example: Initializing FewShotBayesianOptimizer
+    from opik_optimizer import FewShotBayesianOptimizer
 
-> Analyze this dataset and create a visualization that highlights the correlation between customer age and purchase frequency.
+    optimizer = FewShotBayesianOptimizer(
+        model="openai/gpt-4", # Or your preferred chat model
+        project_name="MyFewShotOptimization",
+        min_examples=1,
+        max_examples=5,
+        n_iterations=20 # Number of Bayesian optimization trials
+    )
+    ```
 
-3. Provide additional context: LLMs only know what they have been trained on, by adding examples of the response you expect
-   you can help the LLM generate the response you want. This is often refered to as "few shot examples".
+### 4. Utilizing Response Schemas (Structured Outputs)
+Forcing the model to return a structured output (e.g., JSON) simplifies data parsing in downstream tasks and reduces errors.
 
-> Examples:
-> Question: "Opik is an impressive open-source platform built by Comet that revolutionizes LLM application development and evaluation."
-> Answer: Positive sentiment
-
-For more tips on prompt engineering, the Anthropic guide is very insightful: [Anthropic Prompt Engineering](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview#how-to-prompt-engineer).
-You can also find a prompt engineering guide created by OpenAI [here](https://platform.openai.com/docs/guides/prompt-engineering).
-
-### Utilize Response Schemas
-
-Response schemas allow you to "force" the model to return a JSON object following a specific format. This makes it much easier to parse the
-data in downstream tasks without running into parsing errors.
-
-If you are using OpenAI models, you can use the [`response_format` parameter](https://platform.openai.com/docs/guides/structured-outputs?api-mode=chat)
-to define a response schema. If you are using other models, we recommend using the [Instructor](https://github.com/instructor-ai/instructor) library
-that provides a nice abstraction layer across multiple models:
+*   **Direct Instruction**: "Return your answer as a JSON object with the keys 'product_name' and 'price'."
+*   **Tooling**:
+    *   OpenAI models offer a `response_format={"type": "json_object"}` parameter.
+    *   For broader model support and more complex Pydantic-based schemas, the [Instructor](https://github.com/instructor-ai/instructor) library is excellent.
 
 <Steps>
-  <Step title="Install dependencies">
-```bash
-pip install -U instructor openai
-```
+  <Step title="Install dependencies for Instructor">
+    ```bash
+    pip install -U instructor openai pydantic
+    ```
   </Step>
-  <Step title="Using the Instructor library">
-```python
-import instructor
-from pydantic import BaseModel
-from openai import OpenAI
+  <Step title="Using the Instructor library with Pydantic">
+    ```python
+    import instructor
+    from pydantic import BaseModel
+    from openai import OpenAI
 
-# Define your desired output structure
+    # Define your desired output structure using Pydantic
+    class UserInfo(BaseModel):
+        name: str
+        age: int
 
-class UserInfo(BaseModel):
-name: str
-age: int
+    # Patch the OpenAI client (or other compatible clients)
+    client = instructor.from_openai(OpenAI())
 
-# Patch the OpenAI client
-
-client = instructor.from_openai(OpenAI())
-
-# Extract structured data from natural language
-
-user_info = client.chat.completions.create(
-model="gpt-4o-mini",
-response_model=UserInfo,
-messages=[{"role": "user", "content": "John Doe is 30 years old."}],
-)
-
-print(user_info.name)
-print(user_info.age)
-
-```
-</Step>
+    # Extract structured data
+    try:
+        user_info = client.chat.completions.create(
+            model="gpt-4o-mini", # Or any model that supports function calling/tool use
+            response_model=UserInfo,
+            messages=[{"role": "user", "content": "John Doe is 30 years old."}]
+        )
+        print(f"Name: {user_info.name}, Age: {user_info.age}")
+    except Exception as e:
+        print(f"Error extracting structured data: {e}")
+    ```
+  </Step>
 </Steps>
 
-### Automated improvements with Meta-prompts
+*Opik Connection*: While Opik Agent Optimizers primarily focus on the natural language part of the prompt, ensuring your `instruction_prompt` guides the LLM towards generating content suitable for a specific schema is a key aspect of prompt design. The optimizers can help refine instructions that encourage structured output.
 
-Meta-prompt optimization refers to the concept of using a complex LLM prompt to improve
-the quality of your prompt. This is a technique that is used by both Open AI and Anthropic
-as part of their `Optimize` features available in their respective playgrounds.
+### 5. Iterative Refinement and Meta-Prompts
+Prompt engineering is rarely a one-shot process. Continuous iteration is key. A "meta-prompt" is a sophisticated prompt given to an LLM to help it critique, analyze, or rewrite another (user's) prompt.
 
-You can find the full Anthropic meta-prompt available here:
-[Anthropic prompt generator Notebook](https://colab.research.google.com/drive/1SoAajN8CBYTl79VyTwxtxncfCWlHlyy9).
+*   **Manual Iteration**: Test, analyze failures, refine, repeat.
+*   **Meta-Prompting**: Use an LLM to help you improve your prompts. For example, "Critique this prompt for clarity and suggest 3 ways to make it more effective for a customer service chatbot."
+    *   *Opik Connection*: The [MetaPrompt Optimizer](/agent_optimization/algorithms/metaprompt_optimizer) directly automates this concept. It uses an LLM (the "reasoning model"), guided by an internal meta-prompt, to iteratively generate and evaluate improved versions of your initial prompt.
 
-While these meta-prompts can be tedious to get up and running since you have to run the demo notebook, it provides
-a good way to ensure your prompt follows the best practices for specific model providers.
+    ```python
+    # Example: Initializing MetaPromptOptimizer
+    from opik_optimizer import MetaPromptOptimizer
 
-## Automated prompt optimization
+    prompter = MetaPromptOptimizer( # Note: often aliased as 'prompter' in examples
+        model="openai/gpt-4", # Evaluation model
+        reasoning_model="openai/gpt-4-turbo", # Model for generating prompt suggestions
+        project_name="MyMetaPromptOptimization",
+        max_rounds=5,
+        num_prompts_per_round=3
+    )
+    ```
 
-You can automate the prompt engineering process by using the
-[Opik Optimizer](/agent_optimization/opik_optimizer/quickstart). The `Opik Optimizer`
-allows you to refine a prompt by using a dataset and a set of metrics to evaluate the prompts.
+### 6. Advanced Techniques for Complex Tasks (e.g., DSPy)
+For complex tasks, especially those involving multi-step reasoning, chains of thought, or tool use, optimizing a single prompt string might not be sufficient. Frameworks like [DSPy](https://dspy.ai/) allow you to build and optimize more elaborate "programs" composed of multiple, interconnected LLM calls (modules).
 
-We provide a number of different optimization algorithms for you to choose from:
+*   **Chain-of-Thought (CoT)**: Encourage the LLM to "think step by step."
+*   **ReAct (Reason + Act)**: Combine reasoning with tool use.
+*   **DSPy Programs**: Define modules (e.g., `dspy.Predict`, `dspy.ChainOfThought`, `dspy.ReAct`) and then use DSPy teleprompters to optimize the prompts and few-shot examples within these modules.
+    *   *Opik Connection*: The [MIPRO Optimizer](/agent_optimization/algorithms/mipro_optimizer) is built on DSPy. It can optimize these complex DSPy programs, refining the instructions and demonstrations within each module to improve overall task performance, including for tool-using agents.
 
-1. [Meta-prompt optimization](/agent_optimization/algorithms/metaprompt_optimizer)
-2. [Few-shot Bayesian optimization](/agent_optimization/algorithms/fewshot_bayesian_optimizer)
-3. [Mipro optimization](/agent_optimization/algorithms/mipro_optimizer)
-```
+    ```python
+    # Example: Initializing MiproOptimizer
+    from opik_optimizer import MiproOptimizer
+
+    optimizer = MiproOptimizer( # Often 'optimizer' in examples
+        model="openai/gpt-4o-mini", # Model used within the DSPy program
+        project_name="MyMiproOptimization"
+        # num_candidates for optimize_prompt will control DSPy compilation aspects
+    )
+    ```
+
+### 7. Using Genetic Algorithms for Prompt Evolution
+Evolutionary or genetic algorithms can be applied to "evolve" prompts over generations, using principles of selection, crossover, and mutation to find high-performing prompt structures.
+
+*   *Opik Connection*: The [Evolutionary Optimizer](/agent_optimization/algorithms/evolutionary_optimizer) implements this approach. It can explore a wide range of prompt variations, and even use LLMs to perform more intelligent "semantic" mutations and crossovers.
+
+    ```python
+    # Example: Initializing EvolutionaryOptimizer
+    from opik_optimizer import EvolutionaryOptimizer
+
+    optimizer = EvolutionaryOptimizer(
+        model="openai/gpt-4o-mini",
+        project_name="MyEvolutionaryOpt",
+        population_size=20,
+        num_generations=10
+    )
+    ```
+
+
+## Systematic Prompt Optimization with Opik Agent Optimizer
+
+While the techniques above are valuable for manual prompt engineering, the [Opik Agent Optimizer SDK](/agent_optimization/opik_optimizer/quickstart) offers a systematic and data-driven way to automate and enhance this process. By leveraging a dataset and evaluation metrics, optimizers can explore a vast design space to find high-performing prompts.
+
+<Note>
+All optimizers require a `model` parameter during initialization, which specifies the LLM to be used. Thanks to **LiteLLM integration**, you can specify models from various providers (OpenAI, Azure, Anthropic, Gemini, local models, etc.) using the LiteLLM model string format. See the [LiteLLM Support for Optimizers](/agent_optimization/opik_optimizer/litellm_support) page for more details.
+</Note>
+
+We provide several distinct optimization algorithms, each suited for different scenarios:
+
+1.  [**MetaPrompt Optimizer**](/agent_optimization/algorithms/metaprompt_optimizer): Uses an LLM to iteratively refine your prompt based on a meta-level reasoning process. Good for general prompt improvement.
+2.  [**Few-shot Bayesian Optimizer**](/agent_optimization/algorithms/fewshot_bayesian_optimizer): Finds the optimal set and number of few-shot examples for **chat models** by using Bayesian optimization.
+3.  [**MIPRO Optimizer**](/agent_optimization/algorithms/mipro_optimizer): Optimizes complex prompt structures and agents using DSPy, suitable for multi-step reasoning and tool use.
+4.  [**Evolutionary Optimizer**](/agent_optimization/algorithms/evolutionary_optimizer): Evolves prompts using genetic algorithms, capable of multi-objective optimization (e.g., performance vs. length) and using LLMs for advanced genetic operations.
+
+Refer to each optimizer's specific documentation to understand its strengths and how it aligns with different prompt engineering challenges. For general guidance on getting started, see the [Opik Agent Optimizer Quickstart](/agent_optimization/opik_optimizer/quickstart).
