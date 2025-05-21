@@ -70,12 +70,13 @@ class ExperimentItemBulkMapper {
 
             // If the trace is null, create a new trace "invisible" to the user
             if (item.trace() == null) {
+                Instant now = Instant.now();
                 trace = Trace.builder()
                         .id(idGenerator.generateId())
                         .projectName(ProjectService.DEFAULT_PROJECT)
                         .name("")
-                        .startTime(Instant.now())
-                        .endTime(Instant.now())
+                        .startTime(now)
+                        .endTime(now)
                         .build();
             } else {
                 trace = item.trace();

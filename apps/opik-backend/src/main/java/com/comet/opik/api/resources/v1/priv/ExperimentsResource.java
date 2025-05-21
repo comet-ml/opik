@@ -395,15 +395,19 @@ public class ExperimentsResource {
                                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                                 .retryWhen(AsyncUtils.handleConnectionError()),
-                        spanService.create(new SpanBatch(spans))
-                                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                                        .put(RequestContext.WORKSPACE_ID, workspaceId))
-                                .retryWhen(AsyncUtils.handleConnectionError()),
-                        feedbackScoreService.scoreBatchOfTraces(feedbackScores)
-                                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                                        .put(RequestContext.WORKSPACE_ID, workspaceId))
-                                .retryWhen(AsyncUtils.handleConnectionError())
-                                .then(Mono.just(feedbackScores.size())))))
+                        spans.isEmpty()
+                                ? Mono.just(0)
+                                : spanService.create(new SpanBatch(spans))
+                                        .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
+                                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                                        .retryWhen(AsyncUtils.handleConnectionError()),
+                        feedbackScores.isEmpty()
+                                ? Mono.just(0)
+                                : feedbackScoreService.scoreBatchOfTraces(feedbackScores)
+                                        .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
+                                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                                        .retryWhen(AsyncUtils.handleConnectionError())
+                                        .then(Mono.just(feedbackScores.size())))))
                 .block();
 
         log.info(

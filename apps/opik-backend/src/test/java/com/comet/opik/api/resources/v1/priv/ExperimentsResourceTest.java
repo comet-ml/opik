@@ -107,6 +107,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -3867,6 +3868,70 @@ class ExperimentsResourceTest {
                     .ignoringCollectionOrder()
                     .ignoringFields(EXPERIMENT_ITEMS_IGNORED_FIELDS)
                     .isEqualTo(expectedItems);
+        }
+
+        @Test
+        void experimentItemsBulk__whenProcessingBatchWithNoTraceButWithFeedbackScores__thenReturnNoContent() {
+            // given
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    TEST_WORKSPACE,
+                    API_KEY);
+
+            // Create a bulk upload request with a single item
+
+            var feedbackScore = podamFactory.manufacturePojo(FeedbackScore.class).toBuilder()
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+
+            List<ExperimentItem> expectedItems = List.of(
+                    ExperimentItem.builder()
+                            .datasetItemId(datasetItem.id())
+                            .traceId(podamFactory.manufacturePojo(UUID.class))
+                            .input(null)
+                            .output(null)
+                            .feedbackScores(List.of(feedbackScore))
+                            .duration(0.0)
+                            .createdBy(USER)
+                            .lastUpdatedBy(USER)
+                            .build());
+
+            var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+            var bulkRecord = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem.id())
+                    .feedbackScores(List.of(feedbackScore))
+                    .build();
+
+            var bulkUpload = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(dataset.name())
+                    .items(List.of(bulkRecord))
+                    .build();
+
+            // when
+            experimentResourceClient.bulkUploadExperimentItem(bulkUpload, API_KEY, TEST_WORKSPACE);
+
+            // then
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(actualExperimentItems).hasSize(1);
+
+            assertThat(actualExperimentItems)
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .ignoringFields(Stream.concat(Arrays.stream(EXPERIMENT_ITEMS_IGNORED_FIELDS), Stream.of("traceId"))
+                            .toArray(String[]::new))
+                    .isEqualTo(expectedItems);
+
+            assertThat(actualExperimentItems.getFirst().traceId()).isNotNull();
         }
 
         @Test
