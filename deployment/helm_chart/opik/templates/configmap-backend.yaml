@@ -1,16 +1,27 @@
 {{- range $key, $value := .Values.component }}
-{{- if and $value.enabled  $value.backendConfigMap.enabled }}
+{{- if and $value.enabled $value.backendConfigMap.enabled }}
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "opik.name" $ }}-{{ $key | lower }}
   labels:
-    {{- include "opik.labels" $  | nindent 4 }}
+    {{- include "opik.labels" $ | nindent 4 }}
 data:
+  {{- if eq $key "backend" }}
+  {{- if $.Values.minio.enabled }}
+  AWS_ACCESS_KEY_ID: {{ $.Values.minio.auth.rootUser | quote }}
+  AWS_SECRET_ACCESS_KEY: {{ $.Values.minio.auth.rootPassword | quote }}
+  S3_URL: "http://opik-minio:9000"
+  {{- else }}
+  AWS_ACCESS_KEY_ID: ""
+  AWS_SECRET_ACCESS_KEY: ""
+  IS_MINIO: "false"
+  {{- end }}
+  {{- end }}
+  
   {{- range $envkey, $envvalue := $value.env }}
   {{ $envkey }}: {{ $envvalue | quote }}
   {{- end }}
-
 {{- end }}
 {{- end }}

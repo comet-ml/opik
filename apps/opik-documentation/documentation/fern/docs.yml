@@ -7,6 +7,9 @@ metadata:
   og:title: "Opik LLM development Platform | Observability, Evaluation & Security"
   og:description: "Debug, evaluate, and monitor your LLM applications, RAG systems, and agentic workflows with comprehensive tracing, automated evaluations, and production-ready dashboards."
   og:url: "https://www.comet.com/docs/opik"
+  og:locale: "en_US"
+  twitter:title: "Opik Documentation"
+  twitter:description: "Debug, evaluate, and monitor your LLM applications, RAG systems, and agentic workflows with comprehensive tracing, automated evaluations, and production-ready dashboards."
 
 title: Opik Documentation
 favicon: img/logo.svg
@@ -153,6 +156,9 @@ navigation:
               - page: AG2
                 path: docs/tracing/integrations/ag2.mdx
                 slug: ag2
+              - page: Agno
+                path: docs/tracing/integrations/agno.mdx
+                slug: agno
               - page: Anthropic
                 path: docs/tracing/integrations/anthropic.mdx
                 slug: anthropic
@@ -317,18 +323,18 @@ navigation:
             slug: guardrails
   - tab: agent-optimization
     layout:
-      - page: Agent & Prompt Optimization
+      - page: Opik Agent Optimizer
         icon: fa-regular fa-house
         path: docs/agent_optimization/overview.mdx
         slug: overview
-      - section: Opik Optimizer Guide
+      - section: Opik Agent Optimizer Guide
         slug: /opik_optimizer
         contents:
           - page: Optimizer Quickstart
             icon: fa-regular fa-bolt
             path: docs/agent_optimization/opik_optimizer/quickstart.mdx
             slug: quickstart
-          - page: Core Concepts
+          - page: Optimizer Concepts
             icon: fa-regular fa-lightbulb
             path: docs/agent_optimization/opik_optimizer/concepts.mdx
             slug: concepts
@@ -348,19 +354,23 @@ navigation:
             icon: fa-regular fa-question
             path: docs/agent_optimization/opik_optimizer/faq.mdx
             slug: faq
-      - section: Prompt Optimization Algorithms
+      - section: Optimization Algorithms
         slug: /algorithms
         contents:
           - page: Evolutionary Optimizer
+            icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/evolutionary_optimizer.mdx
             slug: evolutionary_optimizer
           - page: Few-Shot Bayesian Optimizer
+            icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
             slug: fewshot_bayesian_optimizer
           - page: MetaPrompt Optimizer
+            icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
             slug: metaprompt_optimizer
           - page: MIPRO Optimizer
+            icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
             slug: mipro_optimizer
       - section: Optimization Best Practices
@@ -384,10 +394,10 @@ navigation:
       - section: Advanced Topics
         slug: /advanced
         contents:
-          - page: Extending Opik Optimizer
+          - page: Extending Optimizers
             icon: fa-regular fa-puzzle-piece
-            path: docs/agent_optimization/algorithms/extending_optimizer.mdx
-            slug: extending_optimizer
+            path: docs/agent_optimization/algorithms/extending_optimizers.mdx
+            slug: extending_optimizers
   - tab: self-host
     layout:
       - page: Overview
