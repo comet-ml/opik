@@ -20,7 +20,7 @@ const useTraceCommentsBatchDeleteMutation = () => {
   return useMutation({
     mutationFn: async ({ ids }: UseTraceBatchDeleteMutationParams) => {
       const { data } = await api.post(
-        `${TRACES_REST_ENDPOINT}/comments/delete`,
+        `${TRACES_REST_ENDPOINT}comments/delete`,
         {
           ids: ids,
         },

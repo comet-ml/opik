@@ -47,31 +47,11 @@ class CustomModel(OpikBaseModel):
     def __init__(self, model_name: str):
         super().__init__(model_name)
 
-    def generate_provider_response(self, **kwargs: Any) -> str:
+    def generate_provider_response(self, messages: List[Dict[str, Any]], **kwargs: Any) -> str:
         """
         Generate a provider-specific response. Can be used to interface with
         the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
         """
-        pass
-
-    def agenerate_provider_response_stream(self, **kwargs: Any) -> str:
-        """
-        Generate a provider-specific response. Can be used to interface with
-        the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
-        Async version.
-        """
-        pass
-
-    def agenerate_provider_response(self, **kwargs: Any) -> str:
-        """
-        Generate a provider-specific response. Can be used to interface with
-        the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
-        Async version.
-        """
-        pass
-
-    def agenerate_string(self, input: str, **kwargs: Any) -> str:
-        """Simplified interface to generate a string output from the model. Async version."""
         pass
 
     def generate_string(self, input: str, **kwargs: Any) -> str:

@@ -1,5 +1,5 @@
 import abc
-from typing import Any
+from typing import Any, List, Dict
 
 
 class OpikBaseModel(abc.ABC):
@@ -34,6 +34,22 @@ class OpikBaseModel(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def generate_provider_response(
+        self, messages: List[Dict[str, Any]], **kwargs: Any
+    ) -> Any:
+        """
+        Generate a provider-specific response. Can be used to interface with
+        the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
+
+        Args:
+            messages: A list of messages to be sent to the model, should be a list of dictionaries with the keys
+            kwargs: arguments required by the provider to generate a response.
+
+        Returns:
+            Any: The response from the model provider, which can be of any type depending on the use case and LLM.
+        """
+        pass
+
     async def agenerate_string(self, input: str, **kwargs: Any) -> str:
         """
         Simplified interface to generate a string output from the model. Async version.
@@ -45,33 +61,22 @@ class OpikBaseModel(abc.ABC):
         Returns:
             str: The generated string output.
         """
-        pass
+        raise NotImplementedError("Async generation not implemented for this provider")
 
-    @abc.abstractmethod
-    def generate_provider_response(self, **kwargs: Any) -> Any:
-        """
-        Generate a provider-specific response. Can be used to interface with
-        the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
-
-        Args:
-            kwargs: arguments required by the provider to generate a response.
-
-        Returns:
-            Any: The response from the model provider, which can be of any type depending on the use case and LLM.
-        """
-        pass
-
-    @abc.abstractmethod
-    async def agenerate_provider_response(self, **kwargs: Any) -> Any:
+    async def agenerate_provider_response(
+        self, messages: List[Dict[str, Any]], **kwargs: Any
+    ) -> Any:
         """
         Generate a provider-specific response. Can be used to interface with
         the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
         Async version.
 
         Args:
+            messages: A list of messages to be sent to the model, should be a list of dictionaries with the keys
+                "content" and "role".
             kwargs: arguments required by the provider to generate a response.
 
         Returns:
             Any: The response from the model provider, which can be of any type depending on the use case and LLM.
         """
-        pass
+        raise NotImplementedError("Async generation not implemented for this provider")

@@ -40,6 +40,7 @@ export const getRowId = (f: FeedbackDefinition) => f.id;
 const SELECTED_COLUMNS_KEY = "feedback-definitions-selected-columns";
 const COLUMNS_WIDTH_KEY = "feedback-definitions-columns-width";
 const COLUMNS_ORDER_KEY = "feedback-definitions-columns-order";
+const PAGINATION_SIZE_KEY = "feedback-definitions-pagination-size";
 
 export const DEFAULT_COLUMNS: ColumnData<FeedbackDefinition>[] = [
   {
@@ -89,7 +90,9 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [size, setSize] = useState(10);
+  const [size, setSize] = useLocalStorageState<number>(PAGINATION_SIZE_KEY, {
+    defaultValue: 10,
+  });
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
