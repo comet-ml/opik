@@ -2,6 +2,7 @@ import dataclasses
 import random
 import uuid
 from datetime import datetime, timedelta
+from typing import List
 
 from opik.message_processing import messages
 from opik.types import ErrorInfoDict
@@ -24,11 +25,11 @@ ONE_MEGABYTE_OBJECT_B = LongStr("b" * ONE_MEGABYTE)
 ONE_MEGABYTE_OBJECT_C = LongStr("c" * ONE_MEGABYTE)
 
 
-def create_fake_trace_batch(
+def fake_create_trace_message_batch(
     count: int = 1000, approximate_trace_size: int = ONE_MEGABYTE
-) -> messages.CreateTraceBatchMessage:
+) -> List[messages.CreateTraceMessage]:
     """
-    Factory method to create a CreateTraceBatchMessage with a specified number of
+    Factory method to create a batch with a specified number of
     CreateTraceMessage objects initialized with fake data.
 
     Args:
@@ -135,14 +136,14 @@ def create_fake_trace_batch(
 
         dummy_traces.append(trace_message)
 
-    return messages.CreateTraceBatchMessage(batch=dummy_traces)
+    return dummy_traces
 
 
-def create_fake_span_batch(
+def fake_span_create_message_batch(
     count: int = 1000, approximate_span_size: int = ONE_MEGABYTE
-) -> messages.CreateSpansBatchMessage:
+) -> List[messages.CreateSpanMessage]:
     """
-    Factory method to create a CreateSpansBatchMessage with a specified number of
+    Factory method to create a list with a specified number of
     CreateSpanMessage objects initialized with fake data.
 
     Args:
@@ -250,4 +251,4 @@ def create_fake_span_batch(
 
         dummy_spans.append(span_message)
 
-    return messages.CreateSpansBatchMessage(batch=dummy_spans)
+    return dummy_spans

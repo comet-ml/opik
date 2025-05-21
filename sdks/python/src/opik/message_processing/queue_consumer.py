@@ -49,9 +49,7 @@ class QueueConsumer(threading.Thread):
             if message is None:
                 return
             elif message.delivery_time <= now:
-                self._message_processor.process(
-                    message, push_back_callback=self._push_message_back
-                )
+                self._message_processor.process(message)
             else:
                 # put a message back to keep an order in the queue
                 self._push_message_back(message)

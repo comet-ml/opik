@@ -2,6 +2,8 @@ import dataclasses
 import datetime
 from dataclasses import field
 from typing import Optional, Any, Dict, List, Union, Literal
+
+from ..rest_api.types import span_write, trace_write
 from ..types import SpanType, ErrorInfoDict, LLMProvider, AttachmentEntityType
 
 
@@ -152,12 +154,12 @@ class AddSpanFeedbackScoresBatchMessage(AddFeedbackScoresBatchMessage):
 
 @dataclasses.dataclass
 class CreateSpansBatchMessage(BaseMessage):
-    batch: List[CreateSpanMessage]
+    batch: List[span_write.SpanWrite]
 
 
 @dataclasses.dataclass
 class CreateTraceBatchMessage(BaseMessage):
-    batch: List[CreateTraceMessage]
+    batch: List[trace_write.TraceWrite]
 
 
 @dataclasses.dataclass
@@ -196,13 +198,3 @@ class CreateAttachmentMessage(BaseMessage):
     entity_id: str
     project_name: str
     encoded_url_override: str
-
-
-@dataclasses.dataclass
-class MiniBatchMessage(BaseMessage):
-    """The specific type of message to hold mini batches created from bigger ones when the batch size limit is reached
-    and batching is enabled. It is used to store raw data created from the bigger batch messages along with REST API
-    operation name to be used to send the mini batches to the backend."""
-
-    batch: List[Any]
-    rest_operation_name: str
