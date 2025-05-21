@@ -51,22 +51,20 @@ jobs:
             exit 2
           fi
           
-          echo "Running script..."
-          fern docs dev
-          bash ./scripts/check_broken_links.sh
-          # # Run with bash instead of sh to ensure compatibility
-          # bash ./scripts/check_broken_links.sh > check_output.txt 2>&1
-          # SCRIPT_EXIT_CODE=$?
-          # cat check_output.txt
+          echo "Running link checker script..."
+          # The script handles starting fern, checking links, and cleanup
+          bash ./scripts/check_broken_links.sh > check_output.txt 2>&1
+          SCRIPT_EXIT_CODE=$?
+          cat check_output.txt
           
-          # if [ $SCRIPT_EXIT_CODE -ne 0 ]; then
-          #   echo "Broken links found!"
-          #   echo "has_broken_links=true" >> $GITHUB_OUTPUT
-          #   cat check_output.txt > broken_links.log
-          # else
-          #   echo "No broken links found."
-          #   echo "has_broken_links=false" >> $GITHUB_OUTPUT
-          # fi
+          if [ $SCRIPT_EXIT_CODE -ne 0 ]; then
+            echo "Broken links found!"
+            echo "has_broken_links=true" >> $GITHUB_OUTPUT
+            cat check_output.txt > broken_links.log
+          else
+            echo "No broken links found."
+            echo "has_broken_links=false" >> $GITHUB_OUTPUT
+          fi
           
 
       - name: Add PR comment with broken links
