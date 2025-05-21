@@ -1,4 +1,4 @@
-name: Check Documentation for Broken Links
+name: Docs - Check for Broken Links
 
 on:
   # Allow manual triggering from GitHub Actions tab
