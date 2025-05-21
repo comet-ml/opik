@@ -210,7 +210,7 @@ def my_llm_function(user_question: str) -> str:
 > [!TIP]
 > trackデコレータは統合と併用でき、ネストされた関数呼び出しのトラッキングにも対応します。
 
-### 🧑‍⚖️ LLMをジャッジとしてメトリクスメトリクス
+### 🧑‍⚖️ LLMをジャッジとして
 
 Python Opik SDKにはLLM-as-a-judge用メトリクスが多数含まれており、LLMアプリの評価に役立ちます。詳細は [メトリクスドキュメント](https://www.comet.com/docs/opik/evaluation/metrics/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_2_link&utm_campaign=opik) をご覧ください。
 

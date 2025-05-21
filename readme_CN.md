@@ -209,7 +209,7 @@ def my_llm_function(user_question: str) -> str:
 > [!TIP]  
 > `track` 装饰器可与任何集成结合使用，亦可用于跟踪嵌套函数调用。
 
-### 🧑‍⚖️ 作为裁判的 LLM 指标
+### 🧑‍⚖️ 作为裁判的 LLM
 
 Python Opik SDK 包含多种 LLM-as-a-judge 指标，可帮助您评估 LLM 应用。详情请参阅 [指标文档](https://www.comet.com/docs/opik/evaluation/metrics/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_2_link&utm_campaign=opik)。
 
