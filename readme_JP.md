@@ -44,7 +44,7 @@ Opikは、LLMシステムをより良く、より高速に、より低コスト�
 
 <br>
 
-[![Opik platform screenshot (thumbnail)](readme-thumbnail.png)](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=github&utm_content=readme_banner&utm_campaign=opik)
+[![Opik platform screenshot (thumbnail)](readme-thumbnail-new.png)](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=github&utm_content=readme_banner&utm_campaign=opik)
 
 ## 🚀 Opikとは？
 

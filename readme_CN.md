@@ -43,7 +43,7 @@ Opik 帮助您构建、评估和优化 LLM 系统，使其运行得更好、更�
 
 <br>
 
-[![Opik platform screenshot (thumbnail)](readme-thumbnail.png)](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=github&utm_content=readme_banner&utm_campaign=opik)
+[![Opik platform screenshot (thumbnail)](readme-thumbnail-new.png)](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=github&utm_content=readme_banner&utm_campaign=opik)
 
 ## 🚀 什么是 Opik？
 
