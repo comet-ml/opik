@@ -38,8 +38,8 @@ Opikは、LLMシステムをより良く、より高速に、より低コスト�
 </p>
 
 <div align="center" style="margin-top: 1em; margin-bottom: 1em;">
-<a href="#🚀-what-is-opik">🚀 Opikとは？</a> • <a href="#🛠️-opik-server-installation">🛠️ Opikサーバーのインストール</a> • <a href="#💻-opik-client-sdk">💻 OpikクライアントSDK</a> • <a href="#📝-logging-traces-with-integrations">📝 トレースのログ記録と統合</a><br>
-<a href="#🧑‍⚖️-llm-as-a-judge-metrics">🧑‍⚖️ LLMをジャッジとして</a> • <a href="#🔍-evaluating-your-llm-application">🔍 アプリケーションの評価</a> • <a href="#⭐-star-us-on-github">⭐ GitHubでスターを</a> • <a href="#🤝-contributing">🤝 貢献</a>
+<a href="#🚀-opikとは">🚀 Opikとは？</a> • <a href="#🛠️-opikサーバーのインストール">🛠️ Opikサーバーのインストール</a> • <a href="#💻-opikクライアントsdk">💻 OpikクライアントSDK</a> • <a href="#📝-トレースのログ記録と統合">📝 トレースのログ記録と統合</a><br>
+<a href="#🧑‍⚖️-llmをジャッジとして">🧑‍⚖️ LLMをジャッジとして</a> • <a href="#🔍-アプリケーションの評価">🔍 アプリケーションの評価</a> • <a href="#⭐-githubでスターを">⭐ GitHubでスターを</a> • <a href="#🤝-貢献">🤝 貢献</a>
 </div>
 
 <br>
@@ -210,7 +210,7 @@ def my_llm_function(user_question: str) -> str:
 > [!TIP]
 > trackデコレータは統合と併用でき、ネストされた関数呼び出しのトラッキングにも対応します。
 
-### 🧑‍⚖️ LLMをジャッジとしてメトリクスメトリク스
+### 🧑‍⚖️ LLMをジャッジとしてメトリクスメトリクス
 
 Python Opik SDKにはLLM-as-a-judge用メトリクスが多数含まれており、LLMアプリの評価に役立ちます。詳細は [メトリクスドキュメント](https://www.comet.com/docs/opik/evaluation/metrics/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_2_link&utm_campaign=opik) をご覧ください。
 

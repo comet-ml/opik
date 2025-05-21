@@ -38,8 +38,8 @@ Opik은 LLM 시스템을 더 나은 품질로, 더 빠르게, 더 저렴하게 �
 </p>
 
 <div align="center" style="margin-top: 1em; margin-bottom: 1em;">
-<a href="#🚀-what-is-opik">🚀 Opik이란?</a> • <a href="#🛠️-opik-server-installation">🛠️ Opik 서버 설치</a> • <a href="#💻-opik-client-sdk">💻 Opik 클라이언트 SDK</a> • <a href="#📝-logging-traces-with-integrations">📝 트레이스 로깅 및 통합</a><br>
-<a href="#🧑‍⚖️-llm-as-a-judge-metrics">🧑‍⚖️ LLM을 심판으로</a> • <a href="#🔍-evaluating-your-llm-application">🔍 애플리케이션 평가</a> • <a href="#⭐-star-us-on-github">⭐ GitHub 스타</a> • <a href="#🤝-contributing">🤝 기여하기</a>
+<a href="#🚀-opik이란">🚀 Opik이란?</a> • <a href="#🛠️-opik-서버-설치">🛠️ Opik 서버 설치</a> • <a href="#💻-opik-클라이언트-sdk">💻 Opik 클라이언트 SDK</a> • <a href="#📝-트레이스-로깅-및-통합">📝 트레이스 로깅 및 통합</a><br>
+<a href="#🧑‍⚖️-llm을-심판으로">🧑‍⚖️ LLM을 심판으로</a> • <a href="#🔍-애플리케이션-평가">🔍 애플리케이션 평가</a> • <a href="#⭐-github-스타">⭐ GitHub 스타</a> • <a href="#🤝-기여하기">🤝 기여하기</a>
 </div>
 
 <br>
