@@ -8,7 +8,7 @@
         <br>
         Opik
     </div>
-    Open source LLM evaluation framework<br>
+    Open source LLM evaluation platform<br>
 </h1>
 
 ## Installation
