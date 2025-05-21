@@ -16,142 +16,143 @@
     オープンソース LLM 評価フレームワーク<br>
 </h1>
 
+<h2 align="center" style="border-bottom: none">オープンソース LLM 評価プラットフォーム</h2>
+
 <p align="center">
-RAGチャットボット、コードアシスタント、複雑なエージェントパイプライン等、トレース、評価、ダッシュボード機能を備えた、より良く、より速く、低コストなLLMシステムを構築します。
+Opikは、より良く、より速く、低コストなLLMシステムの構築・評価・最適化を支援します。RAGチャットボット、コードアシスタント、複雑なエージェントパイプラインまで、Opikは包括的なトレース、評価、ダッシュボード、<b>Opik Agent Optimizer</b>や<b>Opik Guardrails</b>などの強力な機能を提供し、LLMアプリケーションの安全性と生産性を高めます。
 </p>
 
-## 🚀 Opik とは？
+## 🚀 Opikとは？
 
-Opik は、LLM アプリケーションの評価、テスト、監視のためのオープンソースプラットフォームです。これは [Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=github&utm_content=what_is_opik_link&utm_campaign=opik) により構築されました。
+Opik（[Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=github&utm_content=what_is_opik_link&utm_campaign=opik)が開発）は、LLMアプリケーションのライフサイクル全体を効率化するオープンソースプラットフォームです。開発者がモデルやエージェントシステムを評価・テスト・監視・最適化できるよう支援します。主な機能：
+* **包括的な可観測性**：LLM呼び出しの深いトレース、会話ログ、エージェント活動の記録
+* **高度な評価**：強力なプロンプト評価、LLMジャッジ、実験管理
+* **本番対応**：スケーラブルな監視ダッシュボードとオンライン評価ルール
+* **Opik Agent Optimizer**：プロンプトやエージェントを最適化する専用SDKと最適化ツール
+* **Opik Guardrails**：安全で責任あるAI運用を支援
 
-<br>
+主な機能詳細：
+* **開発・トレース：**
+    * 開発・本番環境でのLLM呼び出しやトレースを詳細に記録（[クイックスタート](https://www.comet.com/docs/opik/quickstart/?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_link&utm_campaign=opik)）
+    * 豊富なサードパーティ統合（**Google ADK**、**Autogen**、**Flowise AI**など）（[統合ドキュメント](https://www.comet.com/docs/opik/tracing/integrations/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=integrations_link&utm_campaign=opik)）
+    * [Python SDK](https://www.comet.com/docs/opik/tracing/annotate_traces/#annotating-traces-and-spans-using-the-sdk?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link&utm_campaign=opik)や[UI](https://www.comet.com/docs/opik/tracing/annotate_traces/#annotating-traces-through-the-ui?from=llm&utm_source=opik&utm_medium=github&utm_content=ui_link&utm_campaign=opik)でトレースやスパンにフィードバックスコアを付与
+    * [Prompt Playground](https://www.comet.com/docs/opik/prompt_engineering/playground)でプロンプトやモデルを試行
 
-Opik を使用すると、以下が可能です:
-* **開発:**
-  * **トレース:** 開発および本番環境での全LLM呼び出しとトレースを追跡します ([クイックスタート](https://www.comet.com/docs/opik/quickstart/?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_link&utm_campaign=opik)、[統合](https://www.comet.com/docs/opik/tracing/integrations/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=integrations_link&utm_campaign=opik))
-  * **注釈:** [Python SDK](https://www.comet.com/docs/opik/tracing/annotate_traces/#annotating-traces-and-spans-using-the-sdk?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link&utm_campaign=opik) または [UI](https://www.comet.com/docs/opik/tracing/annotate_traces/#annotating-traces-through-the-ui?from=llm&utm_source=opik&utm_medium=github&utm_content=ui_link&utm_campaign=opik) を使用し、LLM 呼び出しにフィードバックスコアを記録します。
-  * **プレイグラウンド:** [プロンプトプレイグラウンド](https://www.comet.com/docs/opik/evaluation/playground/?from=llm&utm_source=opik&utm_medium=github&utm_content=playground_link&utm_campaign=opik) で様々なプロンプトやモデルを試すことができます。
-* **評価:**
-  * **データセットと実験:** テストケースを保存し、実験を実行します ([データセット](https://www.comet.com/docs/opik/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_link&utm_campaign=opik)、[LLM アプリケーションの評価](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=eval_link&utm_campaign=opik))
-  * **LLM ジャッジ指標:** Opik の LLM ジャッジ指標を利用して、幻覚検出、モデレーション、及び RAG 評価などの複雑な問題を処理します。
-  * **CI/CD 統合:** [PyTest 統合](https://www.comet.com/docs/opik/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_link&utm_campaign=opik) により、CI/CD パイプライン内で評価を実行可能です。
+* **評価・テスト：**
+    * [データセット](https://www.comet.com/docs/opik/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_link&utm_campaign=opik)や[実験](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=eval_link&utm_campaign=opik)によるLLMアプリの自動評価
+    * 強力なLLMジャッジ指標で[幻覚検出](https://www.comet.com/docs/opik/evaluation/metrics/hallucination/?from=llm&utm_source=opik&utm_medium=github&utm_content=hallucination_link&utm_campaign=opik)、[モデレーション](https://www.comet.com/docs/opik/evaluation/metrics/moderation/?from=llm&utm_source=opik&utm_medium=github&utm_content=moderation_link&utm_campaign=opik)、RAG評価（[回答関連性](https://www.comet.com/docs/opik/evaluation/metrics/answer_relevance/?from=llm&utm_source=opik&utm_medium=github&utm_content=alex_link&utm_campaign=opik)、[コンテキスト精度](https://www.comet.com/docs/opik/evaluation/metrics/context_precision/?from=llm&utm_source=opik&utm_medium=github&utm_content=context_link&utm_campaign=opik)）など複雑な課題に対応
+    * [PyTest統合](https://www.comet.com/docs/opik/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_link&utm_campaign=opik)でCI/CDパイプラインに組み込み
 
-## 🛠️ インストール
+* **本番監視・最適化：**
+    * 大規模な本番トレース記録（1日4,000万件以上）
+    * [Opikダッシュボード](https://www.comet.com/docs/opik/production/production_monitoring/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik)でフィードバックスコア・トレース数・トークン使用量を可視化
+    * [オンライン評価ルール](https://www.comet.com/docs/opik/production/rules/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik)とLLMジャッジ指標で本番課題を特定
+    * **Opik Agent Optimizer**や**Opik Guardrails**でLLMアプリを継続的に改善・保護
 
-Opik は、完全にオープンソースのローカルインストール版または Comet.com によるホスト型ソリューションとして提供されます。最も簡単な方法は、[comet.com](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=github&utm_content=install&utm_campaign=opik) で無料の Comet アカウントを作成することです。
+> [!TIP]
+> 新機能のご要望は[Feature request](https://github.com/comet-ml/opik/issues/new/choose)でお知らせください 🚀
 
-自前で Opik をホストする場合、リポジトリをクローンし、Docker Compose を使用してプラットフォームを起動してください:
+---
 
-Linux または Macの場合:
+## 🛠️ Opikサーバーのインストール
+
+数分でOpikサーバーを起動。用途に応じて選択：
+
+### オプション1：Comet.comクラウド（最も簡単・推奨）
+セットアップ不要ですぐ利用可能。
+
+👉 [無料Cometアカウント作成](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=github&utm_content=install_create_link&utm_campaign=opik)
+
+### オプション2：セルフホスト（完全制御）
+DockerまたはKubernetesを選択可能。
+
+#### Docker Compose（ローカル開発・テスト向け）
+Linux/Mac：
 ```bash
-# Opik リポジトリをクローン
 git clone https://github.com/comet-ml/opik.git
-
-# リポジトリディレクトリに移動
 cd opik
-
-# Opik プラットフォームを起動
 ./opik.sh
 ```
-
-Windowsの場合:
+Windows：
 ```powershell
-# Opik リポジトリをクローン
 git clone https://github.com/comet-ml/opik.git
-
-# リポジトリディレクトリに移動
 cd opik
-
-# Opik プラットフォームを起動
-powershell -ExecutionPolicy ByPass -c ".\opik.ps1"
+powershell -ExecutionPolicy ByPass -c ".\\opik.ps1"
 ```
+起動後 [localhost:5173](http://localhost:5173) へ。詳細は[ローカルデプロイガイド](https://www.comet.com/docs/opik/self-host/local_deployment?from=llm&utm_source=opik&utm_medium=github&utm_content=self_host_link&utm_campaign=opik)
 
-`--help` または `--info` オプションで問題解決を行ってください。
+#### Kubernetes & Helm（大規模運用向け）
+[HelmによるKubernetesインストールガイド](https://www.comet.com/docs/opik/self-host/kubernetes/#kubernetes-installation?from=llm&utm_source=opik&utm_medium=github&utm_content=kubernetes_link&utm_campaign=opik)
 
-起動後、ブラウザで [localhost:5173](http://localhost:5173) にアクセスできます！
+---
 
-詳細なインストール情報は、当社のデプロイガイドをご参照ください。
+## 💻 OpikクライアントSDK
 
-## 🏁 クイックスタート
+OpikはPython、TypeScript、Ruby（OpenTelemetry）SDKとREST APIを提供。詳細は[クライアントリファレンス](apps/opik-documentation/documentation/fern/docs/reference/overview.mdx)参照。
 
-まず Python SDK をインストールします:
+### Python SDKクイックスタート
+インストール：
 ```bash
 pip install opik
 ```
-
-SDK のインストール後、`opik configure` コマンドを実行して設定を行います:
+設定：
 ```bash
 opik configure
 ```
+またはコード内で：
+```python
+opik.configure(use_local=True)
+```
+詳細は[Python SDKドキュメント](apps/opik-documentation/documentation/fern/docs/reference/python-sdk/)
 
-また、Python コード内で `opik.configure(use_local=True)` を呼び出してローカル設定も可能です。
+---
 
-これで、[Python SDK](https://www.comet.com/docs/opik/python-sdk-reference/?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link2&utm_campaign=opik) を使用してトレース情報を記録できます。
+### 📝 トレース記録の統合
 
-### 📝 トレース情報の記録
+Opikは主要なフレームワークと統合可能。詳細は[統合ドキュメント](https://www.comet.com/docs/opik/tracing/integrations/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=integrations_link&utm_campaign=opik)。
 
-最も簡単な方法は、公式統合を使うことです。Opik は以下の統合をサポートしています:
-
-| 統合         | 説明                                               | ドキュメント                                                                                                                    | Colab で試す                                                  |
-|--------------|----------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------|
-| OpenAI       | 全ての OpenAI LLM 呼び出しのトレース記録                | [ドキュメント](https://www.comet.com/docs/opik/tracing/integrations/openai/?utm_source=opik&utm_medium=github&utm_content=openai_link&utm_campaign=opik)         | [Colabリンク](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/openai.ipynb)       |
-| LiteLLM      | OpenAI フォーマットに準拠した任意のLLMモデル呼び出し      | [ドキュメント](https://www.comet.com/docs/opik/tracing/integrations/litellm/?utm_source=opik&utm_medium=github&utm_content=openai_link&utm_campaign=opik)         | [Colabリンク](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/litellm.ipynb)      |
-| LangChain    | 全ての LangChain LLM 呼び出しのトレース記録              | [ドキュメント](https://www.comet.com/docs/opik/tracing/integrations/langchain/?utm_source=opik&utm_medium=github&utm_content=langchain_link&utm_campaign=opik)        | [Colabリンク](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/langchain.ipynb)    |
-| ...          | ...                                                | ...                                                                                                                            | ...                                                          |
-
-> 注意: リストにないフレームワークをご利用の場合は、[Issue](https://github.com/comet-ml/opik/issues) を提出するか、PR を通じて統合を追加してください。
-
-また、上記フレームワークを使用しない場合は、`track` デコレータを用いてトレースを記録可能です:
+未対応の場合は`track`デコレータを利用：
 ```python
 import opik
-
-opik.configure(use_local=True)  # ローカルで実行
-
+opik.configure(use_local=True)
 @opik.track
 def my_llm_function(user_question: str) -> str:
-    # LLM コードをここに記述
+    # LLMコード
     return "Hello"
 ```
 
-> 注意: `track` デコレータは、どの統合とも併用可能で、ネストされた関数呼び出しのトレース記録にも使用できます。
+---
 
-### 🧑‍⚖️ LLM 評価指標
+### 🧑‍⚖️ LLMジャッジ指標
 
-Opik の Python SDK には様々な LLM 評価指標が含まれており、LLM アプリケーションの評価に役立ちます。詳細は [評価指標ドキュメント](https://www.comet.com/docs/opik/evaluation/metrics/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_2_link&utm_campaign=opik) を参照してください。
+Python SDKには多様なLLMジャッジ指標を内蔵。[指標ドキュメント](https://www.comet.com/docs/opik/evaluation/metrics/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_2_link&utm_campaign=opik)参照。
 
-例:
+例：
 ```python
 from opik.evaluation.metrics import Hallucination
-
 metric = Hallucination()
 score = metric.score(
-    input="프랑스의 수도는 무엇입니까?",
-    output="파리",
-    context=["프랑스는 유럽에 있는 국가입니다."]
+    input="フランスの首都はどこですか?",
+    output="パリ",
+    context=["フランスはヨーロッパの国です."]
 )
 print(score)
 ```
 
-Opik は、あらかじめ構築された評価指標を多数提供しており、ユーザー独自の指標も作成可能です。詳細は [評価指標ドキュメント](https://www.comet.com/docs/opik/evaluation/metrics/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_3_link&utm_campaign=opik) をご確認ください。
+---
 
-### 🔍 LLM アプリケーションの評価
+### 🔍 LLMアプリケーションの評価
 
-Opik を使用すると、[データセット](https://www.comet.com/docs/opik/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_2_link&utm_campaign=opik) や [実験](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=experiments_link&utm_campaign=opik) を通じてLLM アプリケーションの評価が可能です。
+Opikは[データセット](https://www.comet.com/docs/opik/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_2_link&utm_campaign=opik)や[実験](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=experiments_link&utm_campaign=opik)による開発時評価、[PyTest統合](https://www.comet.com/docs/opik/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_2_link&utm_campaign=opik)によるCI/CD組み込みが可能。
 
-また、[PyTest 統合](https://www.comet.com/docs/opik/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_2_link&utm_campaign=opik) を使って、CI/CD パイプラインの一環として評価を実行できます。
+---
 
-## ⭐ GitHub でスターを押してください
+## ⭐ GitHubでスターを！
 
-Opik が役立つと感じた場合は、ぜひスターを押してください。皆様の支援は、コミュニティの成長および製品改善に大いに貢献します。
+役立ったらぜひStarをお願いします。皆様の応援が開発の原動力です。
 
-<img src="https://github.com/user-attachments/assets/ffc208bb-3dc0-40d8-9a20-8513b5e4a59d" alt="Opik GitHub Star History" width="600"/>
+---
 
-## 🤝 貢献
+## 🤝 貢献方法
 
-Opik への貢献方法:
-* [バグ報告](https://github.com/comet-ml/opik/issues) および [機能リクエスト](https://github.com/comet-ml/opik/issues) の提出
-* ドキュメントのレビュー及び [Pull Request](https://github.com/comet-ml/opik/pulls) による改善
-* Opik に関する記事作成やプレゼンテーションの実施 ([お問い合わせ](https://chat.comet.com))
-* 人気機能リクエストへの投票によるサポート
-
-詳細は [Contributing ガイドライン](CONTRIBUTING.md) をご参照ください。
+[バグ報告](https://github.com/comet-ml/opik/issues)、[機能要望](https://github.com/comet-ml/opik/issues)、ドキュメントレビューやPR、記事執筆、人気要望への投票などでご参加ください。詳細は[貢献ガイド](CONTRIBUTING.md)参照。
