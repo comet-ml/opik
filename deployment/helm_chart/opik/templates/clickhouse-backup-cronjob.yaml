@@ -17,7 +17,7 @@ spec:
             {{- end }}
         spec:
           {{- if .Values.clickhouse.backup.serviceAccount.enabled }}
-          serviceAccountName: clickhouse-backup
+          serviceAccountName: {{ .Values.clickhouse.backup.serviceAccount.name | default "clickhouse-backup" }}
           {{- end }}
           containers:
           - name: clickhouse-backup-job
@@ -47,16 +47,23 @@ spec:
             {{- else }}
               value: {{ .Values.clickhouse.adminUser.password }}
             {{- end }}
+            {{- if not .Values.clickhouse.backup.serviceAccount.enabled }}
             - name: ACCESS_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.clickhouse.backup.secretName}}
-                  key: access_key_id
+                  key: {{ .Values.clickhouse.backup.accessKey | default "access_key_id" }}
             - name: SECRET_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.clickhouse.backup.secretName}}
-                  key: access_key_secret
+                  key: {{ .Values.clickhouse.backup.secretKey | default "access_key_secret" }}
+            {{- else }}
+            - name: ACCESS_KEY
+              value: ""
+            - name: SECRET_KEY
+              value: ""
+            {{- end }}
 
           {{- with .Values.clickhouse.nodeSelector }}
           nodeSelector:

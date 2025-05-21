@@ -96,6 +96,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.adminUser.username | string | `"opik"` |  |
 | clickhouse.backup.enabled | bool | `false` |  |
 | clickhouse.backup.serviceAccount.annotations | object | `{}` |  |
+| clickhouse.backup.serviceAccount.create | bool | `true` |  |
 | clickhouse.backup.serviceAccount.enabled | bool | `false` |  |
 | clickhouse.backup.successfulJobsHistoryLimit | int | `1` |  |
 | clickhouse.enabled | bool | `true` |  |
@@ -121,8 +122,6 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.ANALYTICS_DB_PORT | string | `"8123"` |  |
 | component.backend.env.ANALYTICS_DB_PROTOCOL | string | `"HTTP"` |  |
 | component.backend.env.ANALYTICS_DB_USERNAME | string | `"opik"` |  |
-| component.backend.env.AWS_ACCESS_KEY_ID | string | `"THAAIOSFODNN7EXAMPLE"` |  |
-| component.backend.env.AWS_SECRET_ACCESS_KEY | string | `"LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"` |  |
 | component.backend.env.JAVA_OPTS | string | `"-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0 -XX:MinRAMPercentage=75"` |  |
 | component.backend.env.OPIK_OTEL_SDK_ENABLED | bool | `false` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED | bool | `true` |  |
@@ -133,7 +132,6 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.OTEL_VERSION | string | `"2.12.0"` |  |
 | component.backend.env.PYTHON_EVALUATOR_URL | string | `"http://opik-python-backend:8000"` |  |
 | component.backend.env.REDIS_URL | string | `"redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/"` |  |
-| component.backend.env.S3_URL | string | `"http://opik-minio:9000"` |  |
 | component.backend.env.STATE_DB_DATABASE_NAME | string | `"opik"` |  |
 | component.backend.env.STATE_DB_PASS | string | `"opik"` |  |
 | component.backend.env.STATE_DB_PROTOCOL | string | `"jdbc:mysql://"` |  |
@@ -162,6 +160,8 @@ Call opik api on http://localhost:5173/api
 | component.backend.service.ports[1].targetPort | int | `3003` |  |
 | component.backend.service.type | string | `"ClusterIP"` |  |
 | component.backend.serviceAccount.create | bool | `true` |  |
+| component.backend.serviceAccount.enabled | bool | `true` |  |
+| component.backend.serviceAccount.name | string | `"opik-backend"` |  |
 | component.backend.waitForClickhouse.clickhouse.host | string | `"clickhouse-opik-clickhouse"` |  |
 | component.backend.waitForClickhouse.clickhouse.port | int | `8123` |  |
 | component.backend.waitForClickhouse.clickhouse.protocol | string | `"http"` |  |
@@ -187,6 +187,8 @@ Call opik api on http://localhost:5173/api
 | component.frontend.service.ports[0].targetPort | int | `5173` |  |
 | component.frontend.service.type | string | `"ClusterIP"` |  |
 | component.frontend.serviceAccount.create | bool | `true` |  |
+| component.frontend.serviceAccount.enabled | bool | `true` |  |
+| component.frontend.serviceAccount.name | string | `"opik-frontend"` |  |
 | component.frontend.throttling | object | `{}` |  |
 | component.frontend.upstreamConfig | object | `{}` |  |
 | component.frontend.volumeMounts[0].mountPath | string | `"/etc/nginx/conf.d/"` |  |
@@ -232,6 +234,8 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.service.ports[0].targetPort | int | `8000` |  |
 | component.python-backend.service.type | string | `"ClusterIP"` |  |
 | component.python-backend.serviceAccount.create | bool | `true` |  |
+| component.python-backend.serviceAccount.enabled | bool | `true` |  |
+| component.python-backend.serviceAccount.name | string | `"opik-python-backend"` |  |
 | demoDataJob | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
 | localFE | bool | `false` |  |
