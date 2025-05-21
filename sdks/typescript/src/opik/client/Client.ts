@@ -1,5 +1,5 @@
 import { loadConfig, OpikConfig } from "@/config/Config";
-import { OpikApiClient } from "@/rest_api";
+import { OpikApiClient, OpikApiError } from "@/rest_api";
 import type { Trace as ITrace } from "@/rest_api/api";
 import { Trace } from "@/tracer/Trace";
 import { generateId } from "@/utils/generateId";
@@ -9,6 +9,9 @@ import { SpanBatchQueue } from "./SpanBatchQueue";
 import { SpanFeedbackScoresBatchQueue } from "./SpanFeedbackScoresBatchQueue";
 import { TraceBatchQueue } from "./TraceBatchQueue";
 import { TraceFeedbackScoresBatchQueue } from "./TraceFeedbackScoresBatchQueue";
+import { DatasetBatchQueue } from "./DatasetBatchQueue";
+import { Dataset } from "../dataset/Dataset";
+import { DatasetNotFoundError } from "@/dataset/errors";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
@@ -23,6 +26,8 @@ export class OpikClient {
   public traceBatchQueue: TraceBatchQueue;
   public spanFeedbackScoresBatchQueue: SpanFeedbackScoresBatchQueue;
   public traceFeedbackScoresBatchQueue: TraceFeedbackScoresBatchQueue;
+  public datasetBatchQueue: DatasetBatchQueue;
+
   private lastProjectNameLogged: string | undefined;
 
   constructor(explicitConfig?: Partial<OpikConfig>) {
@@ -42,6 +47,7 @@ export class OpikClient {
     this.traceFeedbackScoresBatchQueue = new TraceFeedbackScoresBatchQueue(
       this.api
     );
+    this.datasetBatchQueue = new DatasetBatchQueue(this.api);
 
     clients.push(this);
   }
@@ -84,6 +90,145 @@ export class OpikClient {
     return trace;
   };
 
+  /**
+   * Retrieves an existing dataset by name
+   *
+   * @param name The name of the dataset to retrieve
+   * @returns A Dataset object associated with the specified name
+   * @throws Error if the dataset doesn't exist
+   */
+  public getDataset = async (name: string): Promise<Dataset> => {
+    logger.debug(`Getting dataset with name "${name}"`);
+    try {
+      const response = await this.api.datasets.getDatasetByIdentifier({
+        datasetName: name,
+      });
+
+      return new Dataset(response.name, response.description, response.id);
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        throw new DatasetNotFoundError(name);
+      }
+      throw error;
+    }
+  };
+
+  /**
+   * Creates a new dataset with the given name and optional description
+   *
+   * @param name The name of the dataset
+   * @param description Optional description of the dataset
+   * @returns The created Dataset object
+   */
+  public createDataset = async (
+    name: string,
+    description?: string
+  ): Promise<Dataset> => {
+    logger.debug(`Creating dataset with name "${name}"`);
+
+    const entity = new Dataset(name, description);
+
+    try {
+      this.datasetBatchQueue.create({
+        name: entity.name,
+        description: entity.description,
+        id: entity.id,
+      });
+
+      logger.debug("Dataset added to the queue with name:", entity.name);
+
+      return entity;
+    } catch (error) {
+      logger.error(`Failed to create dataset "${name}"`, { error });
+      throw new Error(`Error creating dataset "${name}": ${error}`);
+    }
+  };
+
+  /**
+   * Retrieves an existing dataset by name or creates a new one if it doesn't exist.
+   *
+   * @param name The name of the dataset
+   * @param description Optional description of the dataset (used if created)
+   * @returns A promise that resolves to the existing or newly created Dataset object
+   */
+  public getOrCreateDataset = async (
+    name: string,
+    description?: string
+  ): Promise<Dataset> => {
+    logger.debug(
+      `Attempting to retrieve or create dataset with name: "${name}"`
+    );
+
+    try {
+      return await this.getDataset(name);
+    } catch (error) {
+      if (error instanceof DatasetNotFoundError) {
+        logger.info(
+          `Dataset "${name}" not found. Proceeding to create a new one.`
+        );
+        return this.createDataset(name, description);
+      }
+      logger.error(`Error retrieving dataset "${name}":`, error);
+      throw error;
+    }
+  };
+
+  /**
+   * Returns all datasets up to the specified limit
+   *
+   * @param maxResults Maximum number of datasets to return (default: 100)
+   * @returns List of Dataset objects
+   */
+  public getDatasets = async (maxResults: number = 100): Promise<Dataset[]> => {
+    logger.debug(`Getting all datasets (limit: ${maxResults})`);
+
+    try {
+      // Flush the queue first to ensure all pending datasets are created
+      await this.datasetBatchQueue.flush();
+
+      const response = await this.api.datasets.findDatasets({
+        size: maxResults,
+      });
+
+      const datasets: Dataset[] = [];
+
+      for (const datasetData of response.content || []) {
+        datasets.push(
+          new Dataset(datasetData.name, datasetData.description, datasetData.id)
+        );
+      }
+
+      logger.info(`Retrieved ${datasets.length} datasets`);
+      return datasets;
+    } catch (error) {
+      logger.error("Failed to retrieve datasets", { error });
+      throw new Error("Failed to retrieve datasets");
+    }
+  };
+
+  /**
+   * Deletes a dataset by name
+   *
+   * @param name The name of the dataset to delete
+   */
+  public deleteDataset = async (name: string): Promise<void> => {
+    logger.debug(`Deleting dataset with name "${name}"`);
+
+    try {
+      // First get the dataset ID
+      const dataset = await this.getDataset(name);
+      if (!dataset.id) {
+        throw new Error(`Cannot delete dataset "${name}": ID not available`);
+      }
+
+      // Queue the delete operation
+      this.datasetBatchQueue.delete(dataset.id);
+    } catch (error) {
+      logger.error(`Failed to delete dataset "${name}"`, { error });
+      throw new Error(`Failed to delete dataset "${name}": ${error}`);
+    }
+  };
+
   public flush = async () => {
     logger.debug("Starting flush operation");
     try {
@@ -91,6 +236,7 @@ export class OpikClient {
       await this.spanBatchQueue.flush();
       await this.traceFeedbackScoresBatchQueue.flush();
       await this.spanFeedbackScoresBatchQueue.flush();
+      await this.datasetBatchQueue.flush();
       logger.info("Successfully flushed all data to Opik");
     } catch (error) {
       logger.error("Error during flush operation:", {
