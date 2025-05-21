@@ -40,8 +40,19 @@ jobs:
         working-directory: ./apps/opik-documentation/documentation
         continue-on-error: true
         run: |
-          # Run script and capture both stdout and stderr
-          sh ./scripts/check_broken_links.sh > check_output.txt 2>&1
+          # Ensure script is executable
+          chmod +x ./scripts/check_broken_links.sh
+          
+          # Check if script exists
+          if [ ! -f "./scripts/check_broken_links.sh" ]; then
+            echo "Error: check_broken_links.sh script not found!"
+            echo "Current directory: $(pwd)"
+            echo "Directory contents: $(ls -la ./scripts)"
+            exit 2
+          fi
+          
+          # Run with bash instead of sh to ensure compatibility
+          bash ./scripts/check_broken_links.sh > check_output.txt 2>&1
           SCRIPT_EXIT_CODE=$?
           cat check_output.txt
           
