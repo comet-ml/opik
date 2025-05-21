@@ -474,7 +474,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         optimization = None
         try:
             optimization = self._opik_client.create_optimization(
-                dataset_name=dataset.name, objective_name=metric_config.metric.name
+                dataset_name=dataset.name,
+                objective_name=metric_config.metric.name,
+                metadata={"optimizer": self.__class__.__name__},
             )
             logger.info(f"Created optimization with ID: {optimization.id}")
         except Exception as e:

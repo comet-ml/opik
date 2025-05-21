@@ -1107,6 +1107,7 @@ class Opik:
         dataset_name: str,
         objective_name: str,
         name: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> optimization.Optimization:
         id = id_helpers.generate_id()
 
@@ -1116,6 +1117,7 @@ class Opik:
             dataset_name=dataset_name,
             objective_name=objective_name,
             status="running",
+            metadata=metadata,
         )
 
         optimization_client = optimization.Optimization(

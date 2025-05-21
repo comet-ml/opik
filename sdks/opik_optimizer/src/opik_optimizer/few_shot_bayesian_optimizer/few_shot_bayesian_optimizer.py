@@ -295,6 +295,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             optimization = self._opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric_config.metric.name,
+                metadata={"optimizer": self.__class__.__name__},
             )
         except Exception:
             logger.warning(
