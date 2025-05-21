@@ -94,7 +94,7 @@ Answer the question based on the provided context.
 project_name = "optimize-few-shot-bayesian-hotpot" # For Comet logging
 
 optimizer = FewShotBayesianOptimizer(
-    model="gpt-4o-mini", # LLM to use for generation and optimization
+    model="gpt-4o-mini", # LiteLLM name to use for generation and optimization
     project_name=project_name, # Associates the run with a Comet project
     min_examples=3,      # Min few-shot examples
     max_examples=8,      # Max few-shot examples
