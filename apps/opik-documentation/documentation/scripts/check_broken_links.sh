@@ -21,7 +21,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # Start Fern docs server in the background
-fern docs dev --port $PORT > /dev/null 2>&1 &
+fern docs dev --port $PORT &
 SERVER_PID=$!
 
 # Wait for server to start
