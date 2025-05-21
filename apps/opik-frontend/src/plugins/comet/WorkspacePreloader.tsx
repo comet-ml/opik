@@ -65,9 +65,9 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
   if (workspace) {
     useAppStore.getState().setActiveWorkspaceName(workspace.workspaceName);
   } else {
-    const defaultWorkspace = allWorkspaces.find(
-      (workspace) => workspace.default,
-    );
+    const defaultWorkspace =
+      allWorkspaces.find((workspace) => workspace.default) ??
+      allWorkspaces?.[0];
 
     if (defaultWorkspace) {
       if (isRootPath) {
