@@ -1,8 +1,7 @@
 #!/bin/bash
 
 # Configuration
-PORT=3334
-DOCS_URL="http://localhost:$PORT/docs/opik"
+DOCS_URL="http://localhost:3000/docs/opik"
 MAX_RETRIES=30
 RETRY_INTERVAL=2
 
@@ -21,7 +20,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # Start Fern docs server in the background
-fern docs dev --port $PORT &
+npm run dev &
 SERVER_PID=$!
 
 # Wait for server to start
