@@ -1,0 +1,79 @@
+name: Check Documentation for Broken Links
+
+on:
+  # Allow manual triggering from GitHub Actions tab
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/opik-documentation/documentation/**'
+
+jobs:
+  check-links:
+    name: Check Documentation for Broken Links
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+          
+      - name: Install Fern
+        run: npm install -g fern-api
+        
+      - name: Install broken-link-checker
+        run: npm install -g broken-link-checker
+        
+      - name: Install dependencies
+        working-directory: ./apps/opik-documentation/documentation
+        run: npm install
+        
+      - name: Run link checker
+        id: link_check
+        working-directory: ./apps/opik-documentation/documentation
+        run: |
+          OUTPUT=$(bash ./scripts/check_broken_links.sh)
+          echo "$OUTPUT"
+          # Check if the output does not contain "No broken links found"
+          if ! echo "$OUTPUT" | grep -q "No broken links found"; then
+            echo "Broken links found!"
+            echo "has_broken_links=true" >> $GITHUB_OUTPUT
+            echo "$OUTPUT" > broken_links.log
+            # Don't exit here - we want to continue with the workflow
+          else
+            echo "No broken links found."
+            echo "has_broken_links=false" >> $GITHUB_OUTPUT
+          fi
+          
+
+      - name: Add PR comment with broken links
+        if: steps.link_check.outputs.has_broken_links == 'true' && github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const linkLog = fs.readFileSync('./apps/opik-documentation/documentation/broken_links.log', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ❌ Broken Links Found in Documentation
+              
+              The link check process found broken links in the documentation:
+              
+              \`\`\`
+              ${linkLog}
+              \`\`\`
+              
+              Please fix these broken links before merging this PR.`
+            });
+            
+      - name: Fail if broken links found
+        if: steps.link_check.outputs.has_broken_links == 'true'
+        run: exit 1
+  
