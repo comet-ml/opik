@@ -36,7 +36,8 @@ jobs:
         working-directory: ./apps/opik-documentation/documentation
         continue-on-error: true
         run: |
-          bash ./scripts/check_broken_links.sh > check_output.txt
+          # Run script and capture both stdout and stderr
+          sh ./scripts/check_broken_links.sh > check_output.txt 2>&1
           SCRIPT_EXIT_CODE=$?
           cat check_output.txt
           
