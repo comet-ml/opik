@@ -34,15 +34,16 @@ jobs:
       - name: Run link checker
         id: link_check
         working-directory: ./apps/opik-documentation/documentation
+        continue-on-error: true
         run: |
-          OUTPUT=$(bash ./scripts/check_broken_links.sh)
-          echo "$OUTPUT"
-          # Check if the output does not contain "No broken links found"
-          if ! echo "$OUTPUT" | grep -q "No broken links found"; then
+          bash ./scripts/check_broken_links.sh > check_output.txt
+          SCRIPT_EXIT_CODE=$?
+          cat check_output.txt
+          
+          if [ $SCRIPT_EXIT_CODE -ne 0 ]; then
             echo "Broken links found!"
             echo "has_broken_links=true" >> $GITHUB_OUTPUT
-            echo "$OUTPUT" > broken_links.log
-            # Don't exit here - we want to continue with the workflow
+            cat check_output.txt > broken_links.log
           else
             echo "No broken links found."
             echo "has_broken_links=false" >> $GITHUB_OUTPUT
