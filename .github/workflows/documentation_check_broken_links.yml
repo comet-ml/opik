@@ -52,6 +52,7 @@ jobs:
           fi
           
           echo "Running script..."
+          fern docs dev
           bash ./scripts/check_broken_links.sh
           # # Run with bash instead of sh to ensure compatibility
           # bash ./scripts/check_broken_links.sh > check_output.txt 2>&1
