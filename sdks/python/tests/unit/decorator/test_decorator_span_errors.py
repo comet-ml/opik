@@ -8,7 +8,6 @@ from tests.testlib import ANY_DICT
 
 
 class BrokenOpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
-
     def __init__(
         self,
         start_span_preprocessor_error: bool = False,
@@ -26,7 +25,6 @@ class BrokenOpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
         args: Tuple,
         kwargs: Dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
-
         if self.start_span_preprocessor_error:
             raise Exception("Some error happened during span creation preprocessing")
 
@@ -60,7 +58,6 @@ class BrokenOpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
-
         if self.end_span_preprocessor_error:
             raise Exception("Some error happened during span creation postprocessing")
 
