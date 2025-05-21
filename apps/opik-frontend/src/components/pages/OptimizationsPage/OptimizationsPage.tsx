@@ -13,6 +13,8 @@ import {
   StringParam,
   useQueryParam,
 } from "use-query-params";
+import get from "lodash/get";
+import isObject from "lodash/isObject";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -24,6 +26,7 @@ import OptimizationStatusCell from "@/components/pages/OptimizationsPage/Optimiz
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
+import { toString } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
 import { getFeedbackScore } from "@/lib/feedback-scores";
 import {
@@ -59,6 +62,7 @@ import {
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/grouping";
+import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
 
 const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimizations-columns-width";
@@ -88,6 +92,17 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
     type: COLUMN_TYPE.number,
   },
   {
+    id: "optimizer",
+    label: "Optimizer",
+    type: COLUMN_TYPE.string,
+    size: 200,
+    accessorFn: (row) => {
+      const val = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY, "-");
+
+      return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
+    },
+  },
+  {
     id: "objective_name",
     label: "Best score",
     type: COLUMN_TYPE.numberDictionary,
@@ -111,6 +126,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
   "num_trials",
+  "optimizer",
   "objective_name",
   "status",
 ];
