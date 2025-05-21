@@ -6,10 +6,20 @@
             <img alt="Comet Opik logo" src="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/apps/opik-documentation/documentation/static/img/opik-logo.svg" width="200" />
         </picture></a>
         <br>
-        Opik
+        Opik TypeScript SDK
     </div>
-    Open source LLM evaluation framework<br>
 </h1>
+<h2 align="center" style="border-bottom: none">Open-source LLM evaluation platform</h2>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/opik"><img src="https://img.shields.io/npm/v/opik.svg" alt="NPM Version"></a>
+  <a href="https://www.npmjs.com/package/opik"><img src="https://img.shields.io/npm/dt/opik.svg" alt="NPM Downloads"></a>
+  <a href="https://github.com/comet-ml/opik/blob/main/LICENSE"><img src="https://img.shields.io/github/license/comet-ml/opik" alt="License"></a>
+</p>
+
+The Opik TypeScript SDK allows you to integrate your TypeScript and JavaScript applications with the Opik platform, enabling comprehensive tracing, evaluation, and monitoring of your LLM systems. Opik helps you build, evaluate, and optimize LLM systems that run better, faster, and cheaper.
+
+Opik is an open-source LLM evaluation platform by [Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=github&utm_content=ts_sdk_readme&utm_campaign=opik). For more information about the broader Opik ecosystem, visit our main [GitHub repository](https://github.com/comet-ml/opik), [Website](https://www.comet.com/site/products/opik/), or [Documentation](https://www.comet.com/docs/opik/).
 
 ## Installation
 

@@ -210,7 +210,7 @@ dataset.insert(items)
 # - It sends the `input` as a message to the agent (`agent_executor`).
 # - It captures the agent's actual tool calls from its outputs.
 # - It packages the original input, the agent's outputs, the detected tool calls, and the expected tool calls.
-# This structured output is what the evaluation framework will use to compare expected vs actual behavior using the custom metric(s) you define.
+# This structured output is what the evaluation platform will use to compare expected vs actual behavior using the custom metric(s) you define.
 
 def evaluation_task(dataset_item):
     try:
