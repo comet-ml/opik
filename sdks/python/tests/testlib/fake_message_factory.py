@@ -20,9 +20,6 @@ class LongStr:
 
 
 ONE_MEGABYTE = 1024 * 1024
-ONE_MEGABYTE_OBJECT_A = LongStr("a" * ONE_MEGABYTE)
-ONE_MEGABYTE_OBJECT_B = LongStr("b" * ONE_MEGABYTE)
-ONE_MEGABYTE_OBJECT_C = LongStr("c" * ONE_MEGABYTE)
 
 
 def fake_create_trace_message_batch(

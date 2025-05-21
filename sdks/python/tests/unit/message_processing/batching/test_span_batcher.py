@@ -5,7 +5,7 @@ import pytest
 
 from opik.message_processing.batching import batchers
 from opik.message_processing import messages
-from .. import common
+from ....testlib import fake_message_factory
 
 NOT_USED = mock.sentinel.NOT_USED
 
@@ -26,8 +26,8 @@ def test_create_span_message_batcher__exactly_max_batch_size_reached__batch_is_f
     )
 
     assert batcher.is_empty()
-    span_messages = common.fake_span_create_message_batch(
-        count=MAX_BATCH_SIZE, approximate_span_size=common.ONE_MEGABYTE
+    span_messages = fake_message_factory.fake_span_create_message_batch(
+        count=MAX_BATCH_SIZE, approximate_span_size=fake_message_factory.ONE_MEGABYTE
     )
 
     for span_message in span_messages:
@@ -53,8 +53,9 @@ def test_create_span_message_batcher__more_than_max_batch_size_items_added__one_
     )
 
     assert batcher.is_empty()
-    span_messages = common.fake_span_create_message_batch(
-        count=MAX_BATCH_SIZE + 2, approximate_span_size=common.ONE_MEGABYTE
+    span_messages = fake_message_factory.fake_span_create_message_batch(
+        count=MAX_BATCH_SIZE + 2,
+        approximate_span_size=fake_message_factory.ONE_MEGABYTE,
     )
 
     for span_message in span_messages:
@@ -83,8 +84,8 @@ def test_create_span_message_batcher__split_message_into_batches__size_limit_rea
     )
 
     assert batcher.is_empty()
-    span_messages = common.fake_span_create_message_batch(
-        count=2 * 2, approximate_span_size=common.ONE_MEGABYTE
+    span_messages = fake_message_factory.fake_span_create_message_batch(
+        count=2 * 2, approximate_span_size=fake_message_factory.ONE_MEGABYTE
     )
 
     for span_message in span_messages:

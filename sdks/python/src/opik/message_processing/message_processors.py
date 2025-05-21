@@ -46,7 +46,7 @@ class OpikMessageProcessor(BaseMessageProcessor):
             messages.AddTraceFeedbackScoresBatchMessage: self._process_add_trace_feedback_scores_batch_message,  # type: ignore
             messages.AddSpanFeedbackScoresBatchMessage: self._process_add_span_feedback_scores_batch_message,  # type: ignore
             messages.CreateSpansBatchMessage: self._process_create_spans_batch_message,  # type: ignore
-            messages.CreateTraceBatchMessage: self._split_into_trace_minibatches_and_push_them_back,  # type: ignore
+            messages.CreateTraceBatchMessage: self._process_create_traces_batch_message,  # type: ignore
             messages.GuardrailBatchMessage: self._process_guardrail_batch_message,  # type: ignore
         }
 

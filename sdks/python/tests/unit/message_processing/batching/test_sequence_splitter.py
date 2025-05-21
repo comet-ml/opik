@@ -4,7 +4,18 @@ import pytest
 
 from opik.message_processing.batching import sequence_splitter
 
-from ..common import ONE_MEGABYTE_OBJECT_A, ONE_MEGABYTE_OBJECT_B, ONE_MEGABYTE_OBJECT_C
+from ....testlib import fake_message_factory
+
+
+ONE_MEGABYTE_OBJECT_A = fake_message_factory.LongStr(
+    "a" * fake_message_factory.ONE_MEGABYTE
+)
+ONE_MEGABYTE_OBJECT_B = fake_message_factory.LongStr(
+    "b" * fake_message_factory.ONE_MEGABYTE
+)
+ONE_MEGABYTE_OBJECT_C = fake_message_factory.LongStr(
+    "c" * fake_message_factory.ONE_MEGABYTE
+)
 
 
 def test_split_list_into_batches__by_size_only():

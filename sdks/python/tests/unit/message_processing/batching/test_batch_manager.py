@@ -5,7 +5,7 @@ from opik.message_processing import messages
 from opik.message_processing.batching import batch_manager
 from opik.message_processing.batching import batchers
 
-from .. import common
+from ....testlib import fake_message_factory
 
 NOT_USED = None
 
@@ -88,8 +88,8 @@ def test_batch_manager__start_and_stop_were_called__accumulated_data_is_flushed(
     def flush_callback(message: messages.BaseMessage):
         collected_messages.append(message)
 
-    span_messages_batch = common.fake_span_create_message_batch(
-        count=10, approximate_span_size=common.ONE_MEGABYTE
+    span_messages_batch = fake_message_factory.fake_span_create_message_batch(
+        count=10, approximate_span_size=fake_message_factory.ONE_MEGABYTE
     )
 
     example_span_batcher = batchers.CreateSpanMessageBatcher(

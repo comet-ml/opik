@@ -3,7 +3,7 @@ from unittest import mock
 from opik.message_processing import messages
 from opik.message_processing.batching import batchers
 
-from .. import common
+from ....testlib import fake_message_factory
 
 NOT_USED = mock.sentinel.NOT_USED
 
@@ -24,8 +24,8 @@ def test_create_trace_message_batcher__split_message_into_batches__size_limit_re
     )
 
     assert batcher.is_empty()
-    trace_messages = common.fake_create_trace_message_batch(
-        count=2 * 2, approximate_trace_size=common.ONE_MEGABYTE
+    trace_messages = fake_message_factory.fake_create_trace_message_batch(
+        count=2 * 2, approximate_trace_size=fake_message_factory.ONE_MEGABYTE
     )
 
     for trace_message in trace_messages:

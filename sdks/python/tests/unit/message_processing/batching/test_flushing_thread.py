@@ -4,7 +4,7 @@ from opik.message_processing.batching import (
     batchers,
     flushing_thread,
 )
-from .. import common
+from ....testlib import fake_message_factory
 
 
 def test_flushing_thread__batcher_is_flushed__every_time_flush_interval_time_passes():
@@ -17,8 +17,8 @@ def test_flushing_thread__batcher_is_flushed__every_time_flush_interval_time_pas
         flush_interval_seconds=FLUSH_INTERVAL,
     )
 
-    spans_messages = common.fake_span_create_message_batch(
-        count=2, approximate_span_size=common.ONE_MEGABYTE
+    spans_messages = fake_message_factory.fake_span_create_message_batch(
+        count=2, approximate_span_size=fake_message_factory.ONE_MEGABYTE
     )
 
     tested = flushing_thread.FlushingThread(batchers=[batcher])
