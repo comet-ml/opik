@@ -68,12 +68,12 @@ def my_llm_function(user_question: str) -> str:
     # Your LLM call or business logic here
     # For example:
     # response = openai.ChatCompletion.create(...)
-    response = f"Echoing: {user_question}" # Placeholder
-    
+    response = f"Echoing: {user_question}"
+
     # You can add metadata to your trace
     opik.set_tags(["example", "basic-usage"])
     opik.log_metadata({"question_length": len(user_question)})
-    
+
     return response
 
 my_llm_function("Hello, Opik!")
