@@ -95,3 +95,5 @@ def create_span_for_current_context(
         )
 
         return trace_data, span_data
+
+    raise Exception("This situation should never happen. This method should return at least a span data.")
