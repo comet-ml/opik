@@ -2,7 +2,7 @@ name: Docs - Check for Broken Links
 
 permissions:
   contents: read
-  issues: write
+  pull-requests: write
 
 on:
   # Allow manual triggering from GitHub Actions tab
