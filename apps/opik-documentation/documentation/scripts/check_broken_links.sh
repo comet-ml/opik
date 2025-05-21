@@ -3,7 +3,7 @@
 # Configuration
 PORT=3334
 DOCS_URL="http://localhost:$PORT/docs/opik"
-MAX_RETRIES=3
+MAX_RETRIES=30
 RETRY_INTERVAL=2
 
 # List of domains to exclude from link checking
