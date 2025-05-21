@@ -1,6 +1,6 @@
 import time
 import logging
-from typing import Callable, Optional, Any
+from typing import Callable, Optional
 
 
 LOGGER = logging.getLogger(__name__)
@@ -12,7 +12,9 @@ def wait_for_done(
     progress_callback: Optional[Callable] = None,
     sleep_time: float = 1,
 ) -> None:
-    """Wait up to TIMEOUT seconds for the check function to return True"""
+    """
+    Wait up to TIMEOUT seconds for the check function to return True
+    """
     end_time = time.time() + timeout if timeout else float("inf")
     while check_function() is False and time.time() < end_time:
         if progress_callback is not None:
@@ -31,6 +33,9 @@ def until(
     max_try_seconds: float = 10,
     allow_errors: bool = False,
 ) -> bool:
+    """
+    Call a function until it returns True or max_try_seconds is reached.
+    """
     start_time = time.time()
     while True:
         try:
@@ -45,22 +50,5 @@ def until(
         finally:
             if (time.time() - start_time) > max_try_seconds:
                 return False
-            time.sleep(sleep)
-    return True
-
-
-def try_get_until(
-    function: Callable[[], Any], sleep: float = 0.5, max_try_seconds: float = 10
-) -> Any:
-    """
-    As soon
-    """
-    start_time = time.time()
-    while True:
-        try:
-            return function()
-        except Exception:
-            if (time.time() - start_time) > max_try_seconds:
-                raise
             time.sleep(sleep)
     return True
