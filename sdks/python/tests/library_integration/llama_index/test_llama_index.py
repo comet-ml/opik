@@ -226,10 +226,10 @@ def test_llama_index_chat__happyflow(
     messages = [
         ChatMessage(
             role="system", content="You are a pirate with a colorful personality."
-        ),
+        ).model_dump(),
         ChatMessage(
             role="user", content="What is your name? Answer with a single word"
-        ),
+        ).model_dump(),
     ]
 
     _ = llm.chat(messages)
@@ -308,10 +308,10 @@ def test_llama_index_stream_chat__happyflow(
     messages = [
         ChatMessage(
             role="system", content="You are a pirate with a colorful personality."
-        ),
+        ).model_dump(),
         ChatMessage(
             role="user", content="What is your name? Answer with a single word"
-        ),
+        ).model_dump(),
     ]
 
     final_resp = ""
