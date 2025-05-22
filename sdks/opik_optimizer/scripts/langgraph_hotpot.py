@@ -10,7 +10,7 @@ from opik_optimizer import (
     from_dataset_field,
     from_llm_response_text,
 )
-from opik_optimizer.langgraph_optimizer import LangGraphOptimizer
+from opik_optimizer.langgraph_optimizer import AgentOptimizer
 
 from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI
@@ -94,7 +94,7 @@ task_config = TaskConfig(
 )
 
 
-class MyLangGraphOptimizer(LangGraphOptimizer):
+class MyLangGraphOptimizer(AgentOptimizer):
     def build_agent_invoke(self, agent_config):
         prompt_template = agent_config["prompts"][0]
         prompt = PromptTemplate.from_template(prompt_template)

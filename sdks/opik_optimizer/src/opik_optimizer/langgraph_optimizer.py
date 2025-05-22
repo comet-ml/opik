@@ -12,7 +12,7 @@ from opik_optimizer import (
 logger = logging.getLogger(__name__)
 
 
-class LangGraphOptimizer(BaseOptimizer):
+class AgentOptimizer(BaseOptimizer):
     def __init__(self, project_name, llm, num_threads, tags=None):
         self.project_name = project_name
         self.llm = llm
@@ -78,6 +78,10 @@ class LangGraphOptimizer(BaseOptimizer):
         )
 
         experiment_config["evaluation"] = "full"
+        # FIXME: the following is a sample optimization
+        # and contains some hardcoded bits related
+        # to development code. Next step: abstract
+        # these out:
         count = 0
         while count < 3:
             response = self.llm.invoke(
