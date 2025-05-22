@@ -23,7 +23,7 @@ def disable_misconfigurations_detection():
 def test_metric_equals__track_enabled__happyflow(fake_backend):
     metric = equals.Equals(name="equals_metric", track=True)
 
-    score_result = metric.score(output="123", reference="345")
+    score_result = metric.score(output="123", reference="345").__dict__
 
     tracker.flush_tracker()
 
@@ -69,7 +69,7 @@ def test_metric_equals__track_enabled__project_name_set__data_logged_to_the_spec
         name="equals_metric", track=True, project_name="metric-project-name"
     )
 
-    score_result = metric.score(output="123", reference="345")
+    score_result = metric.score(output="123", reference="345").__dict__
 
     tracker.flush_tracker()
 

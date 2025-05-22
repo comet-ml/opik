@@ -2,6 +2,8 @@ import dataclasses
 import datetime
 from dataclasses import field
 from typing import Optional, Any, Dict, List, Union, Literal
+
+from ..rest_api.types import span_write, trace_write
 from ..types import SpanType, ErrorInfoDict, LLMProvider, AttachmentEntityType
 
 
@@ -152,12 +154,12 @@ class AddSpanFeedbackScoresBatchMessage(AddFeedbackScoresBatchMessage):
 
 @dataclasses.dataclass
 class CreateSpansBatchMessage(BaseMessage):
-    batch: List[CreateSpanMessage]
+    batch: List[span_write.SpanWrite]
 
 
 @dataclasses.dataclass
 class CreateTraceBatchMessage(BaseMessage):
-    batch: List[CreateTraceMessage]
+    batch: List[trace_write.TraceWrite]
 
 
 @dataclasses.dataclass

@@ -54,7 +54,7 @@ def test_dspy__happyflow(
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_STRING(),
         name="ChainOfThought",
-        input={"args": (), "kwargs": {"question": "What is the meaning of life?"}},
+        input={"args": [], "kwargs": {"question": "What is the meaning of life?"}},
         output=None,
         metadata={"created_from": "dspy"},
         start_time=ANY_BUT_NONE,
@@ -126,7 +126,7 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_STRING(),
         name="ChainOfThought",
-        input={"args": (), "kwargs": {"question": "What is the meaning of life?"}},
+        input={"args": [], "kwargs": {"question": "What is the meaning of life?"}},
         output=None,
         metadata={"created_from": "dspy"},
         start_time=ANY_BUT_NONE,
@@ -252,7 +252,7 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
                         id=ANY_STRING(),
                         name="ChainOfThought",
                         input={
-                            "args": (),
+                            "args": [],
                             "kwargs": {"question": "What is the meaning of life?"},
                         },
                         output=ANY_DICT,
@@ -357,7 +357,7 @@ def test_dspy_callback__used_when_there_was_already_existing_trace_without_span_
                 id=ANY_STRING(),
                 name="ChainOfThought",
                 input={
-                    "args": (),
+                    "args": [],
                     "kwargs": {"question": "What is the meaning of life?"},
                 },
                 output=ANY_DICT,
@@ -455,7 +455,7 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
                 id=ANY_STRING(),
                 name="ChainOfThought",
                 input={
-                    "args": (),
+                    "args": [],
                     "kwargs": {"question": "What is the meaning of life?"},
                 },
                 output=ANY_DICT,

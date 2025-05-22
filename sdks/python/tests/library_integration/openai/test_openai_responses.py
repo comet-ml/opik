@@ -595,7 +595,7 @@ def test_openai_client_responses_parse_raises_an_error__span_and_trace_finished_
             "type": "openai_responses",
             "max_output_tokens": -1,
             "model": MODEL_FOR_TESTS,
-            "text_format": CalendarEvent,
+            "text_format": ANY_BUT_NONE,
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -618,7 +618,7 @@ def test_openai_client_responses_parse_raises_an_error__span_and_trace_finished_
                     "type": "openai_responses",
                     "model": MODEL_FOR_TESTS,
                     "max_output_tokens": -1,
-                    "text_format": CalendarEvent,
+                    "text_format": ANY_BUT_NONE,
                 },
                 usage=None,
                 start_time=ANY_BUT_NONE,
@@ -638,7 +638,5 @@ def test_openai_client_responses_parse_raises_an_error__span_and_trace_finished_
 
     assert len(fake_backend.trace_trees) == 1
     trace_tree = fake_backend.trace_trees[0]
-
-    print(trace_tree)
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)

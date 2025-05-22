@@ -240,11 +240,13 @@ def test_llama_index_chat__happyflow(
     # LlamaIndex types
     # EXPECTED_OUTPUT = {"output": {"role": "assistant", "blocks": [{"block_type": "text", "text": resp}]}}
 
+    expected_messages = [message.model_dump() for message in messages]
+
     EXPECTED_TRACE_TREES = [
         TraceModel(
             id=ANY_BUT_NONE,
             name="chat",
-            input={"messages": messages},
+            input={"messages": expected_messages},
             output={"output": ANY_BUT_NONE},
             metadata={"created_from": "llama_index"},
             start_time=ANY_BUT_NONE,
@@ -255,7 +257,7 @@ def test_llama_index_chat__happyflow(
                     id=ANY_BUT_NONE,
                     type="llm",
                     name="llm",
-                    input={"messages": messages},
+                    input={"messages": expected_messages},
                     output={"output": ANY_BUT_NONE},
                     tags=None,
                     metadata=None,
@@ -326,11 +328,13 @@ def test_llama_index_stream_chat__happyflow(
     # LlamaIndex types
     # EXPECTED_OUTPUT = {"output": {"role": "assistant", "blocks": [{"block_type": "text", "text": final_resp}]}}
 
+    expected_messages = [message.model_dump() for message in messages]
+
     EXPECTED_TRACE_TREES = [
         TraceModel(
             id=ANY_BUT_NONE,
             name="chat",
-            input={"messages": messages},
+            input={"messages": expected_messages},
             output=None,
             metadata={"created_from": "llama_index"},
             start_time=ANY_BUT_NONE,
@@ -341,7 +345,7 @@ def test_llama_index_stream_chat__happyflow(
                     id=ANY_BUT_NONE,
                     type="llm",
                     name="llm",
-                    input={"messages": messages},
+                    input={"messages": expected_messages},
                     output={"output": ANY_BUT_NONE},
                     tags=None,
                     metadata=None,

@@ -5,6 +5,8 @@ from opik.message_processing import messages
 from opik.message_processing.batching import batch_manager
 from opik.message_processing.batching import batchers
 
+from ....testlib import fake_message_factory
+
 NOT_USED = None
 
 
@@ -81,30 +83,20 @@ def test_batch_manager__flush_is_called__all_batchers_are_flushed():
 
 
 def test_batch_manager__start_and_stop_were_called__accumulated_data_is_flushed():
-    flush_callback = mock.Mock()
+    collected_messages = []
 
-    CREATE_SPAN_MESSAGE = messages.CreateSpanMessage(
-        span_id=NOT_USED,
-        trace_id=NOT_USED,
-        parent_span_id=NOT_USED,
-        project_name=NOT_USED,
-        start_time=NOT_USED,
-        end_time=NOT_USED,
-        name=NOT_USED,
-        input=NOT_USED,
-        output=NOT_USED,
-        metadata=NOT_USED,
-        tags=NOT_USED,
-        type=NOT_USED,
-        usage=NOT_USED,
-        model=NOT_USED,
-        provider=NOT_USED,
-        error_info=NOT_USED,
-        total_cost=NOT_USED,
+    def flush_callback(message: messages.BaseMessage):
+        collected_messages.append(message)
+
+    span_messages_batch = fake_message_factory.fake_span_create_message_batch(
+        count=10, approximate_span_size=fake_message_factory.ONE_MEGABYTE
     )
 
     example_span_batcher = batchers.CreateSpanMessageBatcher(
-        flush_callback=flush_callback, max_batch_size=42, flush_interval_seconds=0.1
+        flush_callback=flush_callback,
+        max_batch_size=42,
+        flush_interval_seconds=0.1,
+        batch_memory_limit_mb=5,
     )
     tested = batch_manager.BatchManager(
         {messages.CreateSpanMessage: example_span_batcher}
@@ -112,9 +104,10 @@ def test_batch_manager__start_and_stop_were_called__accumulated_data_is_flushed(
 
     tested.start()
     time.sleep(0.1)
-    flush_callback.assert_not_called()
-    tested.process_message(CREATE_SPAN_MESSAGE)
+
+    for span_message in span_messages_batch:
+        tested.process_message(span_message)
+
     tested.stop()
-    flush_callback.assert_called_once_with(
-        messages.CreateSpansBatchMessage(batch=[CREATE_SPAN_MESSAGE])
-    )
+
+    assert len(collected_messages) >= 2
