@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.infrastructure.llm.gemini.GeminiErrorObject;
+import com.comet.opik.infrastructure.llm.openai.OpenAiErrorMessage;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterErrorMessage;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.data.message.AiMessage;
@@ -19,6 +20,7 @@ import dev.langchain4j.model.openai.internal.shared.Usage;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
+import org.apache.commons.lang3.StringUtils;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.Named;
@@ -35,6 +37,7 @@ public interface LlmProviderLangChainMapper {
     String ERR_ROLE_MSG_TYPE_MISMATCH = "role and message instance are not matching, role: '%s', instance: '%s'";
 
     LlmProviderLangChainMapper INSTANCE = Mappers.getMapper(LlmProviderLangChainMapper.class);
+    String CANNOT_BE_NULL_OR_EMPTY = "Message content cannot be null or empty";
 
     default ChatMessage toChatMessage(@NonNull Message message) {
         if (!List.of(Role.ASSISTANT, Role.USER, Role.SYSTEM).contains(message.role())) {
@@ -44,16 +47,19 @@ public interface LlmProviderLangChainMapper {
         switch (message.role()) {
             case ASSISTANT -> {
                 if (message instanceof AssistantMessage assistantMessage) {
+                    validateMessageContent(assistantMessage.content());
                     return AiMessage.from(assistantMessage.content());
                 }
             }
             case USER -> {
                 if (message instanceof UserMessage userMessage) {
+                    validateMessageContent(userMessage.content().toString());
                     return dev.langchain4j.data.message.UserMessage.from(userMessage.content().toString());
                 }
             }
             case SYSTEM -> {
                 if (message instanceof SystemMessage systemMessage) {
+                    validateMessageContent(systemMessage.content());
                     return dev.langchain4j.data.message.SystemMessage.from(systemMessage.content());
                 }
             }
@@ -61,6 +67,12 @@ public interface LlmProviderLangChainMapper {
 
         throw new BadRequestException(ERR_ROLE_MSG_TYPE_MISMATCH.formatted(message.role(),
                 message.getClass().getSimpleName()));
+    }
+
+    private void validateMessageContent(String content) {
+        if (StringUtils.isBlank(content)) {
+            throw new BadRequestException(CANNOT_BE_NULL_OR_EMPTY);
+        }
     }
 
     @Mapping(expression = "java(request.model())", target = "model")
@@ -98,6 +110,13 @@ public interface LlmProviderLangChainMapper {
     }
 
     default Optional<ErrorMessage> getGeminiErrorObject(@NonNull Throwable throwable, @NonNull Logger log) {
+        return getErrorMessage(throwable, log, 0);
+    }
+
+    private Optional<ErrorMessage> getErrorMessage(Throwable throwable, Logger log, int level) {
+        if (throwable == null || level > 10) {
+            return Optional.empty();
+        }
         if (throwable.getMessage() == null) {
             log.warn("failed to parse Gemini error message", throwable);
             return Optional.empty();
@@ -115,7 +134,7 @@ public interface LlmProviderLangChainMapper {
             }
         }
 
-        return Optional.empty();
+        return getErrorMessage(throwable.getCause(), log, level + 1);
     }
 
     default Optional<ErrorMessage> getErrorObject(@NonNull Throwable throwable, @NonNull Logger log) {
@@ -132,7 +151,14 @@ public interface LlmProviderLangChainMapper {
 
             if (openRouterError.isPresent()) {
                 return openRouterError
-                        .map(error -> new ErrorMessage(error.error().code(), error.error().message()));
+                        .map(OpenRouterErrorMessage::toErrorMessage);
+            } else {
+                Optional<OpenAiErrorMessage> openAiError = getOpenAiError(log, jsonPart);
+
+                if (openAiError.isPresent()) {
+                    return openAiError
+                            .map(OpenAiErrorMessage::toErrorMessage);
+                }
             }
         }
 
@@ -140,8 +166,13 @@ public interface LlmProviderLangChainMapper {
     }
 
     private Optional<OpenRouterErrorMessage> getOpenRouterError(Logger log, String jsonPart) {
+        return parseError(log, jsonPart, OpenRouterErrorMessage.class);
+    }
+
+    private <E, T extends LlmProviderError<E>> Optional<T> parseError(Logger log, String jsonPart,
+            Class<T> valueTypeRef) {
         try {
-            var error = JsonUtils.readValue(jsonPart, OpenRouterErrorMessage.class);
+            var error = JsonUtils.readValue(jsonPart, valueTypeRef);
             if (error.error() == null) {
                 return Optional.empty();
             }
@@ -150,6 +181,10 @@ public interface LlmProviderLangChainMapper {
             log.warn("failed to parse error message", e);
             return Optional.empty();
         }
+    }
+
+    private Optional<OpenAiErrorMessage> getOpenAiError(Logger log, String jsonPart) {
+        return parseError(log, jsonPart, OpenAiErrorMessage.class);
     }
 
 }
