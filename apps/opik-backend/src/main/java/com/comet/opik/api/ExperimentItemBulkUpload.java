@@ -33,7 +33,7 @@ public record ExperimentItemBulkUpload(
             RateEventContainer{
 
     public static class View {
-        public static class Write {
+        public interface Write extends Trace.View.Write {
         }
     }
 

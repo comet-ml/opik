@@ -18,7 +18,7 @@ import java.util.UUID;
 public record ExperimentItemBulkRecord(
         @JsonView( {
                 ExperimentItemBulkUpload.View.Write.class}) @NotNull UUID datasetItemId,
-        @JsonView({ExperimentItemBulkUpload.View.Write.class}) Trace trace,
+        @JsonView({ExperimentItemBulkUpload.View.Write.class}) @Valid Trace trace,
         @Size(max = 100) @JsonView({ExperimentItemBulkUpload.View.Write.class}) List<@Valid Span> spans,
         @Size(max = 100) List<@Valid FeedbackScore> feedbackScores){
 }

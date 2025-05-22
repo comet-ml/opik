@@ -14,24 +14,18 @@ import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackDefinition;
-import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
-import com.comet.opik.api.Span;
-import com.comet.opik.api.SpanBatch;
-import com.comet.opik.api.Trace;
-import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.resources.v1.priv.validate.ExperimentItemBulkValidator;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.EntityType;
+import com.comet.opik.domain.ExperimentItemBulkIngestionService;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.IdGenerator;
-import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.Streamer;
-import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.workspaces.WorkspaceMetadata;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -71,11 +65,8 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ChunkedOutput;
-import reactor.core.publisher.Mono;
 
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -101,8 +92,7 @@ public class ExperimentsResource {
     private final @NonNull Streamer streamer;
     private final @NonNull ExperimentSortingFactory sortingFactory;
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
-    private final @NonNull TraceService traceService;
-    private final @NonNull SpanService spanService;
+    private final @NonNull ExperimentItemBulkIngestionService experimentItemBulkIngestionService;
 
     @GET
     @Operation(operationId = "findExperiments", summary = "Find experiments", description = "Find experiments", responses = {
@@ -332,7 +322,7 @@ public class ExperimentsResource {
     }
 
     @PUT
-    @Path("/items/bulk_upload")
+    @Path("/items/bulk")
     @Operation(operationId = "experimentItemsBulkUpload", summary = "Record experiment items in bulk", description = "Record experiment items in bulk with traces, spans, and feedback scores. "
             +
             "Maximum request size is 4MB.", responses = {
@@ -364,55 +354,13 @@ public class ExperimentsResource {
                 .name(request.experimentName())
                 .build();
 
-        UUID experimentId = experimentService.create(experiment)
+        experimentItemBulkIngestionService.ingest(experiment, items)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                 .retryWhen(AsyncUtils.handleConnectionError())
                 .block();
 
-        log.info("Created experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
-                experimentId, request.experimentName(), request.datasetName(), workspaceId);
-
-        Set<ExperimentItem> experimentItems = new HashSet<>();
-        List<Trace> traces = new ArrayList<>();
-        List<Span> spans = new ArrayList<>();
-        List<FeedbackScoreBatchItem> feedbackScores = new ArrayList<>();
-
-        ExperimentItemBulkMapper.splitBatches(idGenerator,
-                items,
-                traces,
-                experimentId,
-                experimentItems,
-                spans,
-                feedbackScores);
-
-        experimentItemService.create(experimentItems)
-                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId))
-                .retryWhen(AsyncUtils.handleConnectionError())
-                .then(Mono.defer(() -> Mono.zip(
-                        traceService.create(new TraceBatch(traces))
-                                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                                        .put(RequestContext.WORKSPACE_ID, workspaceId))
-                                .retryWhen(AsyncUtils.handleConnectionError()),
-                        spans.isEmpty()
-                                ? Mono.just(0)
-                                : spanService.create(new SpanBatch(spans))
-                                        .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                                                .put(RequestContext.WORKSPACE_ID, workspaceId))
-                                        .retryWhen(AsyncUtils.handleConnectionError()),
-                        feedbackScores.isEmpty()
-                                ? Mono.just(0)
-                                : feedbackScoreService.scoreBatchOfTraces(feedbackScores)
-                                        .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                                                .put(RequestContext.WORKSPACE_ID, workspaceId))
-                                        .retryWhen(AsyncUtils.handleConnectionError())
-                                        .then(Mono.just(feedbackScores.size())))))
-                .block();
-
-        log.info(
-                "Recorded experiment items in bulk, experiment items count '{}', traces count '{}', spans count '{}' and feedback scores count '{}'",
-                request.items().size(), traces.size(), spans.size(), feedbackScores.size());
+        log.info("Recorded experiment items in bulk, count '{}'", request.items().size());
 
         return Response.noContent().build();
     }

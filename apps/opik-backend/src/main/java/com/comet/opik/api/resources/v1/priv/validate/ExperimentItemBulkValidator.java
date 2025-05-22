@@ -12,7 +12,7 @@ public class ExperimentItemBulkValidator {
         if (item.trace() == null && !CollectionUtils.isEmpty(item.spans())) {
             throw new BadRequestException("Trace is required when spans are provided");
         } else if (item.trace() != null && hasMatchingTraceId(item)) {
-            throw new BadRequestException("Trace ID must match the span ID");
+            throw new BadRequestException("Trace ID must match the span's trace ID");
         }
     }
 

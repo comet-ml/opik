@@ -15,11 +15,11 @@ import java.io.UncheckedIOException;
 @Slf4j
 public class MaxRequestSizeValidator implements ConstraintValidator<MaxRequestSize, ExperimentItemBulkUpload> {
 
-    private long maxSize;
+    private volatile long maxSizeInBytes;
 
     @Override
     public void initialize(MaxRequestSize constraintAnnotation) {
-        this.maxSize = constraintAnnotation.value();
+        this.maxSizeInBytes = constraintAnnotation.value();
     }
 
     @Override
@@ -33,13 +33,13 @@ public class MaxRequestSizeValidator implements ConstraintValidator<MaxRequestSi
             byte[] serialized = JsonUtils.writeValueAsString(value).getBytes();
             long size = serialized.length;
 
-            boolean isValid = size <= maxSize;
+            boolean isValid = size <= maxSizeInBytes;
 
             if (!isValid) {
                 // Add a custom violation message
                 context.disableDefaultConstraintViolation();
                 context.buildConstraintViolationWithTemplate(
-                        "Request size exceeds the maximum allowed size of " + (maxSize / (1024 * 1024)) + "MB")
+                        "Request size exceeds the maximum allowed size of " + (maxSizeInBytes / (1024 * 1024)) + "MB")
                         .addConstraintViolation();
             }
 

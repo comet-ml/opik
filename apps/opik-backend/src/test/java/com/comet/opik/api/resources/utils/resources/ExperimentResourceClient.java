@@ -166,7 +166,7 @@ public class ExperimentResourceClient {
             String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("items")
-                .path("bulk_upload")
+                .path("bulk")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
