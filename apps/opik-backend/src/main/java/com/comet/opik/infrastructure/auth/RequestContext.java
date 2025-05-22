@@ -23,6 +23,7 @@ public class RequestContext {
     public static final String REMAINING_LIMIT = "Opik-%s-Remaining-Limit";
     public static final String LIMIT_REMAINING_TTL = "Opik-%s-Remaining-Limit-TTL-Millis";
     public static final String VISIBILITY = "visibility";
+    public static final String RATE_LIMIT_RESET = "RateLimit-Reset";
 
     public static final String PROJECT_NAME = "projectName";
 
