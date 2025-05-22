@@ -38,6 +38,7 @@ jobs:
                   --recurse \
                   --skip "search\/v2\/key" \
                   --skip "https://ai.google.dev/gemini-api" \
+                  --skip "http://localhost:5173" \
                   --format csv | awk -F',' '
                     BEGIN { found_broken = 0 }
                     NR==1 {next}
@@ -48,7 +49,7 @@ jobs:
                       gsub(/^"|"$/, "", $4)
                       if ($3 != "OK" && $2 != "403") {
                         if (found_broken == 0) {
-                          print "**Found broken links:**\n\n" >> "preview_url.txt"
+                          print "**The following broken links where found:**\n\n" >> "preview_url.txt"
                           found_broken = 1
                         }
                         
