@@ -10,7 +10,7 @@ from opik_optimizer import (
     from_dataset_field,
     from_llm_response_text,
 )
-from opik_optimizer.langgraph_optimizer import AgentOptimizer
+from opik_optimizer.agent_optimizer import AgentOptimizer
 
 from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI
