@@ -8,7 +8,7 @@ import {
   mockAPIFunction,
   mockAPIFunctionWithError,
   createMockHttpResponsePromise,
-} from "./mockUtils";
+} from "../mockUtils";
 
 describe("Opik dataset operations", () => {
   let client: Opik;
@@ -426,7 +426,10 @@ describe("Opik dataset operations", () => {
 
   it("should throw error when dataset ID is not available", async () => {
     // Create a dataset instance with name and description but no ID
-    const mockDataset = new Dataset("dataset-to-delete", "Dataset to delete");
+    const mockDataset = new Dataset(
+      { name: "dataset-to-delete", description: "Dataset to delete" },
+      client
+    );
     // Override the id property to be null
     Object.defineProperty(mockDataset, "id", {
       get: () => null,

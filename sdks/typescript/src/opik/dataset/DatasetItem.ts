@@ -1,7 +1,9 @@
-import { v4 as uuidv4 } from "uuid";
 import { DatasetItemWriteSource } from "@/rest_api/api";
 import { JsonNode } from "@/rest_api/api/types/JsonNode";
 import { DatasetItemWrite } from "@/rest_api/api/types/DatasetItemWrite";
+import { generateId } from "@/utils/generateId";
+import stringify from "fast-json-stable-stringify";
+import { initHashApi } from "@/utils/hash";
 
 export type DatasetItemData = JsonNode & {
   id?: string;
@@ -54,7 +56,7 @@ export class DatasetItem<T extends DatasetItemData = DatasetItemData> {
   ) {
     const { id, traceId, spanId, source, ...rest } = params;
 
-    this.id = id || uuidv4();
+    this.id = id || generateId();
     this.traceId = traceId;
     this.spanId = spanId;
     this.source = source || DatasetItemWriteSource.Sdk;
@@ -67,7 +69,7 @@ export class DatasetItem<T extends DatasetItemData = DatasetItemData> {
    * @param includeId Whether to include the ID in the content
    * @returns The content as a JSON object
    */
-  public getContent(includeId = false): JsonNode {
+  public getContent(includeId = false): T {
     const content: T = { ...this.data };
 
     if (includeId) {
@@ -78,21 +80,19 @@ export class DatasetItem<T extends DatasetItemData = DatasetItemData> {
   }
 
   /**
-   * Creates a new dataset item with updated data.
-   * This maintains immutability by returning a new instance.
-   *
-   * @param newData The new data to merge with the existing data
-   * @returns A new DatasetItem instance with the merged data
+   * Computes a hash of the item's content for deduplication.
+   * @returns A promise resolving to the content hash
    */
-  public update<U extends DatasetItemData>(newData: U): DatasetItem<T & U> {
-    return new DatasetItem<T & U>({
-      id: this.id,
-      traceId: this.traceId,
-      spanId: this.spanId,
-      source: this.source,
-      ...this.data,
-      ...newData,
-    });
+  async contentHash(): Promise<string> {
+    const content = this.getContent();
+    // Use fast-json-stable-stringify for deterministic JSON
+    const json = stringify(content);
+
+    // Use xxhash32 with a seed value for hashing
+    const hashFn = await initHashApi();
+    const hash = hashFn.h32(json, 0xabcd).toString(16);
+
+    return hash;
   }
 
   /**

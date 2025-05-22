@@ -104,7 +104,7 @@ export class OpikClient {
         datasetName: name,
       });
 
-      return new Dataset(response.name, response.description, response.id);
+      return new Dataset(response, this);
     } catch (error) {
       if (error instanceof OpikApiError && error.statusCode === 404) {
         throw new DatasetNotFoundError(name);
@@ -126,7 +126,7 @@ export class OpikClient {
   ): Promise<Dataset> => {
     logger.debug(`Creating dataset with name "${name}"`);
 
-    const entity = new Dataset(name, description);
+    const entity = new Dataset({ name, description }, this);
 
     try {
       this.datasetBatchQueue.create({
@@ -193,9 +193,7 @@ export class OpikClient {
       const datasets: Dataset[] = [];
 
       for (const datasetData of response.content || []) {
-        datasets.push(
-          new Dataset(datasetData.name, datasetData.description, datasetData.id)
-        );
+        datasets.push(new Dataset(datasetData, this));
       }
 
       logger.info(`Retrieved ${datasets.length} datasets`);

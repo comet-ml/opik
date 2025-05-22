@@ -15,7 +15,7 @@ import {
   OpikParent,
   TrackOpikConfig,
 } from "./types";
-import { Opik, OpikSpanType, Trace } from "opik";
+import { Opik, OpikSpanType } from "opik";
 
 const handleError = (
   error: Error,
@@ -74,7 +74,7 @@ const wrapMethod = <T extends GenericMethod>(
     metadata: finalMetadata,
   };
 
-  let rootTracer: Trace;
+  let rootTracer: OpikParent;
 
   const hasUserProvidedParent = Boolean(config?.parent);
 
