@@ -3,7 +3,7 @@ from typing import Any
 
 def recursive_shallow_copy(obj: Any) -> Any:
     """
-    Creates a recursive shallow copy of a dictionary which may include other dictionaries
+    Creates a recursive shallow copy of a dictionary or list which may include other dictionaries
     or lists as values.
 
     Args:
