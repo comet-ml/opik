@@ -1,6 +1,6 @@
-import { Trace, Opik } from "opik";
+import { Trace, Opik, Span } from "opik";
 
-export type OpikParent = Trace;
+export type OpikParent = Trace | Span;
 
 export interface TrackOpikConfig {
   traceMetadata?: Record<string, unknown> & {
