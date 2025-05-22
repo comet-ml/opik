@@ -157,6 +157,7 @@ public class ExperimentResourceClient {
 
     public void bulkUploadExperimentItem(ExperimentItemBulkUpload bulkUpload, String apiKey, String workspaceName) {
         try (var response = callExperimentItemBulkUpload(bulkUpload, apiKey, workspaceName)) {
+            assertThat(response.hasEntity()).isFalse();
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }

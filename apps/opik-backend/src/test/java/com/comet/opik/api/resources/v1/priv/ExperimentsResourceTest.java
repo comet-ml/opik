@@ -114,6 +114,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -3800,45 +3801,13 @@ class ExperimentsResourceTest {
                     API_KEY);
 
             // Create a bulk upload request with a single item
-            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
-                    .id(podamFactory.manufacturePojo(UUID.class))
-                    .startTime(Instant.now())
-                    .endTime(Instant.now().plusSeconds(1))
-                    .usage(null)
-                    .totalEstimatedCost(null)
-                    .createdBy(USER)
-                    .lastUpdatedBy(USER)
-                    .build();
+            var trace = createTrace();
 
-            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .id(podamFactory.manufacturePojo(UUID.class))
-                    .startTime(Instant.now())
-                    .endTime(Instant.now().plusSeconds(1))
-                    .usage(null)
-                    .totalEstimatedCost(null)
-                    .createdBy(USER)
-                    .lastUpdatedBy(USER)
-                    .build();
+            var span = creatrSpan();
 
-            var feedbackScore = podamFactory.manufacturePojo(FeedbackScore.class).toBuilder()
-                    .createdBy(USER)
-                    .lastUpdatedBy(USER)
-                    .build();
+            var feedbackScore = createScore();
 
-            List<ExperimentItem> expectedItems = List.of(
-                    ExperimentItem.builder()
-                            .datasetItemId(datasetItem.id())
-                            .traceId(trace.id())
-                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(),
-                                    trace.endTime()))
-                            .input(trace.input())
-                            .output(trace.output())
-                            .feedbackScores(List.of(feedbackScore))
-                            .createdAt(trace.createdAt())
-                            .lastUpdatedAt(trace.lastUpdatedAt())
-                            .createdBy(USER)
-                            .lastUpdatedBy(USER)
-                            .build());
+            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, trace, feedbackScore);
 
             var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
             var bulkRecord = ExperimentItemBulkRecord.builder()
@@ -3861,13 +3830,58 @@ class ExperimentsResourceTest {
             List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
                     API_KEY, TEST_WORKSPACE);
 
-            assertThat(actualExperimentItems).hasSize(1);
+            assertItems(actualExperimentItems, expectedItems, EXPERIMENT_ITEMS_IGNORED_FIELDS);
+        }
 
-            assertThat(actualExperimentItems)
-                    .usingRecursiveComparison()
-                    .ignoringCollectionOrder()
-                    .ignoringFields(EXPERIMENT_ITEMS_IGNORED_FIELDS)
-                    .isEqualTo(expectedItems);
+        private List<ExperimentItem> getExpectedItem(DatasetItem datasetItem, Trace trace,
+                FeedbackScore feedbackScore) {
+            return List.of(
+                    ExperimentItem.builder()
+                            .datasetItemId(datasetItem.id())
+                            .traceId(Optional.ofNullable(trace).map(Trace::id).orElse(null))
+                            .duration(Optional.ofNullable(trace)
+                                    .map(t -> DurationUtils.getDurationInMillisWithSubMilliPrecision(t.startTime(),
+                                            t.endTime()))
+                                    .orElse(0.0))
+                            .input(Optional.ofNullable(trace).map(Trace::input).orElse(null))
+                            .output(Optional.ofNullable(trace).map(Trace::output).orElse(null))
+                            .feedbackScores(List.of(feedbackScore))
+                            .createdAt(Optional.ofNullable(trace).map(Trace::createdAt).orElse(null))
+                            .lastUpdatedAt(Optional.ofNullable(trace).map(Trace::lastUpdatedAt).orElse(null))
+                            .createdBy(USER)
+                            .lastUpdatedBy(USER)
+                            .build());
+        }
+
+        private FeedbackScore createScore() {
+            return podamFactory.manufacturePojo(FeedbackScore.class).toBuilder()
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+        }
+
+        private Span creatrSpan() {
+            return podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .id(podamFactory.manufacturePojo(UUID.class))
+                    .startTime(Instant.now())
+                    .endTime(Instant.now().plusSeconds(1))
+                    .usage(null)
+                    .totalEstimatedCost(null)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+        }
+
+        private Trace createTrace() {
+            return podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .id(podamFactory.manufacturePojo(UUID.class))
+                    .startTime(Instant.now())
+                    .endTime(Instant.now().plusSeconds(1))
+                    .usage(null)
+                    .totalEstimatedCost(null)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
         }
 
         @Test
@@ -3886,52 +3900,49 @@ class ExperimentsResourceTest {
 
             // Create a bulk upload request with a single item
 
-            var feedbackScore = podamFactory.manufacturePojo(FeedbackScore.class).toBuilder()
-                    .createdBy(USER)
-                    .lastUpdatedBy(USER)
-                    .build();
+            var feedbackScore = createScore();
 
-            List<ExperimentItem> expectedItems = List.of(
-                    ExperimentItem.builder()
-                            .datasetItemId(datasetItem.id())
-                            .traceId(podamFactory.manufacturePojo(UUID.class))
-                            .input(null)
-                            .output(null)
-                            .feedbackScores(List.of(feedbackScore))
-                            .duration(0.0)
-                            .createdBy(USER)
-                            .lastUpdatedBy(USER)
-                            .build());
+            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, null, feedbackScore);
 
             var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
-            var bulkRecord = ExperimentItemBulkRecord.builder()
+            var bulkItemRecord = ExperimentItemBulkRecord.builder()
                     .datasetItemId(datasetItem.id())
                     .feedbackScores(List.of(feedbackScore))
                     .build();
 
-            var bulkUpload = ExperimentItemBulkUpload.builder()
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
                     .experimentName(experimentName)
                     .datasetName(dataset.name())
-                    .items(List.of(bulkRecord))
+                    .items(List.of(bulkItemRecord))
                     .build();
 
             // when
-            experimentResourceClient.bulkUploadExperimentItem(bulkUpload, API_KEY, TEST_WORKSPACE);
+            experimentResourceClient.bulkUploadExperimentItem(bulkUploadRequest, API_KEY, TEST_WORKSPACE);
 
             // then
             List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
                     API_KEY, TEST_WORKSPACE);
 
-            assertThat(actualExperimentItems).hasSize(1);
+            String[] ignoringFields = Stream
+                    .concat(Arrays.stream(EXPERIMENT_ITEMS_IGNORED_FIELDS), Stream.of("traceId"))
+                    .toArray(String[]::new);
 
-            assertThat(actualExperimentItems)
+            assertItems(actualExperimentItems, expectedItems, ignoringFields);
+        }
+
+        private void assertItems(List<ExperimentItem> actual, List<ExperimentItem> expected, String[] ignoringFields) {
+            assertThat(actual).hasSize(expected.size());
+
+            assertThat(actual)
                     .usingRecursiveComparison()
+                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
                     .ignoringCollectionOrder()
-                    .ignoringFields(Stream.concat(Arrays.stream(EXPERIMENT_ITEMS_IGNORED_FIELDS), Stream.of("traceId"))
-                            .toArray(String[]::new))
-                    .isEqualTo(expectedItems);
+                    .ignoringFields(ignoringFields)
+                    .isEqualTo(expected);
 
-            assertThat(actualExperimentItems.getFirst().traceId()).isNotNull();
+            if (ignoringFields != null && Set.of(ignoringFields).contains("traceId")) {
+                assertThat(actual.getFirst().traceId()).isNotNull();
+            }
         }
 
         @Test
