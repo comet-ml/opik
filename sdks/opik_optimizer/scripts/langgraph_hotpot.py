@@ -95,7 +95,7 @@ task_config = TaskConfig(
 
 
 class MyLangGraphOptimizer(LangGraphOptimizer):
-    def build_agent(self, agent_config):
+    def build_agent_invoke(self, agent_config):
         prompt_template = agent_config["prompts"][0]
         prompt = PromptTemplate.from_template(prompt_template)
         tools = agent_config["tools"]
@@ -137,17 +137,15 @@ class MyLangGraphOptimizer(LangGraphOptimizer):
             tags=self.tags,
             graph=graph.get_graph(xray=True),
         )
-        return graph
 
-    def get_program_task(self, graph, task_config):
-        def program_task(item: Dict[str, Any]) -> Dict[str, Any]:
-            # FIXME: map input dataset to agent. task_config.input_dataset_fields["question"] -> "input"
+        def agent_invoke(item: Dict[str, Any]) -> Dict[str, Any]:
+            # "input" and "output" are Agent State fields
+            # FIXME: need to map input_dataset_fields to correct state fields:
             state = {"input": item[key] for key in task_config.input_dataset_fields}
             result = graph.invoke(state)
-            # FIXME: map output to agent. task_config.output_dataset_field ("answer") -> "output"
-            return {"output": result["output"]}  # task_config.output_dataset_field]
+            return {"output": result["output"]}
 
-        return program_task
+        return agent_invoke
 
 
 optimizer = MyLangGraphOptimizer(

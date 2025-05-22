@@ -45,14 +45,12 @@ class LangGraphOptimizer(BaseOptimizer):
             "tools": self.tools,
         }
 
-        # Call user's method:
-        graph = self.build_agent(agent_config)
+        # Build user's agent invoke method:
+        agent_invoke = self.build_agent_invoke(agent_config)
 
         dataset_item_ids = [
             item["id"] for item in random.sample(dataset.get_items(), n_samples)
         ]
-
-        program_task = self.get_program_task(graph, task_config)
 
         experiment_config = {
             "optimizer": self.__class__.__name__,
@@ -70,7 +68,7 @@ class LangGraphOptimizer(BaseOptimizer):
         print(prompt_template)
         score = task_evaluator.evaluate(
             dataset=dataset,
-            evaluated_task=program_task,
+            evaluated_task=agent_invoke,
             metric_config=metric_config,
             dataset_item_ids=dataset_item_ids,
             project_name=self.project_name,
@@ -115,18 +113,12 @@ Here is the prompt:
                 "tools": self.tools,
             }
 
-            try:
-                # Calls user subclass method:
-                graph = self.build_agent(agent_config)
-            except Exception as exc:
-                print(new_prompt)
-                print("Failed to create a graph %r; trying again..." % exc)
-                continue
+            agent_invoke = self.build_agent_invoke(agent_config)
 
             count += 1
             score = task_evaluator.evaluate(
                 dataset=dataset,
-                evaluated_task=program_task,
+                evaluated_task=agent_invoke,
                 metric_config=metric_config,
                 dataset_item_ids=dataset_item_ids,
                 project_name=self.project_name,
