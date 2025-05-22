@@ -1497,7 +1497,7 @@ def test_track__function_called_with_wrong_arguments__trace_is_still_created_wit
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="f",
-        input={"args": tuple(), "kwargs": {"y": 5}},
+        input={"args": list(), "kwargs": {"y": 5}},
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -1510,7 +1510,7 @@ def test_track__function_called_with_wrong_arguments__trace_is_still_created_wit
             SpanModel(
                 id=ANY_BUT_NONE,
                 name="f",
-                input={"args": tuple(), "kwargs": {"y": 5}},
+                input={"args": list(), "kwargs": {"y": 5}},
                 output=None,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
