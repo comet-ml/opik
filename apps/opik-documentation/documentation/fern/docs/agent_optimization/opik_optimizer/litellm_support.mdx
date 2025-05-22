@@ -1,0 +1,99 @@
+---
+title: "Agent Optimizer LiteLLM Support"
+subtitle: "LiteLLM Model Support for Optimizers (OpenAI, Azure, Local Models)"
+description: "Learn how to use any model with Opik Agent Optimizer, LiteLLMs supports various LLM providers including OpenAI, Azure, Anthropic, Google, and local models."
+pytest_codeblocks_skip: true
+---
+
+`Opik Agent Optimizer` leverages [LiteLLM](https://litellm.ai/) under the hood to provide comprehensive support for a wide array of Large Language Models (LLMs). This integration means you can use virtually any model provider or even locally hosted models with any of the Opik optimization algorithms.
+
+## How it Works
+
+When you initialize an optimizer (e.g., `MetaPromptOptimizer`, `FewShotBayesianOptimizer`, `MiproOptimizer`, `EvolutionaryOptimizer`), the `model` parameter (and `reasoning_model` for `MetaPromptOptimizer`) accepts a LiteLLM model string. LiteLLM then handles the communication with the specified model provider or local endpoint.
+
+This builds upon Opik's existing [tracing integration with LiteLLM](/tracing/integrations/litellm), ensuring that not only are your optimization processes flexible in model choice, but calls made during optimization can also be seamlessly tracked if you have the `OpikLogger` callback configured in LiteLLM.
+
+<Info>
+  **Key Benefit**: You are not locked into a specific model provider. You can experiment with different models, including open-source ones running locally, to find the best fit for your task and budget, all while using the same Opik Agent Optimizer codebase.
+</Info>
+
+## Specifying Models
+
+You pass the LiteLLM model identifier string directly to the `model` parameter in the optimizer's constructor. Here are some common examples:
+
+### OpenAI
+```python
+from opik_optimizer import MetaPromptOptimizer
+
+optimizer = MetaPromptOptimizer(
+    model="openai/gpt-4o-mini", # Standard OpenAI model
+    # ... other parameters
+)
+```
+
+### Azure OpenAI
+```python
+from opik_optimizer import FewShotBayesianOptimizer
+
+optimizer = FewShotBayesianOptimizer(
+    model="azure/your-azure-deployment-name", # Your Azure deployment name
+    # Ensure your environment variables for Azure (AZURE_API_KEY, AZURE_API_BASE, AZURE_API_VERSION) are set
+    # ... other parameters
+)
+```
+
+### Anthropic
+```python
+from opik_optimizer import MiproOptimizer
+
+optimizer = MiproOptimizer(
+    model="anthropic/claude-3-opus-20240229",
+    # Ensure ANTHROPIC_API_KEY is set
+    # ... other parameters
+)
+```
+
+### Google Gemini
+```python
+from opik_optimizer import EvolutionaryOptimizer
+
+optimizer = EvolutionaryOptimizer(
+    model="gemini/gemini-1.5-pro-latest",
+    # Ensure GEMINI_API_KEY is set
+    # ... other parameters
+)
+```
+
+### Local Models (e.g., via Ollama)
+LiteLLM allows you to connect to models served locally through tools like Ollama.
+
+<Steps>
+<Step title="Ensure Ollama is running and the model is served">
+  For example, to serve Llama 3:
+  ```bash
+  ollama serve
+  ollama pull llama3
+  ```
+</Step>
+<Step title="Use the LiteLLM convention for Ollama models">
+  The format is typically `ollama/model_name` or `ollama_chat/model_name` for chat-tuned models.
+
+  ```python
+  from opik_optimizer import MetaPromptOptimizer
+
+  optimizer = MetaPromptOptimizer(
+      model="ollama_chat/llama3", # Or "ollama/llama3" if not using the chat API specifically
+      # LiteLLM defaults to http://localhost:11434 for Ollama. 
+      # If Ollama runs elsewhere, set an environment variable like OLLAMA_API_BASE_URL or pass api_base in model_kwargs
+      # model_kwargs={"api_base": "http://my-ollama-host:11434"}
+      # ... other parameters
+  )
+  ```
+</Step>
+</Steps>
+
+### Other Providers
+LiteLLM supports numerous other providers like Cohere, Mistral AI, Bedrock, Vertex AI, Hugging Face Inference Endpoints, etc. Refer to the [LiteLLM documentation on Providers](https://docs.litellm.ai/docs/providers) for the correct model identifier strings and required environment variables for API keys.
+
+Example for a generic Hugging Face Inference Endpoint:
+```

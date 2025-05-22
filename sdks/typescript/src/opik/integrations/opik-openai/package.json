@@ -1,0 +1,67 @@
+{
+  "name": "opik-openai",
+  "description": "Opik TypeScript and JavaScript SDK integration with OpenAI",
+  "version": "1.0.1",
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/comet-ml/opik.git",
+    "directory": "blob/sdks/typescript/src/opik/integrations/opik-openai"
+  },
+  "homepage": "https://www.comet.com/docs/opik/",
+  "author": {
+    "name": "Comet",
+    "email": "support@comet.com",
+    "url": "https://github.com/comet-ml"
+  },
+  "bugs": {
+    "url": "https://github.com/comet-ml/opik/issues",
+    "email": "support@comet.com"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "opik",
+    "openai",
+    "openai-integration",
+    "sdk",
+    "javascript",
+    "javascript-sdk",
+    "typescript",
+    "typescript-sdk",
+    "comet"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "watch": "tsup --watch",
+    "lint": "eslint '**/*.{ts,tsx}'",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx,json,md}'",
+    "test": "vitest"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "openai": "^4.97.0",
+    "opik": "^1.7.25"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.5"
+  }
+}

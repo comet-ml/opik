@@ -63,7 +63,7 @@ def setup_logging(
     _logging_configured = True
     
     # Use level name provided by rich handler by default
-    package_logger.info(f"Opik Optimizer logging configured to level: [bold cyan]{logging.getLevelName(level)}[/bold cyan]")
+    package_logger.info(f"Opik Agent Optimizer logging configured to level: [bold cyan]{logging.getLevelName(level)}[/bold cyan]")
 
 # Ensure logger obtained after setup can be used immediately if needed
 logger = logging.getLogger(__name__)

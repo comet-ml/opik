@@ -1,5 +1,5 @@
 ---
-subtitle: Introduces the concepts behind Opik's evaluation framework
+subtitle: Introduces the concepts behind Opik's evaluation platform
 ---
 
 <Tip>
@@ -18,7 +18,7 @@ In order to understand how to run evaluations in Opik, it is important to first 
   <img src="/img/evaluation/evaluation_concepts.png" />
 </Frame>
 
-In this section, we will walk through all the concepts associated with Opik's evaluation framework.
+In this section, we will walk through all the concepts associated with Opik's evaluation platform.
 
 ## Datasets
 
@@ -41,7 +41,7 @@ Given the importance of datasets in the evaluation process, teams often spend a 
 
 ## Experiments
 
-Experiments are the core building block of the Opik evaluation framework. Each time you run a new evaluation, a new experiment is created. Each experiment is made up of two main components:
+Experiments are the core building block of the Opik evaluation platform. Each time you run a new evaluation, a new experiment is created. Each experiment is made up of two main components:
 
 1. **Experiment Configuration**: The configuration object associated with each experiment allows you to track some metadata, often you would use this field to store the prompt template used for a given experiment for example.
 2. **Experiment Items**: Experiment items store the input, expected output, actual output and feedback scores for each dataset sample that was processed during an experiment.
@@ -50,7 +50,7 @@ In addition, for each experiment you will be able to see the average scores for 
 
 ### Experiment Configuration
 
-One of the main advantages of having an automated evaluation framework is the ability to iterate quickly. The main drawback is that it can become difficult to track what has changed between two different iterations of an experiment.
+One of the main advantages of having an automated evaluation platform is the ability to iterate quickly. The main drawback is that it can become difficult to track what has changed between two different iterations of an experiment.
 
 The experiment configuration object allows you to store some metadata associated with a given experiment. This is useful for tracking things like the prompt template used for a given experiment, the model used, the temperature, etc.
 
@@ -70,7 +70,7 @@ Experiment items store the input, expected output, actual output and feedback sc
 
 ## Learn more
 
-We have provided some guides to help you get started with Opik's evaluation framework:
+We have provided some guides to help you get started with Opik's evaluation platform:
 
 1. [Overview of Opik's evaluation features](/evaluation/overview)
 2. [Evaluate prompts](/evaluation/evaluate_prompt)

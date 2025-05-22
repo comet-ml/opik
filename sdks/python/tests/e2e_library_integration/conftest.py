@@ -21,7 +21,9 @@ def configure_e2e_tests_env():
 
 
 @pytest.fixture()
-def opik_client(configure_e2e_tests_env, shutdown_cached_client_after_test):
+def opik_client(
+    configure_e2e_tests_env_unique_project_name, shutdown_cached_client_after_test
+):
     opik_client_ = opik.api_objects.opik_client.Opik(_use_batching=True)
 
     yield opik_client_
@@ -33,7 +35,7 @@ def opik_client(configure_e2e_tests_env, shutdown_cached_client_after_test):
 def configure_e2e_tests_env_unique_project_name():
     project_name = f"{OPIK_E2E_LIB_INTEGRATION_TESTS_PROJECT_NAME}-{random_chars()}"
     with testlib.patch_environ({"OPIK_PROJECT_NAME": project_name}):
-        yield
+        yield project_name
 
 
 @pytest.fixture()
