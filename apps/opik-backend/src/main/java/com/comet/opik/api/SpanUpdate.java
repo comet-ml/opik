@@ -26,6 +26,7 @@ public record SpanUpdate(
         @Schema(description = "If null and project_name not specified, Default Project is assumed") UUID projectId,
         @NotNull UUID traceId,
         UUID parentSpanId,
+        String name,
         Instant endTime,
         @Schema(implementation = JsonListString.class) JsonNode input,
         @Schema(implementation = JsonListString.class) JsonNode output,

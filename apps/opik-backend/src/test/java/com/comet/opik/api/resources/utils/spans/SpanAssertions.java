@@ -39,15 +39,19 @@ public class SpanAssertions {
 
         assertThat(actualSpans).hasSize(expectedSpans.size());
         assertThat(actualSpans)
-                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                .containsExactlyElementsOf(expectedSpans);
+                .usingRecursiveComparison()
+                .ignoringFields(IGNORED_FIELDS)
+                .ignoringCollectionOrderInFields("tags")
+                .isEqualTo(expectedSpans);
 
         assertIgnoredFields(actualSpans, expectedSpans, userName);
 
         if (!unexpectedSpans.isEmpty()) {
             assertThat(actualSpans)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                    .doesNotContainAnyElementsOf(unexpectedSpans);
+                    .usingRecursiveComparison()
+                    .ignoringFields(IGNORED_FIELDS)
+                    .ignoringCollectionOrderInFields("tags")
+                    .isNotEqualTo(unexpectedSpans);
         }
     }
 
@@ -67,7 +71,11 @@ public class SpanAssertions {
                     ? null
                     : expectedSpan.feedbackScores().reversed();
             assertThat(actualSpan.projectId()).isNotNull();
-            assertThat(actualSpan.projectName()).isNull();
+
+            // Pagination endpoint doesn't resolve projectName, whereas get by id does
+            if (actualSpan.projectName() != null) {
+                assertThat(actualSpan.projectName()).isEqualTo(expectedSpan.projectName());
+            }
 
             if (actualSpan.createdAt() != null) {
                 assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
@@ -81,6 +89,16 @@ public class SpanAssertions {
                 } else {
                     assertThat(actualSpan.lastUpdatedAt()).isCloseTo(Instant.now(), within(2, ChronoUnit.SECONDS));
                 }
+            }
+
+            // The createdBy field can be excluded from the response
+            if (actualSpan.createdBy() != null) {
+                assertThat(actualSpan.createdBy()).isEqualTo(userName);
+            }
+
+            // The lastUpdatedBy field can be excluded from the response
+            if (actualSpan.lastUpdatedBy() != null) {
+                assertThat(actualSpan.lastUpdatedBy()).isEqualTo(userName);
             }
 
             assertThat(actualSpan.feedbackScores())

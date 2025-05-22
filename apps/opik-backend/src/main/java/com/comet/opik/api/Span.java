@@ -9,7 +9,6 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
@@ -37,7 +36,7 @@ public record Span(
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) @NotNull UUID traceId,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) UUID parentSpanId,
-        @JsonView({Span.View.Public.class, Span.View.Write.class}) @NotBlank String name,
+        @JsonView({Span.View.Public.class, Span.View.Write.class}) String name,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) @NotNull SpanType type,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) @NotNull Instant startTime,
         @JsonView({Span.View.Public.class, Span.View.Write.class}) Instant endTime,
