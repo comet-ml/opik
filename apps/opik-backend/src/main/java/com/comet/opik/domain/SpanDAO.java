@@ -179,7 +179,7 @@ class SpanDAO {
                     new_span.name
                 ) as name,
                 multiIf(
-                    CAST(old_span.type, 'Int8') > 0, old_span.type,
+                    notEquals(old_span.type, 'unknown'), old_span.type,
                     new_span.type
                 ) as type,
                 multiIf(
@@ -247,7 +247,7 @@ class SpanDAO {
                     :trace_id as trace_id,
                     :parent_span_id as parent_span_id,
                     :name as name,
-                    CAST(:type, 'Enum8(\\'unknown\\' = 0 , \\'general\\' = 1, \\'tool\\' = 2, \\'llm\\' = 3, \\'guardrail\\' = 4)') as type,
+                    :type as type,
                     parseDateTime64BestEffort(:start_time, 9) as start_time,
                     <if(end_time)> parseDateTime64BestEffort(:end_time, 9) as end_time, <else> null as end_time, <endif>
                     :input as input,
@@ -312,7 +312,7 @@ class SpanDAO {
             	trace_id,
             	parent_span_id,
                 <if(name)> :name <else> name <endif> as name,
-            	type,
+            	<if(type)> :type <else> type <endif> as type,
             	start_time,
             	<if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> end_time <endif> as end_time,
             	<if(input)> :input <else> input <endif> as input,
@@ -376,8 +376,9 @@ class SpanDAO {
                     new_span.name
                 ) as name,
                 multiIf(
-                    CAST(new_span.type, 'Int8') > 0 , new_span.type,
-                    old_span.type
+                    notEquals(new_span.type, 'unknown'), new_span.type,
+                    notEquals(old_span.type, 'unknown'), old_span.type,
+                    new_span.type
                 ) as type,
                 multiIf(
                     notEquals(old_span.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND old_span.start_time >= toDateTime64('1970-01-01 00:00:00.000', 9), old_span.start_time,
@@ -455,7 +456,7 @@ class SpanDAO {
                     :trace_id as trace_id,
                     :parent_span_id as parent_span_id,
                     <if(name)> :name <else> '' <endif> as name,
-                    CAST('unknown', 'Enum8(\\'unknown\\' = 0 , \\'general\\' = 1, \\'tool\\' = 2, \\'llm\\' = 3)') as type,
+                    <if(type)> :type <else> 'unknown' <endif> as type,
                     toDateTime64('1970-01-01 00:00:00.000', 9) as start_time,
                     <if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> null <endif> as end_time,
                     <if(input)> :input <else> '' <endif> as input,
@@ -554,7 +555,6 @@ class SpanDAO {
 
     private static final String SELECT_PARTIAL_BY_ID = """
             SELECT
-                type,
                 start_time
             FROM spans
             WHERE workspace_id = :workspace_id
@@ -939,7 +939,7 @@ class SpanDAO {
                         .bind("project_id" + i, span.projectId())
                         .bind("trace_id" + i, span.traceId())
                         .bind("name" + i, StringUtils.defaultIfBlank(span.name(), ""))
-                        .bind("type" + i, span.type().toString())
+                        .bind("type" + i, Objects.toString(span.type(), SpanType.UNKNOWN_VALUE))
                         .bind("start_time" + i, span.startTime().toString())
                         .bind("parent_span_id" + i, span.parentSpanId() != null ? span.parentSpanId() : "")
                         .bind("input" + i, span.input() != null ? span.input().toString() : "")
@@ -1004,7 +1004,7 @@ class SpanDAO {
                 .bind("project_id", span.projectId())
                 .bind("trace_id", span.traceId())
                 .bind("name", StringUtils.defaultIfBlank(span.name(), ""))
-                .bind("type", span.type().toString())
+                .bind("type", Objects.toString(span.type(), SpanType.UNKNOWN_VALUE))
                 .bind("start_time", span.startTime().toString())
                 .bind("input", Objects.toString(span.input(), ""))
                 .bind("output", Objects.toString(span.output(), ""))
@@ -1128,6 +1128,8 @@ class SpanDAO {
         if (StringUtils.isNotBlank(spanUpdate.name())) {
             statement.bind("name", spanUpdate.name());
         }
+        Optional.ofNullable(spanUpdate.type())
+                .ifPresent(type -> statement.bind("type", type.toString()));
         Optional.ofNullable(spanUpdate.input())
                 .ifPresent(input -> statement.bind("input", input.toString()));
         Optional.ofNullable(spanUpdate.output())
@@ -1179,7 +1181,8 @@ class SpanDAO {
         if (StringUtils.isNotBlank(spanUpdate.name())) {
             template.add("name", spanUpdate.name());
         }
-
+        Optional.ofNullable(spanUpdate.type())
+                .ifPresent(type -> template.add("type", type.toString()));
         Optional.ofNullable(spanUpdate.input())
                 .ifPresent(input -> template.add("input", input.toString()));
         Optional.ofNullable(spanUpdate.output())
@@ -1283,10 +1286,7 @@ class SpanDAO {
                         .map(UUID::fromString)
                         .orElse(null))
                 .name(StringUtils.defaultIfBlank(getValue(exclude, SpanField.NAME, row, "name", String.class), null))
-                .type(Optional.ofNullable(
-                        getValue(exclude, SpanField.TYPE, row, "type", String.class))
-                        .map(SpanType::fromString)
-                        .orElse(null))
+                .type(SpanType.fromString(getValue(exclude, SpanField.TYPE, row, "type", String.class)))
                 .startTime(getValue(exclude, SpanField.START_TIME, row, "start_time", Instant.class))
                 .endTime(getValue(exclude, SpanField.END_TIME, row, "end_time", Instant.class))
                 .input(Optional.ofNullable(getValue(exclude, SpanField.INPUT, row, "input", String.class))
@@ -1310,8 +1310,9 @@ class SpanDAO {
                                 "total_estimated_cost", BigDecimal.class))
                                 .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
                                 .orElse(null))
-                .totalEstimatedCostVersion(getValue(exclude, SpanField.TOTAL_ESTIMATED_COST_VERSION, row,
-                        "total_estimated_cost_version", String.class))
+                .totalEstimatedCostVersion(
+                        StringUtils.defaultIfBlank(getValue(exclude, SpanField.TOTAL_ESTIMATED_COST_VERSION, row,
+                                "total_estimated_cost_version", String.class), null))
                 .feedbackScores(Optional
                         .ofNullable(getValue(exclude, SpanField.FEEDBACK_SCORES, row, "feedback_scores_list",
                                 List.class))
@@ -1369,7 +1370,6 @@ class SpanDAO {
 
     private Publisher<Span> mapToPartialDto(Result result) {
         return result.map((row, rowMetadata) -> Span.builder()
-                .type(SpanType.fromString(row.get("type", String.class)))
                 .startTime(row.get("start_time", Instant.class))
                 .build());
     }
