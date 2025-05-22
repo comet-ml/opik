@@ -226,10 +226,10 @@ def test_llama_index_chat__happyflow(
     messages = [
         ChatMessage(
             role="system", content="You are a pirate with a colorful personality."
-        ).model_dump(),
+        ),
         ChatMessage(
             role="user", content="What is your name? Answer with a single word"
-        ).model_dump(),
+        ),
     ]
 
     _ = llm.chat(messages)
@@ -239,6 +239,8 @@ def test_llama_index_chat__happyflow(
     # This is ideal expected output but in tests, the output is still using
     # LlamaIndex types
     # EXPECTED_OUTPUT = {"output": {"role": "assistant", "blocks": [{"block_type": "text", "text": resp}]}}
+
+    expected_messages = [message.model_dump() for message in messages]
 
     EXPECTED_TRACE_TREES = [
         TraceModel(
@@ -255,7 +257,7 @@ def test_llama_index_chat__happyflow(
                     id=ANY_BUT_NONE,
                     type="llm",
                     name="llm",
-                    input={"messages": messages},
+                    input={"messages": expected_messages},
                     output={"output": ANY_BUT_NONE},
                     tags=None,
                     metadata=None,
@@ -308,10 +310,10 @@ def test_llama_index_stream_chat__happyflow(
     messages = [
         ChatMessage(
             role="system", content="You are a pirate with a colorful personality."
-        ).model_dump(),
+        ),
         ChatMessage(
             role="user", content="What is your name? Answer with a single word"
-        ).model_dump(),
+        ),
     ]
 
     final_resp = ""
@@ -325,6 +327,8 @@ def test_llama_index_stream_chat__happyflow(
     # This is ideal expected output but in tests, the output is still using
     # LlamaIndex types
     # EXPECTED_OUTPUT = {"output": {"role": "assistant", "blocks": [{"block_type": "text", "text": final_resp}]}}
+
+    expected_messages = [message.model_dump() for message in messages]
 
     EXPECTED_TRACE_TREES = [
         TraceModel(
@@ -341,7 +345,7 @@ def test_llama_index_stream_chat__happyflow(
                     id=ANY_BUT_NONE,
                     type="llm",
                     name="llm",
-                    input={"messages": messages},
+                    input={"messages": expected_messages},
                     output={"output": ANY_BUT_NONE},
                     tags=None,
                     metadata=None,
