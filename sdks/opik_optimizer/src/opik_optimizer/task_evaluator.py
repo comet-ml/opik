@@ -1,11 +1,12 @@
 import opik
-
+import logging
 from typing import Any, Callable, Dict, List, Optional
 from opik_optimizer.optimization_config.configs import MetricConfig
 from opik.evaluation.metrics import score_result
 
 from opik.evaluation import evaluator as opik_evaluator
 
+logger = logging.getLogger(__name__)
 
 def evaluate(
     dataset: opik.Dataset,
@@ -17,6 +18,7 @@ def evaluate(
     project_name: Optional[str] = None,
     n_samples: Optional[int] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
+    verbose: int = 1,
 ) -> float:
     """
     Evaluate a task on a dataset.
@@ -31,6 +33,7 @@ def evaluate(
         num_threads: Number of threads to use for evaluation.
         experiment_config: The dictionary with parameters that describe experiment
         optimization_id: Optional optimization ID for the experiment.
+        verbose: Whether to print debug information.
 
     Returns:
         float: The average score of the evaluated task.
@@ -71,6 +74,7 @@ def evaluate(
             task_threads=num_threads,
             nb_samples=n_samples,
             experiment_config=experiment_config,
+            verbose=verbose,
         )
     else:
         result = opik_evaluator.evaluate(
@@ -83,6 +87,7 @@ def evaluate(
             task_threads=num_threads,
             nb_samples=n_samples,
             experiment_config=experiment_config,
+            verbose=verbose,
         )
 
     if not result.test_results:

@@ -5,6 +5,7 @@ import optuna
 import optuna.samplers
 import logging
 import json
+from datetime import datetime
 
 from opik import Dataset
 from opik_optimizer.optimization_config import mappers
@@ -26,20 +27,6 @@ _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 logger = logging.getLogger(__name__)
 
 
-@_throttle.rate_limited(_limiter)
-def _call_model(model, messages, seed, model_kwargs):
-    model_kwargs = opik_litellm_monitor.try_add_opik_monitoring_to_params(model_kwargs)
-
-    response = litellm.completion(
-        model=model,
-        messages=messages,
-        seed=seed,
-        **model_kwargs,
-    )
-
-    return response
-
-
 class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     def __init__(
         self,
@@ -51,6 +38,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         n_threads: int = 8,
         n_initial_prompts: int = 5,
         n_iterations: int = 10,
+        verbose: int = 1,
         **model_kwargs,
     ) -> None:
         super().__init__(model, project_name, **model_kwargs)
@@ -60,8 +48,36 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self.n_threads = n_threads
         self.n_initial_prompts = n_initial_prompts
         self.n_iterations = n_iterations
+        self.verbose = verbose
         self._opik_client = opik.Opik()
+        self.llm_call_counter = 0
         logger.debug(f"Initialized FewShotBayesianOptimizer with model: {model}")
+
+    @_throttle.rate_limited(_limiter)
+    def _call_model(self, model, messages, seed, model_kwargs):
+        self.llm_call_counter += 1
+
+        current_model_kwargs = self.model_kwargs.copy()
+        current_model_kwargs.update(model_kwargs)
+
+        filtered_call_kwargs = current_model_kwargs.copy()
+        filtered_call_kwargs.pop('n_trials', None)
+        filtered_call_kwargs.pop('n_samples', None)
+        filtered_call_kwargs.pop('n_iterations', None)
+        filtered_call_kwargs.pop('min_examples', None)
+        filtered_call_kwargs.pop('max_examples', None)
+        filtered_call_kwargs.pop('n_initial_prompts', None)
+
+        final_params_for_litellm = opik_litellm_monitor.try_add_opik_monitoring_to_params(filtered_call_kwargs)
+
+        response = litellm.completion(
+            model=self.model,
+            messages=messages,
+            seed=seed,
+            num_retries=6,
+            **final_params_for_litellm,
+        )
+        return response
 
     def _split_dataset(
         self, dataset: List[Dict[str, Any]], train_ratio: float
@@ -96,6 +112,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         n_samples: int = None,
     ) -> optimization_result.OptimizationResult:
         random.seed(self.seed)
+        self.llm_call_counter = 0
 
         if not task_config.use_chat_prompt:
             raise ValueError(
@@ -161,6 +178,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             project_name=self.project_name,
             experiment_config=initial_eval_config,
             optimization_id=optimization_id,
+            verbose=self.verbose,
         )
         logger.info(f"Initial (zero-shot) score: {initial_score:.4f}")
 
@@ -222,6 +240,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 project_name=self.project_name,
                 experiment_config=trial_config,
                 optimization_id=optimization_id,
+                verbose=self.verbose,
             )
             logger.debug(f"Trial {trial.number} score: {score:.4f}")
 
@@ -242,10 +261,58 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         except Exception as e:
             logger.warning(f"Could not configure Optuna logging within optimizer: {e}")
 
+        # Explicitly create and seed the sampler for Optuna
         sampler = optuna.samplers.TPESampler(seed=self.seed)
         study = optuna.create_study(direction="maximize", sampler=sampler)
-        study.optimize(optimization_objective, n_trials=n_trials)
+        
+        study.optimize(optimization_objective, n_trials=n_trials, show_progress_bar=(self.verbose >= 1))
         logger.info("Optuna study finished.")
+
+        optuna_history_processed = []
+        for trial_idx, trial in enumerate(study.trials):
+            if trial.state == optuna.trial.TrialState.COMPLETE:
+                param_obj: Optional[prompt_parameter.ChatPromptParameter] = trial.user_attrs.get("param")
+                prompt_cand_display = None # Default to None
+                if param_obj and hasattr(param_obj, 'as_template') and callable(param_obj.as_template):
+                    try:
+                        # .format() on ChatPromptTemplate returns the list of messages
+                        chat_messages_for_history = param_obj.as_template().format()
+                        prompt_cand_display = json.dumps(chat_messages_for_history) 
+                    except Exception as e_param_format:
+                        logger.warning(f"Trial {trial.number}: Error formatting prompt from param_obj: {e_param_format}")
+                        prompt_cand_display = "Error: Could not format prompt content."
+                elif not param_obj:
+                    logger.warning(f"Trial {trial.number}: 'param' object not found in user_attrs.")
+                    prompt_cand_display = "Error: Prompt data missing in trial."
+                else:
+                    logger.warning(f"Trial {trial.number}: 'param' object is not of expected type or lacks methods.")
+                    prompt_cand_display = "Error: Invalid prompt data structure in trial."
+
+                score_val = trial.value # This can be None if trial failed to produce a score
+                duration_val = None
+                if trial.datetime_complete and trial.datetime_start:
+                    duration_val = (trial.datetime_complete - trial.datetime_start).total_seconds()
+
+                iter_detail = {
+                    "iteration": trial.number + 1, 
+                    "timestamp": trial.datetime_start.isoformat() if trial.datetime_start else datetime.now().isoformat(),
+                    "prompt_candidate": prompt_cand_display,
+                    "parameters_used": { 
+                        "optuna_params": trial.params, 
+                        "example_indices": trial.user_attrs.get("example_indices", []) # Default to empty list
+                    },
+                    "scores": [{
+                        "metric_name": metric_config.metric.name, 
+                        "score": score_val, # Can be None
+                        "opik_evaluation_id": None # TODO
+                    }],
+                    "tokens_used": None, # TODO
+                    "cost": None, # TODO
+                    "duration_seconds": duration_val,
+                }
+                optuna_history_processed.append(iter_detail)
+            else:
+                logger.warning(f"Skipping trial {trial.number} from history due to state: {trial.state}. Value: {trial.value}")
 
         best_trial = study.best_trial
         best_score = best_trial.value
@@ -279,6 +346,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "model": self.model,
                 "temperature": self.model_kwargs.get("temperature"),
             },
+            history=optuna_history_processed,
+            llm_calls=self.llm_call_counter
         )
 
     def optimize_prompt(
@@ -390,6 +459,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             num_threads=self.n_threads,
             project_name=self.project_name,
             experiment_config=experiment_config,
+            verbose=self.verbose,
         )
         logger.debug(f"Evaluation score: {score:.4f}")
 
@@ -401,11 +471,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, Any]:
             prompt_ = template.format(**dataset_item)
 
-            response = _call_model(
+            response = self._call_model(
                 model=self.model,
                 messages=prompt_,
                 seed=self.seed,
-                model_kwargs=self.model_kwargs,
+                model_kwargs=self.model_kwargs
             )
 
             return {

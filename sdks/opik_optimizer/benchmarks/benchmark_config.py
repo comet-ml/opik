@@ -2,6 +2,7 @@ from typing import Dict, List, Tuple, Callable, Any
 import sys
 import os
 import time
+import logging
 
 import opik_optimizer
 from opik.evaluation.metrics import (
@@ -18,6 +19,9 @@ import pandas as pd
 from datetime import datetime
 from pathlib import Path
 # from external_optimizers import ExternalDspyMiproOptimizer, ExternalAdalFlowOptimizer
+from rich import print
+from rich.console import Console
+from rich.style import Style
 
 # Project configuration
 def get_project_config(test_mode: bool = False) -> Dict:
@@ -30,27 +34,27 @@ def get_project_config(test_mode: bool = False) -> Dict:
 
 # Dataset configurations
 DATASET_CONFIGS = {
-    "gsm8k": {
-        "name": "GSM8K",
-        "metrics": [LevenshteinRatio()],
-        "input_key": "question",
-        "output_key": "answer",
-        "huggingface_path": "gsm8k",
-    },
-    "ragbench_sentence_relevance": {
-        "name": "RAGBench Sentence Relevance",
-        "metrics": [AnswerRelevance(require_context=False)],
-        "input_key": "question",
-        "output_key": "sentence",
-        "huggingface_path": "ragbench_sentence_relevance",
-    },
-    "election_questions": {
-        "name": "Election Questions",
-        "metrics": [Hallucination()],
-        "input_key": "question",
-        "output_key": "label",
-        "huggingface_path": "election_questions",
-    },
+    # "gsm8k": {
+    #     "name": "GSM8K",
+    #     "metrics": [LevenshteinRatio()],
+    #     "input_key": "question",
+    #     "output_key": "answer",
+    #     "huggingface_path": "gsm8k",
+    # },
+    # "ragbench_sentence_relevance": {
+    #     "name": "RAGBench Sentence Relevance",
+    #     "metrics": [AnswerRelevance(require_context=False)],
+    #     "input_key": "question",
+    #     "output_key": "sentence",
+    #     "huggingface_path": "ragbench_sentence_relevance",
+    # },
+    # "election_questions": {
+    #     "name": "Election Questions",
+    #     "metrics": [Hallucination()],
+    #     "input_key": "question",
+    #     "output_key": "label",
+    #     "huggingface_path": "election_questions",
+    # },
     "medhallu": {
         "name": "MedHallu",
         "metrics": [Hallucination(), AnswerRelevance(require_context=False)],
@@ -58,13 +62,13 @@ DATASET_CONFIGS = {
         "output_key": "ground_truth",
         "huggingface_path": "medhallu",
     },
-    "rag_hallucinations": {
-        "name": "RAG Hallucinations",
-        "metrics": [Hallucination(), ContextPrecision()],
-        "input_key": "question",
-        "output_key": "answer",
-        "huggingface_path": "rag_hallucinations",
-    },
+    # "rag_hallucinations": {
+    #     "name": "RAG Hallucinations",
+    #     "metrics": [Hallucination(), ContextPrecision()],
+    #     "input_key": "question",
+    #     "output_key": "answer",
+    #     "huggingface_path": "rag_hallucinations",
+    # },
     # "hotpotqa": {
     #     "name": "HotpotQA",
     #     "metrics": [AnswerRelevance(), ContextPrecision()],
@@ -79,13 +83,13 @@ DATASET_CONFIGS = {
     #     "output_key": "answer",
     #     "huggingface_path": "ai2_arc",
     # },
-    # "truthfulqa": {
-    #     "name": "TruthfulQA",
-    #     "metrics": [Hallucination(), AnswerRelevance()],
-    #     "input_key": "question",
-    #     "output_key": "answer",
-    #     "huggingface_path": "truthful_qa",
-    # },
+    "truthfulqa": {
+        "name": "TruthfulQA",
+        "metrics": [Hallucination(), AnswerRelevance()],
+        "input_key": "question",
+        "output_key": "answer",
+        "huggingface_path": "truthful_qa",
+    },
     # "cnn_dailymail": {
     #     "name": "CNN/Daily Mail",
     #     "metrics": [LevenshteinRatio(), ContextRecall()],
@@ -97,41 +101,118 @@ DATASET_CONFIGS = {
 
 # Optimizer configurations
 OPTIMIZER_CONFIGS = {
-    "few_shot": {
-        "class": "FewShotBayesianOptimizer",
-        "params": {
-            "model": "gpt-4o-mini",
-            "min_examples": 3,
-            "max_examples": 8,
-            "n_threads": 4,
-            "seed": 42,
-        },
-    },
+    ##############
+    # TEST configs
+    ##############
+
+    # "few_shot": {
+    #     "class": "FewShotBayesianOptimizer",
+    #     "params": {
+    #         "min_examples": 2,
+    #         "max_examples": 3,
+    #         "n_threads": 6,
+    #         "n_trials": 3,
+    #         "n_samples": 100,
+    #         "seed": 42,
+    #         "verbose": 0,
+    #     },
+    # },
     # "meta_prompt": {
     #     "class": "MetaPromptOptimizer",
     #     "params": {
-    #         "model": "gpt-4o-mini",
-    #         "max_rounds": 3,
-    #         "num_prompts_per_round": 4,
+    #         "max_rounds": 2,
+    #         "num_prompts_per_round": 2,
     #         "improvement_threshold": 0.01,
     #         "temperature": 0.1,
-    #         "max_completion_tokens": 5000,
-    #         "num_threads": 4,
+    #         "max_completion_tokens": 9000,
+    #         "num_threads": 5,
+    #         "subsample_size": 5,
+    #         "seed": 42,
+    #         "verbose": 0,
     #     },
     # },
     # "mipro": {
     #     "class": "MiproOptimizer",
     #     "params": {
-    #         "model": "gpt-4o-mini",
     #         "temperature": 0.1,
     #         "max_tokens": 5000,
-    #         "num_threads": 4,
+    #         "num_threads": 10,
+    #         "seed": 42,
+    #         "verbose": 0,
+    #     },
+    # },
+
+
+    ##############
+    # Live Benchmark configs
+    ##############
+
+    # "few_shot": {
+    #     "class": "FewShotBayesianOptimizer",
+    #     "params": {
+    #         "min_examples": 3,
+    #         "max_examples": 7,
+    #         "n_threads": 4,
+    #         "seed": 42,
+    #         "n_trials": 10,
+    #         "n_samples": 100,
+    #         "verbose": 0,
+    #     },
+    # },
+    "meta_prompt": {
+        "class": "MetaPromptOptimizer",
+        "params": {
+            "max_rounds": 3,
+            "num_prompts_per_round": 4,
+            "improvement_threshold": 0.01,
+            "temperature": 0.1,
+            "max_completion_tokens": 9000,
+            "num_threads": 5,
+            "subsample_size": 10,
+            "verbose": 0,
+            "enable_context": True,
+        },
+    },
+    "meta_prompt_no_context": {
+        "class": "MetaPromptOptimizer",
+        "params": {
+            "max_rounds": 3,
+            "num_prompts_per_round": 4,
+            "improvement_threshold": 0.01,
+            "temperature": 0.1,
+            "max_completion_tokens": 9000,
+            "num_threads": 5,
+            "subsample_size": 10,
+            "verbose": 0,
+            "enable_context": False,
+        },
+    },
+    "meta_prompt_single_cot": {
+        "class": "MetaPromptOptimizer",
+        "params": {
+            "max_rounds": 1,
+            "num_prompts_per_round": 1,
+            "improvement_threshold": 0.01,
+            "temperature": 0.1,
+            "max_completion_tokens": 9000,
+            "num_threads": 5,
+            "subsample_size": 10,
+            "verbose": 0,
+            "enable_context": False,
+        },
+    },
+    # "mipro": {
+    #     "class": "MiproOptimizer",
+    #     "params": {
+    #         "temperature": 0.1,
+    #         "max_tokens": 5000,
+    #         "num_threads": 10,
+    #         "verbose": 0,
     #     },
     # },
     # "external_dspy_mipro": {
     #     "class": "ExternalDspyMiproOptimizer",
     #     "params": {
-    #         "model": "openai/gpt-4o-mini",
     #         "temperature": 0.1,
     #         "max_tokens": 5000,
     #         "num_threads": 1,
@@ -140,13 +221,24 @@ OPTIMIZER_CONFIGS = {
     # "external_adalflow": {
     #     "class": "ExternalAdalFlowOptimizer",
     #     "params": {
-    #         "model": "gpt-4o-mini",
     #         "temperature": 0.1,
     #         "max_tokens": 5000,
     #         "num_threads": 1,
     #     },
     # },
 }
+
+MODELS_TO_RUN = [
+    # Standard models
+    # "openai/gpt-4.1-2025-04-14",
+    "openai/gpt-4o-mini",
+    # "anthropic/claude-3-5-sonnet-20241022",
+    # "openrouter/google/gemini-2.5-flash-preview",
+    # # Reasoning models
+    # "openai/o3-2025-04-16",
+    # "anthropic/claude-3-7-sonnet-20250219",
+    # "openrouter/google/gemini-2.5-pro-preview",
+]
 
 # Initial prompts for each dataset
 INITIAL_PROMPTS = {
@@ -162,12 +254,19 @@ INITIAL_PROMPTS = {
 }
 
 
-def get_experiment_config(dataset_name: str, optimizer_name: str, test_mode: bool = False) -> Dict:
+def get_experiment_config(dataset_name: str, optimizer_name: str, model_name: str, test_mode: bool = False) -> Dict:
     """Get experiment configuration with metadata."""
     version_info = sys.version_info
+    
+    # Get base optimizer params and add model_name
+    optimizer_params = OPTIMIZER_CONFIGS.get(optimizer_name, {}).get("params", {})
+    current_params = optimizer_params.copy()
+    current_params["model"] = model_name
+
     return {
         "dataset": dataset_name,
         "optimizer": optimizer_name,
+        "model_name": model_name,
         "timestamp": datetime.now().isoformat(),
         "test_mode": test_mode,  # Include test mode in experiment config
         "environment": {
@@ -176,133 +275,8 @@ def get_experiment_config(dataset_name: str, optimizer_name: str, test_mode: boo
             ),
             "opik_version": opik_optimizer.__version__,
         },
-        "parameters": {
-            "model": OPTIMIZER_CONFIGS[optimizer_name]["params"]["model"],
-            "temperature": OPTIMIZER_CONFIGS[optimizer_name]["params"].get(
-                "temperature", 0.1
-            ),
-            "max_tokens": OPTIMIZER_CONFIGS[optimizer_name]["params"].get(
-                "max_tokens", 5000
-            ),
-        },
+        # Store the specific parameters used for this optimizer run
+        "parameters": current_params, 
         "metrics": [str(m) for m in DATASET_CONFIGS[dataset_name]["metrics"]],
     }
 
-
-class OptimizationMonitor:
-    """Monitor optimization progress and generate plots."""
-    
-    def __init__(self, output_dir: str):
-        self.output_dir = output_dir
-        self.metrics_history = []
-        self.prompts_history = []
-        self.start_time = time.time()
-        
-        # Create output directory if it doesn't exist
-        os.makedirs(output_dir, exist_ok=True)
-        
-    def callback(self, result: Any, step: int, total_steps: int) -> None:
-        """Callback function called after each optimization step."""
-        timestamp = datetime.now().isoformat()
-        
-        # Extract metrics from result
-        metrics = {}
-        if hasattr(result, "scores"):
-            metrics = result.scores
-        elif hasattr(result, "score"):
-            metrics = {"score": result.score}
-            
-        # Record metrics
-        metrics_entry = {
-            "timestamp": timestamp,
-            "step": step,
-            "total_steps": total_steps,
-            "trial": len(self.metrics_history) + 1,
-            **metrics
-        }
-        self.metrics_history.append(metrics_entry)
-        
-        # Record prompt if available
-        if hasattr(result, "prompt"):
-            prompt_entry = {
-                "timestamp": timestamp,
-                "step": step,
-                "trial": len(self.prompts_history) + 1,
-                "prompt": result.prompt
-            }
-            self.prompts_history.append(prompt_entry)
-            
-        # Print progress
-        print(f"\nTrial {metrics_entry['trial']} - Step {step}/{total_steps}")
-        print(f"Metrics: {metrics}")
-        if hasattr(result, "prompt"):
-            print(f"Current prompt: {result.prompt[:100]}...")
-            
-    def save_progress(self) -> None:
-        """Save optimization progress to files."""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        # Save metrics history
-        if self.metrics_history:
-            metrics_df = pd.DataFrame(self.metrics_history)
-            metrics_file = os.path.join(self.output_dir, f"metrics_{timestamp}.csv")
-            metrics_df.to_csv(metrics_file, index=False)
-            
-        # Save prompts history
-        if self.prompts_history:
-            prompts_df = pd.DataFrame(self.prompts_history)
-            prompts_file = os.path.join(self.output_dir, f"prompts_{timestamp}.csv")
-            prompts_df.to_csv(prompts_file, index=False)
-            
-        # Generate plots
-        self.generate_plots(timestamp)
-        
-    def generate_plots(self, timestamp: str) -> None:
-        """Generate plots from optimization history."""
-        if not self.metrics_history:
-            return
-            
-        metrics_df = pd.DataFrame(self.metrics_history)
-        
-        # Plot metrics over trials
-        plt.figure(figsize=(12, 6))
-        for metric in metrics_df.columns:
-            if metric not in ["timestamp", "step", "total_steps", "trial"]:
-                plt.plot(metrics_df["trial"], metrics_df[metric], label=metric)
-                
-        plt.xlabel("Trial")
-        plt.ylabel("Score")
-        plt.title("Optimization Progress")
-        plt.legend()
-        plt.grid(True)
-        
-        # Save plot
-        plot_file = os.path.join(self.output_dir, f"optimization_progress_{timestamp}.png")
-        plt.savefig(plot_file)
-        plt.close()
-        
-        # Plot metrics over time
-        plt.figure(figsize=(12, 6))
-        metrics_df["timestamp"] = pd.to_datetime(metrics_df["timestamp"])
-        for metric in metrics_df.columns:
-            if metric not in ["timestamp", "step", "total_steps", "trial"]:
-                plt.plot(metrics_df["timestamp"], metrics_df[metric], label=metric)
-                
-        plt.xlabel("Time")
-        plt.ylabel("Score")
-        plt.title("Optimization Progress Over Time")
-        plt.legend()
-        plt.grid(True)
-        plt.xticks(rotation=45)
-        
-        # Save plot
-        time_plot_file = os.path.join(self.output_dir, f"optimization_progress_time_{timestamp}.png")
-        plt.savefig(time_plot_file, bbox_inches="tight")
-        plt.close()
-
-
-def get_optimization_monitor(
-    output_dir: str = "benchmark_results",
-) -> OptimizationMonitor:
-    """Get an instance of the optimization monitor."""
-    return OptimizationMonitor(output_dir)

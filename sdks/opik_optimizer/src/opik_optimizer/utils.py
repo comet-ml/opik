@@ -8,9 +8,6 @@ from opik.api_objects.opik_client import Opik
 
 from typing import List, Dict, Any, Optional, Callable, TYPE_CHECKING
 
-# Test dataset name for optimizer examples
-TEST_DATASET_NAME = "tiny-test-optimizer"
-
 # Type hint for OptimizationResult without circular import
 if TYPE_CHECKING:
     from .optimization_result import OptimizationResult
