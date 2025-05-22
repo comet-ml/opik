@@ -246,7 +246,7 @@ def test_llama_index_chat__happyflow(
         TraceModel(
             id=ANY_BUT_NONE,
             name="chat",
-            input={"messages": messages},
+            input={"messages": expected_messages},
             output={"output": ANY_BUT_NONE},
             metadata={"created_from": "llama_index"},
             start_time=ANY_BUT_NONE,
@@ -334,7 +334,7 @@ def test_llama_index_stream_chat__happyflow(
         TraceModel(
             id=ANY_BUT_NONE,
             name="chat",
-            input={"messages": messages},
+            input={"messages": expected_messages},
             output=None,
             metadata={"created_from": "llama_index"},
             start_time=ANY_BUT_NONE,
