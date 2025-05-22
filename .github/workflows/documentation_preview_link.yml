@@ -26,6 +26,7 @@ jobs:
                   echo "$OUTPUT"
                   URL=$(echo "$OUTPUT" | grep -oP 'Published docs to \K.*(?= \()')
                   echo "Preview URL: $URL"
+                  echo "URL=$URL" >> $GITHUB_OUTPUT
                   echo "🌿 Preview your docs: $URL" > preview_url.txt
 
             - name: Check for broken links
