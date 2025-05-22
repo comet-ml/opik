@@ -97,7 +97,7 @@ public interface LlmProviderLangChainMapper {
         return request.messages().stream().map(this::toChatMessage).toList();
     }
 
-    default Optional<ErrorMessage> getGeminiErrorObject(@NonNull Throwable throwable, Logger log) {
+    default Optional<ErrorMessage> getGeminiErrorObject(@NonNull Throwable throwable, @NonNull Logger log) {
         if (throwable.getMessage() == null) {
             log.warn("failed to parse Gemini error message", throwable);
             return Optional.empty();
@@ -118,7 +118,7 @@ public interface LlmProviderLangChainMapper {
         return Optional.empty();
     }
 
-    default Optional<ErrorMessage> getErrorObject(@NonNull Throwable throwable, Logger log) {
+    default Optional<ErrorMessage> getErrorObject(@NonNull Throwable throwable, @NonNull Logger log) {
         if (throwable.getMessage() == null) {
             log.warn("failed to parse error message", throwable);
             return Optional.empty();
