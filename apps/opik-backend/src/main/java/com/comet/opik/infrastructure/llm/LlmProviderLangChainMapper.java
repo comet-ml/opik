@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.infrastructure.llm.gemini.GeminiErrorObject;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterErrorMessage;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -115,6 +116,40 @@ public interface LlmProviderLangChainMapper {
         }
 
         return Optional.empty();
+    }
+
+    default Optional<ErrorMessage> getErrorObject(@NonNull Throwable throwable, Logger log) {
+        if (throwable.getMessage() == null) {
+            log.warn("failed to parse error message", throwable);
+            return Optional.empty();
+        }
+
+        String message = throwable.getMessage();
+        var openBraceIndex = message.indexOf('{');
+        if (openBraceIndex >= 0) {
+            String jsonPart = message.substring(openBraceIndex); // Extract JSON part
+            Optional<OpenRouterErrorMessage> openRouterError = getOpenRouterError(log, jsonPart);
+
+            if (openRouterError.isPresent()) {
+                return openRouterError
+                        .map(error -> new ErrorMessage(error.error().code(), error.error().message()));
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    private Optional<OpenRouterErrorMessage> getOpenRouterError(Logger log, String jsonPart) {
+        try {
+            var error = JsonUtils.readValue(jsonPart, OpenRouterErrorMessage.class);
+            if (error.error() == null) {
+                return Optional.empty();
+            }
+            return Optional.of(error);
+        } catch (UncheckedIOException e) {
+            log.warn("failed to parse error message", e);
+            return Optional.empty();
+        }
     }
 
 }
