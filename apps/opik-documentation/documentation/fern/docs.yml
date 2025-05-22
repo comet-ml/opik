@@ -528,6 +528,9 @@ navigation:
               - page: LangChain
                 path: docs/reference/typescript-sdk/integrations/langchain.mdx
                 slug: langchain
+              - page: OpenAI
+                path: docs/reference/typescript-sdk/integrations/openai.mdx
+                slug: openai
       - section: Rest API
         slug: rest-api
         contents:
