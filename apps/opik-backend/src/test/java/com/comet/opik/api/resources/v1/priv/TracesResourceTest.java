@@ -5654,7 +5654,7 @@ class TracesResourceTest {
         @Test
         void createWithMissingFields() {
             var trace = Trace.builder()
-                    .projectName("project" + RandomStringUtils.secure().nextAlphanumeric(32))
+                    .projectName("project-" + RandomStringUtils.secure().nextAlphanumeric(32))
                     .startTime(Instant.now())
                     .createdAt(Instant.now())
                     .build();
@@ -5771,7 +5771,7 @@ class TracesResourceTest {
 
         @Test
         void batch__whenMissingFields__thenReturnNoContent() {
-            var projectName = "project" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
             var expectedTraces = IntStream.range(0, 5)
                     .mapToObj(i -> Trace.builder()
                             .projectName(projectName)

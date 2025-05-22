@@ -1,3 +1,4 @@
 api:
-  path: ./openapi/opik.yaml
-  overrides: ./openapi/overrides.yml
+  specs:
+    - openapi: ./openapi/opik.yaml
+      overrides: ./openapi/overrides.yml

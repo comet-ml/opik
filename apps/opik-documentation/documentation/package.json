@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "broken-link-checker": "^0.7.8",
     "fern-api": "^0.56.20",
     "nodemon": "^3.1.9"
   },
