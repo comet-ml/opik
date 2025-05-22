@@ -19,7 +19,9 @@ component:
   backend:
     enabled: true
     serviceAccount:
+      enabled: true 
       create: true
+      name: opik-backend
     metrics:
       enabled: false
     image:
@@ -74,9 +76,6 @@ component:
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
       PYTHON_EVALUATOR_URL: http://opik-python-backend:8000
-      AWS_ACCESS_KEY_ID: THAAIOSFODNN7EXAMPLE # rootUser for minio
-      AWS_SECRET_ACCESS_KEY: LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY # rootPassword for minio
-      S3_URL: "http://opik-minio:9000"
     envFrom:
       - configMapRef:
           name: opik-backend
@@ -99,7 +98,9 @@ component:
   python-backend:
     enabled: true
     serviceAccount:
+      enabled: true 
       create: true
+      name: opik-python-backend
     metrics:
       enabled: false
     image:
@@ -156,7 +157,9 @@ component:
   frontend:
     enabled: true
     serviceAccount:
+      enabled: true
       create: true
+      name: opik-frontend
     metrics:
       enabled: false
     image:
@@ -325,6 +328,7 @@ clickhouse:
     successfulJobsHistoryLimit: 1
     serviceAccount:
         enabled: false
+        create: true
         annotations: {}
     # bucketURL: ""
     # secretName: ""
