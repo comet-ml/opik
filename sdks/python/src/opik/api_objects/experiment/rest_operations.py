@@ -1,9 +1,9 @@
-from typing import List
+from typing import List, Optional
 
-from ... import exceptions
+from opik import exceptions
 from .. import rest_stream_parser
-from ...rest_api import OpikApi
-from ...rest_api.types import experiment_public
+from opik.rest_api import OpikApi
+from opik.rest_api.types import experiment_public
 
 
 def get_experiment_data_by_name(
@@ -22,11 +22,19 @@ def get_experiment_data_by_name(
 
 
 def get_experiments_data_by_name(
-    rest_client: OpikApi, name: str
+    rest_client: OpikApi,
+    name: str,
+    max_results: Optional[int] = None,
 ) -> List[experiment_public.ExperimentPublic]:
-    experiments_stream = rest_client.experiments.stream_experiments(name=name)
-    experiments = rest_stream_parser.read_and_parse_stream(
-        stream=experiments_stream, item_class=experiment_public.ExperimentPublic
+    experiments = rest_stream_parser.read_and_parse_full_stream(
+        read_source=lambda current_batch_size,
+        last_retrieved_id: rest_client.experiments.stream_experiments(
+            name=name,
+            limit=current_batch_size,
+            last_retrieved_id=last_retrieved_id,
+        ),
+        max_results=max_results,
+        parsed_item_class=experiment_public.ExperimentPublic,
     )
 
     if len(experiments) == 0:
