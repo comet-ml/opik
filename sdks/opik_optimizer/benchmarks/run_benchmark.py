@@ -43,7 +43,7 @@ from opik_optimizer import (
     TaskConfig,
     from_dataset_field,
     from_llm_response_text,
-    GeneticOptimizer,
+    EvolutionaryOptimizer,
 )
 from opik_optimizer.demo import get_or_create_dataset
 from opik_optimizer.cache_config import initialize_cache, clear_cache
@@ -441,10 +441,10 @@ class BenchmarkRunner:
             
             # Try direct optimizer class resolution first
             try:
-                if optimizer_class_name == "GeneticOptimizer":
-                    from opik_optimizer import GeneticOptimizer
-                    optimizer_class = GeneticOptimizer
-                    logger.info("Using direct import for GeneticOptimizer")
+                if optimizer_class_name == "EvolutionaryOptimizer":
+                    from opik_optimizer import EvolutionaryOptimizer
+                    optimizer_class = EvolutionaryOptimizer
+                    logger.info("Using direct import for EvolutionaryOptimizer")
                 else:
                     optimizer_class = globals()[optimizer_class_name]
             except Exception as e_class:
@@ -457,20 +457,20 @@ class BenchmarkRunner:
             logger.error(f"[red]Error creating optimizer {optimizer_config['class']} for model {model_name}: {e}[/red]")
             logger.exception(f"Traceback for error creating optimizer [bold]{optimizer_config['class']}[/bold]:")
 
-            # Special handling for GeneticOptimizer to help diagnose issues
-            if optimizer_class_name == "GeneticOptimizer":
-                logger.error(f"[red]GeneticOptimizer creation failed. Available keys: {list(globals().keys())}[/red]")
+            # Special handling for EvolutionaryOptimizer to help diagnose issues
+            if optimizer_class_name == "EvolutionaryOptimizer":
+                logger.error(f"[red]EvolutionaryOptimizer creation failed. Available keys: {list(globals().keys())}[/red]")
                 try:
-                    # Verify GeneticOptimizer is imported properly
+                    # Verify EvolutionaryOptimizer is imported properly
                     import opik_optimizer
-                    from opik_optimizer import GeneticOptimizer  # Try direct import
-                    logger.info(f"GeneticOptimizer direct import successful: {GeneticOptimizer}")
+                    from opik_optimizer import EvolutionaryOptimizer  # Try direct import
+                    logger.info(f"EvolutionaryOptimizer direct import successful: {EvolutionaryOptimizer}")
                     # Try alternate initialization path
-                    alternate_optimizer = GeneticOptimizer(model=model_name, project_name=project_name, **params)
-                    logger.info("[green]Alternate GeneticOptimizer initialization successful[/green]")
+                    alternate_optimizer = EvolutionaryOptimizer(model=model_name, project_name=project_name, **params)
+                    logger.info("[green]Alternate EvolutionaryOptimizer initialization successful[/green]")
                     return alternate_optimizer
                 except Exception as e_alt:
-                    logger.error(f"[red]Alternate GeneticOptimizer initialization also failed: {e_alt}[/red]")
+                    logger.error(f"[red]Alternate EvolutionaryOptimizer initialization also failed: {e_alt}[/red]")
                     logger.exception("Traceback for alternate initialization attempt:")
             
             return None
@@ -792,10 +792,10 @@ class BenchmarkRunner:
                         n_trials=getattr(optimizer, 'n_trials', 10),
                         n_samples=getattr(optimizer, 'n_samples', 100)
                     )
-                # Check for GeneticOptimizer by actual class name, not by lowercase displayed name
-                elif "GeneticOptimizer" in type(optimizer).__name__:
-                    logger.info(f"Detected GeneticOptimizer. Running with appropriate parameters.")
-                    # Don't pass experiment_config to GeneticOptimizer's optimize_prompt method
+                # Check for EvolutionaryOptimizer by actual class name, not by lowercase displayed name
+                elif "EvolutionaryOptimizer" in type(optimizer).__name__:
+                    logger.info(f"Detected EvolutionaryOptimizer. Running with appropriate parameters.")
+                    # Don't pass experiment_config to EvolutionaryOptimizer's optimize_prompt method
                     results_obj = optimizer.optimize_prompt(
                         dataset=config.dataset,
                         metric_config=config.objective,
@@ -968,8 +968,8 @@ class BenchmarkRunner:
                     else: opt_history_processed = [] # Simplified for brevity, but should be the detailed logging
 
                 # Check both the lowercase display name and the original class name for more robust detection
-                elif actual_optimizer_class_name_display == "geneticoptimizer" or "GeneticOptimizer" in task_result.get("optimizer_original_class_name", ""): # Add dedicated block for GeneticOptimizer
-                    logger.debug(f"HISTORY_DEBUG ({actual_optimizer_class_name_display}, {task_id}): Entered GeneticOptimizer history processing block.")
+                elif actual_optimizer_class_name_display == "EvolutionaryOptimizer" or "EvolutionaryOptimizer" in task_result.get("optimizer_original_class_name", ""): # Add dedicated block for EvolutionaryOptimizer
+                    logger.debug(f"HISTORY_DEBUG ({actual_optimizer_class_name_display}, {task_id}): Entered EvolutionaryOptimizer history processing block.")
                     
                     if hasattr(results_obj, "history") and results_obj.history is not None:
                         logger.debug(f"HISTORY_DEBUG: results_obj has history attribute, type: {type(results_obj.history)}")
@@ -1133,7 +1133,7 @@ class BenchmarkRunner:
                     actual_prompt_for_submission = final_prompt_to_eval 
                     evaluation_errors.append("FSBO: Optimized chat_messages not retrieved for final eval; used base prompt.")
             
-            elif actual_optimizer_class_name_display == "geneticoptimizer": # Specific handling for GeneticOptimizer
+            elif actual_optimizer_class_name_display == "EvolutionaryOptimizer": # Specific handling for EvolutionaryOptimizer
                 # Get prompt from multiple possible sources
                 prompt_text = None
                 
@@ -1170,10 +1170,10 @@ class BenchmarkRunner:
                         final_prompt_to_eval = prompt_text
                         actual_prompt_for_submission = prompt_text
                 else:
-                    final_prompt_to_eval = [{"role": "system", "content": "Error: GeneticOptimizer prompt was None for final eval."}]
+                    final_prompt_to_eval = [{"role": "system", "content": "Error: EvolutionaryOptimizer prompt was None for final eval."}]
                     actual_prompt_for_submission = None
-                    logger.error("[red]GeneticOptimizer: Prompt not found in results_obj for final evaluation. Cannot evaluate.[/red]")
-                    evaluation_errors.append("GeneticOptimizer: Prompt not found for final eval.")
+                    logger.error("[red]EvolutionaryOptimizer: Prompt not found in results_obj for final evaluation. Cannot evaluate.[/red]")
+                    evaluation_errors.append("EvolutionaryOptimizer: Prompt not found for final eval.")
                 
             else: # MetaPromptOptimizer and other fallbacks
                 string_prompt_val = getattr(results_obj, 'prompt', None) 
@@ -1207,7 +1207,7 @@ class BenchmarkRunner:
                     if actual_prompt_for_submission is None:
                         logger.error("[red]FewShotBayesianOptimizer: Chat messages not found for final evaluation. Cannot evaluate.[/red]")
                         evaluation_errors.append("FewShotBayesianOptimizer: Chat messages not found for final eval.")
-                elif actual_optimizer_class_name_display.lower() == "geneticoptimizer".lower() or "GeneticOptimizer" in task_result.get("optimizer_original_class_name", ""):
+                elif actual_optimizer_class_name_display.lower() == "EvolutionaryOptimizer".lower() or "EvolutionaryOptimizer" in task_result.get("optimizer_original_class_name", ""):
                     # Since we already set actual_prompt_for_submission above, we don't need to duplicate the logic here
                     # But we do need to check if it's None for error handling consistency
                     if actual_prompt_for_submission is None:
@@ -1218,10 +1218,10 @@ class BenchmarkRunner:
                                 actual_prompt_for_submission = latest_entry['best_prompt']
                         
                         if actual_prompt_for_submission is None:
-                            logger.error("[red]GeneticOptimizer: Prompt not found for final evaluation (from previous handling). Cannot evaluate.[/red]")
-                            evaluation_errors.append("GeneticOptimizer: Prompt not found for final eval.")
+                            logger.error("[red]EvolutionaryOptimizer: Prompt not found for final evaluation (from previous handling). Cannot evaluate.[/red]")
+                            evaluation_errors.append("EvolutionaryOptimizer: Prompt not found for final eval.")
                     else:
-                        print(f"DEBUG: GeneticOptimizer actual_prompt_for_submission is set: {actual_prompt_for_submission[:50]}...")
+                        print(f"DEBUG: EvolutionaryOptimizer actual_prompt_for_submission is set: {actual_prompt_for_submission[:50]}...")
                 else: # MetaPromptOptimizer and other fallbacks
                     actual_prompt_for_submission = getattr(results_obj, 'prompt', None) # Usually a string
                     if actual_prompt_for_submission is None:
