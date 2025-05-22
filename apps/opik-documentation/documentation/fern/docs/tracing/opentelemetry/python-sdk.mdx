@@ -1,0 +1,124 @@
+---
+subtitle: How to send data to Opik using the OpenTelemetry Python SDK
+toc_max_heading_level: 4
+pytest_codeblocks_skip: true
+---
+
+# Using the OpenTelemetry Python SDK
+
+This guide shows you how to directly instrument your Python applications with the OpenTelemetry SDK to send trace data to Opik.
+
+## Installation
+
+First, install the required OpenTelemetry packages:
+
+```bash
+pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
+```
+
+## Full Example
+
+Here's a complete example that demonstrates how to instrument a chatbot application with OpenTelemetry and send the traces to Opik:
+
+```python
+# Dependencies: opentelemetry-exporter-otlp
+
+import os
+import time
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.semconv.resource import ResourceAttributes
+
+
+# Configure OpenTelemetry
+
+# For comet.com
+os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "https://www.comet.com/opik/api/v1/private/otel"
+os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = "Authorization=<your-api-key>,Comet-Workspace=<your-workspace-name>,projectName=<your-project-name>"
+
+# Configure the tracer provider
+resource = Resource.create({
+    ResourceAttributes.SERVICE_NAME: "opentelemetry-example"
+})
+
+# Create a tracer provider
+tracer_provider = TracerProvider(resource=resource)
+
+# Set up the OTLP HTTP exporter
+otlp_exporter = OTLPSpanExporter()
+
+# Add the exporter to the tracer provider
+tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+
+# Set the tracer provider
+trace.set_tracer_provider(tracer_provider)
+
+# Get a tracer
+tracer = trace.get_tracer("example-tracer")
+
+def main():
+    # Simulate user request
+    user_request = "What's the weather like today?"
+
+    # Create a parent span representing the entire chatbot conversation
+    with tracer.start_as_current_span("chatbot_conversation") as conversation_span:
+        print(f"User request: {user_request}")
+
+        # Add user request as an attribute to the parent span
+        conversation_span.set_attribute("input", user_request)
+        conversation_span.set_attribute("conversation.id", "conv_12345")
+        conversation_span.set_attribute("conversation.type", "weather_inquiry")
+
+        # Process the user request
+
+        # Simulate initial processing
+        time.sleep(0.2)
+
+        # Create a child span for LLM generation using GenAI conventions
+        with tracer.start_as_current_span("llm_completion") as llm_span:
+            print("Generating LLM response...")
+
+            # Create a prompt for the LLM
+            llm_prompt = f"User question: {user_request}\n\nProvide a concise answer about the weather."
+
+            # Add GenAI semantic convention attributes
+            llm_span.set_attribute("gen_ai.operation.name", "completion")
+            llm_span.set_attribute("gen_ai.system", "gpt")
+            llm_span.set_attribute("gen_ai.request.model", "gpt-4")
+            llm_span.set_attribute("gen_ai.response.model", "gpt-4")
+            llm_span.set_attribute("gen_ai.request.input", llm_prompt)  # Add the prompt
+            llm_span.set_attribute("gen_ai.usage.input_tokens", 10)  # Example token count
+            llm_span.set_attribute("gen_ai.usage.output_tokens", 25)  # Example token count
+            llm_span.set_attribute("gen_ai.usage.total_tokens", 35)   # Example token count
+            llm_span.set_attribute("gen_ai.request.temperature", 0.7)
+            llm_span.set_attribute("gen_ai.request.max_tokens", 100)
+
+            # Simulate LLM thinking time
+            time.sleep(0.5)
+
+            # Generate chatbot response
+            chatbot_response = "It's sunny with a high of 75°F in your area today!"
+
+            # Set response in the LLM span
+            llm_span.set_attribute("gen_ai.response.output", chatbot_response)
+
+            print("LLM generation completed")
+
+        # Back in parent span context
+        conversation_span.set_attribute("output", chatbot_response)
+        # Response has been generated
+
+        print(f"Chatbot response: {chatbot_response}")
+
+if __name__ == "__main__":
+    main()
+
+    # Ensure all spans are flushed before the program exits
+    tracer_provider.shutdown()
+
+    print("\nSpans have been sent to OpenTelemetry collector.")
+    print("If you configured Comet.com, you can view the traces in your Comet project.")
+```

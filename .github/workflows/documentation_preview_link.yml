@@ -39,6 +39,7 @@ jobs:
                   --skip "search\/v2\/key" \
                   --skip "https://ai.google.dev/gemini-api" \
                   --skip "http://localhost:5173" \
+                  --skip "https://chat.comet.com/" \
                   --format csv | awk -F',' '
                     BEGIN { found_broken = 0 }
                     NR==1 {next}
