@@ -228,6 +228,9 @@ navigation:
               - page: Get Started
                 path: docs/tracing/opentelemetry/overview.mdx
                 slug: overview
+              - page: Python SDK
+                path: docs/tracing/opentelemetry/python-sdk.mdx
+                slug: python-sdk
       - section: Evaluation
         slug: /evaluation
         contents:
