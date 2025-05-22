@@ -1,3 +1,6 @@
+---
+pytest_codeblocks_skip: true
+---
 The Opik SDK provides a simple way to integrate with Ragas, a framework for evaluating RAG systems.
 
 There are two main ways to use Ragas with Opik:
@@ -10,6 +13,7 @@ There are two main ways to use Ragas with Opik:
     You can check out the Colab Notebook if you'd like to jump straight to the code:
   </span>
   <a
+    className="no-external-icon"
     href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/ragas.ipynb"
     target="_blank"
     rel="noopener noreferrer"
@@ -38,7 +42,7 @@ opik configure
 
 ## Using Ragas to score traces or spans
 
-Ragas provides a set of metrics that can be used to evaluate the quality of a RAG pipeline, a full list of the supported metrics can be found in the [Ragas documentation](https://docs.ragas.io/en/latest/references/metrics.html#).
+Ragas provides a set of metrics that can be used to evaluate the quality of a RAG pipeline, a full list of the supported metrics can be found in the [Ragas documentation](https://docs.ragas.io/en/latest/concepts/metrics/available_metrics/).
 
 In addition to being able to track these feedback scores in Opik, you can also use the `OpikTracer` callback to keep track of the score calculation in Opik.
 
@@ -135,11 +139,11 @@ In the Opik UI, you will be able to see the full trace including the score calcu
 
 ## Using Ragas metrics to evaluate a RAG pipeline
 
-In order to use a Ragas metric within the Opik evaluation framework, we will need to wrap it in a custom scoring method. In the example below we will:
+In order to use a Ragas metric within the Opik evaluation platform, we will need to wrap it in a custom scoring method. In the example below we will:
 
 1. Define the Ragas metric
 2. Create a scoring metric wrapper
-3. Use the scoring metric wrapper within the Opik evaluation framework
+3. Use the scoring metric wrapper within the Opik evaluation platform
 
 ### 1. Define the Ragas metric
 
@@ -206,9 +210,9 @@ nest_asyncio.apply()
 
 </Tip>
 
-### 3. Use the scoring metric wrapper within the Opik evaluation framework
+### 3. Use the scoring metric wrapper within the Opik evaluation platform
 
-You can now use the scoring metric wrapper within the Opik evaluation framework:
+You can now use the scoring metric wrapper within the Opik evaluation platform:
 
 ```python
 from opik.evaluation import evaluate

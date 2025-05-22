@@ -210,7 +210,7 @@ dataset.insert(items)
 # - It sends the `input` as a message to the agent (`agent_executor`).
 # - It captures the agent's actual tool calls from its outputs.
 # - It packages the original input, the agent's outputs, the detected tool calls, and the expected tool calls.
-# This structured output is what the evaluation framework will use to compare expected vs actual behavior using the custom metric(s) you define.
+# This structured output is what the evaluation platform will use to compare expected vs actual behavior using the custom metric(s) you define.
 
 def evaluation_task(dataset_item):
     try:
@@ -383,7 +383,7 @@ From here, you might want to:
 
 - Optimize your prompts to drive better agent behavior with **[Prompt Optimization](/prompt_engineering/prompt_optimization)**.
 - Monitor agents in production to catch regressions, errors, and drift in real-time with **[Production Monitoring](/production/production_monitoring)**.
-- Add **guardrails** for security, content safety, and sensitive data leakage prevention, ensuring your agents behave responsibly even in dynamic environments.
+- Add **[Guardrails](/production/guardrails)** for security, content safety, and sensitive data leakage prevention, ensuring your agents behave responsibly even in dynamic environments.
 
 Each of these steps builds on the foundation you’ve set: observability, evaluation, and continuous iteration.
 

@@ -706,7 +706,9 @@ Ensure a good mix of variations, all targeting the specified output style from t
         opik_optimization_run = None
         try:
             opik_optimization_run = self._opik_client.create_optimization(
-                dataset_name=opik_dataset_obj.name, objective_name=metric_config.metric.name
+                dataset_name=opik_dataset_obj.name,
+                objective_name=metric_config.metric.name,
+                metadata={"optimizer": self.__class__.__name__},
             )
             self._current_optimization_id = opik_optimization_run.id
             logger.info(f"Created Opik Optimization run with ID: {self._current_optimization_id}")

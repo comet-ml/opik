@@ -1,10 +1,13 @@
-The Opik Optimizer provides a set of tools for optimizing LLM prompts. This
-reference guide will help you understand the available APIs and how to use them
-effectively.
+---
+title: "Opik Agent Optimizer API Reference"
+subtitle: "Technical SDK reference guide"
+pytest_codeblocks_skip: true
+---
+The Opik Agent Optimizer SDK provides a set of tools for optimizing LLM prompts. This reference guide will help you understand the available APIs and how to use them effectively.
 
 ## Installation
 
-You can install the Opik Optimizer package using pip:
+You can install the Opik Agent Optimizer package using pip:
 
 ```bash
 pip install opik-optimizer opik
@@ -21,7 +24,7 @@ opik configure
 
 ### MetaPromptOptimizer
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 class opik_optimizer.MetaPromptOptimizer(
     model: str,
     reasoning_model: str = None,
@@ -87,7 +90,7 @@ class opik_optimizer.MetaPromptOptimizer(
 
 Optimizes a prompt using meta-reasoning.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 def opik_optimizer.MetaPromptOptimizer.optimize_prompt(
     self,
     dataset: Union[str, Dataset],
@@ -130,7 +133,7 @@ Returns: [OptimizationResult](#optimizationresult)
 
 Evaluates a specific prompt on a dataset.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 def opik_optimizer.MetaPromptOptimizer.evaluate_prompt(
     self,
     dataset: Dataset,
@@ -178,9 +181,204 @@ def opik_optimizer.MetaPromptOptimizer.evaluate_prompt(
 
 Returns: `float` - The evaluation score
 
+### EvolutionaryOptimizer
+
+```python
+class opik_optimizer.EvolutionaryOptimizer(
+    model: str,
+    project_name: Optional[str] = None,
+    population_size: int = 30,
+    num_generations: int = 15,
+    mutation_rate: float = 0.2,
+    crossover_rate: float = 0.8,
+    tournament_size: int = 4,
+    num_threads: int = 12,
+    elitism_size: int = 3,
+    adaptive_mutation: bool = True,
+    enable_moo: bool = True,
+    enable_llm_crossover: bool = True,
+    seed: Optional[int] = 42,
+    output_style_guidance: Optional[str] = "Produce clear, effective, and high-quality responses suitable for the task.",
+    infer_output_style: bool = False,
+    verbose: int = 1,
+    **model_kwargs
+)
+```
+Optimizes prompts using a genetic algorithm. Evolves prompt text, supporting single or multi-objective optimization (e.g., score vs. length) and can use LLMs for advanced genetic operations.
+
+<ParamField path="model" type="string" required={true}>
+  LLM for evaluating prompts and for LLM-driven genetic operations (e.g., "openai/gpt-4o-mini"). Supports all models available through LiteLLM.
+</ParamField>
+
+<ParamField path="project_name" type="string">
+  Optional name for the optimization project.
+</ParamField>
+
+<ParamField path="population_size" type="number" default="30">
+  Number of prompts in each generation.
+</ParamField>
+
+<ParamField path="num_generations" type="number" default="15">
+  Number of iterations the algorithm will run.
+</ParamField>
+
+<ParamField path="mutation_rate" type="number" default="0.2">
+  Probability of mutating an individual prompt.
+</ParamField>
+
+<ParamField path="crossover_rate" type="number" default="0.8">
+  Probability of crossing over two individual prompts.
+</ParamField>
+
+<ParamField path="tournament_size" type="number" default="4">
+  Size of the tournament for selection (if not using Multi-Objective Optimization).
+</ParamField>
+
+<ParamField path="num_threads" type="number" default="12">
+  Number of threads for parallel evaluation.
+</ParamField>
+
+<ParamField path="elitism_size" type="number" default="3">
+  Number of best individuals to carry over to the next generation (if not MOO).
+</ParamField>
+
+<ParamField path="adaptive_mutation" type="boolean" default="true">
+  Dynamically adjust mutation rate based on population diversity and progress.
+</ParamField>
+
+<ParamField path="enable_moo" type="boolean" default="true">
+  Enable Multi-Objective Optimization. Default objectives are maximizing score and minimizing prompt length.
+</ParamField>
+
+<ParamField path="enable_llm_crossover" type="boolean" default="true">
+  Use an LLM for crossover operations, potentially creating more semantically meaningful children prompts.
+</ParamField>
+
+<ParamField path="seed" type="number" default="42">
+  Random seed for reproducibility.
+</ParamField>
+
+<ParamField path="output_style_guidance" type="string" default="Produce clear, effective, and high-quality responses suitable for the task.">
+  Optional specific guidance for LLM-generated prompts' output style. Used by LLM-driven mutations/crossovers.
+</ParamField>
+
+<ParamField path="infer_output_style" type="boolean" default="false">
+  If true and `output_style_guidance` is default/not set, infer desired output style from the dataset.
+</ParamField>
+
+<ParamField path="verbose" type="number" default="1">
+  Verbosity level. (Note: current implementation might have fixed verbosity).
+</ParamField>
+
+<ParamField path="model_kwargs" type="object">
+  Additional keyword arguments passed to the model (e.g., temperature, max_tokens).
+</ParamField>
+
+#### Methods
+
+##### optimize_prompt
+
+Optimizes a prompt using an evolutionary algorithm.
+
+```python
+def opik_optimizer.EvolutionaryOptimizer.optimize_prompt(
+    self,
+    dataset: Union[str, opik.Dataset],
+    metric_config: MetricConfig,
+    task_config: TaskConfig,
+    experiment_config: Optional[Dict] = None,
+    n_samples: Optional[int] = None,
+    auto_continue: bool = False,
+    **kwargs
+) -> OptimizationResult
+```
+
+<ParamField path="dataset" type="Union[str, opik.Dataset]" required={true}>
+  Dataset to use for optimization. Can be a dataset name string or an Opik Dataset object.
+</ParamField>
+
+<ParamField path="metric_config" type="MetricConfig" required={true}>
+  Configuration for the evaluation metric.
+</ParamField>
+
+<ParamField path="task_config" type="TaskConfig" required={true}>
+  Configuration for the prompt task, including the initial `instruction_prompt`.
+</ParamField>
+
+<ParamField path="experiment_config" type="Dict">
+  Optional configuration for the experiment.
+</ParamField>
+
+<ParamField path="n_samples" type="number">
+  Optional number of samples from the dataset to use for evaluating each prompt in each generation.
+</ParamField>
+
+<ParamField path="auto_continue" type="boolean" default="false">
+  (Currently not implemented for this optimizer) If true, the algorithm may continue optimization.
+</ParamField>
+
+Returns: [OptimizationResult](#optimizationresult)
+
+##### evaluate_prompt
+
+Evaluates a specific prompt on a dataset.
+
+```python
+def opik_optimizer.EvolutionaryOptimizer.evaluate_prompt(
+    self,
+    dataset: Union[str, opik.Dataset],
+    metric_config: MetricConfig,
+    task_config: TaskConfig,
+    prompt: str,
+    n_samples: Optional[int] = None,
+    dataset_item_ids: Optional[List[str]] = None,
+    experiment_config: Optional[Dict] = None,
+    optimization_id: Optional[str] = None,
+    verbose: int = 0
+) -> float
+```
+
+<ParamField path="dataset" type="Union[str, opik.Dataset]" required={true}>
+  Dataset to evaluate the prompt on.
+</ParamField>
+
+<ParamField path="metric_config" type="MetricConfig" required={true}>
+  Configuration for the evaluation metric.
+</ParamField>
+
+<ParamField path="task_config" type="TaskConfig" required={true}>
+  Configuration for the prompt task.
+</ParamField>
+
+<ParamField path="prompt" type="string" required={true}>
+  The prompt string to evaluate.
+</ParamField>
+
+<ParamField path="n_samples" type="number">
+  Optional number of samples to use for evaluation.
+</ParamField>
+
+<ParamField path="dataset_item_ids" type="List[str]">
+  Optional list of specific dataset item IDs to evaluate on.
+</ParamField>
+
+<ParamField path="experiment_config" type="Dict">
+  Optional configuration for the experiment.
+</ParamField>
+
+<ParamField path="optimization_id" type="string">
+  Optional ID for tracking the optimization run.
+</ParamField>
+
+<ParamField path="verbose" type="number" default="0">
+  Verbosity level for this evaluation.
+</ParamField>
+
+Returns: `float` - The evaluation score
+
 ### MiproOptimizer
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 class opik_optimizer.MiproOptimizer(
     model: str,
     project_name: Optional[str] = None,
@@ -209,7 +407,7 @@ The MiproOptimizer uses DSPy's MIPRO (Modular Instruction Programming and Optimi
 
 Optimizes a prompt using MIPRO (Modular Instruction Programming and Optimization).
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 def opik_optimizer.MiproOptimizer.optimize_prompt(
     self,
     dataset: Union[str, Dataset],
@@ -248,7 +446,7 @@ Returns: [OptimizationResult](#optimizationresult)
 
 Evaluates a specific prompt on a dataset.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 def opik_optimizer.MiproOptimizer.evaluate_prompt(
     self,
     dataset: Dataset,
@@ -296,7 +494,7 @@ Returns: `float` - The evaluation score
 
 Load a previously optimized module from a checkpoint file.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 def opik_optimizer.MiproOptimizer.load_from_checkpoint(
     self,
     filename: str
@@ -311,7 +509,7 @@ def opik_optimizer.MiproOptimizer.load_from_checkpoint(
 
 Continue the optimization process after preparing with `prepare_optimize_prompt`. This method runs the actual MIPRO compilation and optimization.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 def opik_optimizer.MiproOptimizer.continue_optimize_prompt(
     self
 ) -> OptimizationResult
@@ -321,7 +519,7 @@ Returns: [OptimizationResult](#optimizationresult)
 
 ### FewShotBayesianOptimizer
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 class opik_optimizer.FewShotBayesianOptimizer(
     model: str,
     project_name: Optional[str] = None,
@@ -376,7 +574,7 @@ class opik_optimizer.FewShotBayesianOptimizer(
 
 Optimizes a prompt using few-shot examples and Bayesian optimization.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 def opik_optimizer.FewShotBayesianOptimizer.optimize_prompt(
     self,
     dataset: Union[str, Dataset],
@@ -454,7 +652,7 @@ Returns: `float` - The evaluation score
 
 Configuration for a prompt task, specifying how to use the prompt with input data and tools.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 class opik_optimizer.TaskConfig(
     instruction_prompt: Union[str, List[Dict[Literal["role", "content"], str]]],
     use_chat_prompt: bool = False,
@@ -488,7 +686,7 @@ class opik_optimizer.TaskConfig(
 
 Configuration for a metric used in optimization. This class specifies how to evaluate prompts during optimization.
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 class opik_optimizer.MetricConfig(
     metric: BaseMetric,
     inputs: Dict[str, Union[str, Callable[[Any], Any]]]
@@ -507,7 +705,7 @@ class opik_optimizer.MetricConfig(
 
 ### OptimizationResult
 
-```python wordWrap {pytest_codeblocks_skip=true}
+```python
 class opik_optimizer.OptimizationResult(
     prompt: Union[str, List[Dict[Literal["role", "content"], str]]],
     score: float,
