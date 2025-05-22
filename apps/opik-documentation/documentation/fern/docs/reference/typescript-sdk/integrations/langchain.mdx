@@ -1,0 +1,131 @@
+# LangChain Integration
+
+Opik provides seamless integration with [LangChain](https://js.langchain.com/) through the `opik-langchain` package, allowing you to trace, monitor, and debug your LangChain applications.
+
+## Features
+
+- **Comprehensive Tracing**: Automatically trace LLM calls, chains, tools, retrievers, and agents
+- **Hierarchical Visualization**: View your LangChain execution as a structured trace with parent-child relationships
+- **Detailed Metadata Capture**: Record model names, prompts, completions, usage statistics, and custom metadata
+- **Error Handling**: Capture and visualize errors at every step of your LangChain execution
+- **Custom Tagging**: Add custom tags to organize and filter your traces
+
+## Installation
+
+### Option 1: Using npm
+
+```bash
+npm install opik-langchain
+```
+
+### Option 2: Using yarn
+
+```bash
+yarn add opik-langchain
+```
+
+### Requirements
+
+- Node.js ≥ 18
+- LangChain (`@langchain/core` ≥ 0.3.42)
+- Opik SDK (automatically installed as a dependency)
+
+## Basic Usage
+
+### Using with LLM Calls
+
+You can add the OpikCallbackHandler in two ways in LangChain: at construction time and at execution time. Here's how to use both approaches:
+
+```typescript
+import { OpikCallbackHandler } from "opik-langchain";
+import { ChatOpenAI } from "@langchain/openai";
+
+// Create the Opik callback handler
+const opikHandler = new OpikCallbackHandler();
+
+// Option 1: Add the handler at model initialization time
+const llm = new ChatOpenAI({
+  callbacks: [opikHandler], // Will be used for all calls to this model
+});
+
+// Run LLM
+const response = await llm.invoke("Hello, how can you help me today?");
+
+// Option 2: Add the handler at invocation time (or both)
+const llmWithoutHandler = new ChatOpenAI();
+const response2 = await llmWithoutHandler.invoke("What's the weather like today?", {
+  callbacks: [opikHandler], // Will be used just for this specific call
+});
+
+// You can also combine both approaches
+const anotherResponse = await llm.invoke("Tell me a joke", {
+  callbacks: [opikHandler], // Will use both the constructor handler and this one
+});
+
+// Ensure all traces are sent before your app terminates
+await opikHandler.flushAsync();
+```
+
+### Configuring for All Components
+
+You can also set up the handler to be used across all LangChain components in your application:
+
+```typescript
+import { OpikCallbackHandler } from "opik-langchain";
+import { ChatOpenAI } from "@langchain/openai";
+import { PromptTemplate } from "@langchain/core/prompts";
+import { LLMChain } from "langchain/chains";
+import { setGlobalCallbacks } from "@langchain/core/callbacks/manager";
+
+// Create the Opik callback handler
+const opikHandler = new OpikCallbackHandler({
+  tags: ["global"],
+  projectName: "langchain-app",
+});
+
+// Set as global handler (will be used for all LangChain components)
+setGlobalCallbacks([opikHandler]);
+
+// These components will now automatically use the global handler
+const llm = new ChatOpenAI();
+const template = PromptTemplate.fromTemplate("Answer this question: {question}");
+const chain = new LLMChain({ llm, prompt: template });
+
+// Global handlers are used automatically
+const result = await chain.call({ question: "What is 2+2?" });
+
+// Flush before your app exits
+await opikHandler.flushAsync();
+```
+
+## Advanced Configuration
+
+The `OpikCallbackHandler` constructor accepts several options to customize the integration:
+
+```typescript
+const opikHandler = new OpikCallbackHandler({
+  // Optional array of tags to apply to all traces
+  tags: ["langchain", "production", "user-query"],
+
+  // Optional metadata to include with all traces
+  metadata: {
+    environment: "production",
+    version: "1.0.0",
+  },
+
+  // Optional project name for Opik
+  projectName: "my-langchain-project",
+
+  // Optional pre-configured Opik client
+  // If not provided, a new client will be created automatically
+  client: customOpikClient,
+});
+```
+
+## Troubleshooting
+
+**Missing Traces**: Ensure you're providing the `OpikCallbackHandler` to both the component constructor and each invoke call.
+
+**Incomplete Hierarchies**: For proper parent-child relationships, use the same handler instance throughout your application.
+
+**Performance Impact**: The Opik integration adds minimal overhead to your LangChain application.

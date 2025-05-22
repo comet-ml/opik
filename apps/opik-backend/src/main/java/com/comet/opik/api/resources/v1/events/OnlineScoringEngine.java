@@ -177,7 +177,7 @@ public class OnlineScoringEngine {
                         JsonObjectSchema.builder()
                                 .description(scoreDefinition.description())
                                 .required(SCORE_FIELD_NAME, REASON_FIELD_NAME)
-                                .properties(Map.of(
+                                .addProperties(Map.of(
                                         SCORE_FIELD_NAME, switch (scoreDefinition.type()) {
                                             case BOOLEAN -> JsonBooleanSchema.builder()
                                                     .description(SCORE_FIELD_DESCRIPTION + scoreDefinition.name())
@@ -198,7 +198,8 @@ public class OnlineScoringEngine {
                 ))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         var allPropertyNames = structuredFields.keySet().stream().toList();
-        var schemaBuilder = JsonObjectSchema.builder().required(allPropertyNames).properties(structuredFields).build();
+        var schemaBuilder = JsonObjectSchema.builder().required(allPropertyNames).addProperties(structuredFields)
+                .build();
         var jsonSchema = JsonSchema.builder().name(DEFAULT_SCHEMA_NAME).rootElement(schemaBuilder).build();
         return ResponseFormat.builder()
                 .type(ResponseFormatType.JSON)

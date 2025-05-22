@@ -2,11 +2,12 @@ import functools
 import logging
 from typing import List, Optional
 
+import opik.rest_api
 from opik.message_processing.batching import sequence_splitter
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import experiment_item as rest_experiment_item
 from . import experiment_item
-from .. import constants, helpers
+from .. import constants, helpers, rest_stream_parser
 from ...api_objects.prompt import Prompt
 
 LOGGER = logging.getLogger(__name__)
@@ -83,33 +84,59 @@ class Experiment:
             )
             LOGGER.debug("Sent experiment items batch of size %d", len(batch))
 
-    def get_items(self) -> List[experiment_item.ExperimentItemContent]:
+    def get_items(
+        self,
+        max_results: Optional[int] = None,
+        truncate: bool = False,
+    ) -> List[experiment_item.ExperimentItemContent]:
         """
-        Returns:
-            List[ExperimentItemContent]: the list with contents of existing experiment items.
+        Retrieves and returns a list of experiment items by streaming from the backend in batches, with an option to
+        truncate the results for each batch.
+
+        This method streams experiment items from a backend service in chunks up to the specified `max_results`
+        or until the available items are exhausted. It handles batch-wise retrieval and parsing, ensuring the client
+        receives a list of `ExperimentItemContent` objects, while respecting the constraints on maximum retrieval size
+        from the backend. If truncation is enabled, the backend may return truncated details for each item.
+
+        Args:
+            max_results: Maximum number of experiment items to retrieve.
+            truncate: Whether to truncate the items returned by the backend.
+
         """
         result: List[experiment_item.ExperimentItemContent] = []
 
-        page = 0
+        # this is the constant for the maximum number of objects sent from the backend side
+        max_endpoint_batch_size = 2_000
 
-        while True:  # TODO: refactor this logic when backend implements a proper streaming endpoint
-            page += 1
-            dataset_items_page = (
-                self._rest_client.datasets.find_dataset_items_with_experiment_items(
-                    id=self.dataset_id,
-                    experiment_ids=f'["{self.id}"]',
-                    page=page,
-                    size=100,
+        while True:
+            if max_results is None:
+                current_batch_size = max_endpoint_batch_size
+            else:
+                current_batch_size = min(
+                    max_results - len(result), max_endpoint_batch_size
+                )
+
+            items_stream = self._rest_client.experiments.stream_experiment_items(
+                experiment_name=self.name,
+                limit=current_batch_size,
+                last_retrieved_id=result[-1].id if len(result) > 0 else None,
+                truncate=truncate,
+            )
+
+            experiment_item_compare_current_batch = (
+                rest_stream_parser.read_and_parse_stream(
+                    stream=items_stream,
+                    item_class=opik.rest_api.ExperimentItemCompare,
                 )
             )
-            if len(dataset_items_page.content) == 0:
-                break
 
-            for dataset_item in dataset_items_page.content:
-                rest_experiment_item_compare = dataset_item.experiment_items[0]
-                content = experiment_item.ExperimentItemContent.from_rest_experiment_item_compare(
-                    value=rest_experiment_item_compare
+            for item in experiment_item_compare_current_batch:
+                converted_item = experiment_item.ExperimentItemContent.from_rest_experiment_item_compare(
+                    value=item
                 )
-                result.append(content)
+                result.append(converted_item)
+
+            if current_batch_size > len(experiment_item_compare_current_batch):
+                break
 
         return result

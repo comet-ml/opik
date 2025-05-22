@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
 
 _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
+
 class MetaPromptOptimizer(BaseOptimizer):
     """Optimizer that uses meta-prompting to improve prompts based on examples and performance."""
 
@@ -496,7 +497,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         optimization = None
         try:
             optimization = self._opik_client.create_optimization(
-                dataset_name=dataset.name, objective_name=metric_config.metric.name
+                dataset_name=dataset.name,
+                objective_name=metric_config.metric.name,
+                metadata={"optimizer": self.__class__.__name__},
             )
             logger.info(f"Created optimization with ID: {optimization.id}")
         except Exception as e:
@@ -901,6 +904,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         }
 
         return OptimizationResult(
+            optimizer=self.__class__.__name__,
             prompt=best_prompt,
             score=best_score,
             metric_name=metric_config.metric.name,

@@ -3,7 +3,8 @@ from typing import Literal, List, Dict, Any
 from .. import utils
 from datasets import load_dataset
 import traceback
-
+from importlib.resources import files
+import json
 
 class HaltError(Exception):
     """Exception raised when we need to halt the process due to a critical error."""
@@ -153,48 +154,36 @@ def get_or_create_dataset(
 
 
 def _load_hotpot_500(test_mode: bool = False, seed: int = 42) -> List[Dict[str, Any]]:
-    from dspy.datasets import HotPotQA
+    size = 500 if not test_mode else 5
+    
+    if seed != 42:
+        print("Seed parameter is currently not supported for the hotpot-500 dataset")
 
-    size = 5 if test_mode else 500
-
-    try:
-        trainset = [
-            x.with_inputs("question")
-            for x in HotPotQA(train_seed=seed, train_size=size).train
-        ]
-    except Exception:
-        raise Exception("Unable to download HotPotQA; please try again") from None
+    # This is not a random dataset
+    json_content = (files('opik_optimizer') / 'data' / 'hotpot-500.json').read_text(encoding='utf-8')
+    all_data = json.loads(json_content)
+    trainset = all_data[:size]
 
     data = []
     for row in reversed(trainset):
-        d = row.toDict()
-        del d["dspy_uuid"]
-        del d["dspy_split"]
-        data.append(d)
-
+        data.append(row)
     return data
 
 
 def _load_hotpot_300(test_mode: bool = False, seed: int = 42) -> List[Dict[str, Any]]:
-    from dspy.datasets import HotPotQA
+    size = 300 if not test_mode else 3
+    
+    if seed != 42:
+        print("Seed parameter is currently not supported for the hotpot-300 dataset")
 
-    size = 5 if test_mode else 300
-
-    try:
-        trainset = [
-            x.with_inputs("question")
-            for x in HotPotQA(train_seed=seed, train_size=size).train
-        ]
-    except Exception:
-        raise Exception("Unable to download HotPotQA; please try again") from None
+    # This is not a random dataset
+    json_content = (files('opik_optimizer') / 'data' / 'hotpot-500.json').read_text(encoding='utf-8')
+    all_data = json.loads(json_content)
+    trainset = all_data[:size]
 
     data = []
-    for row in trainset:
-        d = row.toDict()
-        del d["dspy_uuid"]
-        del d["dspy_split"]
-        data.append(d)
-
+    for row in reversed(trainset):
+        data.append(row)
     return data
 
 

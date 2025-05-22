@@ -11,7 +11,7 @@ import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
@@ -50,13 +50,13 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig) {
         return LlmProviderClientApiConfig.builder()
                 .apiKey(EncryptionUtils.decrypt(providerConfig.apiKey()))
-                .headers(providerConfig.headers())
+                .headers(Optional.ofNullable(providerConfig.headers()).orElse(Map.of()))
                 .baseUrl(providerConfig.baseUrl())
-                .configuration(providerConfig.configuration())
+                .configuration(Optional.ofNullable(providerConfig.configuration()).orElse(Map.of()))
                 .build();
     }
 
-    public ChatLanguageModel getLanguageModel(@NonNull String workspaceId,
+    public ChatModel getLanguageModel(@NonNull String workspaceId,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         var llmProvider = getLlmProvider(modelParameters.name());
         var providerConfig = getProviderApiKey(workspaceId, llmProvider);

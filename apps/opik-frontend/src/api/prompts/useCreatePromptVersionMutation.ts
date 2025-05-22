@@ -11,7 +11,7 @@ type UseCreatePromptVersionMutationParams = {
   template: string;
   metadata?: object;
   changeDescription?: string;
-  onSetActiveVersionId: (versionId: string) => void;
+  onSuccess: (promptVersion: PromptVersion) => void;
 };
 
 const useCreatePromptVersionMutation = () => {
@@ -49,8 +49,8 @@ const useCreatePromptVersionMutation = () => {
         variant: "destructive",
       });
     },
-    onSuccess: async (data: PromptVersion, { onSetActiveVersionId }) => {
-      onSetActiveVersionId(data.id);
+    onSuccess: async (data: PromptVersion, { onSuccess }) => {
+      onSuccess(data);
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["prompt-versions"] });

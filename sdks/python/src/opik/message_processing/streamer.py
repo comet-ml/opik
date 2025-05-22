@@ -1,13 +1,13 @@
-import queue
 import threading
 import logging
 import time
-from typing import Any, List, Optional
+from typing import List, Optional
 
-from . import messages, queue_consumer
+from . import messages, message_queue, queue_consumer
 from .. import synchronization
 from .batching import batch_manager
 from ..file_upload import base_upload_manager
+from .. import _logging
 
 LOGGER = logging.getLogger(__name__)
 
@@ -15,13 +15,13 @@ LOGGER = logging.getLogger(__name__)
 class Streamer:
     def __init__(
         self,
-        message_queue: "queue.Queue[Any]",
+        queue: message_queue.MessageQueue[messages.BaseMessage],
         queue_consumers: List[queue_consumer.QueueConsumer],
         batch_manager: Optional[batch_manager.BatchManager],
         file_upload_manager: base_upload_manager.BaseFileUploadManager,
     ) -> None:
         self._lock = threading.RLock()
-        self._message_queue = message_queue
+        self._message_queue = queue
         self._queue_consumers = queue_consumers
         self._batch_manager = batch_manager
         self._file_upload_manager = file_upload_manager
@@ -46,6 +46,12 @@ class Streamer:
             elif base_upload_manager.message_supports_upload(message):
                 self._file_upload_manager.upload(message)
             else:
+                if self._message_queue.accept_put_without_discarding() is False:
+                    _logging.log_once_at_level(
+                        logging.WARNING,
+                        "The message queue size limit has been reached. The new message has been added to the queue, and the oldest message has been discarded.",
+                        logger=LOGGER,
+                    )
                 self._message_queue.put(message)
 
     def close(self, timeout: Optional[int]) -> bool:
@@ -97,6 +103,9 @@ class Streamer:
 
     def workers_waiting(self) -> bool:
         return all([consumer.waiting for consumer in self._queue_consumers])
+
+    def queue_size(self) -> int:
+        return self._message_queue.size()
 
     def _start_queue_consumers(self) -> None:
         for consumer in self._queue_consumers:

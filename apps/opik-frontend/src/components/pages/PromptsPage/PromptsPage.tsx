@@ -39,6 +39,7 @@ export const getRowId = (p: Prompt) => p.id;
 const SELECTED_COLUMNS_KEY = "prompts-selected-columns";
 const COLUMNS_WIDTH_KEY = "prompts-columns-width";
 const COLUMNS_ORDER_KEY = "prompts-columns-order";
+const PAGINATION_SIZE_KEY = "prompts-pagination-size";
 
 export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
   {
@@ -90,7 +91,9 @@ const PromptsPage: React.FunctionComponent = () => {
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [size, setSize] = useState(10);
+  const [size, setSize] = useLocalStorageState<number>(PAGINATION_SIZE_KEY, {
+    defaultValue: 10,
+  });
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 

@@ -22,10 +22,10 @@ import com.comet.opik.podam.manufacturer.anthropic.AnthropicCreateMessageRespons
 import com.comet.opik.podam.manufacturer.anthropic.AnthropicUsageManufacturer;
 import com.comet.opik.podam.manufacturer.anthropic.ChatCompletionRequestManufacturer;
 import com.fasterxml.jackson.databind.JsonNode;
-import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageResponse;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicUsage;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Pattern;
@@ -36,6 +36,7 @@ import uk.co.jemos.podam.api.RandomDataProviderStrategy;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -81,5 +82,10 @@ public class PodamFactoryUtils {
 
     public static <T> Set<T> manufacturePojoSet(PodamFactory podamFactory, Class<T> pojoClass) {
         return podamFactory.manufacturePojo(Set.class, pojoClass);
+    }
+
+    public static <K, V> Map<K, V> manufacturePojoMap(
+            PodamFactory podamFactory, Class<K> keyClass, Class<V> valueClass) {
+        return podamFactory.manufacturePojo(Map.class, keyClass, valueClass);
     }
 }

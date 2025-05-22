@@ -11,6 +11,7 @@ export interface DatasetItemPublic {
     source: OpikApi.DatasetItemPublicSource;
     data: OpikApi.JsonNode;
     experimentItems?: OpikApi.ExperimentItemPublic[];
+    datasetId?: string;
     createdAt?: Date;
     lastUpdatedAt?: Date;
     createdBy?: string;

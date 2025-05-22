@@ -73,7 +73,7 @@ def test_quickstart_snippet(page, env_config, integration):
         try:
             # Set a timeout for the subprocess to prevent hanging
             result = subprocess.run(
-                ["python", str(file_path)], capture_output=True, text=True, timeout=30
+                ["python", str(file_path)], capture_output=True, text=True, timeout=60
             )
 
             logger.info("\n=== Output ===")

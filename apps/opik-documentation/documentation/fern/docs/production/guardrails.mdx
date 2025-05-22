@@ -1,0 +1,129 @@
+<Tip>
+  This feature is currently available in the **self-hosted** installation of Opik. Support for managed deployments is
+  coming soon.
+</Tip>
+
+Guardrails help you protect your application from risks inherent in LLMs.
+Use them to check the inputs and outputs of your LLM calls, and detect issues like
+off-topic answers or leaking sensitive information.
+
+<Frame>
+  <img src="/img/production/guardrails_results.gif" />
+</Frame>
+
+# How it works
+
+Conceptually, we need to determine the presence of a series of risks for each input and
+output, and take action on it.
+
+The ideal method depends on the type of the problem,
+and aims to pick the best combination of accuracy, latency and cost.
+
+There are three commonly used methods:
+
+1. **Heuristics or traditional NLP models**: ideal for checking for PII or competitor mentions
+2. **Small language models**: ideal for staying on topic
+3. **Large language models**: ideal for detecting complex issues like hallucination
+
+# Types of guardrails
+
+Providers like OpenAI or Anthropic have built-in guardrails for risks like harmful or
+malicious content and are generally desirable for the vast majority of users.
+The Opik Guardrails aim to cover the residual risks which are often very user specific, and need to be configured with more detail.
+
+## PII guardrail
+
+The PII guardrail checks for sensitive information, such as name, age, address, email, phone number, or credit card details.
+The specific entities can be configured in the SDK call, see more in the reference documentation.
+
+_The method used here leverages traditional NLP models for tokenization and named entity recognition._
+
+## Topic guardrail
+
+The topic guardrail ensures that the inputs and outputs remain on topic.
+You can configure the allowed or disallowed topics in the SDK call, see more in the reference documentation.
+
+_This guardrails relies on a small language model, specifically a zero-shot classifier._
+
+## Custom guardrail
+
+<Info>Custom guardrail is coming soon.</Info>
+
+Custom guardrail allows you to define your own guardrails using a custom model, and log the response to Opik.
+
+# Getting started
+
+## Running the guardrail backend
+
+You can start the guardrails backend by running:
+
+```bash
+./opik.sh --guardrails
+```
+
+## Using the Python SDK
+
+<Frame>
+  <img src="/img/production/guardrails_editor.gif" />
+</Frame>
+
+```python {pytest_codeblocks_skip=true}
+from opik.guardrails import Guardrail, PII, Topic
+from opik import exceptions
+
+guardrail = Guardrail(
+    guards=[
+        Topic(restricted_topics=["finance", "health"], threshold=0.9),
+        PII(blocked_entities=["CREDIT_CARD", "PERSON"]),
+    ]
+)
+
+llm_response = "You should buy some NVIDIA stocks!"
+
+try:
+    guardrail.validate(llm_response)
+except exceptions.GuardrailValidationFailed as e:
+    print(e)
+```
+
+The immediate result of a guardrail failure is an exception, and your application code will need to handle it.
+
+The call is blocking, since the main purpose of the guardrail is to prevent the application from proceeding with a potentially undesirable response.
+
+### Guarding streaming responses and long inputs
+
+You can call `guardrail.validate` repeatedly to validate the response chunk by chunk, or their parts or combinations.
+The results will be added as additional spans to the same trace.
+
+```python {pytest_codeblocks_skip=true}
+for chunk in response:
+    try:
+        guardrail.validate(chunk)
+    except exceptions.GuardrailValidationFailed as e:
+        print(e)
+```
+
+## Working with the results
+
+### Examining specific traces
+
+When a guardrail fails on an LLM call, Opik automatically adds the information to the trace.
+You can filter the traces in your project to only view those that have failed the guardrails.
+
+<Frame>
+  <img src="/img/production/guardrails_example.png" />
+</Frame>
+
+### Analyzing trends
+
+You can also view how often each guardrail is failing in the Metrics section of the project.
+
+## Performance and limit considerations
+
+The guardrails backend will use a GPU automatically if there is one available.
+For production use, running the guardrails backend on a GPU node is strongly recommended.
+
+Current limits:
+
+- Topic guardrail: the maximum input size is 1024 tokens
+- Both Topic and PII guardrails support English language

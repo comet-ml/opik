@@ -1,0 +1,187 @@
+---
+title: "Opik Agent Optimizer Core Concepts"
+subtitle: "Common terminology and how we optimize"
+description: "Learn about the core concepts of Opik Agent Optimizer, including key terms, evaluation processes, optimization workflows, and best practices for effective LLM optimization."
+---
+
+## Overview
+
+Understanding the core concepts of the Opik Agent Optimizer is essential for unlocking its full potential in LLM evaluation and optimization. This section explains the foundational terms, processes, and strategies that underpin effective agent and prompt optimization within Opik.
+
+## What is Agent Optimization (and Prompt Optimization)?
+
+In Opik, **Agent Optimization** refers to the systematic process of refining and evaluating the prompts, configurations, and overall design of language model-based applications to maximize their performance. This is an iterative approach leveraging continuous testing, data-driven refinement, and advanced evaluation techniques.
+
+**Prompt Optimization** is a crucial subset of Agent Optimization. It focuses specifically on improving the instructions (prompts) given to Large Language Models (LLMs) to achieve desired outputs more accurately, consistently, and efficiently. Since prompts are the primary way to interact with and guide LLMs, optimizing them is fundamental to enhancing any LLM-powered agent or application.
+
+`Opik Agent Optimizer` provides tools for both: directly optimizing individual prompt strings and also for optimizing more complex agentic structures that might involve multiple prompts, few-shot examples, or tool interactions.
+
+## Key Terms
+
+<AccordionGroup>
+  <Accordion title="Run">
+    A single execution of a prompt optimization process using a specific configuration. For example, calling
+    `optimizer.optimize_prompt(...)` once constitutes a Run. Each Run is typically logged to the Opik platform for
+    tracking.
+  </Accordion>
+  <Accordion title="Trial">
+    Often used interchangeably with "Run" in the context of Opik Agent Optimizer documentation referring to a single
+    optimization execution. More broadly in experimental design, a trial might involve multiple runs to ensure
+    statistical significance, but for Opik Agent Optimizer, focus on it as one complete `optimize_prompt` cycle. Within some
+    optimizers (e.g., `FewShotBayesianOptimizer` using Optuna, or `MetaPromptOptimizer`'s candidate evaluations),
+    "trial" can also refer to an individual evaluation point within the larger optimization process (e.g., testing one
+    specific set of few-shot examples).
+  </Accordion>
+  <Accordion title="Optimizer">
+    A specialized algorithm within the Opik Agent Optimizer SDK designed to enhance prompt effectiveness. Each optimizer
+    (e.g., [`MetaPromptOptimizer`](/agent_optimization/algorithms/metaprompt_optimizer),
+    [`FewShotBayesianOptimizer`](/agent_optimization/algorithms/fewshot_bayesian_optimizer),
+    [`MiproOptimizer`](/agent_optimization/algorithms/mipro_optimizer),
+    [`EvolutionaryOptimizer`](/agent_optimization/algorithms/evolutionary_optimizer)) employs unique strategies and
+    configurable parameters to address specific optimization goals.
+  </Accordion>
+  <Accordion title="Reasoning Model">
+    Specific to the [`MetaPromptOptimizer`](/agent_optimization/algorithms/metaprompt_optimizer), this is an LLM used by
+    the optimizer to analyze the current prompt and task, and then generate new candidate prompt suggestions and the
+    reasoning behind them. It can be the same as or different from the model used for evaluating the prompts.
+  </Accordion>
+  <Accordion title="Teleprompter (DSPy context)">
+    In the context of [DSPy](https://dspy.ai/) (which is leveraged by
+    [`MiproOptimizer`](/agent_optimization/algorithms/mipro_optimizer)), a teleprompter is a component that optimizes a
+    DSPy program. It does this by, for example, generating and refining instructions or few-shot examples for the
+    modules within the program. MIPRO is one such advanced teleprompter.
+  </Accordion>
+  <Accordion title="Pareto Front">
+    Relevant for multi-objective optimization, as seen in the
+    [`EvolutionaryOptimizer`](/agent_optimization/algorithms/evolutionary_optimizer) when `enable_moo=True`. A Pareto
+    front represents a set of solutions where no solution is strictly better than another across all objectives. For
+    example, one solution might have a higher accuracy but also a longer prompt, while another has slightly lower
+    accuracy but a much shorter prompt. Neither is definitively superior without knowing the user's specific priorities.
+  </Accordion>
+  <Accordion title="Dataset (for Optimization)">
+    A collection of data items, typically with inputs and expected outputs (ground truth), used to guide and evaluate
+    the prompt optimization process. See [Datasets and Testing](/agent_optimization/opik_optimizer/datasets) for more.
+  </Accordion>
+  <Accordion title="TaskConfig">
+    An object defining the specifics of the LLM task, including the initial `instruction_prompt`, how
+    `input_dataset_fields` are used, the `output_dataset_field` for reference, and whether to `use_chat_prompt` format.
+    See the [API Reference](/agent_optimization/opik_optimizer/reference#taskconfig).
+  </Accordion>
+  <Accordion title="MetricConfig">
+    An object defining how to measure the performance of a prompt. It includes the `metric` to use (e.g.,
+    LevenshteinRatio) and how its `inputs` are mapped from the dataset and LLM response. See the [API
+    Reference](/agent_optimization/opik_optimizer/reference#metricconfig).
+  </Accordion>
+  <Accordion title="Ground Truth">
+    The expected or correct output for a given input in your dataset. This is used as a benchmark by evaluation metrics
+    to score the LLM's actual responses.
+  </Accordion>
+  <Accordion title="Evaluation Metrics">
+    Quantitative measures (e.g., accuracy, Levenshtein distance, F1 score, ROUGE, custom scores) used to assess the
+    quality of an LLM's output compared to the ground truth, and thus the effectiveness of a prompt. Opik provides
+    several [built-in metrics](/evaluation/metrics/overview) and supports custom ones.
+  </Accordion>
+</AccordionGroup>
+
+## The Role of Evaluation in Optimization
+
+At the core of every optimizer is a robust evaluation process. The optimizers don't just guess what makes a good prompt; they systematically test candidate prompts using the same underlying evaluation principles and tools available elsewhere in the Opik platform.
+
+Here's how it generally works:
+
+1.  **Dataset as Ground Truth**: The `dataset` you provide, with its input samples and expected outputs (ground truth), serves as the benchmark.
+2.  **`MetricConfig` as Judge**: The `MetricConfig` defines _how_ a candidate prompt's performance is measured. It specifies the metric (e.g., `LevenshteinRatio`, `Accuracy`, or a custom metric) and how to map the LLM's output and dataset fields to that metric's inputs.
+3.  **Iterative Evaluation**: As an optimizer generates or selects new candidate prompts (or prompt components), it internally runs evaluations. For each candidate, it typically:
+    - Uses the candidate prompt to get responses from the specified LLM for a selection of samples from your dataset.
+    - Compares these LLM responses against the ground truth in the dataset using the logic defined in your `MetricConfig`.
+    - Calculates a score based on this comparison.
+4.  **Guided Search**: The scores obtained from these internal evaluations guide the optimizer's search strategy. It learns which types of prompts perform better and focuses its efforts accordingly, whether it's refining wording, selecting different few-shot examples, or evolving prompt structures.
+
+<Info>
+  Understanding Opik's broader evaluation capabilities can help you better configure and interpret optimizer results.
+
+- For a general overview of evaluation, see: **[Evaluation Overview](/evaluation/overview)**
+- For details on evaluating individual prompts (similar to what optimizers do internally): **[Evaluate Prompts](/evaluation/evaluate_prompt)**
+- For evaluating more complex agentic systems (relevant if your optimization target is an agent): **[Evaluate Agents](/evaluation/evaluate_agents)**
+- To learn about available metrics: **[Metrics Overview](/evaluation/metrics/overview)**
+</Info>
+
+## Optimization Workflow
+
+1. **Initialization**
+   - Select the [Optimizer](/agent_optimization/overview#optimization-algorithms) appropriate for your task.
+   - Configure its parameters (e.g., `model`, `project_name`, algorithm-specific settings).
+   - Prepare your [Dataset](/agent_optimization/opik_optimizer/datasets), ensuring it has relevant inputs and ground truth outputs.
+   - Define your `TaskConfig` and `MetricConfig`.
+2. **Trial Execution (`optimize_prompt`)**
+   - Run the optimization process by calling the optimizer's `optimize_prompt` method, passing in your dataset, task config, and metric config.
+   - The optimizer will iteratively generate/select, and evaluate candidate prompts or prompt configurations.
+   - Results and progress are typically logged to the Opik platform.
+3. **Analysis & Results**
+   - The `optimize_prompt` method returns an `OptimizationResult` object.
+   - Use `result.display()` for a console summary or inspect its attributes (`result.prompt`, `result.score`, `result.history`) programmatically.
+   - Analyze the detailed run information in the Opik UI to understand performance improvements and identify the best prompt(s).
+4. **Refinement (Optional / Iterative)**
+   - Based on the results, you might choose to adjust optimizer parameters, refine your initial `TaskConfig.instruction_prompt`, improve your dataset, or even try a different optimizer and run further optimization trials.
+5. **Validation (Recommended)**
+   - Test the best prompt(s) found during optimization on a separate, unseen validation or test dataset to ensure the improvements generalize well.
+
+## Core Optimization Strategies (employed by various optimizers)
+
+<AccordionGroup>
+  <Accordion title="Iterative Refinement">
+    Most optimizers work by repeatedly trying variations of a prompt (or prompt components), evaluating them, and using the results to guide the next set of variations. This is a core loop of generate/evaluate/select.
+  </Accordion>
+  <Accordion title="Few-shot Learning (Example-driven prompting)">
+    Providing examples of the desired input/output behavior directly within the prompt can significantly improve LLM performance. The [`FewShotBayesianOptimizer`](/agent_optimization/algorithms/fewshot_bayesian_optimizer) automates finding the best examples for chat models Other optimizers like `MiproOptimizer` (via DSPy) also leverage demonstrations.
+  </Accordion>
+  <Accordion title="LLM-driven Generation/Critique (Meta-Prompting)">
+    Using an LLM itself to suggest improvements to a prompt, or to generate new candidate prompts based on some analysis. The [`MetaPromptOptimizer`](/agent_optimization/algorithms/metaprompt_optimizer) is a prime example. The [`EvolutionaryOptimizer`](/agent_optimization/algorithms/evolutionary_optimizer) can also use LLMs for its genetic operators.
+  </Accordion>
+  <Accordion title="Bayesian Optimization">
+    A strategy for efficiently searching large parameter spaces by building a probabilistic model of how different parameter choices affect the outcome. Used by [`FewShotBayesianOptimizer`](/agent_optimization/algorithms/fewshot_bayesian_optimizer) (via Optuna) to select few-shot examples.
+  </Accordion>
+  <Accordion title="Evolutionary Algorithms">
+    Techniques inspired by biological evolution, involving a population of solutions (prompts) that undergo selection,
+    crossover (recombination), and mutation over generations to find optimal solutions. Used by the
+    [`EvolutionaryOptimizer`](/agent_optimization/algorithms/evolutionary_optimizer).
+  </Accordion>
+  <Accordion title="Compilation (DSPy context)">
+    In DSPy, "compiling" a program means optimizing its internal prompts and few-shot demonstrations for a given task,
+    dataset, and metric. [`MiproOptimizer`](/agent_optimization/algorithms/mipro_optimizer) uses this concept.
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<Steps>
+  <Step title="1. Ensure Dataset Quality is Key">
+    Ensure datasets contain sufficient, diverse, and high-quality examples representative of your actual task.
+    Maintain accurate ground truth and consistent formatting.
+  </Step>
+  <Step title="2. Start Simple, then Iterate">
+    Begin with a reasonable baseline prompt and default optimizer settings.
+    Iteratively adjust parameters, dataset, or even optimizer choice based on observed results.
+  </Step>
+  <Step title="3. Conduct Meaningful Evaluation">
+    Use evaluation metrics that genuinely reflect success for _your_ specific task.
+    Always validate final prompts on an unseen test set to check for generalization.
+  </Step>
+  <Step title="4. Understand Your Chosen Optimizer">
+    Read its specific documentation to understand its mechanism, key parameters, and when it's most effective.
+  </Step>
+  <Step title="5. Log and Track Experiments">
+    Leverage the Opik platform (via `project_name`) to keep your optimization runs organized and compare results effectively.
+  </Step>
+</Steps>
+
+## Next Steps
+
+- Explore specific [Optimizers](/agent_optimization/overview#optimization-algorithms) for algorithm details.
+- Review [Dataset Requirements](/agent_optimization/opik_optimizer/datasets) to ensure effective optimization.
+- Consult the [Quickstart Guide](/agent_optimization/opik_optimizer/quickstart) to get started rapidly.
+- Refer to the [FAQ](/agent_optimization/opik_optimizer/faq) for common questions and troubleshooting.
+
+<Info>
+  📓 Want to see these concepts in action? Check out our [Example Projects & Cookbooks](/agent_optimization/cookbook) for step-by-step, runnable Colab notebooks.
+</Info>

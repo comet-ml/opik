@@ -5,16 +5,14 @@ from opik.error_tracking.error_filtering import (
 )
 
 
-def test_custom_filter_chain(mocked_error_event, basic_hint):
+def test_custom_filter_chain(fake_error_event, fake_basic_hint):
     count_handler = filter_by_count.FilterByCount(max_count=1, level="error")
 
     tested_chain = filter_chain.FilterChain([count_handler])
 
-    assert tested_chain.validate(mocked_error_event, basic_hint) is True
+    assert tested_chain.validate(fake_error_event, fake_basic_hint) is True
     # because of the count = 1 should be false
-    assert tested_chain.validate(mocked_error_event, basic_hint) is False
-
-    assert mocked_error_event.get() == "error"
+    assert tested_chain.validate(fake_error_event, fake_basic_hint) is False
 
 
 class FakeException(Exception):

@@ -1,0 +1,290 @@
+---
+title: "Optimizer Frequently Asked Questions"
+subtitle: "Your FAQ on Opik Agent Optimizer"
+description: "Find answers to common questions about Opik Agent Optimizer, including optimizer selection, configuration, usage, and best practices."
+---
+
+This FAQ section addresses common questions and concerns about the Opik
+Optimizer, providing clear and concise answers to help users effectively utilize
+the tool.
+
+<Tip>
+  Many general questions about model support (OpenAI, Azure, local models, etc.) and passing LLM parameters like `temperature` are covered in our [LiteLLM Support for Optimizers](/agent_optimization/opik_optimizer/litellm_support) guide.
+</Tip>
+
+## General Questions
+
+<AccordionGroup>
+  <Accordion title="Q: How do I choose the right optimizer for my task?">
+    A: The best optimizer depends on your specific needs:
+    - **`MetaPromptOptimizer`**: Good for general iterative refinement of a single instruction prompt. It uses an LLM to suggest and evaluate changes.
+    - **`FewShotBayesianOptimizer`**: Ideal when you're using chat models and want to find the optimal set and number of few-shot examples to include with your system prompt.
+    - **`MiproOptimizer`**: Best for complex tasks, especially those involving tool use or multi-step reasoning. It leverages the DSPy framework to optimize potentially complex agent structures.
+    - **`EvolutionaryOptimizer`**: Suited for exploring a wide range of prompt variations through genetic algorithms. It supports multi-objective optimization (e.g., performance vs. prompt length) and can use LLMs for more intelligent mutations and crossovers.
+
+    See the [Optimization Algorithms overview](/agent_optimization/overview#optimization-algorithms) for a comparison table and links to detailed guides.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: What are `TaskConfig` and `MetricConfig`? Why are they important?">
+    A: These are crucial configuration objects:
+    - **`TaskConfig`**: Defines *what* your LLM task is. It specifies:
+        - `instruction_prompt`: The base prompt you're trying to optimize.
+        - `input_dataset_fields`: Which fields from your dataset should be used as input to the LLM.
+        - `output_dataset_field`: Which field in your dataset contains the target/reference output.
+        - `use_chat_prompt`: Whether the prompt should be formatted for chat models (e.g., with system/user/assistant roles).
+        - `tools`: (Optional) A list of tools the agent can use, primarily for `MiproOptimizer`.
+    - **`MetricConfig`**: Defines *how* the performance of a prompt is measured. It specifies:
+        - `metric`: An instance of an evaluation metric (e.g., `LevenshteinRatio()`, `Accuracy()`, or a custom metric).
+        - `inputs`: A mapping that tells the metric how to get its required inputs (e.g., `{"output": from_llm_response_text(), "reference": from_dataset_field(name="expected_answer")}`).
+
+    Correctly configuring these tells the optimizer what to optimize and how to judge success. You can find more details in the [API Reference](/agent_optimization/opik_optimizer/reference) and individual optimizer examples.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: How does `project_name` in the optimizer constructor work?">
+    A: The `project_name` parameter allows you to group and organize your optimization runs within the Opik platform. When you view your experiments in the Opik UI, runs with the same `project_name` will be logically associated, making it easier to track progress and compare different optimization attempts for the same underlying task.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: What does `n_samples` in `optimizer.optimize_prompt(...)` do?">
+    A: The `n_samples` parameter controls how many items from your dataset are used to evaluate each candidate prompt during an optimization run.
+    - If `None` or not specified, the behavior might vary slightly by optimizer, but often a default number of samples or the full dataset (if small) might be used.
+    - Specifying `n_samples` (e.g., `n_samples=50`) means that for each prompt being tested, it will be evaluated against that many randomly chosen examples from your dataset.
+    - Using a subset can significantly speed up optimization, especially with large datasets or slow models, but it introduces a trade-off: the evaluation score for each prompt becomes an estimate based on that subset. For final robust evaluation, you might use more samples or the full dataset.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: How can I view the results of an optimization?">
+    A: The `optimize_prompt` method of any optimizer returns an `OptimizationResult` object.
+    - You can call `result.display()` to get a nicely formatted summary in your console, including the best prompt, score, and other details.
+    - The `OptimizationResult` object itself contains attributes like `result.prompt`, `result.score`, `result.history`, `result.details`, etc., which you can access programmatically.
+    - All optimization runs are also logged to the Opik platform, where you can find detailed dashboards, compare trials, and view the evolution of prompts.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: Can I run optimizers in parallel or control threading?">
+    A: Yes, most optimizers have a `num_threads` parameter in their constructor (e.g., `MetaPromptOptimizer(..., num_threads=8)`). This parameter controls the number of worker threads used for parallel evaluation of candidate prompts or dataset items, which can significantly speed up the optimization process, especially when evaluations involve LLM calls. The optimal number of threads depends on your CPU, the LLM API's rate limits, and the nature of the task.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: What is the recommended number of records for the optimization dataset?">
+    A:
+    - **Minimum**: 50 examples for basic coverage.
+    - **Optimal**: 100-500 examples for better representation and more reliable results.
+    - **Maximum**: Depends on the model's context window and your computational budget.
+    For more details, see our [Datasets and Testing](/agent_optimization/opik_optimizer/datasets) documentation.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: Does the algorithm use input and output data to optimize the prompt?">
+    A: Yes, both input and output data from your dataset are used. Input data forms the basis of the queries sent to the LLM, and output data (ground truth) is used by the `MetricConfig` to score how well the LLM's responses match the desired outcome. This score then guides the optimization process.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: What models are supported by optimizers?">
+    A: Opik Agent Optimizer supports a wide array of Large Language Models through its integration with **LiteLLM**. This includes models from:
+    - OpenAI (e.g., GPT-4, GPT-3.5-turbo)
+    - Azure OpenAI
+    - Anthropic (e.g., Claude series)
+    - Google (e.g., Gemini series)
+    - Cohere
+    - Mistral AI
+    - Locally hosted models (e.g., via Ollama, Hugging Face Inference Endpoints)
+    - And many others supported by LiteLLM.
+
+    For comprehensive details on how to specify different model providers, pass API keys, and configure endpoints, please refer to our dedicated [LiteLLM Support for Optimizers guide](/agent_optimization/opik_optimizer/litellm_support).
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: Is there any document which explains how these optimization algorithms work?">
+    A: Yes, we have detailed documentation:
+    1.  **Core Concepts**: See our [Core Concepts](/agent_optimization/opik_optimizer/concepts) documentation.
+    2.  **Optimizer Details**: Each optimizer has its own page under [Optimization Algorithms](/agent_optimization/overview#optimization-algorithms), explaining how it works, configuration, and examples.
+    3.  **Research Papers**: Many optimizer pages include links to relevant research papers.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: What should I do if the optimization isn't improving results?">
+  A: Try these steps:
+  1.  **Check Dataset**:
+      - Ensure sufficient examples (50+ recommended, 100-500 optimal).
+      - Verify data quality (accurate ground truth, diverse inputs).
+      - Check for representation of edge cases and common scenarios.
+  2.  **Review `MetricConfig`**:
+      - Is the metric appropriate for your task? (e.g., exact match vs. semantic similarity).
+      - Are the `inputs` to the metric correctly mapped from the dataset and LLM output?
+  3.  **Review `TaskConfig`**:
+      - Is the `instruction_prompt` a good starting point?
+      - Are `input_dataset_fields` and `output_dataset_field` correctly specified?
+      - Is `use_chat_prompt` set correctly for your model type?
+  4.  **Adjust Optimizer Parameters**:
+      - Try more iterations/rounds/generations/candidates.
+      - For `MetaPromptOptimizer`, consider a more powerful `reasoning_model`.
+      - For `FewShotBayesianOptimizer`, ensure `min_examples` and `max_examples` cover a reasonable range.
+      - For `EvolutionaryOptimizer`, experiment with `population_size`, `mutation_rate`, and LLM-driven operators.
+      - For `MiproOptimizer`, if using tools, ensure the tools themselves are robust.
+  5.  **Adjust LLM Parameters**:
+      - Experiment with `temperature` (lower for more deterministic, higher for more creative).
+      - Ensure `max_tokens` is sufficient for the desired output.
+  6.  **Increase `n_samples`**: If you're using a small `n_samples` for `optimize_prompt`, try increasing it for more stable evaluations per candidate, or evaluate the final prompt on the full dataset.
+  7.  **Analyze Optimizer History**: The `OptimizationResult.history` can provide insights into how scores changed over iterations.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: How can I optimize for specific use cases?">
+  A:
+  1.  **Custom Metrics**: Define your own metric by subclassing `opik.evaluation.metrics.BaseMetric` if standard metrics aren't sufficient. This allows you to score prompt performance based on domain-specific criteria.
+  2.  **Dataset Curation**: Tailor your dataset to reflect the specific nuances, vocabulary, and desired outputs of your use case. Include challenging examples and edge cases.
+  3.  **`TaskConfig.instruction_prompt`**: Craft your initial instruction prompt to be highly relevant to the use case. Even with optimization, a good starting point helps.
+  4.  **Optimizer Selection**: Choose the optimizer best suited for the *type* of optimization your use case needs (e.g., few-shot examples, complex agent logic, general wording).
+  5.  **Parameter Tuning**: Adjust optimizer and LLM parameters based on experimentation to fine-tune performance for your specific scenario. For example, if optimizing for code generation, you might use a lower temperature.
+  </Accordion>
+</AccordionGroup>
+
+
+## Optimizer Specific Questions
+
+### `MetaPromptOptimizer`
+
+<AccordionGroup>
+  <Accordion title="Q: When is `MetaPromptOptimizer` a good choice?">
+    A: `MetaPromptOptimizer` is a strong choice when you have an initial instruction prompt and want to iteratively refine its wording, structure, and clarity using LLM-driven suggestions. It's good for general-purpose prompt improvement where the core idea of the prompt is sound but could be phrased better for the LLM.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: What's the difference between `model` and `reasoning_model` in `MetaPromptOptimizer`?">
+    A:
+    - `model`: This is the LLM used to *evaluate* the candidate prompts. It runs the prompts against your dataset and its responses are scored by the `MetricConfig`.
+    - `reasoning_model`: (Optional) This is the LLM used by the optimizer to *generate new candidate prompts* and provide the reasoning behind them. If not specified, the `model` is used for both evaluation and reasoning. You might use a more powerful (and potentially more expensive) model as the `reasoning_model` to get higher quality prompt suggestions, while using a cheaper/faster model for the more frequent evaluations.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: How do `max_rounds` and `num_prompts_per_round` affect `MetaPromptOptimizer`?">
+    A:
+    - `max_rounds`: This defines the number of full optimization cycles. In each round, new prompts are generated and evaluated. More rounds give the optimizer more chances to improve but increase time/cost.
+    - `num_prompts_per_round`: This is the number of new candidate prompts the `reasoning_model` will generate in each round based on the current best prompt. A higher number explores more variations per round.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: How does `adaptive_trial_threshold` work in `MetaPromptOptimizer`?">
+    A: If set (e.g., to 0.8), `adaptive_trial_threshold` helps manage evaluation cost. After `initial_trials_per_candidate`, if a new prompt's score is below `best_current_score * adaptive_trial_threshold`, it's considered unpromising and won't receive the full `max_trials_per_candidate`. This focuses evaluation effort on better candidates.
+  </Accordion>
+</AccordionGroup>
+
+### `FewShotBayesianOptimizer`
+
+<AccordionGroup>
+  <Accordion title="Q: When should I use `FewShotBayesianOptimizer`?">
+    A: This optimizer is specifically designed for **chat models** when you want to find the optimal set and number of few-shot examples (user/assistant turn pairs) to prepend to your main system instruction. If your task benefits significantly from in-context learning via examples, this is the optimizer to use.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: How do `min_examples`, `max_examples`, and `n_iterations` influence `FewShotBayesianOptimizer`?">
+    A:
+    - `min_examples` / `max_examples`: These define the range for the number of few-shot examples that Optuna (the underlying Bayesian optimization library) will try to select from your dataset. For instance, it might try using 2 examples, then 5, then 3, etc., within this range.
+    - `n_iterations` (`optimize_prompt`'s `n_trials` parameter is often an alias or related): This is the total number of different few-shot combinations (number of examples + specific examples) that Optuna will try. More iterations allow for a more thorough search of the example space but take longer.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: Does `FewShotBayesianOptimizer` optimize the `instruction_prompt` itself?">
+    A: No, `FewShotBayesianOptimizer` focuses solely on finding the best *set of examples* from your dataset to pair with the `instruction_prompt` you provide in `TaskConfig`. The `instruction_prompt` itself remains unchanged.
+  </Accordion>
+</AccordionGroup>
+
+### `MiproOptimizer`
+
+<AccordionGroup>
+  <Accordion title="Q: When is `MiproOptimizer` suitable?">
+    A: `MiproOptimizer` is powerful for complex tasks, especially those requiring:
+    - Multi-step reasoning.
+    - Tool usage by an LLM agent.
+    - Optimization of more than just a single prompt string (e.g., optimizing the internal prompts of a DSPy agent).
+    It leverages the [DSPy](https://dspy.ai/) library.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: How does `MiproOptimizer` relate to DSPy?">
+    A: `MiproOptimizer` uses DSPy's teleprompters (specifically an internal version similar to MIPRO) to "compile" your task into an optimized DSPy program. This compilation process involves generating and refining prompts and few-shot examples for the modules within the DSPy program. If you provide `tools` in `TaskConfig`, it will typically build and optimize a DSPy agent (like `dspy.ReAct`).
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: What does `num_candidates` in `MiproOptimizer.optimize_prompt` control?">
+    A: `num_candidates` influences the DSPy compilation process. It generally corresponds to the number of candidate programs or configurations that the DSPy teleprompter will explore and evaluate during its optimization. A higher number means a more thorough search.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: Can I use `MiproOptimizer` if I'm not familiar with DSPy?">
+    A: Yes, `MiproOptimizer` abstracts away much of DSPy's complexity for common use cases. You define your task via `TaskConfig` (including tools if needed), and the optimizer handles the DSPy program construction and optimization. However, understanding DSPy concepts can help in advanced scenarios or for interpreting the `OptimizationResult` which might contain DSPy module structures.
+  </Accordion>
+</AccordionGroup>
+
+### EvolutionaryOptimizer
+
+<AccordionGroup>
+  <Accordion title="Q: What are the strengths of `EvolutionaryOptimizer`?">
+    A: Its main strengths are:
+    - **Broad Exploration**: Genetic algorithms can explore a very diverse range of prompt structures.
+    - **Multi-Objective Optimization (`enable_moo`)**: It can optimize for multiple criteria simultaneously, e.g., maximizing a performance score while minimizing prompt length.
+    - **LLM-driven Genetic Operators**: It can use LLMs to perform more semantically meaningful "mutations" and "crossovers" of prompts, potentially leading to more creative and effective solutions than purely syntactic changes.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: What does `enable_moo` (multi-objective optimization) do in `EvolutionaryOptimizer`?">
+    A: When `enable_moo=True`, the optimizer tries to find prompts that are good across multiple dimensions. By default, it optimizes for the primary metric score (maximize) and prompt length (minimize). Instead of a single best prompt, it returns a set of "Pareto optimal" solutions, where each solution is a trade-off (e.g., one prompt might have a slightly lower score but be much shorter, while another has the highest score but is longer).
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: How do `population_size` and `num_generations` impact `EvolutionaryOptimizer`?">
+    A:
+    - `population_size`: The number of candidate prompts maintained in each generation. A larger population increases diversity but also computational cost per generation.
+    - `num_generations`: The number of evolutionary cycles (evaluation, selection, crossover, mutation). More generations allow for more refinement but take longer.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: What is `output_style_guidance` in `EvolutionaryOptimizer` and when should I use it?">
+    A: `output_style_guidance` is a string you provide to guide the LLM-driven mutation and crossover operations. It should describe the desired *style of the target LLM's output* when using the prompts being optimized (e.g., "Produce concise, factual, single-sentence answers."). This helps the optimizer generate new prompt variants that are more likely to elicit correctly styled responses from the final LLM. Use it if you have specific formatting or stylistic requirements for the LLM's output. If `infer_output_style=True` and this is not set, the optimizer tries to infer it from the dataset.
+  </Accordion>
+</AccordionGroup>
+
+<AccordionGroup>
+  <Accordion title="Q: What's the difference between standard and LLM-driven operators (`enable_llm_crossover`) in `EvolutionaryOptimizer`?">
+    A:
+    - **Standard operators**: Perform syntactic changes (e.g., swapping words, combining sentence chunks from two parent prompts).
+    - **LLM-driven operators**: Use an LLM to perform more intelligent, semantic changes. For example, an LLM-driven crossover might try to blend the core ideas of two parent prompts into a new, coherent child prompt, rather than just mixing parts. This often leads to higher quality offspring but incurs more LLM calls.
+  </Accordion>
+</AccordionGroup>
+
+## Example Projects & Cookbooks
+
+<Info>
+  Looking for hands-on, runnable examples? Explore our [Example Projects & Cookbooks](/agent_optimization/cookbook) for step-by-step Colab notebooks on prompt and agent optimization.
+</Info>
+
+## Next Steps
+
+- Explore [API Reference](/agent_optimization/opik_optimizer/reference) for detailed technical documentation.
+- Review the individual Optimizer pages under [Optimization Algorithms](/agent_optimization/overview#optimization-algorithms).
+- Check out the [Quickstart Guide](/agent_optimization/opik_optimizer/quickstart).

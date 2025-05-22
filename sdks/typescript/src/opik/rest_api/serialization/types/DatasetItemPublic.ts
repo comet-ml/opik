@@ -22,6 +22,7 @@ export const DatasetItemPublic: core.serialization.ObjectSchema<
         "experiment_items",
         core.serialization.list(ExperimentItemPublic).optional(),
     ),
+    datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -36,6 +37,7 @@ export declare namespace DatasetItemPublic {
         source: DatasetItemPublicSource.Raw;
         data: JsonNode.Raw;
         experiment_items?: ExperimentItemPublic.Raw[] | null;
+        dataset_id?: string | null;
         created_at?: string | null;
         last_updated_at?: string | null;
         created_by?: string | null;

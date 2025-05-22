@@ -16,7 +16,7 @@ from .. import (
     rest_client_configurator,
     url_helpers,
 )
-from ..message_processing import messages, streamer_constructors
+from ..message_processing import messages, streamer_constructors, message_queue
 from ..message_processing.batching import sequence_splitter
 from ..rest_api import client as rest_api_client
 from ..rest_api.core.api_error import ApiError
@@ -93,7 +93,7 @@ class Opik:
         self._use_batching = _use_batching
 
         self._initialize_streamer(
-            base_url=config_.url_override,
+            url_override=config_.url_override,
             workers=config_.background_workers,
             file_upload_worker_count=config_.file_upload_background_workers,
             api_key=config_.api_key,
@@ -113,7 +113,7 @@ class Opik:
 
     def _initialize_streamer(
         self,
-        base_url: str,
+        url_override: str,
         workers: int,
         file_upload_worker_count: int,
         api_key: Optional[str],
@@ -128,19 +128,26 @@ class Opik:
             compress_json_requests=enable_json_request_compression,
         )
         self._rest_client = rest_api_client.OpikApi(
-            base_url=base_url,
+            base_url=url_override,
             httpx_client=httpx_client_,
         )
         self._rest_client._client_wrapper._timeout = (
             httpx.USE_CLIENT_DEFAULT
         )  # See https://github.com/fern-api/fern/issues/5321
         rest_client_configurator.configure(self._rest_client)
+
+        max_queue_size = message_queue.calculate_max_queue_size(
+            maximal_queue_size=self._config.maximal_queue_size,
+            batch_factor=self._config.maximal_queue_size_batch_factor,
+        )
+
         self._streamer = streamer_constructors.construct_online_streamer(
             n_consumers=workers,
             rest_client=self._rest_client,
             httpx_client=httpx_client_,
             use_batching=use_batching,
             file_upload_worker_count=file_upload_worker_count,
+            max_queue_size=max_queue_size,
         )
 
     def _display_trace_url(self, trace_id: str, project_name: str) -> None:
@@ -894,28 +901,37 @@ class Opik:
             truncate: Whether to truncate image data stored in input, output or metadata
         """
 
-        page_size = 100
         traces: List[trace_public.TracePublic] = []
 
-        filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
+        filter_expressions = opik_query_language.OpikQueryLanguage(
+            filter_string
+        ).get_filter_expressions()
+        filters_ = helpers.parse_search_span_expressions(filter_expressions)
 
-        page = 1
+        # this is the constant for maximum objects sent from backend side
+        max_endpoint_batch_size = 2_000
+
         while len(traces) < max_results:
-            page_traces = self._rest_client.traces.get_traces_by_project(
+            spans_amount_left = max_results - len(traces)
+            current_batch_size = min(spans_amount_left, max_endpoint_batch_size)
+
+            traces_stream = self._rest_client.traces.search_traces(
                 project_name=project_name or self._project_name,
-                filters=filters,
-                page=page,
-                size=page_size,
+                filters=filters_,
+                limit=current_batch_size,
                 truncate=truncate,
+                last_retrieved_id=traces[-1].id if len(traces) > 0 else None,
             )
 
-            if len(page_traces.content) == 0:
+            new_traces = rest_stream_parser.read_and_parse_stream(
+                stream=traces_stream, item_class=trace_public.TracePublic
+            )
+            traces.extend(new_traces)
+
+            if current_batch_size > len(new_traces):
                 break
 
-            traces.extend(page_traces.content)
-            page += 1
-
-        return traces[:max_results]
+        return traces
 
     def search_spans(
         self,
@@ -962,10 +978,10 @@ class Opik:
             new_spans = rest_stream_parser.read_and_parse_stream(
                 stream=spans_stream, item_class=span_public.SpanPublic
             )
-            if len(new_spans) == 0:
-                break
-
             spans.extend(new_spans)
+
+            if current_batch_size > len(new_spans):
+                break
 
         return spans
 
@@ -1091,6 +1107,7 @@ class Opik:
         dataset_name: str,
         objective_name: str,
         name: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> optimization.Optimization:
         id = id_helpers.generate_id()
 
@@ -1100,6 +1117,7 @@ class Opik:
             dataset_name=dataset_name,
             objective_name=objective_name,
             status="running",
+            metadata=metadata,
         )
 
         optimization_client = optimization.Optimization(

@@ -1,0 +1,144 @@
+---
+title: "Opik Agent Optimizer: Getting Started"
+subtitle: "Simple few step process to getting you optimized"
+description: "Get started with Opik Agent Optimizer SDK to improve your LLM prompts through systematic optimization. Learn installation, configuration, and basic usage."
+pytest_codeblocks_skip: true
+---
+This guide will help you get started with Opik Agent Optimizer SDK for improving your LLM prompts through systematic optimization.
+
+## Prerequisites
+
+- Python 3.9 or higher
+- An Opik API key ([sign up here](https://www.comet.com/signup?from=llm) if you don't have one)
+
+## Getting Started with Optimizers  
+
+Here's a step-by-step guide to get you up and running with Opik Agent Optimizer:
+
+<Steps>
+  <Step title="1. Install Opik and the optimizer package">
+    Install the required packages using pip or uv (recommended for faster installation):
+    ```bash
+    # Using pip
+    pip install opik opik-optimizer
+
+    # Using uv (recommended for faster installation)
+    uv pip install opik-optimizer
+    ```
+
+    Then configure your Opik environment:
+    ```bash
+    # Install the Opik CLI if not already installed
+    pip install opik
+
+    # Configure your API key
+    opik configure
+    ```
+  </Step>
+  <Step title="2. Import necessary modules">
+    First, we import all the required classes and functions from `opik` and `opik_optimizer`.
+    ```python
+    from opik.evaluation.metrics import LevenshteinRatio
+    from opik_optimizer import FewShotBayesianOptimizer, MetricConfig, TaskConfig, from_llm_response_text, from_dataset_field
+    from opik_optimizer.demo import get_or_create_dataset
+    ```
+  </Step>
+  <Step title="3. Define your evaluation dataset">
+    You can use a demo dataset for testing, or create/load your own. `get_or_create_dataset` is a helper for demo purposes.
+    ```python
+    # You can use a demo dataset for testing, or your own dataset
+    dataset = get_or_create_dataset("tiny-test")
+    print(f"Using dataset: {dataset.name}, with {len(dataset.items)} items.")
+    ```
+  </Step>
+  <Step title="4. Configure the evaluation metric">
+    `MetricConfig` tells the optimizer how to score the LLM's outputs. Here, `LevenshteinRatio` measures the similarity between the model's response and a "label" field in the dataset.
+    ```python
+    # This example uses Levenshtein distance to measure output quality
+    metric_config = MetricConfig(
+        metric=LevenshteinRatio(),
+        inputs={
+            "output": from_llm_response_text(),  # Model's output
+            "reference": from_dataset_field(name="label"),  # Ground truth
+        }
+    )
+    print("MetricConfig created.")
+    ```
+  </Step>
+  <Step title="5. Define your base prompt">
+    This is the initial instruction that the `FewShotBayesianOptimizer` will try to enhance by adding few-shot examples.
+    ```python
+    # Following best practices, provide clear instructions and context
+    system_prompt = """You are an expert assistant. Your task is to answer questions
+    accurately and concisely. Consider the context carefully before responding."""
+    print("System prompt defined.")
+    ```
+  </Step>
+  <Step title="6. Choose and configure an optimizer">
+    Instantiate `FewShotBayesianOptimizer`, specifying the model, project name, and parameters like `min_examples`, `max_examples`, and `n_iterations` which control the few-shot search.
+    ```python
+    optimizer = FewShotBayesianOptimizer(
+        model="gpt-4",  # Choose your preferred model, ensure it's configured in LiteLLM if not OpenAI
+        project_name="Prompt Optimization Quickstart",
+        min_examples=2,  # Minimum number of examples to try
+        max_examples=5,  # Maximum number of examples to try (kept small for quick demo)
+        n_iterations=3   # Number of optimization iterations (kept small for quick demo)
+    )
+    print(f"Optimizer configured: {type(optimizer).__name__}")
+    ```
+  </Step>
+  <Step title="7. Configure the task">
+    `TaskConfig` ties everything together: the `instruction_prompt`, the dataset fields to use for input and output, and whether to format for chat models.
+    ```python
+    task_config = TaskConfig(
+        instruction_prompt=system_prompt,
+        input_dataset_fields=["text"],  # Input field(s) from your dataset
+        output_dataset_field="label",   # Output field from your dataset
+        use_chat_prompt=True,  # Use chat format for modern LLMs
+    )
+    print("TaskConfig created.")
+    ```
+  </Step>
+  <Step title="8. Run the optimization">
+    The `optimizer.optimize_prompt(...)` method is called with the dataset, metric configuration, and task configuration to start the optimization process.
+    ```python
+    print("Starting optimization...")
+    result = optimizer.optimize_prompt(
+        dataset=dataset,
+        metric_config=metric_config,
+        task_config=task_config,
+        n_samples=10 # Use a subset of the dataset for faster evaluation during optimization
+    )
+    print("Optimization finished.")
+    ```
+  </Step>
+  <Step title="9. View results in the CLI">
+    After optimization completes, call `result.display()` to see a summary of the optimization, including the best prompt found and its score, directly in your terminal.
+    ```python
+    print("Optimization Results:")
+    result.display() 
+    ```
+    The `OptimizationResult` object also contains more details in `result.history` and `result.details`. The optimization results will be displayed in your console, showing the progress and final scores.
+    <Frame>
+      <img src="/img/agent_optimization/sdk_cli_results.png" alt="Opik agent optimization progress in CLI" />
+    </Frame>
+  </Step>
+  <Step title="10. View results in the Opik dashboard">
+    In addition to the CLI output, your optimization results are also available in the Opik Agent Optimization dashboard for further analysis and visualization.
+
+    <Frame>
+      <img src="/img/agent_optimization/trial_dashboard.png" alt="Opik agent optimization results in dashboard" />
+    </Frame>
+  </Step>
+</Steps>
+
+## Next Steps
+
+1. Explore different [optimization algorithms](/agent_optimization/overview#optimization-algorithms) to choose the best one for your use case
+2. Understand [prompt engineering best practices](/agent_optimization/best_practices/prompt_engineering)
+3. Set up your own [evaluation datasets](/agent_optimization/opik_optimizer/datasets)
+4. Review the [API reference](/agent_optimization/opik_optimizer/reference) for detailed configuration options
+
+<Info>
+  🚀 Want to see Opik Agent Optimizer in action? Check out our [Example Projects & Cookbooks](/agent_optimization/cookbook) for runnable Colab notebooks covering real-world optimization workflows, including HotPotQA and synthetic data generation.
+</Info>

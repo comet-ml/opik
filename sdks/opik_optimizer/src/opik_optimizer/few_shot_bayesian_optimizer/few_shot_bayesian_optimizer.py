@@ -101,7 +101,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         split_idx = int(len(dataset) * train_ratio)
         return dataset[:split_idx], dataset[split_idx:]
 
-    def _optimize_prompt(   
+    def _optimize_prompt(
         self,
         dataset: Union[str, Dataset],
         metric_config: MetricConfig,
@@ -190,7 +190,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "n_examples", self.min_examples, self.max_examples
             )
             example_indices = [
-                trial.suggest_categorical(f"example_{i}", list(range(len(dataset_items))))
+                trial.suggest_categorical(
+                    f"example_{i}", list(range(len(dataset_items)))
+                )
                 for i in range(n_examples)
             ]
             trial.set_user_attr("example_indices", example_indices)
@@ -324,6 +326,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         main_prompt_string = best_param.instruction
 
         return optimization_result.OptimizationResult(
+            optimizer=self.__class__.__name__,
             prompt=main_prompt_string,
             score=best_score,
             metric_name=metric_config.metric.name,
@@ -361,6 +364,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             optimization = self._opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric_config.metric.name,
+                metadata={"optimizer": self.__class__.__name__},
             )
         except Exception:
             logger.warning(

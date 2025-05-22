@@ -5,7 +5,7 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import dev.langchain4j.model.anthropic.AnthropicChatModel;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
@@ -46,7 +46,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
                 .build();
     }
 
-    private ChatLanguageModel newChatLanguageModel(LlmProviderClientApiConfig config,
+    private ChatModel newChatLanguageModel(LlmProviderClientApiConfig config,
             LlmAsJudgeModelParameters modelParameters) {
         var builder = AnthropicChatModel.builder()
                 .apiKey(config.apiKey())
@@ -75,7 +75,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
     }
 
     @Override
-    public ChatLanguageModel generateChat(@NonNull LlmProviderClientApiConfig config,
+    public ChatModel generateChat(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         return newChatLanguageModel(config, modelParameters);
     }

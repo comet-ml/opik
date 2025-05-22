@@ -314,11 +314,8 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   }
 
   return (
-    <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Experiments</h1>
-      </div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+    <div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={search}

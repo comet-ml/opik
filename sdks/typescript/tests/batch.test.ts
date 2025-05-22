@@ -2,6 +2,7 @@ import { logger } from "@/utils/logger";
 import { Opik } from "opik";
 import { MockInstance } from "vitest";
 import { advanceToDelay } from "./utils";
+import { mockAPIFunction, mockAPIFunctionWithError } from "./mockUtils";
 
 const logTraceAndSpan = async ({
   client,
@@ -42,10 +43,6 @@ const logTraceAndSpan = async ({
   await client.flush();
 };
 
-async function mockAPIPromise<T>() {
-  return {} as T;
-}
-
 describe("Opik client batching", () => {
   let client: Opik;
   let createSpansSpy: MockInstance<typeof client.api.spans.createSpans>;
@@ -61,19 +58,19 @@ describe("Opik client batching", () => {
 
     createSpansSpy = vi
       .spyOn(client.api.spans, "createSpans")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     updateSpansSpy = vi
       .spyOn(client.api.spans, "updateSpan")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     createTracesSpy = vi
       .spyOn(client.api.traces, "createTraces")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     updateTracesSpy = vi
       .spyOn(client.api.traces, "updateTrace")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     loggerErrorSpy = vi.spyOn(logger, "error");
 
@@ -139,9 +136,7 @@ describe("Opik client batching", () => {
   it("should log an error if trace endpoint fails", async () => {
     const errorMessage = "Test error";
 
-    createTracesSpy.mockImplementation(async () => {
-      throw new Error(errorMessage);
-    });
+    createTracesSpy.mockImplementation(mockAPIFunctionWithError(errorMessage));
 
     const trace = client.trace({ name: "test" });
     trace.end();

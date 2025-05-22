@@ -88,6 +88,10 @@ set_trace_data = _context_storage.set_trace_data
 clear_all = _context_storage.clear_all
 
 
+def get_current_context_instance() -> OpikContextStorage:
+    return _context_storage
+
+
 @contextlib.contextmanager
 def temporary_context(
     span_data: span.SpanData, trace_data: Optional[trace.TraceData]

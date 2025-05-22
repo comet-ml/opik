@@ -1,0 +1,116 @@
+## Integration with Opik
+
+As of today, `Opik` does not provide a Ruby SDK. However, you can use the Opik OpenTelemetry integration to send telemetry data to Opik.
+
+## Opik Configuration
+
+You can configure your application to use OpenTelemetry SDK by setting up the following dependencies:
+
+```ruby
+# gemfile
+# ... other gems
+
+gem 'opentelemetry-sdk'
+gem 'opentelemetry-exporter-otlp'
+gem 'opentelemetry-instrumentation-all'
+```
+
+Next, you need to set up the OpenTelemetry SDK and configure it to use the Opik as the traces backend.
+
+```ruby
+# opentelemetry_config.rb
+require 'opentelemetry/sdk'
+require 'opentelemetry/exporter/otlp'
+require 'opentelemetry/instrumentation/all'
+
+module OpenTelemetryConfig
+  def self.configure
+
+    # This is the url for the Opik API endpoint for Otel traces
+    opik_endpoint = ENV.fetch('OPIK_OTEL_TRACES_ENDPOINT', 'https://www.comet.com/opik/api/v1/private/otel/v1/traces')
+    # Here you can set the Opik API key, project name and workspace name
+    # Set any default values but make sure to set them correctly in your environment variables
+    opik_api_key = ENV.fetch('OPIK_API_KEY', '<any-api-key-value>')
+    opik_project_name = ENV.fetch('OPIK_PROJECT_NAME', '<any-project-name-value>')
+    opik_workspace_name = ENV.fetch('OPIK_COMET_WORKSPACE', '<default-workspace>')
+
+    # This is very important, you need to set the headers for the Opik API calls to be able to authenticate against Opik
+    otlp_headers = {
+      'Authorization' => opik_api_key,
+      'projectName' => opik_project_name,
+      'Comet-Workspace' => opik_workspace_name
+    }
+
+    # Configure the exporter to use the Opik API endpoint and headers
+    ENV['OTEL_EXPORTER_OTLP_PROTOCOL'] = 'http/protobuf' # Use the OTLP HTTP/Protobuf protocol
+    ENV['OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'] = opik_endpoint
+    ENV['OTEL_EXPORTER_OTLP_TRACES_HEADERS'] = otlp_headers.map { |k, v| "#{k}=#{v}" }.join(',')
+
+    OpenTelemetry::SDK.configure do |c|
+      c.service_name = opik_project_name
+      c.use_all # Enable automatic instrumentation for common libraries
+    end
+  end
+end
+
+OpenTelemetryConfig.configure
+```
+
+## Usage
+
+Once configured, you can start using the OpenTelemetry SDK in your application. The following example demonstrates how to create a simple trace and span:
+
+```ruby
+# app.rb
+require_relative './opentelemetry_config'
+
+require 'net/http'
+require 'uri'
+require 'json'
+
+TRACER = OpenTelemetry.tracer_provider.tracer('opik-tracer', '1.0.0')
+
+uri = URI("https://jsonplaceholder.typicode.com/posts/1")
+
+# Create a trace and spans via OpenTelemetry instrumentation
+TRACER.in_span('JSONPlaceholder API Call', kind: :client, attributes: {
+  'http.url' => uri.to_s,
+  'http.method' => 'GET',
+}) do |span|
+  # Your application logic ...
+
+  # For example, making an HTTP request to JSONPlaceholder
+  http = Net::HTTP.new(uri.host, uri.port)
+  http.use_ssl = true
+
+  request = Net::HTTP::Get.new(uri)
+  request["Content-Type"] = "application/json"
+
+  response = http.request(request)
+  span.set_attribute('http.status_code', response.code.to_i)
+
+  puts "Response from JSONPlaceholder: #{response.body}"
+
+  span.set_attribute('output', response.body)
+end
+```
+
+It's important to note that OpenTelemetry (otel) auto-instrumentations don’t automatically align with Opik’s schema, so you may need to manually set certain attributes, like the `output` attribute in the example above.
+
+Opik supports mapping of attributes to Opik traces, for the following libraries:
+
+- `python/OpenInference`
+- `python/Pydantic`
+- `python/GenAI`
+
+In the future we may add more integrations to Opik. If you have any suggestions on what else could be integrated into Opik, please let us know!
+
+<Tip>
+  If your application is a short-lived process, you may need to call `OpenTelemetry.tracer_provider.force_flush(timeout: <timeout>)` or similar method at the end of your application to ensure all telemetry data is flushed before exiting.
+</Tip>
+
+## Conclusion
+
+This guide provided an overview of how to integrate Opik with the OpenTelemetry SDK in Ruby. By following the steps outlined above, you can easily set up your application to send telemetry data to Opik for monitoring and analysis.
+
+Feel free to reach out to us if you have any questions or issues with the integration, via the [GitHub repository](https://github.com/comet-ml/opik/issues), or join our [Slack](https://chat.comet.com) channel.

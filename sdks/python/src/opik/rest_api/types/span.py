@@ -8,6 +8,7 @@ from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .comment import Comment
 from .error_info import ErrorInfo
 from .feedback_score import FeedbackScore
+from .json_list_string import JsonListString
 from .json_node import JsonNode
 from .span_type import SpanType
 
@@ -26,8 +27,8 @@ class Span(UniversalBaseModel):
     type: SpanType
     start_time: dt.datetime
     end_time: typing.Optional[dt.datetime] = None
-    input: typing.Optional[JsonNode] = None
-    output: typing.Optional[JsonNode] = None
+    input: typing.Optional[JsonListString] = None
+    output: typing.Optional[JsonListString] = None
     metadata: typing.Optional[JsonNode] = None
     model: typing.Optional[str] = None
     provider: typing.Optional[str] = None

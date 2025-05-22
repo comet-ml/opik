@@ -14,14 +14,15 @@ export interface SpanWrite {
     type: OpikApi.SpanWriteType;
     startTime: Date;
     endTime?: Date;
-    input?: OpikApi.JsonNodeWrite;
-    output?: OpikApi.JsonNodeWrite;
+    input?: OpikApi.JsonListStringWrite;
+    output?: OpikApi.JsonListStringWrite;
     metadata?: OpikApi.JsonNodeWrite;
     model?: string;
     provider?: string;
     tags?: string[];
     usage?: Record<string, number>;
     errorInfo?: OpikApi.ErrorInfoWrite;
+    lastUpdatedAt?: Date;
     totalEstimatedCost?: number;
     totalEstimatedCostVersion?: string;
 }

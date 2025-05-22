@@ -6,6 +6,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .error_info_write import ErrorInfoWrite
+from .json_list_string_write import JsonListStringWrite
 from .json_node_write import JsonNodeWrite
 from .span_write_type import SpanWriteType
 
@@ -23,14 +24,15 @@ class SpanWrite(UniversalBaseModel):
     type: SpanWriteType
     start_time: dt.datetime
     end_time: typing.Optional[dt.datetime] = None
-    input: typing.Optional[JsonNodeWrite] = None
-    output: typing.Optional[JsonNodeWrite] = None
+    input: typing.Optional[JsonListStringWrite] = None
+    output: typing.Optional[JsonListStringWrite] = None
     metadata: typing.Optional[JsonNodeWrite] = None
     model: typing.Optional[str] = None
     provider: typing.Optional[str] = None
     tags: typing.Optional[typing.List[str]] = None
     usage: typing.Optional[typing.Dict[str, int]] = None
     error_info: typing.Optional[ErrorInfoWrite] = None
+    last_updated_at: typing.Optional[dt.datetime] = None
     total_estimated_cost: typing.Optional[float] = None
     total_estimated_cost_version: typing.Optional[str] = None
 
