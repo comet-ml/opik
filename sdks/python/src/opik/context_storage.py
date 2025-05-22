@@ -38,16 +38,52 @@ class OpikContextStorage:
             contextvars.ContextVar("spans_data_stack", default=[])
         )
 
+    def _has_span_id(self, span_id: str) -> bool:
+        return span_id in [span.id for span in self._get_data_stack()]
+
+    def _get_data_stack(self) -> List[span.SpanData]:
+        return self._spans_data_stack_context.get().copy()
+
+    def _trim_span_data_stack_to_certain_span(self, span_id: str) -> None:
+        if not self._has_span_id(span_id):
+            return
+
+        stack = self._get_data_stack()
+        new_stack = []
+        for span in stack:
+            new_stack.append(span)
+            if span.id == span_id:
+                break
+
+        self._spans_data_stack_context.set(new_stack)
+
     def top_span_data(self) -> Optional[span.SpanData]:
         if self.span_data_stack_empty():
             return None
         stack = self._get_data_stack()
         return stack[-1]
 
-    def pop_span_data(self) -> Optional[span.SpanData]:
-        stack = self._get_data_stack()
-        self._spans_data_stack_context.set(stack[:-1])
-        return stack[-1]
+    def pop_span_data(
+        self,
+        ensure_id: Optional[str] = None,
+        pop_until_found: bool = False,
+    ) -> Optional[span.SpanData]:
+        if ensure_id is None:
+            stack = self._get_data_stack()
+            self._spans_data_stack_context.set(stack[:-1])
+            return stack[-1]
+
+        if not self._has_span_id(ensure_id):
+            return None
+
+        if pop_until_found:
+            if self.top_span_data().id != ensure_id:
+                self._trim_span_data_stack_to_certain_span(ensure_id)
+            return self.pop_span_data()
+
+        TOP_SPAN_REMAINS_THE_SAME = None
+
+        return TOP_SPAN_REMAINS_THE_SAME
 
     def add_span_data(self, span: span.SpanData) -> None:
         stack = self._get_data_stack()
@@ -56,15 +92,21 @@ class OpikContextStorage:
     def span_data_stack_empty(self) -> bool:
         return len(self._get_data_stack()) == 0
 
-    def _get_data_stack(self) -> List[span.SpanData]:
-        return self._spans_data_stack_context.get().copy()
-
     def get_trace_data(self) -> Optional[trace.TraceData]:
         trace = self._current_trace_data_context.get()
         return trace
 
-    def pop_trace_data(self) -> Optional[trace.TraceData]:
+    def pop_trace_data(
+        self, ensure_id: Optional[str] = None
+    ) -> Optional[trace.TraceData]:
         trace = self._current_trace_data_context.get()
+
+        if trace is None:
+            return None
+
+        if ensure_id is not None and trace.id != ensure_id:
+            return None
+
         self.set_trace_data(None)
         return trace
 
