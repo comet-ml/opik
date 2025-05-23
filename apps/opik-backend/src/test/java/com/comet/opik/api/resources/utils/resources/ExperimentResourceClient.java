@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentItemBulkUpload;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentStreamRequest;
@@ -153,4 +154,23 @@ public class ExperimentResourceClient {
             return getStreamed(response, ITEM_TYPE_REFERENCE);
         }
     }
+
+    public void bulkUploadExperimentItem(ExperimentItemBulkUpload bulkUpload, String apiKey, String workspaceName) {
+        try (var response = callExperimentItemBulkUpload(bulkUpload, apiKey, workspaceName)) {
+            assertThat(response.hasEntity()).isFalse();
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public Response callExperimentItemBulkUpload(ExperimentItemBulkUpload bulkUpload, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("bulk")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(bulkUpload));
+    }
+
 }
