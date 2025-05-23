@@ -38,8 +38,9 @@ jobs:
                   --recurse \
                   --skip "search\/v2\/key" \
                   --skip "https://ai.google.dev/gemini-api" \
-                  --skip "http://localhost:5173" \
                   --skip "https://chat.comet.com/" \
+                  --skip "https://github.com" \
+                  --skip "/^http:\/\/localhost(:[0-9]+)?\/?$/" \
                   --format csv | awk -F',' '
                     BEGIN { found_broken = 0 }
                     NR==1 {next}
