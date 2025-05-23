@@ -48,7 +48,7 @@ public interface OptimizationDAO {
         }
     }
 
-    Mono<Void> insert(Optimization optimization);
+    Mono<Void> upsert(Optimization optimization);
 
     Mono<Optimization> getById(UUID id);
 
@@ -72,11 +72,7 @@ public interface OptimizationDAO {
 @Slf4j
 class OptimizationDAOImpl implements OptimizationDAO {
 
-    /**
-     * The query validates if already exists with this id. Failing if so.
-     * That way only insert is allowed, but not update.
-     */
-    private static final String INSERT = """
+    private static final String UPSERT = """
             INSERT INTO optimizations (
                 id,
                 dataset_id,
@@ -86,44 +82,21 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 status,
                 metadata,
                 created_by,
-                last_updated_by
+                last_updated_by,
+                last_updated_at
             )
-            SELECT
-                if(
-                    LENGTH(CAST(old.id AS Nullable(String))) > 0,
-                    leftPad('', 40, '*'),
-                    new.id
-                ) as id,
-                new.dataset_id,
-                new.name,
-                new.workspace_id,
-                new.objective_name,
-                new.status,
-                new.metadata,
-                new.created_by,
-                new.last_updated_by
-            FROM (
-                SELECT
-                :id AS id,
-                :dataset_id AS dataset_id,
-                :name AS name,
-                :workspace_id AS workspace_id,
-                :objective_name AS objective_name,
-                :status AS status,
-                :metadata AS metadata,
-                :created_by AS created_by,
-                :last_updated_by AS last_updated_by
-            ) AS new
-            LEFT JOIN (
-                SELECT
-                id
-                FROM optimizations
-                WHERE id = :id
-                AND workspace_id = :workspace_id
-                ORDER BY last_updated_at DESC
-                LIMIT 1 BY id
-            ) AS old
-            ON new.id = old.id
+            VALUES (
+                :id,
+                :dataset_id,
+                :name,
+                :workspace_id,
+                :objective_name,
+                :status,
+                :metadata,
+                :created_by,
+                :last_updated_by,
+                COALESCE(parseDateTime64BestEffortOrNull(:last_updated_at, 6), now64(6))
+            )
             ;
             """;
 
@@ -324,9 +297,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
     private final @NonNull ConnectionFactory connectionFactory;
 
     @Override
-    public Mono<Void> insert(@NonNull Optimization optimization) {
+    public Mono<Void> upsert(@NonNull Optimization optimization) {
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> insert(optimization, connection))
+                .flatMapMany(connection -> upsert(optimization, connection))
                 .then();
     }
 
@@ -524,14 +497,20 @@ class OptimizationDAOImpl implements OptimizationDAO {
         }
     }
 
-    private Publisher<? extends Result> insert(Optimization optimization, Connection connection) {
-        var statement = connection.createStatement(INSERT)
+    private Publisher<? extends Result> upsert(Optimization optimization, Connection connection) {
+        var statement = connection.createStatement(UPSERT)
                 .bind("id", optimization.id())
                 .bind("dataset_id", optimization.datasetId())
                 .bind("name", optimization.name())
                 .bind("objective_name", optimization.objectiveName())
                 .bind("status", optimization.status().getValue())
                 .bind("metadata", getStringOrDefault(optimization.metadata()));
+
+        if (optimization.lastUpdatedAt() != null) {
+            statement.bind("last_updated_at", optimization.lastUpdatedAt().toString());
+        } else {
+            statement.bindNull("last_updated_at", String.class);
+        }
 
         return makeFluxContextAware((userName, workspaceId) -> {
             log.info("Inserting optimization with id '{}', datasetId '{}', datasetName '{}', workspaceId '{}'",
