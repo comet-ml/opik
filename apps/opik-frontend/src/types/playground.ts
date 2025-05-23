@@ -88,12 +88,16 @@ export interface LogSpan {
   };
 }
 
+export interface LogExperimentPromptVersion {
+  id: string;
+}
+
 export interface LogExperiment {
   id: string;
   datasetName: string;
   name?: string;
   metadata?: object;
-  prompt_versions?: string[];
+  prompt_versions?: LogExperimentPromptVersion[];
 }
 
 export type LogExperimentItem = {
