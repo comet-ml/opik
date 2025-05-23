@@ -18,6 +18,7 @@ import dev.langchain4j.model.openai.internal.chat.SystemMessage;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
 import dev.langchain4j.model.openai.internal.shared.Usage;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import io.dropwizard.util.Throwables;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
@@ -110,81 +111,56 @@ public interface LlmProviderLangChainMapper {
     }
 
     default Optional<ErrorMessage> getGeminiErrorObject(@NonNull Throwable throwable, @NonNull Logger log) {
-        return getErrorMessage(throwable, log, 0);
+        return getErrorMessage(throwable, log, GeminiErrorObject.class);
     }
 
-    private Optional<ErrorMessage> getErrorMessage(Throwable throwable, Logger log, int level) {
-        if (throwable == null || level > 10) {
-            return Optional.empty();
-        }
-        if (throwable.getMessage() == null) {
-            log.warn("failed to parse Gemini error message", throwable);
-            return Optional.empty();
-        }
-        String message = throwable.getMessage();
-        var openBraceIndex = message.indexOf('{');
-        if (openBraceIndex >= 0) {
-            String jsonPart = message.substring(openBraceIndex); // Extract JSON part
-            try {
-                var geminiError = JsonUtils.readValue(jsonPart, GeminiErrorObject.class);
-                return geminiError.toErrorMessage();
-            } catch (UncheckedIOException e) {
-                log.warn("failed to parse Gemini error message", e);
-                return Optional.empty();
-            }
-        }
+    private <E, T extends LlmProviderError<E>> Optional<ErrorMessage> getErrorMessage(Throwable throwable, Logger log,
+            Class<T> errorType) {
+        Optional<Throwable> llmProviderError = Throwables.findThrowableInChain(this::findError, throwable);
 
-        return getErrorMessage(throwable.getCause(), log, level + 1);
-    }
+        String failToGetErrorMessage = "failed to parse %s message".formatted(errorType.getSimpleName());
 
-    default Optional<ErrorMessage> getErrorObject(@NonNull Throwable throwable, @NonNull Logger log) {
-        if (throwable.getMessage() == null) {
-            log.warn("failed to parse error message", throwable);
+        if (llmProviderError.isEmpty()) {
+            log.warn(failToGetErrorMessage, throwable);
             return Optional.empty();
         }
 
-        String message = throwable.getMessage();
-        var openBraceIndex = message.indexOf('{');
-        if (openBraceIndex >= 0) {
-            String jsonPart = message.substring(openBraceIndex); // Extract JSON part
-            Optional<OpenRouterErrorMessage> openRouterError = getOpenRouterError(log, jsonPart);
+        String message = llmProviderError.get().getMessage();
+        int openBraceIndex = message.indexOf('{');
+        String jsonPart = message.substring(openBraceIndex);
 
-            if (openRouterError.isPresent()) {
-                return openRouterError
-                        .map(OpenRouterErrorMessage::toErrorMessage);
-            } else {
-                Optional<OpenAiErrorMessage> openAiError = getOpenAiError(log, jsonPart);
-
-                if (openAiError.isPresent()) {
-                    return openAiError
-                            .map(OpenAiErrorMessage::toErrorMessage);
-                }
-            }
-        }
-
-        return Optional.empty();
+        Optional<T> error = parseError(log, jsonPart, errorType);
+        return error.map(LlmProviderError::toErrorMessage);
     }
 
-    private Optional<OpenRouterErrorMessage> getOpenRouterError(Logger log, String jsonPart) {
-        return parseError(log, jsonPart, OpenRouterErrorMessage.class);
-    }
+    private <E, T extends LlmProviderError<E>> Optional<T> parseError(Logger log, String jsonPart, Class<T> errorType) {
 
-    private <E, T extends LlmProviderError<E>> Optional<T> parseError(Logger log, String jsonPart,
-            Class<T> valueTypeRef) {
+        String failToGetErrorMessage = "failed to parse %s message".formatted(errorType.getSimpleName());
+
         try {
-            var error = JsonUtils.readValue(jsonPart, valueTypeRef);
+            var error = JsonUtils.readValue(jsonPart, errorType);
             if (error.error() == null) {
                 return Optional.empty();
             }
             return Optional.of(error);
         } catch (UncheckedIOException e) {
-            log.warn("failed to parse error message", e);
+            log.warn(failToGetErrorMessage, e);
             return Optional.empty();
         }
     }
 
-    private Optional<OpenAiErrorMessage> getOpenAiError(Logger log, String jsonPart) {
-        return parseError(log, jsonPart, OpenAiErrorMessage.class);
+    private boolean findError(Throwable t) {
+        return t.getMessage() != null && t.getMessage().contains("{");
     }
 
+    default Optional<ErrorMessage> getErrorObject(@NonNull Throwable throwable, @NonNull Logger log) {
+
+        Optional<ErrorMessage> errorMessage = getErrorMessage(throwable, log, OpenRouterErrorMessage.class);
+
+        if (errorMessage.isPresent()) {
+            return errorMessage;
+        }
+
+        return getErrorMessage(throwable, log, OpenAiErrorMessage.class);
+    }
 }
