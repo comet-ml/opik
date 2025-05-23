@@ -347,10 +347,10 @@ class OpikTracer(BaseTracer):
         except Exception as e:
             LOGGER.debug(f"Failed during _process_end_span: {e}")
         finally:
-            self._opik_context_storage.pop_span_data(
-                ensure_id=span_data.id,
-                pop_until_found=True,
+            self._opik_context_storage.trim_span_data_stack_to_certain_span(
+                span_id=span_data.id
             )
+            self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
 
     def _process_end_span_with_error(self, run: "Run") -> None:
         try:
@@ -369,10 +369,10 @@ class OpikTracer(BaseTracer):
         except Exception as e:
             LOGGER.debug(f"Failed during _process_end_span_with_error: {e}")
         finally:
-            self._opik_context_storage.pop_span_data(
-                ensure_id=span_data.id,
-                pop_until_found=True,
+            self._opik_context_storage.trim_span_data_stack_to_certain_span(
+                span_id=span_data.id
             )
+            self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
 
     def _update_thread_id_from_metadata(self, run_dict: Dict[str, Any]) -> None:
         if not self._thread_id:
