@@ -3,7 +3,8 @@
 This guide will help you get started with contributing to the Opik backend.
 
 <Tip>
-  Before you start, please review our general [Contribution Overview](overview) and the [Contributor License Agreement (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md).
+  Before you start, please review our general [Contribution Overview](overview) and the [Contributor License Agreement
+  (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md).
 </Tip>
 
 ## Project Structure
@@ -15,6 +16,7 @@ The Opik backend is a Java application (source in `apps/opik-backend`) that form
 <Steps>
   ### 1. Run External Dependencies
   The backend relies on Clickhouse, MySQL, and Redis. You can start these using Docker Compose from the `deployment/docker-compose` directory in the repository:
+  
   ```bash
   cd deployment/docker-compose
   
@@ -24,43 +26,56 @@ The Opik backend is a Java application (source in `apps/opik-backend`) that form
   docker compose up clickhouse redis mysql -d
   ```
 
-  ### 2. Install Prerequisites for Backend Development
-  Ensure you have the following installed:
-  - Java Development Kit (JDK) - Version specified in `pom.xml` (e.g., JDK 17 or newer)
-  - Apache Maven - For building the project
+### 2. Install Prerequisites for Backend Development
 
-  ### 3. Build and Run the Backend Locally
-  Navigate to the backend project directory and use Maven commands:
-  ```bash
-  cd apps/opik-backend
-  
-  # Build the Opik application (compiles, runs tests, packages)
-  mvn clean install
-  
-  # Start the Opik application server
-  java -jar target/opik-backend-{project.pom.version}.jar server config.yml
-  ```
-  Replace `{project.pom.version}` with the actual version number found in the `pom.xml` file (e.g., `0.1.0-SNAPSHOT`).
-  Once started, the Opik API should be accessible at `http://localhost:8080`.
+Ensure you have the following installed:
 
-  ### 4. Code Formatting
-  We use Spotless for code formatting. Before submitting a PR, please ensure your code is formatted correctly:
-  ```bash
-  cd apps/opik-backend
-  mvn spotless:apply
-  ```
-  Our CI (Continuous Integration) will check formatting using `mvn spotless:check` and fail the build if it's not correct.
+- Java Development Kit (JDK) - Version specified in `pom.xml` (e.g., JDK 17 or newer)
+- Apache Maven - For building the project
 
-  ### 5. Running Tests
-  Ensure your changes pass all backend tests:
-  ```bash
-  cd apps/opik-backend
-  mvn test
-  ```
-  Tests leverage the `testcontainers` library to run integration tests against real instances of external services (Clickhouse, MySQL, etc.). Ports for these services are randomly assigned by the library during tests to avoid conflicts.
+### 3. Build and Run the Backend Locally
 
-  ### 6. Submitting a Pull Request
-  After implementing your changes, ensuring tests pass, and code is formatted, commit your work and open a Pull Request against the `main` branch of the `comet-ml/opik` repository.
+Navigate to the backend project directory and use Maven commands:
+
+```bash
+cd apps/opik-backend
+
+# Build the Opik application (compiles, runs tests, packages)
+mvn clean install
+
+# Start the Opik application server
+java -jar target/opik-backend-{project.pom.version}.jar server config.yml
+```
+
+Replace `{project.pom.version}` with the actual version number found in the `pom.xml` file (e.g., `0.1.0-SNAPSHOT`).
+Once started, the Opik API should be accessible at `http://localhost:8080`.
+
+### 4. Code Formatting
+
+We use Spotless for code formatting. Before submitting a PR, please ensure your code is formatted correctly:
+
+```bash
+cd apps/opik-backend
+mvn spotless:apply
+```
+
+Our CI (Continuous Integration) will check formatting using `mvn spotless:check` and fail the build if it's not correct.
+
+### 5. Running Tests
+
+Ensure your changes pass all backend tests:
+
+```bash
+cd apps/opik-backend
+mvn test
+```
+
+Tests leverage the `testcontainers` library to run integration tests against real instances of external services (Clickhouse, MySQL, etc.). Ports for these services are randomly assigned by the library during tests to avoid conflicts.
+
+### 6. Submitting a Pull Request
+
+After implementing your changes, ensuring tests pass, and code is formatted, commit your work and open a Pull Request against the `main` branch of the `comet-ml/opik` repository.
+
 </Steps>
 
 ## Advanced Backend Topics
@@ -87,20 +102,21 @@ The Opik backend is a Java application (source in `apps/opik-backend`) that form
       *   Must not cause downtime.
       *   Must have a unique name.
       *   Must contain a rollback statement (or use `empty` if Liquibase cannot auto-generate one). Refer to [Evolutionary Database Design](https://martinfowler.com/articles/evodb.html) and [Liquibase Rollback Docs](https://docs.liquibase.com/workflows/liquibase-community/using-rollback.html).
+
   </Accordion>
 
-  <Accordion title="Data Migrations (DML)">
-    DML (Data Manipulation Language) migrations are for changes to data itself, not the schema.
-    - **Execution**: These are not run automatically. They must be run manually by a system admin using a database client.
-    - **Documentation**: DML migrations are documented in `CHANGELOG.md` (link to GitHub: [CHANGELOG.md](https://github.com/comet-ml/opik/blob/main/CHANGELOG.md)) and the scripts are placed at `apps/opik-backend/data-migrations` along with detailed instructions.
-    - **Requirements for DML Migrations**:
-      *   Must be backward compatible (no data deletion unless 100% safe, allow rollback, no performance degradation).
-      *   Must include detailed execution instructions.
-      *   Must be batched appropriately to avoid disrupting operations.
-      *   Must not cause downtime.
-      *   Must have a unique name.
-      *   Must contain a rollback statement.
-  </Accordion>
+{" "}
+
+<Accordion title="Data Migrations (DML)">
+  DML (Data Manipulation Language) migrations are for changes to data itself, not the schema. - **Execution**: These are
+  not run automatically. They must be run manually by a system admin using a database client. - **Documentation**: DML
+  migrations are documented in `CHANGELOG.md` (link to GitHub:
+  [CHANGELOG.md](https://github.com/comet-ml/opik/blob/main/CHANGELOG.md)) and the scripts are placed at
+  `apps/opik-backend/data-migrations` along with detailed instructions. - **Requirements for DML Migrations**: * Must be
+  backward compatible (no data deletion unless 100% safe, allow rollback, no performance degradation). * Must include
+  detailed execution instructions. * Must be batched appropriately to avoid disrupting operations. * Must not cause
+  downtime. * Must have a unique name. * Must contain a rollback statement.
+</Accordion>
 
   <Accordion title="Accessing ClickHouse Directly">
     You can query the ClickHouse REST endpoint directly. For example, to get the version:
@@ -109,4 +125,4 @@ The Opik backend is a Java application (source in `apps/opik-backend`) that form
     ```
     Sample output: `23.8.15.35`
   </Accordion>
-</AccordionGroup> 
+</AccordionGroup>

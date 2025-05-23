@@ -3,7 +3,8 @@
 The Opik Python SDK is a key component of our platform, allowing developers to integrate Opik into their Python applications seamlessly. The SDK source code is located in the `sdks/python` directory of the main `comet-ml/opik` repository.
 
 <Tip>
-  Before you start, please review our general [Contribution Overview](overview) and the [Contributor License Agreement (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md).
+  Before you start, please review our general [Contribution Overview](overview) and the [Contributor License Agreement
+  (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md).
 </Tip>
 
 ## Getting Started
@@ -31,6 +32,7 @@ The Opik Python SDK is a key component of our platform, allowing developers to i
     opik configure --use_local
     ```
     </Tab>
+
   </Tabs>
   Your local Opik server will be accessible at `http://localhost:5173`.
 
@@ -52,44 +54,60 @@ The Opik Python SDK is a key component of our platform, allowing developers to i
       ```
   </Tip>
 
-  ### 2. Install SDK for Development
-  Navigate to the `sdks/python` directory (or use the path from your virtual environment setup) and install the SDK in editable mode:
-  ```bash
-  pip install -e .
-  ```
+### 2. Install SDK for Development
 
-  ### 3. Review Coding Guidelines
-  Familiarize yourself with the [coding guidelines for our Python SDK](https://github.com/comet-ml/opik/blob/main/sdks/python/README.md). This will cover style, conventions, and other important aspects.
+Navigate to the `sdks/python` directory (or use the path from your virtual environment setup) and install the SDK in editable mode:
 
-  ### 4. Implement Your Changes
-  Make your desired code changes, additions, or bug fixes within the `sdks/python` directory.
+```bash
+pip install -e .
+```
 
-  ### 5. Test Your Changes
-  Testing is crucial. For most SDK contributions, you should run the end-to-end (e2e) tests:
-  ```bash
-  cd sdks/python # Ensure you are in this directory
-  # Install test-specific requirements
-  pip install -r tests/test_requirements.txt
-  # Install pre-commit for linting checks (optional but good practice)
-  pip install pre-commit
-  # Run e2e tests
-  pytest tests/e2e
-  ```
-  If you're making changes to specific integrations (e.g., OpenAI, Anthropic):
-  1. Install the integration-specific requirements: `pip install -r tests/integrations/openai/requirements.txt` (example for OpenAI).
-  2. Configure any necessary API keys for the integration as environment variables or per your test setup.
-  3. Run the specific integration tests: `pytest tests/integrations/openai` (example for OpenAI).
+### 3. Review Coding Guidelines
 
-  ### 6. Run Linters
-  Ensure your code adheres to our linting standards:
-  ```bash
-  cd sdks/python
-  pre-commit run --all-files
-  ```
+Familiarize yourself with the [coding guidelines for our Python SDK](https://github.com/comet-ml/opik/blob/main/sdks/python/README.md). This will cover style, conventions, and other important aspects.
 
-  ### 7. Update Documentation (If Applicable)
-  If your changes impact public-facing methods, parameters, or docstrings, please also update the documentation. Refer to the [Documentation Contribution Guide](/contributing/guides/documentation) for how to update the Python SDK Reference Documentation (Sphinx).
+### 4. Implement Your Changes
 
-  ### 8. Submit a Pull Request
-  Once all tests and checks pass, and any relevant documentation is updated, commit your changes and open a Pull Request against the `main` branch of the `comet-ml/opik` repository. Clearly describe your changes and link to any relevant issues.
-</Steps> 
+Make your desired code changes, additions, or bug fixes within the `sdks/python` directory.
+
+### 5. Test Your Changes
+
+Testing is crucial. For most SDK contributions, you should run the end-to-end (e2e) tests:
+
+```bash
+cd sdks/python # Ensure you are in this directory
+
+# Install test-specific requirements
+pip install -r tests/test_requirements.txt
+
+# Install pre-commit for linting checks (optional but good practice)
+pip install pre-commit
+
+# Run e2e tests
+pytest tests/e2e
+```
+
+If you're making changes to specific integrations (e.g., OpenAI, Anthropic):
+
+1. Install the integration-specific requirements: `pip install -r tests/integrations/openai/requirements.txt` (example for OpenAI).
+2. Configure any necessary API keys for the integration as environment variables or per your test setup.
+3. Run the specific integration tests: `pytest tests/integrations/openai` (example for OpenAI).
+
+### 6. Run Linters
+
+Ensure your code adheres to our linting standards:
+
+```bash
+cd sdks/python
+pre-commit run --all-files
+```
+
+### 7. Update Documentation (If Applicable)
+
+If your changes impact public-facing methods, parameters, or docstrings, please also update the documentation. Refer to the [Documentation Contribution Guide](/contributing/guides/documentation) for how to update the Python SDK Reference Documentation (Sphinx).
+
+### 8. Submit a Pull Request
+
+Once all tests and checks pass, and any relevant documentation is updated, commit your changes and open a Pull Request against the `main` branch of the `comet-ml/opik` repository. Clearly describe your changes and link to any relevant issues.
+
+</Steps>

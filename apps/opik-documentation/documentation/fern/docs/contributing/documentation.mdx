@@ -3,7 +3,8 @@
 This guide will help you get started with contributing to Opik's documentation.
 
 <Tip>
-  Before you start, please review our general [Contribution Overview](overview) and the [Contributor License Agreement (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md).
+  Before you start, please review our general [Contribution Overview](overview) and the [Contributor License Agreement
+  (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md).
 </Tip>
 
 ## Documentation Structure
@@ -23,22 +24,31 @@ Here's how you can work with either one:
       ### 2. Set up Locally
       ```bash
       cd apps/opik-documentation/documentation
+
       # Install dependencies - Only needs to be run once
       npm install
+
+      # Optional - Install Python dependencies if updating Jupyter Cookbooks
+      pip install -r requirements.txt
+
       # Run the documentation website locally
       npm run dev
+
+
       ```
       Access the local site at `http://localhost:3000`. Changes will update in real-time.
 
       ### 3. Make Your Changes
       Update content primarily in:
       - `fern/docs/`: Main markdown content (like this page).
-      - `fern/docs/cookbook/`: Our collection of cookbooks and examples.
+      - `/docs/cookbook`: Our collection of cookbooks and examples - Please note that you should not be updating the `cookbook` markdown files directly as they are generated from the Jupyter Notebook.
+
       Refer to the `docs.yml` file for the overall structure and navigation.
 
       ### 4. Submitting Changes
       Once you're happy with your changes, commit them and open a Pull Request against the `main` branch of the `comet-ml/opik` repository.
     </Steps>
+
   </Accordion>
   <Accordion title="Contributing to the Python SDK Reference Documentation (Sphinx)">
     The Python SDK reference docs (source in `apps/opik-documentation/python-sdk-docs`) are generated from docstrings in the Python codebase using [Sphinx](https://www.sphinx-doc.org/en/master/).
@@ -65,5 +75,6 @@ Here's how you can work with either one:
       ### 5. Submitting Changes
       Commit your changes to both the Python SDK source files and any necessary updates in the `python-sdk-docs` directory. Open a Pull Request against the `main` branch.
     </Steps>
+
   </Accordion>
-</AccordionGroup> 
+</AccordionGroup>
