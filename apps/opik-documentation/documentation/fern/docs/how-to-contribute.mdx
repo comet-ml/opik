@@ -1,0 +1,303 @@
+# Contributing to Opik
+
+We're excited that you're interested in contributing to Opik! There are many ways to contribute, from writing code to improving the documentation, or even helping us with developer tooling.
+
+## How You Can Help
+
+<CardGroup>
+  <Card title="Report Issues & Request Features" icon="fa-regular fa-bugs" href="#submitting-a-new-issue-or-feature-request">
+    Help us improve by submitting bug reports and suggesting new features.
+  </Card>
+  <Card title="Contribute to Documentation" icon="fa-regular fa-book" href="#contributing-to-the-documentation">
+    Improve our guides, tutorials, and reference materials.
+  </Card>
+  <Card title="Contribute Code" icon="fa-regular fa-code" href="#contributing-code">
+    Dive into the codebase for our Python SDK, Frontend, or Backend.
+  </Card>
+  <Card title="Spread the Word" icon="fa-regular fa-bullhorn">
+    Speak or write about Opik and share your experiences. Let us know on [Comet Chat](https://chat.comet.com)!
+  </Card>
+</CardGroup>
+
+Also, consider reviewing our [Contributor License Agreement (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md).
+
+## Submitting a new issue or feature request
+
+This is a vital way to help us improve Opik!
+
+<AccordionGroup>
+  <Accordion title="Submitting a New Bug Report">
+    Before submitting a new issue, please check the [existing issues](https://github.com/comet-ml/opik/issues) to avoid duplicates.
+
+    To help us understand the issue you're experiencing, please provide:
+    1. Clear steps to reproduce the issue.
+    2. A minimal code snippet that reproduces the issue, if applicable.
+    This helps us diagnose the issue and fix it more quickly.
+  </Accordion>
+  <Accordion title="Submitting a New Feature Request">
+    Feature requests are welcome! To help us understand the feature you'd like to see, please provide:
+    1. A short description of the motivation behind this request.
+    2. A detailed description of the feature you'd like to see, including any code snippets if applicable.
+
+    If you are in a position to submit a PR for the feature, feel free to open a PR!
+  </Accordion>
+</AccordionGroup>
+
+## Project Setup and Architecture
+
+The Opik project is made up of five main sub-projects:
+
+*   `apps/opik-documentation`: The Opik documentation website (this site!)
+*   `deployment/installer`: The Opik installer
+*   `sdks/python`: The Opik Python SDK
+*   `apps/opik-frontend`: The Opik frontend application
+*   `apps/opik-backend`: The Opik backend server
+
+Opik relies on: Clickhouse (traces, spans, feedback), MySQL (metadata), and Redis (caching).
+
+The local development environment is based on `docker-compose`. Please see instructions in the [deployment/docker-compose/README.md](https://github.com/comet-ml/opik/blob/main/deployment/docker-compose/README.md) on GitHub.
+
+## Contributing to the Documentation
+
+<AccordionGroup>
+  <Accordion title="Contributing to this Documentation Website (Fern)">
+    This website is built with [Fern](https://www.buildwithfern.com/) (source in `apps/opik-documentation/documentation`).
+
+    <Steps>
+      ### 1. Install Prerequisites
+      Ensure you have Node.js and npm installed. You can follow the official guide [here](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm/).
+
+      ### 2. Set up Locally
+      ```bash
+      cd apps/opik-documentation/documentation
+      # Install dependencies - Only needs to be run once
+      npm install
+      # Run the documentation website locally
+      npm run dev
+      ```
+      Access the local site at `http://localhost:3000`. Changes will update in real-time.
+
+      ### 3. Make Your Changes
+      Update content in:
+      - `fern/docs`: Main markdown content.
+      - `docs/cookbook`: Cookbooks. (Note: Verify this path if structure changes)
+
+    </Steps>
+  </Accordion>
+  <Accordion title="Contributing to the Python SDK Reference Documentation (Sphinx)">
+    The Python SDK reference docs (source in `apps/opik-documentation/python-sdk-docs`) are built with [Sphinx](https://www.sphinx-doc.org/en/master/).
+    <Steps>
+      ### 1. Install Prerequisites
+      Ensure you have Python and pip installed.
+
+      ### 2. Set up Locally
+      ```bash
+      cd apps/opik-documentation/python-sdk-docs
+      # Install dependencies - Only needs to be run once
+      pip install -r requirements.txt
+      # Run the python sdk reference documentation locally
+      make dev
+      ```
+      Access the local site at `http://127.0.0.1:8000`. Changes will update in real-time.
+    </Steps>
+  </Accordion>
+</AccordionGroup>
+
+## Contributing Code
+
+This section outlines how to contribute to the different parts of the Opik codebase.
+
+<AccordionGroup>
+  <Accordion title="Contributing to the Python SDK">
+    The Python SDK is located under `sdks/python`.
+
+    <Steps>
+      ### 1. Set up Opik Locally
+      You'll need Opik running locally. Follow instructions in the [Docker Compose README](https://github.com/comet-ml/opik/blob/main/deployment/docker-compose/README.md) or use the helper scripts:
+      <Tabs>
+        <Tab title="Linux/Mac">
+        ```bash
+        # From the root of the repository
+        ./opik.sh
+
+        # Configure the Python SDK to point to the local Opik deployment
+        opik configure --use_local
+        ```
+        </Tab>
+        <Tab title="Windows">
+        ```powershell
+        # From the root of the repository
+        powershell -ExecutionPolicy ByPass -c ".\opik.ps1"
+
+        # Configure the Python SDK to point to the local Opik deployment
+        opik configure --use_local
+        ```
+        </Tab>
+      </Tabs>
+      The Opik server will be running on `http://localhost:5173`.
+
+      _Windows Users Note:_ Ensure Python scripts directory is in PATH. Using a virtual environment is recommended:
+      ```powershell
+      py -m venv <environment_name>
+      cd <environment_name>\Scripts && .\activate.bat
+      pip install -e ../../sdks/python  # Adjust path as necessary
+      opik configure --use_local
+      ```
+
+      ### 2. Install SDK for Development
+      Install locally using `pip install -e sdks/python`.
+
+      ### 3. Read Coding Guidelines
+      Please review the [Python SDK coding guidelines](https://github.com/comet-ml/opik/blob/main/sdks/python/README.md).
+
+      ### 4. Test Your Changes
+      For most contributions, run e2e tests:
+      ```bash
+      cd sdks/python
+      pip install -r tests/test_requirements.txt
+      pip install pre-commit
+      pytest tests/e2e
+      ```
+      For specific integrations (e.g., OpenAI, Anthropic):
+      1. Install integration-specific requirements: `pip install -r tests/integrations/openai/requirements.txt`
+      2. Configure necessary API keys.
+      3. Run specific tests: `pytest tests/integrations/openai`
+
+      ### 5. Run Linters
+      ```bash
+      cd sdks/python
+      pre-commit run --all-files
+      ```
+      > [!NOTE]
+      > If your changes impact public facing methods or docstrings, please also update the documentation (see [Contributing to this documentation website](#contributing-to-this-documentation-website)).
+    </Steps>
+  </Accordion>
+
+  <Accordion title="Contributing to the Frontend">
+    The Opik frontend (React) is in `apps/opik-frontend`.
+    <Steps>
+      ### 1. Prerequisites
+      Ensure Node.js is installed.
+
+      ### 2. Configure Environment Variables
+      Navigate to `apps/opik-frontend/.env.development` and update it:
+      ```ini
+      VITE_BASE_URL=/
+      VITE_BASE_API_URL=http://localhost:8080
+      ```
+
+      ### 3. Enable CORS in Back-End
+      Open `deployment/docker-compose/docker-compose.yaml` (see on [GitHub](https://github.com/comet-ml/opik/blob/main/deployment/docker-compose/docker-compose.yaml)) and in `services.backend.environment`, add `CORS: true`.
+      ```yaml
+      ...
+      OPIK_USAGE_REPORT_ENABLED: ${OPIK_USAGE_REPORT_ENABLED:-true}
+      CORS: true
+      ...
+      ```
+
+      ### 4. Start Services
+      Run:
+      ```bash
+      # Optionally, pull latest images
+      docker compose pull
+      docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d
+      ```
+
+      ### 5. Verify Back-End
+      Check `http://localhost:8080/is-alive/ver`. A version number means success.
+
+      ### 6. Install Front-End Dependencies
+      ```bash
+      cd apps/opik-frontend
+      npm install
+      ```
+
+      ### 7. Start the Front-End
+      ```bash
+      npm run start
+      ```
+      Access the app at `http://localhost:5174/`.
+      (Another build is at `http://localhost:5173/` for checking builds).
+
+      ### 8. Run Checks Before PR
+      ```bash
+      cd apps/opik-frontend
+      npm run e2e
+      npm run lint
+      npm run typecheck
+      ```
+    </Steps>
+  </Accordion>
+
+  <Accordion title="Contributing to the Backend">
+    The Opik backend (Java) is in `apps/opik-backend`.
+    <Steps>
+      ### 1. Run External Services
+      Use `docker-compose` for Clickhouse, MySQL, Redis:
+      ```bash
+      cd deployment/docker-compose
+      # Optionally, pull latest images
+      docker compose pull
+      docker compose up clickhouse redis mysql -d
+      ```
+
+      ### 2. Prerequisites for Backend
+      Ensure Java and Maven are installed.
+
+      ### 3. Run Backend Locally
+      ```bash
+      cd apps/opik-backend
+      # Build the Opik application
+      mvn clean install
+      # Start the Opik application
+      java -jar target/opik-backend-{project.pom.version}.jar server config.yml
+      ```
+      Replace `{project.pom.version}` with the actual version from `pom.xml`.
+      Access the API at `http://localhost:8080`.
+
+      ### 4. Format Code
+      Run `mvn spotless:apply`. CI checks with `mvn spotless:check`.
+
+      ### 5. Run Tests
+      ```bash
+      cd apps/opik-backend
+      mvn test
+      ```
+      Tests use `testcontainers` for integration tests.
+
+      ### 6. Advanced Usage: Migrations & Health Checks
+      - **Health Check**: `http://localhost:8080/healthcheck`
+      - **DDL Migrations (Liquibase)**:
+        - Located in `apps/opik-backend/src/main/resources/liquibase/{{DB}}/migrations`.
+        - Managed by `run_db_migrations.sh`, automated in Docker/Helm.
+        - Manual commands:
+          - `java -jar target/opik-backend-{project.pom.version}.jar {database} status config.yml`
+          - `java -jar target/opik-backend-{project.pom.version}.jar {database} migrate config.yml`
+          - `java -jar target/opik-backend-{project.pom.version}.jar {database} tag config.yml {tag_name}`
+          - `java -jar target/opik-backend-{project.pom.version}.jar {database} rollback config.yml --count 1` (or `--tag {tag_name}`)
+        - `{database}` is `db` (MySQL) or `dbAnalytics` (ClickHouse).
+        - **Requirements**: Backward compatible, code-independent, no downtime, unique name, rollback statement. See [Evolutionary Database Design](https://martinfowler.com/articles/evodb.html) and [Liquibase Rollback Docs](https://docs.liquibase.com/workflows/liquibase-community/using-rollback.html).
+      - **DML Migrations**:
+        - Run manually by sysadmin.
+        - Documented in `apps/opik-backend/CHANGELOG.md` (see on [GitHub](https://github.com/comet-ml/opik/blob/main/apps/opik-backend/CHANGELOG.md)) and placed in `apps/opik-backend/data-migrations`.
+        - **Requirements**: Backward compatible, detailed instructions, batched, no downtime, unique name, rollback.
+      - **Accessing Clickhouse**:
+        `echo 'SELECT version()' | curl -H 'X-ClickHouse-User: opik' -H 'X-ClickHouse-Key: opik' 'http://localhost:8123/' -d @-`
+    </Steps>
+  </Accordion>
+</AccordionGroup>
+
+## Developer Tooling & AI Assistance
+
+### `llms.txt` for AI Context
+
+To help AI assistants (like Cursor) better understand our codebase, we provide context files:
+
+*   **General Context**: [`https://www.comet.com/docs/opik/llms.txt`](https://www.comet.com/docs/opik/llms.txt) - Provides a general overview suitable for most queries.
+*   **Full Context**: [`https://www.comet.com/docs/opik/llms-full.txt`](https://www.comet.com/docs/opik/llms-full.txt) - Offers a more comprehensive context for in-depth assistance.
+
+You can point your AI tools to these URLs to provide them with relevant information about Opik.
+
+---
+*Review our [Contributor License Agreement (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md) if you haven't already.*
+*Comment on [popular feature requests](https://github.com/comet-ml/opik/issues?q=is%3Aissue+is%3Aopen+label%3A%22feature+request%22) to show your support.* 
