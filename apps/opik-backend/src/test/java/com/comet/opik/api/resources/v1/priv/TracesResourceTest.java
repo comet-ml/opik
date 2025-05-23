@@ -20,6 +20,7 @@ import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.Filter;
@@ -198,6 +199,7 @@ class TracesResourceTest {
                 it -> it.toBuilder().totalEstimatedCost(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.THREAD_ID, it -> it.toBuilder().threadId(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.DURATION, it -> it.toBuilder().duration(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.VISIBILITY_MODE, it -> it.toBuilder().visibilityMode(null).build());
     }
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -5657,6 +5659,7 @@ class TracesResourceTest {
                     .projectName("project-" + RandomStringUtils.secure().nextAlphanumeric(32))
                     .startTime(Instant.now())
                     .createdAt(Instant.now())
+                    .visibilityMode(VisibilityMode.DEFAULT)
                     .build();
             var id = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
@@ -5776,6 +5779,7 @@ class TracesResourceTest {
                     .mapToObj(i -> Trace.builder()
                             .projectName(projectName)
                             .startTime(Instant.now())
+                            .visibilityMode(VisibilityMode.DEFAULT)
                             .build())
                     .toList();
             traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
@@ -5791,6 +5795,7 @@ class TracesResourceTest {
                             .id(generator.generate())
                             .startTime(Instant.now())
                             .createdAt(Instant.now())
+                            .visibilityMode(VisibilityMode.DEFAULT)
                             .build())
                     .toList();
             traceResourceClient.batchCreateTraces(expectedTraces0, API_KEY, TEST_WORKSPACE);
@@ -6301,6 +6306,7 @@ class TracesResourceTest {
                     .id(generator.generate())
                     .startTime(Instant.now().minusSeconds(10))
                     .createdAt(Instant.now())
+                    .visibilityMode(VisibilityMode.DEFAULT)
                     .build();
             id = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
         }
