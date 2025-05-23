@@ -46,7 +46,7 @@ type AddNewPromptVersionDialogProps = {
   setOpen: (open: boolean) => void;
   prompt?: PromptWithLatestVersion;
   template: string;
-  onSave: (promptId: PromptVersion) => void;
+  onSave: (version: PromptVersion) => void;
 };
 
 const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
@@ -130,6 +130,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
         },
         {
           onSuccess: (data?: PromptWithLatestVersion) => {
+            console.log(222, data); // TODO lala
             if (data?.latest_version) onSave(data.latest_version);
           },
         },

@@ -31,7 +31,7 @@ const usePromptCreateMutation = () => {
       });
 
       const extractedId = extractIdFromLocation(headers?.location);
-
+      console.log(111, extractedId, data); // TODO lala
       if (extractedId && withResponse) {
         const { data: promptData } = await api.get(
           `${PROMPTS_REST_ENDPOINT}${extractedId}/`,
