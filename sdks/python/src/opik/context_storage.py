@@ -8,36 +8,36 @@ from opik.api_objects import span, trace
 class OpikContextStorage:
     """
     Manages span and trace context using Python's contextvars.
-    
+
     ## IMPORTANT: Working with ContextVars
-    
-    This class uses ContextVars to maintain isolated stacks across different 
+
+    This class uses ContextVars to maintain isolated stacks across different
     execution contexts (like threads or async tasks). The ContextVar default value can be
-    a mutable object, and changes to it will affect all contexts. So, when working with these 
+    a mutable object, and changes to it will affect all contexts. So, when working with these
     context variables, always follow these guidelines:
-    
+
     ### DO NOT modify the context directly:
     ```python
     # WRONG: Direct modification affects all contexts
     spans_stack_context.get().append(new_span)  # Don't do this!
     ```
-    
+
     ### DO use copy-modify-set pattern:
-    
+
     For adding elements:
     ```python
     # CORRECT: Copy, modify, then set
     stack = spans_stack_context.get().copy()
     spans_stack_context.set(stack + [new_element])
     ```
-    
+
     For removing elements:
     ```python
     # CORRECT: Copy, modify, then set
     stack = spans_stack_context.get().copy()
     spans_stack_context.set(stack[:-1])
     ```
-    
+
     The methods in this class follow these patterns and provide a safe API
     for manipulating the context stacks.
     """
@@ -60,13 +60,13 @@ class OpikContextStorage:
         """
         If span with the given id exists in the stack, eliminates the spans from the stack
         until the span with the given id is at the top.
-        
+
         Intended to be used in the modules that perform unsafe manipulations with the
         span data stack (when there is a risk of missing the add or pop operation, e.g. in callback-based integrations).
 
         In such cases, where the id of the span that SHOULD be on top is known, we can trim
         the stack to remove hanged spans if there are any.
-        
+
         Args:
             span_id: The id of the span to trim the stack to.
         Returns:
@@ -104,12 +104,15 @@ class OpikContextStorage:
         Returns:
             The span that was popped from the stack or None.
         """
+        if self.span_data_stack_empty():
+            return None
+
         if ensure_id is None:
             stack = self._get_data_stack()
             self._spans_data_stack_context.set(stack[:-1])
             return stack[-1]
 
-        if not self.span_data_stack_empty() and self.top_span_data().id == ensure_id:
+        if not self.span_data_stack_empty() and self.top_span_data().id == ensure_id:  # type: ignore
             return self.pop_span_data()
 
         STACK_IS_EMPTY_OR_THE_ID_DOES_NOT_MATCH = None
@@ -168,7 +171,10 @@ get_trace_data = _context_storage.get_trace_data
 pop_trace_data = _context_storage.pop_trace_data
 set_trace_data = _context_storage.set_trace_data
 clear_all = _context_storage.clear_all
-trim_span_data_stack_to_certain_span = _context_storage.trim_span_data_stack_to_certain_span
+trim_span_data_stack_to_certain_span = (
+    _context_storage.trim_span_data_stack_to_certain_span
+)
+
 
 def get_current_context_instance() -> OpikContextStorage:
     return _context_storage
