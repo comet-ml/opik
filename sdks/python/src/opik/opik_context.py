@@ -32,7 +32,7 @@ def get_current_trace_data() -> Optional[trace.TraceData]:
 
 def get_distributed_trace_headers() -> DistributedTraceHeadersDict:
     """
-    Returns headers dictionary to be passed into tracked function on remote node.
+    Returns headers' dictionary to be passed into tracked function on remote node.
     Requires an existing span in the context, otherwise raises an error.
     """
     current_span_data = context_storage.top_span_data()
