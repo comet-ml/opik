@@ -16,7 +16,7 @@ export enum EVALUATOR_MODEL {
   equals = "equals",
   contains = "contains",
   regex_match = "regex_match",
-  isJSON = "isJSON",
+  isJSON = "isJson",
   levenshtein = "levenshtein",
   hallucination = "hallucination",
   moderation = "moderation",
@@ -47,7 +47,7 @@ const EVALUATOR_MODEL_MAP: Record<EVALUATOR_MODEL, ModelData> = {
     scoreParameters: ["output", "reference"],
   },
   [EVALUATOR_MODEL.isJSON]: {
-    class: "IsJSON",
+    class: "IsJson",
     scoreParameters: ["output"],
   },
   [EVALUATOR_MODEL.levenshtein]: {
@@ -94,7 +94,7 @@ const HEURISTICS_MODELS_OPTIONS: DropdownOption<EVALUATOR_MODEL>[] = [
   },
   {
     value: EVALUATOR_MODEL.isJSON,
-    label: "isJSON",
+    label: "isJson",
     description: "Validates JSON format compliance.",
   },
   {

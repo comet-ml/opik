@@ -4907,14 +4907,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\n3. Use the scoring metric wrapper within the Opik evaluation framework\n\nYou can now use the scoring metric wrapper within the Opik evaluation framework:\n\n```python\nfrom opik.evaluation import evaluate\n\nevaluation_task = evaluate(\n    dataset=dataset,\n    task=evaluation_task,\n    scoring_metrics=[answer_relevancy],\n    nb_samples=10,\n)\n```\n"
+                    "\n\n3. Use the scoring metric wrapper within the Opik evaluation platform\n\nYou can now use the scoring metric wrapper within the Opik evaluation platform:\n\n```python\nfrom opik.evaluation import evaluate\n\nevaluation_task = evaluate(\n    dataset=dataset,\n    task=evaluation_task,\n    scoring_metrics=[answer_relevancy],\n    nb_samples=10,\n)\n```\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "3. Use the scoring metric wrapper within the Opik evaluation framework\n\nYou can now use the scoring metric wrapper within the Opik evaluation framework:\n\n```python\nfrom opik.evaluation import evaluate\n\nevaluation_task = evaluate(\n    dataset=dataset,\n    task=evaluation_task,\n    scoring_metrics=[answer_relevancy],\n    nb_samples=10,\n)\n```"
+                    "3. Use the scoring metric wrapper within the Opik evaluation platform\n\nYou can now use the scoring metric wrapper within the Opik evaluation platform:\n\n```python\nfrom opik.evaluation import evaluate\n\nevaluation_task = evaluate(\n    dataset=dataset,\n    task=evaluation_task,\n    scoring_metrics=[answer_relevancy],\n    nb_samples=10,\n)\n```"
                 ],
                 "num_chunks": 1,
             }
@@ -4979,14 +4979,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nUsing Ragas metrics to evaluate a RAG pipeline\n\nIn order to use a Ragas metric within the Opik evaluation framework, we will need to wrap it in a custom scoring method. In the example below we will:\n\n1. Define the Ragas metric\n2. Create a scoring metric wrapper\n3. Use the scoring metric wrapper within the Opik evaluation framework\n"
+                    "\n\nUsing Ragas metrics to evaluate a RAG pipeline\n\nIn order to use a Ragas metric within the Opik evaluation platform, we will need to wrap it in a custom scoring method. In the example below we will:\n\n1. Define the Ragas metric\n2. Create a scoring metric wrapper\n3. Use the scoring metric wrapper within the Opik evaluation platform\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Using Ragas metrics to evaluate a RAG pipeline\n\nIn order to use a Ragas metric within the Opik evaluation framework, we will need to wrap it in a custom scoring method. In the example below we will:\n\n1. Define the Ragas metric\n2. Create a scoring metric wrapper\n3. Use the scoring metric wrapper within the Opik evaluation framework"
+                    "Using Ragas metrics to evaluate a RAG pipeline\n\nIn order to use a Ragas metric within the Opik evaluation platform, we will need to wrap it in a custom scoring method. In the example below we will:\n\n1. Define the Ragas metric\n2. Create a scoring metric wrapper\n3. Use the scoring metric wrapper within the Opik evaluation platform"
                 ],
                 "num_chunks": 1,
             }
@@ -9523,14 +9523,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "---\nsidebar_label: Custom Metric\ndescription: Describes how to create your own metric to use with Opik's evaluation framework\ntoc_max_heading_level: 4\n---\n"
+                    "---\nsidebar_label: Custom Metric\ndescription: Describes how to create your own metric to use with Opik's evaluation platform\ntoc_max_heading_level: 4\n---\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "---\nsidebar_label: Custom Metric\ndescription: Describes how to create your own metric to use with Opik's evaluation framework\ntoc_max_heading_level: 4\n---"
+                    "---\nsidebar_label: Custom Metric\ndescription: Describes how to create your own metric to use with Opik's evaluation platform\ntoc_max_heading_level: 4\n---"
                 ],
                 "num_chunks": 1,
             }
@@ -10027,14 +10027,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nExperiment Configuration\n\nOne of the main advantages of having an automated evaluation framework is the ability to iterate quickly. The main drawback is that it can become difficult to track what has changed between two different iterations of an experiment.\n\nThe experiment configuration object allows you to store some metadata associated with a given experiment. This is useful for tracking things like the prompt template used for a given experiment, the model used, the temperature, etc.\n\nYou can then compare the configuration of two different experiments from the Opik UI to see what has changed.\n\n!Experiment Configuration\n"
+                    "\n\nExperiment Configuration\n\nOne of the main advantages of having an automated evaluation platform is the ability to iterate quickly. The main drawback is that it can become difficult to track what has changed between two different iterations of an experiment.\n\nThe experiment configuration object allows you to store some metadata associated with a given experiment. This is useful for tracking things like the prompt template used for a given experiment, the model used, the temperature, etc.\n\nYou can then compare the configuration of two different experiments from the Opik UI to see what has changed.\n\n!Experiment Configuration\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Experiment Configuration\n\nOne of the main advantages of having an automated evaluation framework is the ability to iterate quickly. The main drawback is that it can become difficult to track what has changed between two different iterations of an experiment.\n\nThe experiment configuration object allows you to store some metadata associated with a given experiment. This is useful for tracking things like the prompt template used for a given experiment, the model used, the temperature, etc.\n\nYou can then compare the configuration of two different experiments from the Opik UI to see what has changed.\n\n!Experiment Configuration"
+                    "Experiment Configuration\n\nOne of the main advantages of having an automated evaluation platform is the ability to iterate quickly. The main drawback is that it can become difficult to track what has changed between two different iterations of an experiment.\n\nThe experiment configuration object allows you to store some metadata associated with a given experiment. This is useful for tracking things like the prompt template used for a given experiment, the model used, the temperature, etc.\n\nYou can then compare the configuration of two different experiments from the Opik UI to see what has changed.\n\n!Experiment Configuration"
                 ],
                 "num_chunks": 1,
             }
@@ -10051,14 +10051,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nExperiments\n\nExperiments are the core building block of the Opik evaluation framework. Each time you run a new evaluation, a new experiment is created. Each experiment is made up of two main components:\n\n1. **Experiment Configuration**: The configuration object associated with each experiment allows you to track some metadata, often you would use this field to store the prompt template used for a given experiment for example.\n2. **Experiment Items**: Experiment items store the input, expected output, actual output and feedback scores for each dataset sample that was processed during an experiment.\n\nIn addition, for each experiment you will be able to see the average scores for each metric.\n"
+                    "\n\nExperiments\n\nExperiments are the core building block of the Opik evaluation platform. Each time you run a new evaluation, a new experiment is created. Each experiment is made up of two main components:\n\n1. **Experiment Configuration**: The configuration object associated with each experiment allows you to track some metadata, often you would use this field to store the prompt template used for a given experiment for example.\n2. **Experiment Items**: Experiment items store the input, expected output, actual output and feedback scores for each dataset sample that was processed during an experiment.\n\nIn addition, for each experiment you will be able to see the average scores for each metric.\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Experiments\n\nExperiments are the core building block of the Opik evaluation framework. Each time you run a new evaluation, a new experiment is created. Each experiment is made up of two main components:\n\n1. **Experiment Configuration**: The configuration object associated with each experiment allows you to track some metadata, often you would use this field to store the prompt template used for a given experiment for example.\n2. **Experiment Items**: Experiment items store the input, expected output, actual output and feedback scores for each dataset sample that was processed during an experiment.\n\nIn addition, for each experiment you will be able to see the average scores for each metric."
+                    "Experiments\n\nExperiments are the core building block of the Opik evaluation platform. Each time you run a new evaluation, a new experiment is created. Each experiment is made up of two main components:\n\n1. **Experiment Configuration**: The configuration object associated with each experiment allows you to track some metadata, often you would use this field to store the prompt template used for a given experiment for example.\n2. **Experiment Items**: Experiment items store the input, expected output, actual output and feedback scores for each dataset sample that was processed during an experiment.\n\nIn addition, for each experiment you will be able to see the average scores for each metric."
                 ],
                 "num_chunks": 1,
             }
@@ -10099,14 +10099,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nEvaluation Concepts\n\n:::tip\nIf you want to jump straight to running evaluations, you can head to the Evaluate your LLM application section.\n:::\n\nWhen working with LLM applications, the bottleneck to iterating faster is often the evaluation process. While it is possible to manually review your LLM application's output, this process is slow and not scalable. Instead of manually reviewing your LLM application's output, Opik allows you to automate the evaluation of your LLM application.\n\nIn order to understand how to run evaluations in Opik, it is important to first become familiar with the concepts of:\n\n1. **Dataset**: A dataset is a collection of samples that your LLM application will be evaluated on. Datasets only store the input and expected outputs for each sample, the output from your LLM application will be computed and scored during the evaluation process.\n2. **Experiment**: An experiment is a single evaluation of your LLM application. During an experiment, we process each dataset item, compute the output based on your LLM application and then score the output.\n\n!Evaluation Concepts\n\nIn this section, we will walk through all the concepts associated with Opik's evaluation framework.\n"
+                    "\n\nEvaluation Concepts\n\n:::tip\nIf you want to jump straight to running evaluations, you can head to the Evaluate your LLM application section.\n:::\n\nWhen working with LLM applications, the bottleneck to iterating faster is often the evaluation process. While it is possible to manually review your LLM application's output, this process is slow and not scalable. Instead of manually reviewing your LLM application's output, Opik allows you to automate the evaluation of your LLM application.\n\nIn order to understand how to run evaluations in Opik, it is important to first become familiar with the concepts of:\n\n1. **Dataset**: A dataset is a collection of samples that your LLM application will be evaluated on. Datasets only store the input and expected outputs for each sample, the output from your LLM application will be computed and scored during the evaluation process.\n2. **Experiment**: An experiment is a single evaluation of your LLM application. During an experiment, we process each dataset item, compute the output based on your LLM application and then score the output.\n\n!Evaluation Concepts\n\nIn this section, we will walk through all the concepts associated with Opik's evaluation platform.\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Evaluation Concepts\n\n:::tip\nIf you want to jump straight to running evaluations, you can head to the Evaluate your LLM application section.\n:::\n\nWhen working with LLM applications, the bottleneck to iterating faster is often the evaluation process. While it is possible to manually review your LLM application's output, this process is slow and not scalable. Instead of manually reviewing your LLM application's output, Opik allows you to automate the evaluation of your LLM application.\n\nIn order to understand how to run evaluations in Opik, it is important to first become familiar with the concepts of:\n\n1. **Dataset**: A dataset is a collection of samples that your LLM application will be evaluated on. Datasets only store the input and expected outputs for each sample, the output from your LLM application will be computed and scored during the evaluation process.\n2. **Experiment**: An experiment is a single evaluation of your LLM application. During an experiment, we process each dataset item, compute the output based on your LLM application and then score the output.\n\n!Evaluation Concepts\n\nIn this section, we will walk through all the concepts associated with Opik's evaluation framework."
+                    "Evaluation Concepts\n\n:::tip\nIf you want to jump straight to running evaluations, you can head to the Evaluate your LLM application section.\n:::\n\nWhen working with LLM applications, the bottleneck to iterating faster is often the evaluation process. While it is possible to manually review your LLM application's output, this process is slow and not scalable. Instead of manually reviewing your LLM application's output, Opik allows you to automate the evaluation of your LLM application.\n\nIn order to understand how to run evaluations in Opik, it is important to first become familiar with the concepts of:\n\n1. **Dataset**: A dataset is a collection of samples that your LLM application will be evaluated on. Datasets only store the input and expected outputs for each sample, the output from your LLM application will be computed and scored during the evaluation process.\n2. **Experiment**: An experiment is a single evaluation of your LLM application. During an experiment, we process each dataset item, compute the output based on your LLM application and then score the output.\n\n!Evaluation Concepts\n\nIn this section, we will walk through all the concepts associated with Opik's evaluation platform."
                 ],
                 "num_chunks": 1,
             }
@@ -10123,14 +10123,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "---\nsidebar_label: Concepts\ndescription: Introduces the concepts behind Opik's evaluation framework\n---\n"
+                    "---\nsidebar_label: Concepts\ndescription: Introduces the concepts behind Opik's evaluation platform\n---\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "---\nsidebar_label: Concepts\ndescription: Introduces the concepts behind Opik's evaluation framework\n---"
+                    "---\nsidebar_label: Concepts\ndescription: Introduces the concepts behind Opik's evaluation platform\n---"
                 ],
                 "num_chunks": 1,
             }

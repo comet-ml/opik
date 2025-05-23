@@ -1497,7 +1497,7 @@ def test_track__function_called_with_wrong_arguments__trace_is_still_created_wit
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="f",
-        input={"args": tuple(), "kwargs": {"y": 5}},
+        input={"args": list(), "kwargs": {"y": 5}},
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -1510,7 +1510,7 @@ def test_track__function_called_with_wrong_arguments__trace_is_still_created_wit
             SpanModel(
                 id=ANY_BUT_NONE,
                 name="f",
-                input={"args": tuple(), "kwargs": {"y": 5}},
+                input={"args": list(), "kwargs": {"y": 5}},
                 output=None,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
@@ -1578,3 +1578,59 @@ def test_track__span_usage_updated__openai_format(fake_backend):
     assert len(fake_backend.trace_trees) == 1
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__function_called_with_mutable_input_which_changed_afterward__check_span_and_trace_inputs_are_not_affected(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        return "the-output"
+
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Hello"},
+    ]
+    f(messages)
+
+    # mutate input data to see if it affects the trace and spans input's created
+    messages.append(
+        {
+            "unrelated": "unrelated",
+        }
+    )
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={
+            "x": [
+                {"content": "You are a helpful assistant.", "role": "system"},
+                {"content": "Hello", "role": "user"},
+            ]
+        },
+        output={"output": "the-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={
+                    "x": [
+                        {"content": "You are a helpful assistant.", "role": "system"},
+                        {"content": "Hello", "role": "user"},
+                    ]
+                },
+                output={"output": "the-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)

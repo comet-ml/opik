@@ -4,7 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const tagVariants = cva(
-  "comet-body-s-accented inline-block truncate rounded-sm transition-colors",
+  "comet-body-xs-accented inline-block truncate rounded-sm transition-colors",
   {
     variants: {
       variant: {
@@ -24,8 +24,8 @@ const tagVariants = cva(
       size: {
         default: "h-5 px-2 leading-5",
         sm: "h-4 px-2 text-[11px] leading-4",
-        md: "comet-body-xs-accented h-6 rounded-md px-1.5 leading-6",
-        lg: "h-7 rounded-md px-3 leading-7",
+        md: "h-6 rounded-md px-1.5 leading-6",
+        lg: "comet-body-s-accented h-7 rounded-md px-3 leading-7",
       },
     },
     defaultVariants: {

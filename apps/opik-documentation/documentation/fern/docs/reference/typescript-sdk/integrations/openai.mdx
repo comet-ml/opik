@@ -1,0 +1,177 @@
+# OpenAI Integration
+
+Opik provides seamless integration with the official [OpenAI Node.js SDK](https://github.com/openai/openai-node) through the `opik-openai` package, allowing you to trace, monitor, and debug your OpenAI API calls.
+
+## Features
+
+- **Comprehensive Tracing**: Automatically trace OpenAI API calls, including chat completions, embeddings, images, and more
+- **Hierarchical Visualization**: View your OpenAI requests as structured traces with parent-child relationships
+- **Detailed Metadata Capture**: Record model names, prompts, completions, token usage, and custom metadata
+- **Error Handling**: Capture and visualize errors encountered during OpenAI API interactions
+- **Custom Tagging**: Add custom tags to organize and filter your traces
+- **Streaming Support**: Full support for streamed responses with token-by-token tracing
+
+## Installation
+
+### Option 1: Using npm
+
+```bash
+npm install opik-openai openai
+```
+
+### Option 2: Using yarn
+
+```bash
+yarn add opik-openai openai
+```
+
+### Requirements
+
+- Node.js ≥ 18
+- OpenAI SDK (`openai` ≥ 4.0.0)
+- Opik SDK (automatically installed as a dependency)
+
+## Basic Usage
+
+### Using with OpenAI Client
+
+To trace your OpenAI API calls, you need to wrap your OpenAI client instance with the `trackOpenAI` function:
+
+```typescript
+import OpenAI from "openai";
+import { trackOpenAI } from "opik-openai";
+
+// Initialize the original OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Wrap the client with Opik tracking
+const trackedOpenAI = trackOpenAI(openai);
+
+// Use the tracked client just like the original
+const completion = await trackedOpenAI.chat.completions.create({
+  model: "gpt-4",
+  messages: [{ role: "user", content: "Hello, how can you help me today?" }],
+});
+
+console.log(completion.choices[0].message.content);
+
+// Ensure all traces are sent before your app terminates
+await trackedOpenAI.flush();
+```
+
+### Using with Streaming Responses
+
+The integration fully supports OpenAI's streaming responses:
+
+```typescript
+import OpenAI from "openai";
+import { trackOpenAI } from "opik-openai";
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const trackedOpenAI = trackOpenAI(openai);
+
+async function streamingExample() {
+  // Create a streaming chat completion
+  const stream = await trackedOpenAI.chat.completions.create({
+    model: "gpt-3.5-turbo",
+    messages: [{ role: "user", content: "What is streaming?" }],
+    stream: true,
+    // Include usage in the stream
+    stream_options: {
+      include_usage: true,
+    },
+  });
+
+  // Process the stream
+  let streamedContent = "";
+  for await (const chunk of stream) {
+    const content = chunk.choices[0]?.delta?.content || "";
+    process.stdout.write(content);
+    streamedContent += content;
+  }
+
+  console.log("\nStreaming complete!");
+
+  // Don't forget to flush when done
+  await trackedOpenAI.flush();
+}
+
+streamingExample();
+```
+
+## Advanced Configuration
+
+The `trackOpenAI` function accepts an optional configuration object to customize the integration:
+
+```typescript
+import OpenAI from "openai";
+import { trackOpenAI } from "opik-openai";
+import { Opik } from "opik";
+
+// Optional: Create a custom Opik client
+const customOpikClient = new Opik({
+  apiKey: "YOUR_OPIK_API_KEY", // If not using environment variables
+  projectName: "openai-integration-project",
+});
+
+const existingOpikTrace = customOpikClient.trace({
+  name: `Trace`,
+  input: {
+    prompt: `Hello, world!`,
+  },
+  output: {
+    response: `Hello, world!`,
+  },
+});
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Configure the tracked client with options
+const trackedOpenAI = trackOpenAI(openai, {
+  // Optional array of tags to apply to all traces
+  traceMetadata: {
+    tags: ["openai", "production", "user-query"],
+
+    // Optional metadata to include with all traces
+    environment: "production",
+    version: "1.2.3",
+    component: "recommendation-engine",
+  },
+
+  // Optional custom name for the generation/trace
+  generationName: "ProductRecommendationService",
+
+  // Optional pre-configured Opik client
+  // If not provided, a singleton instance will be used
+  client: customOpikClient,
+
+  // Optional parent trace for hierarchical relationships
+  parent: existingOpikTrace,
+});
+
+// Use the tracked client with your configured options
+const response = await trackedOpenAI.embeddings.create({
+  model: "text-embedding-ada-002",
+  input: "This is a sample text for embeddings",
+});
+
+// Close the existing trace
+existingOpikTrace.end();
+
+// Flush before your application exits
+await trackedOpenAI.flush();
+```
+
+## Troubleshooting
+
+**Missing Traces**: Ensure your OpenAI and Opik API keys are correct and that you're calling `await trackedOpenAI.flush()` before your application exits.
+
+**Incomplete Data**: For streaming responses, make sure you're consuming the entire stream before ending your application.
+
+**Hierarchical Traces**: To create proper parent-child relationships, use the `parent` option in the configuration when you want OpenAI calls to be children of another trace.
+
+**Performance Impact**: The Opik integration adds minimal overhead to your OpenAI API calls.
