@@ -579,11 +579,11 @@ navigation:
           - page: TypeScript SDK
             path: docs/contributing/typescript-sdk.mdx
             slug: typescript-sdk
-            icon: lucide:box
+            icon: fa-brands fa-typescript
           - page: Opik Optimizer
             path: docs/contributing/agent-optimizer-sdk.mdx
             slug: opik-optimizer
-            icon: lucide:zap
+            icon: fa-brands fa-gauge-high
           - page: Frontend
             path: docs/contributing/frontend.mdx
             slug: frontend
@@ -593,11 +593,11 @@ navigation:
             slug: backend
             icon: fa-regular fa-server
       - section: Developer Programs
-        # slug: /developer-programs
+        slug: /developer-programs
         contents:
         - page: Bounty Program
           path: docs/contributing/bounties.mdx
-          slug: bounty-program
+          slug: bounties
           icon: fa-regular fa-gem
 redirects:
   - source: "/docs/opik/playground"
