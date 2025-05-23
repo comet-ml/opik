@@ -576,6 +576,14 @@ navigation:
             path: docs/contributing/python-sdk.mdx
             slug: python-sdk
             icon: fa-brands fa-python
+          - page: TypeScript SDK
+            path: docs/contributing/typescript-sdk.mdx
+            slug: typescript-sdk
+            icon: fa-brands fa-js
+          - page: Opik Optimizer
+            path: docs/contributing/opik-optimizer.mdx
+            slug: opik-optimizer
+            icon: fa-regular fa-gauge-high
           - page: Frontend
             path: docs/contributing/frontend.mdx
             slug: frontend
