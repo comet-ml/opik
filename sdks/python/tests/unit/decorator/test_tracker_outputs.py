@@ -1583,12 +1583,8 @@ def test_track__span_usage_updated__openai_format(fake_backend):
 def test_track__function_called_with_mutable_input_which_changed_afterward__check_span_and_trace_inputs_are_not_affected(
     fake_backend,
 ):
-    ID_STORAGE = {}
-
     @tracker.track
     def f(x):
-        ID_STORAGE["f_trace-id"] = opik_context.get_current_trace_data().id
-        ID_STORAGE["f_span-id"] = opik_context.get_current_span_data().id
         return "the-output"
 
     messages = [
