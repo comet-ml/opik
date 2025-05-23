@@ -207,10 +207,8 @@ class OptimizationsResourceTest {
         assertOptimization(updatedOptimization, updatedActualOptimization);
     }
 
-    private static Stream<Arguments> getLastUpdatedAt() {
-        return Stream.of(
-                Arguments.of((Instant) null),
-                Arguments.of(Instant.now()));
+    static Stream<Instant> getLastUpdatedAt() {
+        return Stream.of(null, Instant.now());
     }
 
     @Nested
@@ -218,7 +216,7 @@ class OptimizationsResourceTest {
     class GetOptimizerById {
 
         @ParameterizedTest
-        @MethodSource("getLastUpdatedAt")
+        @MethodSource("com.comet.opik.api.resources.v1.priv.OptimizationsResourceTest#getLastUpdatedAt")
         @DisplayName("Get optimizer by id")
         void getById(Instant lastUpdatedAt) {
             var optimization = optimizationResourceClient.createPartialOptimization()
@@ -230,12 +228,6 @@ class OptimizationsResourceTest {
             var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
 
             assertOptimization(optimization, actualOptimization);
-        }
-
-        private static Stream<Arguments> getLastUpdatedAt() {
-            return Stream.of(
-                    Arguments.of((Instant) null),
-                    Arguments.of(Instant.now()));
         }
 
         @ParameterizedTest

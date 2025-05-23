@@ -59,7 +59,6 @@ public class OptimizationsResource {
     private final @NonNull IdGenerator idGenerator;
 
     @PUT
-    @Path("/upsert")
     @Operation(operationId = "upsertOptimization", summary = "Upsert optimization", description = "Upsert optimization", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/optimizations/{id}", schema = @Schema(implementation = String.class))})})

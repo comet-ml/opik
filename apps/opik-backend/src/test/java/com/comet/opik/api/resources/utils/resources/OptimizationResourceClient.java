@@ -33,8 +33,7 @@ public class OptimizationResourceClient {
         return podamFactory.manufacturePojo(Optimization.class).toBuilder()
                 .status(OptimizationStatus.RUNNING)
                 .numTrials(0L)
-                .feedbackScores(null)
-                .lastUpdatedAt(Instant.now());
+                .feedbackScores(null);
     }
 
     public UUID create(Optimization optimization, String apiKey, String workspaceName) {
@@ -50,7 +49,6 @@ public class OptimizationResourceClient {
 
     public UUID upsert(Optimization optimization, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("upsert")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
