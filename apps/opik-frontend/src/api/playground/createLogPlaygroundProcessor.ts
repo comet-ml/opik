@@ -111,6 +111,10 @@ const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
 };
 
 const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
+  const versions = run.providerMessages
+    .filter((m) => m.promptVersionId)
+    .map((m) => m.promptVersionId);
+
   return {
     id: v7(),
     datasetName: run.datasetName!,
@@ -119,6 +123,7 @@ const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
       messages: JSON.stringify(run.providerMessages),
       model_config: run.configs,
     },
+    ...(versions.length && { prompt_versions: versions }),
   };
 };
 

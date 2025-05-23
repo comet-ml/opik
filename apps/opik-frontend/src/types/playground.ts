@@ -93,6 +93,7 @@ export interface LogExperiment {
   datasetName: string;
   name?: string;
   metadata?: object;
+  prompt_versions?: string[];
 }
 
 export type LogExperimentItem = {
