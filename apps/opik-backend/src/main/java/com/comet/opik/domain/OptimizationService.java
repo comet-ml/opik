@@ -39,7 +39,7 @@ import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 @ImplementedBy(OptimizationServiceImpl.class)
 public interface OptimizationService {
 
-    Mono<UUID> create(@NonNull Optimization optimization);
+    Mono<UUID> upsert(@NonNull Optimization optimization);
 
     Mono<Optimization> getById(UUID id);
 
@@ -92,7 +92,7 @@ class OptimizationServiceImpl implements OptimizationService {
 
     @Override
     @WithSpan
-    public Mono<UUID> create(@NonNull Optimization optimization) {
+    public Mono<UUID> upsert(@NonNull Optimization optimization) {
         UUID id = optimization.id() == null ? idGenerator.generateId() : optimization.id();
         IdGenerator.validateVersion(id, "Optimization");
         var name = StringUtils.getIfBlank(optimization.name(), nameGenerator::generateName);
@@ -103,12 +103,9 @@ class OptimizationServiceImpl implements OptimizationService {
                             .id(id)
                             .name(name)
                             .datasetId(datasetId)
-                            // The createdAt field is set to later post the ExperimentCreated event, but it is not persisted in the
-                            // database as the default now64(9) is used instead.
-                            .createdAt(Instant.now())
                             .build();
 
-                    return makeMonoContextAware((userName, workspaceId) -> optimizationDAO.insert(newOptimization)
+                    return makeMonoContextAware((userName, workspaceId) -> optimizationDAO.upsert(newOptimization)
                             .thenReturn(newOptimization.id())
                             // The event is posted only when the experiment is successfully created.
                             .doOnSuccess(experimentId -> postOptimizationCreatedEvent(newOptimization, workspaceId,
@@ -181,7 +178,7 @@ class OptimizationServiceImpl implements OptimizationService {
         eventBus.post(new OptimizationCreated(
                 newOptimization.id(),
                 newOptimization.datasetId(),
-                newOptimization.createdAt(),
+                Instant.now(),
                 workspaceId,
                 userName));
         log.info("Posted optimization created event for optimization id '{}', datasetId '{}', workspaceId '{}'",

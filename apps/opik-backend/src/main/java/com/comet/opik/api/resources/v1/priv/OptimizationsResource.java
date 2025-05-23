@@ -58,6 +58,27 @@ public class OptimizationsResource {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
 
+    @PUT
+    @Operation(operationId = "upsertOptimization", summary = "Upsert optimization", description = "Upsert optimization", responses = {
+            @ApiResponse(responseCode = "201", description = "Created", headers = {
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/optimizations/{id}", schema = @Schema(implementation = String.class))})})
+    @RateLimited
+    public Response upsert(
+            @RequestBody(content = @Content(schema = @Schema(implementation = Optimization.class))) @JsonView(Optimization.View.Write.class) @NotNull @Valid Optimization optimization,
+            @Context UriInfo uriInfo) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Upserting optimization with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
+                optimization.id(), optimization.name(), optimization.datasetName(), workspaceId);
+        var id = optimizationService.upsert(optimization)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(id)).build();
+        log.info("Upserted optimization with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
+                id, optimization.name(), optimization.datasetName(), workspaceId);
+
+        return Response.created(uri).build();
+    }
+
     @GET
     @Operation(operationId = "findOptimizations", summary = "Find optimizations", description = "Find optimizations", responses = {
             @ApiResponse(responseCode = "200", description = "Optimizations resource", content = @Content(schema = @Schema(implementation = Optimization.OptimizationPage.class))),
@@ -114,7 +135,7 @@ public class OptimizationsResource {
         var workspaceId = requestContext.get().getWorkspaceId();
         log.info("Creating optimization with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
                 optimization.id(), optimization.name(), optimization.datasetName(), workspaceId);
-        var id = optimizationService.create(optimization)
+        var id = optimizationService.upsert(optimization)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(id)).build();

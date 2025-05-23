@@ -9,6 +9,7 @@ import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Optimization;
+import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
@@ -59,6 +60,8 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.sql.SQLException;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -71,6 +74,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -172,24 +176,58 @@ class OptimizationsResourceTest {
         Mockito.verify(defaultEventBus).post(experimentCaptor.capture());
     }
 
+    @ParameterizedTest
+    @MethodSource("getLastUpdatedAt")
+    @DisplayName("Get optimizer by id")
+    void upsertOptimizer(Instant lastUpdatedAt) {
+        Mockito.reset(defaultEventBus);
+
+        var optimization = optimizationResourceClient.createPartialOptimization()
+                .lastUpdatedAt(lastUpdatedAt)
+                .build();
+
+        // Create optimization via upsert
+        var id = optimizationResourceClient.upsert(optimization, API_KEY, TEST_WORKSPACE_NAME);
+        var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+        assertOptimization(optimization, actualOptimization);
+        ArgumentCaptor<OptimizationCreated> experimentCaptor = ArgumentCaptor.forClass(OptimizationCreated.class);
+
+        Mockito.verify(defaultEventBus).post(experimentCaptor.capture());
+
+        // Update the same optimization
+        var updatedOptimization = actualOptimization.toBuilder()
+                .name(UUID.randomUUID().toString())
+                .status(OptimizationStatus.COMPLETED)
+                .objectiveName(UUID.randomUUID().toString())
+                .build();
+        optimizationResourceClient.upsert(updatedOptimization, API_KEY, TEST_WORKSPACE_NAME);
+
+        var updatedActualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+        assertOptimization(updatedOptimization, updatedActualOptimization);
+    }
+
+    static Stream<Instant> getLastUpdatedAt() {
+        return Stream.of(null, Instant.now());
+    }
+
     @Nested
     @DisplayName("Get optimizer by id")
     class GetOptimizerById {
 
-        @Test
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.OptimizationsResourceTest#getLastUpdatedAt")
         @DisplayName("Get optimizer by id")
-        void getById() {
-            var optimization = optimizationResourceClient.createPartialOptimization().build();
+        void getById(Instant lastUpdatedAt) {
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .lastUpdatedAt(lastUpdatedAt)
+                    .build();
 
             var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
 
             var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
 
-            assertThat(actualOptimization)
-                    .usingRecursiveComparison()
-                    .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
-                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                    .isEqualTo(optimization);
+            assertOptimization(optimization, actualOptimization);
         }
 
         @ParameterizedTest
@@ -364,12 +402,7 @@ class OptimizationsResourceTest {
 
         var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
 
-        assertThat(actualOptimization)
-                .usingRecursiveComparison()
-                .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
-                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                .isEqualTo(optimization);
-
+        assertOptimization(optimization, actualOptimization);
     }
 
     private Stream<Arguments> updateById() {
@@ -661,4 +694,19 @@ class OptimizationsResourceTest {
         }
     }
 
+    private void assertOptimization(Optimization expected, Optimization actual) {
+        assertThat(actual)
+                .usingRecursiveComparison()
+                .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                .isEqualTo(expected);
+
+        if (expected.lastUpdatedAt() != null) {
+            assertThat(actual.lastUpdatedAt().truncatedTo(ChronoUnit.MICROS))
+                    // Some JVMs can resolve higher than microseconds, such as nanoseconds in the Ubuntu AMD64 JVM
+                    .isAfterOrEqualTo(expected.lastUpdatedAt().truncatedTo(ChronoUnit.MICROS));
+        } else {
+            assertThat(actual.lastUpdatedAt()).isCloseTo(Instant.now(), within(2, ChronoUnit.SECONDS));
+        }
+    }
 }
