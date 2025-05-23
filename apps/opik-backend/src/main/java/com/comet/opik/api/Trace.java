@@ -103,10 +103,10 @@ public record Trace(
     }
 
     public static class View {
-        public interface Write {
+        public static class Write {
         }
 
-        public interface Public {
+        public static class Public {
         }
     }
 }

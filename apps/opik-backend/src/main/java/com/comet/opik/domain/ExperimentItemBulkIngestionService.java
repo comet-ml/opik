@@ -143,7 +143,6 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                 trace = Trace.builder()
                         .id(idGenerator.generateId())
                         .projectName(ProjectService.DEFAULT_PROJECT)
-                        .name("")
                         .startTime(now)
                         .endTime(now)
                         .build();

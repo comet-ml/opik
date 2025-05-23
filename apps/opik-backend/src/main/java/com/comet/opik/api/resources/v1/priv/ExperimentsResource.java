@@ -323,11 +323,12 @@ public class ExperimentsResource {
 
     @PUT
     @Path("/items/bulk")
-    @Operation(operationId = "experimentItemsBulkUpload", summary = "Record experiment items in bulk", description = "Record experiment items in bulk with traces, spans, and feedback scores. "
+    @Operation(operationId = "experimentItemsBulk", summary = "Record experiment items in bulk", description = "Record experiment items in bulk with traces, spans, and feedback scores. "
             +
             "Maximum request size is 4MB.", responses = {
                     @ApiResponse(responseCode = "204", description = "No content"),
-                    @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+                    @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+                    @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = com.comet.opik.api.error.ErrorMessage.class))),
             })
     @RateLimited
     @UsageLimited
