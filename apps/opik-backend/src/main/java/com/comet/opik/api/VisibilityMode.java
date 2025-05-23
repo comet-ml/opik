@@ -29,6 +29,6 @@ public enum VisibilityMode {
             return null;
         }
 
-        throw new IllegalArgumentException("Invalid SpanType: " + value);
+        throw new IllegalArgumentException("Invalid VisibilityMode: " + value);
     }
 }
