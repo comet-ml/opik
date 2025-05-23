@@ -44,6 +44,7 @@ interface PlaygroundPromptProps {
   isPendingProviderKeys: boolean;
   providerResolver: ProviderResolver;
   modelResolver: ModelResolver;
+  scrollToPromptRef: React.MutableRefObject<string>;
 }
 
 const PlaygroundPrompt = ({
@@ -54,6 +55,7 @@ const PlaygroundPrompt = ({
   isPendingProviderKeys,
   providerResolver,
   modelResolver,
+  scrollToPromptRef,
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
 
@@ -101,6 +103,7 @@ const PlaygroundPrompt = ({
     });
 
     addPrompt(newPrompt, index + 1);
+    scrollToPromptRef.current = newPrompt.id;
   };
 
   const handleUpdateMessage = useCallback(
@@ -188,6 +191,18 @@ const PlaygroundPrompt = ({
     model,
   ]);
 
+  const setRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (element && scrollToPromptRef.current === promptId) {
+        element?.scrollIntoView({
+          behavior: "smooth",
+          inline: "start",
+        });
+      }
+    },
+    [promptId, scrollToPromptRef],
+  );
+
   return (
     <div
       className="h-[var(--prompt-height)] w-full min-w-[var(--min-prompt-width)]"
@@ -196,6 +211,7 @@ const PlaygroundPrompt = ({
           "--prompt-height": "calc(100% - 64px)",
         } as React.CSSProperties
       }
+      ref={setRef}
     >
       <div className="mb-2 flex h-8 items-center justify-between">
         <p className="comet-body-s-accented">
