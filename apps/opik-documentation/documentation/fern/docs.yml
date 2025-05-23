@@ -67,6 +67,10 @@ tabs:
     display-name: SDK and API reference
     icon: fa-regular fa-square-terminal
     slug: /reference
+  contributing:
+    display-name: Contributing
+    icon: fa-regular fa-code-branch
+    slug: /contributing
 navigation:
   - tab: documentation
     layout:
@@ -555,6 +559,19 @@ navigation:
           - page: Overview
             path: docs/reference/ruby-otel-sdk/overview.mdx
             slug: overview
+  - tab: contributing
+    layout:
+      - section: How to Contribute
+        slug: /how-to-contribute
+        contents:
+          - page: Contribution Guide
+            path: docs/how-to-contribute.mdx
+            slug: overview
+            icon: fa-regular fa-file-lines
+          - page: Bounty Program
+            path: docs/bounties.mdx
+            slug: bounty-program
+            icon: fa-regular fa-gem
 redirects:
   - source: "/docs/opik/playground"
     destination: "/docs/opik/prompt_engineering/playground"
