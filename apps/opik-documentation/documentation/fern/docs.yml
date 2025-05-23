@@ -64,7 +64,7 @@ tabs:
     icon: fa-regular fa-server
     slug: /self-host
   reference:
-    display-name: SDK and API reference
+    display-name: SDK & API reference
     icon: fa-regular fa-square-terminal
     slug: /reference
   contributing:
