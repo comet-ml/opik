@@ -140,7 +140,7 @@ def test_broken_decorator__end_span_preprocessor__no_error(fake_backend):
         id=ANY_STRING(),
         input={"num": 42},
         name="f_inner",
-        output=42,
+        output={"output": 42},
         start_time=ANY_BUT_NONE,
         error_info=None,
         spans=[
@@ -149,7 +149,7 @@ def test_broken_decorator__end_span_preprocessor__no_error(fake_backend):
                 id=ANY_STRING(),
                 input={"num": 42},
                 name="f_inner",
-                output=42,
+                output={"output": 42},
                 start_time=ANY_BUT_NONE,
                 type="general",
                 spans=[],
