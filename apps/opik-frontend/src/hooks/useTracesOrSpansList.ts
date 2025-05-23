@@ -15,12 +15,14 @@ import { Sorting } from "@/types/sorting";
 
 export enum TRACE_DATA_TYPE {
   traces = "traces",
+  spans = "spans",
   llm = "llm",
 }
 
 type UseTracesOrSpansListParams = {
   projectId: string;
   type: TRACE_DATA_TYPE;
+  spanType?: SPAN_TYPE;
   filters?: Filters;
   sorting?: Sorting;
   search?: string;
@@ -71,7 +73,7 @@ export default function useTracesOrSpansList(
   } = useSpansList(
     {
       ...params,
-      type: SPAN_TYPE.llm,
+      type: !isTracesData && params.spanType ? params.spanType : SPAN_TYPE.llm,
     },
     {
       ...config,

@@ -77,6 +77,9 @@ const TracesPage = () => {
               <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.traces}>
                 Traces
               </TabsTrigger>
+              <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.spans}>
+                Spans
+              </TabsTrigger>
               <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.llm}>
                 LLM calls
               </TabsTrigger>
@@ -96,6 +99,14 @@ const TracesPage = () => {
               type={TRACE_DATA_TYPE.traces}
               projectId={projectId}
               projectName={projectName}
+            />
+          </TabsContent>
+          <TabsContent value={TRACE_DATA_TYPE.spans}>
+            <TracesSpansTab
+              type={TRACE_DATA_TYPE.spans}
+              projectId={projectId}
+              projectName={projectName}
+              showSpanType={true}
             />
           </TabsContent>
           <TabsContent value={TRACE_DATA_TYPE.llm}>

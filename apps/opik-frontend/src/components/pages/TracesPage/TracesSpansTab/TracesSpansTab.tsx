@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import {
+  createEnumParam,
   JsonParam,
   NumberParam,
   StringParam,
@@ -35,7 +36,7 @@ import {
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import { BaseTraceData, Span, Trace } from "@/types/traces";
+import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
 import {
   convertColumnDataToColumn,
   isColumnSortable,
@@ -82,6 +83,7 @@ import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import GuardrailsCell from "@/components/shared/DataTableCells/GuardrailsCell";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import SelectBox from "@/components/shared/SelectBox/SelectBox";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -209,13 +211,25 @@ type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;
   projectId: string;
   projectName: string;
+  showSpanType?: boolean;
 };
+
+const SpanTypeParam = createEnumParam(Object.values(SPAN_TYPE));
 
 export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   type,
   projectId,
   projectName,
+  showSpanType = false,
 }) => {
+  const [spanType = SPAN_TYPE.tool, setSpanType] = useQueryParam(
+    "span_type",
+    SpanTypeParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
+
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -288,7 +302,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           keyComponentProps: {
             rootKeys: ["metadata"],
             projectId,
-            type,
+            type: showSpanType ? spanType : type,
             placeholder: "key",
             excludeRoot: true,
           },
@@ -297,13 +311,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           keyComponent: TracesOrSpansFeedbackScoresSelect,
           keyComponentProps: {
             projectId,
-            type,
+            type: showSpanType ? spanType : type,
             placeholder: "Select score",
           },
         },
       },
     }),
-    [projectId, type],
+    [projectId, type, showSpanType, spanType],
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -312,6 +326,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     {
       projectId,
       type: type as TRACE_DATA_TYPE,
+      spanType: showSpanType && spanType ? spanType : undefined,
       sorting: sortedColumns,
       filters,
       page: page as number,
@@ -329,6 +344,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       {
         projectId,
         type: type as TRACE_DATA_TYPE,
+        spanType: showSpanType && spanType ? spanType : undefined,
         filters,
         search: search as string,
       },
@@ -342,6 +358,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       {
         projectId,
         type: type as TRACE_DATA_TYPE,
+        spanType: showSpanType && spanType ? spanType : undefined,
       },
       {
         refetchInterval: REFETCH_INTERVAL,
@@ -665,7 +682,33 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return <Loader />;
   }
 
+  const SpanTypeSelectBox = () => {
+    return (
+      <SelectBox
+        className="h-8 w-[120px]"
+        value={spanType as string}
+        options={Object.values(SPAN_TYPE).map((a) => ({
+          value: a,
+          label: a,
+        }))}
+        placeholder="Span Type"
+        onChange={(a) => setSpanType(a as SPAN_TYPE)}
+        testId="span-type-filter"
+      />
+    );
+  };
+
   if (noData && rows.length === 0 && page === 1) {
+    if (showSpanType) {
+      return (
+        <div>
+          <div className="px-6">
+            <SpanTypeSelectBox />
+          </div>
+          <NoTracesPage />
+        </div>
+      );
+    }
     return <NoTracesPage />;
   }
 
@@ -677,6 +720,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         limitWidth
       >
         <div className="flex items-center gap-2">
+          {showSpanType && <SpanTypeSelectBox />}
           <SearchInput
             searchText={search as string}
             setSearchText={setSearch}
