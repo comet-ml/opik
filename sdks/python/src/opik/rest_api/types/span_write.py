@@ -20,7 +20,7 @@ class SpanWrite(UniversalBaseModel):
 
     trace_id: str
     parent_span_id: typing.Optional[str] = None
-    name: str
+    name: typing.Optional[str] = None
     type: SpanWriteType
     start_time: dt.datetime
     end_time: typing.Optional[dt.datetime] = None

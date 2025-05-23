@@ -10,7 +10,7 @@ export interface SpanWrite {
     projectName?: string;
     traceId: string;
     parentSpanId?: string;
-    name: string;
+    name?: string;
     type: OpikApi.SpanWriteType;
     startTime: Date;
     endTime?: Date;

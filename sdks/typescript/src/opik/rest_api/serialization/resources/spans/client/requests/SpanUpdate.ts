@@ -15,6 +15,7 @@ export const SpanUpdate: core.serialization.Schema<serializers.SpanUpdate.Raw, O
         projectId: core.serialization.property("project_id", core.serialization.string().optional()),
         traceId: core.serialization.property("trace_id", core.serialization.string()),
         parentSpanId: core.serialization.property("parent_span_id", core.serialization.string().optional()),
+        name: core.serialization.string().optional(),
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
         input: JsonListString.optional(),
         output: JsonListString.optional(),
@@ -33,6 +34,7 @@ export declare namespace SpanUpdate {
         project_id?: string | null;
         trace_id: string;
         parent_span_id?: string | null;
+        name?: string | null;
         end_time?: string | null;
         input?: JsonListString.Raw | null;
         output?: JsonListString.Raw | null;

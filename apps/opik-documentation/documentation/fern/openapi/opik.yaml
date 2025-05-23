@@ -7230,7 +7230,6 @@ components:
           type: string
     Span:
       required:
-      - name
       - start_time
       - trace_id
       - type
@@ -7347,7 +7346,6 @@ components:
       - type: string
     Span_Write:
       required:
-      - name
       - start_time
       - trace_id
       - type
@@ -7503,7 +7501,6 @@ components:
       - type: string
     Span_Public:
       required:
-      - name
       - start_time
       - trace_id
       - type
@@ -7792,6 +7789,8 @@ components:
         parent_span_id:
           type: string
           format: uuid
+        name:
+          type: string
         end_time:
           type: string
           format: date-time

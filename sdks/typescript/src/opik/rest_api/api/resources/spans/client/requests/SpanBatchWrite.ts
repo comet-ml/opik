@@ -9,7 +9,6 @@ import * as OpikApi from "../../../../index";
  *     {
  *         spans: [{
  *                 traceId: "trace_id",
- *                 name: "name",
  *                 type: "general",
  *                 startTime: "2024-01-15T09:30:00Z"
  *             }]
