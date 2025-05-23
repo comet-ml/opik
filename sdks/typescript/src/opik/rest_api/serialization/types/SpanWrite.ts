@@ -16,7 +16,7 @@ export const SpanWrite: core.serialization.ObjectSchema<serializers.SpanWrite.Ra
         projectName: core.serialization.property("project_name", core.serialization.string().optional()),
         traceId: core.serialization.property("trace_id", core.serialization.string()),
         parentSpanId: core.serialization.property("parent_span_id", core.serialization.string().optional()),
-        name: core.serialization.string(),
+        name: core.serialization.string().optional(),
         type: SpanWriteType,
         startTime: core.serialization.property("start_time", core.serialization.date()),
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
@@ -42,7 +42,7 @@ export declare namespace SpanWrite {
         project_name?: string | null;
         trace_id: string;
         parent_span_id?: string | null;
-        name: string;
+        name?: string | null;
         type: SpanWriteType.Raw;
         start_time: string;
         end_time?: string | null;

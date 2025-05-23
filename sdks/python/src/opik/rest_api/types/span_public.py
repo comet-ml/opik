@@ -23,7 +23,7 @@ class SpanPublic(UniversalBaseModel):
     project_id: typing.Optional[str] = None
     trace_id: str
     parent_span_id: typing.Optional[str] = None
-    name: str
+    name: typing.Optional[str] = None
     type: SpanPublicType
     start_time: dt.datetime
     end_time: typing.Optional[dt.datetime] = None
