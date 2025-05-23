@@ -1,13 +1,16 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.infrastructure.llm.LlmProviderError;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import jakarta.validation.constraints.NotBlank;
 
 import static com.comet.opik.infrastructure.llm.openai.OpenAiErrorMessage.OpenAiError;
 
 public record OpenAiErrorMessage(OpenAiError error) implements LlmProviderError<OpenAiError> {
 
-    public record OpenAiError(String message, String code, String type) {
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record OpenAiError(@NotBlank String message, @NotBlank String code, @NotBlank String type) {
     }
 
     public ErrorMessage toErrorMessage() {
