@@ -61,8 +61,7 @@ Before you start, please review our general [Contribution Overview](/contributin
 
 <AccordionGroup>
   <Accordion title="Health Check">
-    To check the health of your locally running backend application, you can access the health check endpoint in your browser or via `curl`:
-    [`http://localhost:8080/healthcheck`](http://localhost:8080/healthcheck)
+    To check the health of your locally running backend application, you can access the health check endpoint in your browser or via `curl` at `http://localhost:8080/healthcheck`.
   </Accordion>
 
   <Accordion title="Database Migrations (Liquibase)">
@@ -87,7 +86,7 @@ Before you start, please review our general [Contribution Overview](/contributin
   <Accordion title="Data Migrations (DML)">
     DML (Data Manipulation Language) migrations are for changes to data itself, not the schema.
     - **Execution**: These are not run automatically. They must be run manually by a system admin using a database client.
-    - **Documentation**: DML migrations are documented in `CHANGELOG.md` (link to GitHub: [CHANGELOG.md](https://github.com/comet-ml/opik/blob/main/apps/opik-backend/CHANGELOG.md)) and the scripts are placed at `apps/opik-backend/data-migrations` along with detailed instructions.
+    - **Documentation**: DML migrations are documented in `CHANGELOG.md` (link to GitHub: [CHANGELOG.md](https://github.com/comet-ml/opik/blob/main/CHANGELOG.md)) and the scripts are placed at `apps/opik-backend/data-migrations` along with detailed instructions.
     - **Requirements for DML Migrations**:
       *   Must be backward compatible (no data deletion unless 100% safe, allow rollback, no performance degradation).
       *   Must include detailed execution instructions.
