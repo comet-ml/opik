@@ -68,7 +68,6 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
 
   const onSaveHandler = useCallback(
     (version: PromptVersion) => {
-      console.log(123, version);
       onChangeMessage({
         promptId: version.prompt_id,
         content: version.template ?? "",

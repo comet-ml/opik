@@ -14,6 +14,7 @@ interface CreatePromptTemplate {
 
 type UsePromptCreateMutationParams = {
   prompt: Partial<Prompt> & CreatePromptTemplate;
+  withResponse?: boolean;
 };
 
 const usePromptCreateMutation = () => {
@@ -21,18 +22,29 @@ const usePromptCreateMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ prompt }: UsePromptCreateMutationParams) => {
+    mutationFn: async ({
+      prompt,
+      withResponse,
+    }: UsePromptCreateMutationParams) => {
       const { data, headers } = await api.post(PROMPTS_REST_ENDPOINT, {
         ...prompt,
       });
 
-      console.log(123); // TODO lala
+      const extractedId = extractIdFromLocation(headers?.location);
+
+      if (extractedId && withResponse) {
+        const { data: promptData } = await api.get(
+          `${PROMPTS_REST_ENDPOINT}${extractedId}/`,
+        );
+
+        return promptData;
+      }
 
       return data
         ? data
         : {
             ...prompt,
-            id: extractIdFromLocation(headers?.location),
+            id: extractedId,
           };
     },
 

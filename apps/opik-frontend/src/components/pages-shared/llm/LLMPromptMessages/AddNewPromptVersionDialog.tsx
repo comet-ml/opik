@@ -126,8 +126,13 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
             ...(metadata && { metadata: safelyParseJSON(metadata) }),
             ...(description && { description }),
           },
+          withResponse: true,
         },
-        { onSuccess: (data) => onSave(data) },
+        {
+          onSuccess: (data?: PromptWithLatestVersion) => {
+            if (data?.latest_version) onSave(data.latest_version);
+          },
+        },
       );
       setOpen(false);
     }
