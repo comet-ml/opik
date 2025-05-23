@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import AddEditAIProviderDialog from "@/components/shared/AddEditAIProviderDialog/AddEditAIProviderDialog";
+import ManageAIProviderDialog from "@/components/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
 import { PROVIDER_LOCATION_TYPE, ProviderKey } from "@/types/providers";
 import useProviderKeysDeleteMutation from "@/api/provider-keys/useProviderKeysDeleteMutation";
 import { PROVIDERS } from "@/constants/providers";
@@ -51,7 +51,7 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
       className="justify-end p-0"
       stopClickPropagation
     >
-      <AddEditAIProviderDialog
+      <ManageAIProviderDialog
         key={`edit-${resetKeyRef.current}`}
         providerKey={providerKey}
         open={open === 2}
@@ -62,8 +62,8 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
         open={open === 1}
         setOpen={setOpen}
         onConfirm={deleteProviderKeyHandler}
-        title={`Delete ${PROVIDERS[providerKey.provider]?.label} configuration`}
-        description="Are you sure you want to delete this provider configuration?"
+        title="Delete configuration"
+        description="This configuration is shared across the workspace. Deleting it will remove access for everyone. This action can’t be undone. Are you sure you want to proceed?"
         confirmText="Delete configuration"
       />
       <DropdownMenu>

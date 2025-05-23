@@ -1,12 +1,11 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { MessageCircleWarning } from "lucide-react";
 import { z } from "zod";
 import get from "lodash/get";
 import isFunction from "lodash/isFunction";
-import isArray from "lodash/isArray";
 
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,52 +23,60 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   LocalAIProviderData,
   PROVIDER_LOCATION_TYPE,
   PROVIDER_TYPE,
   ProviderKey,
 } from "@/types/providers";
-import SelectBox from "@/components/shared/SelectBox/SelectBox";
+
+import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
+import useProviderKeysDeleteMutation from "@/api/provider-keys/useProviderKeysDeleteMutation";
+import ProviderSelect from "@/components/pages-shared/llm/ProviderSelect/ProviderSelect";
 import useProviderKeysUpdateMutation from "@/api/provider-keys/useProviderKeysUpdateMutation";
 import useProviderKeysCreateMutation from "@/api/provider-keys/useProviderKeysCreateMutation";
 import useLocalAIProviderData from "@/hooks/useLocalAIProviderData";
-import { PROVIDERS, PROVIDERS_OPTIONS } from "@/constants/providers";
-import { SelectItem } from "@/components/ui/select";
-import { DropdownOption } from "@/types/shared";
+import { PROVIDERS } from "@/constants/providers";
 import {
   AIProviderFormSchema,
   AIProviderFormType,
-} from "@/components/shared/AddEditAIProviderDialog/schema";
-import CloudAIProviderDetails from "@/components/shared/AddEditAIProviderDialog/CloudAIProviderDetails";
-import LocalAIProviderDetails from "@/components/shared/AddEditAIProviderDialog/LocalAIProviderDetails";
-import VertexAIProviderDetails from "@/components/shared/AddEditAIProviderDialog/VertexAIProviderDetails";
+} from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
+import CloudAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CloudAIProviderDetails";
+import LocalAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/LocalAIProviderDetails";
+import VertexAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/VertexAIProviderDetails";
 
-type AddEditAIProviderDialogProps = {
+type ManageAIProviderDialogProps = {
   providerKey?: ProviderKey;
   open: boolean;
   setOpen: (open: boolean) => void;
   onAddProvider?: (provider: PROVIDER_TYPE) => void;
-  excludedProviders?: PROVIDER_TYPE[];
+  onDeleteProvider?: (provider: PROVIDER_TYPE) => void;
+  configuredProvidersList?: ProviderKey[];
 };
 
-const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
+const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   providerKey,
   open,
   setOpen,
   onAddProvider,
-  excludedProviders,
+  onDeleteProvider,
+  configuredProvidersList,
 }) => {
+  const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
+
   const { getLocalAIProviderData, setLocalAIProviderData } =
     useLocalAIProviderData();
   const { mutate: createMutate } = useProviderKeysCreateMutation();
   const { mutate: updateMutate } = useProviderKeysUpdateMutation();
+  const { mutate: deleteMutate } = useProviderKeysDeleteMutation();
+  const { deleteLocalAIProviderData } = useLocalAIProviderData();
 
-  const localData = useMemo(() => {
-    return providerKey?.provider
+  const [localData, setLocalData] = useState<LocalAIProviderData | undefined>(
+    providerKey?.provider
       ? getLocalAIProviderData(providerKey.provider)
-      : undefined;
-  }, [getLocalAIProviderData, providerKey]);
+      : undefined,
+  );
 
   const form: UseFormReturn<AIProviderFormType> = useForm<
     z.infer<typeof AIProviderFormSchema>
@@ -89,16 +96,41 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
 
   const provider = form.watch("provider") as PROVIDER_TYPE | "";
 
-  const isEdit = Boolean(providerKey);
+  const configuredProviderKeys = useMemo(
+    () => (configuredProvidersList || []).map((p) => p.provider),
+    [configuredProvidersList],
+  );
+
+  const calculatedProviderKey = useMemo(() => {
+    return configuredProvidersList?.find((p) => provider === p.provider);
+  }, [configuredProvidersList, provider]);
+
+  useEffect(() => {
+    if (
+      calculatedProviderKey &&
+      PROVIDERS[calculatedProviderKey.provider]?.locationType ===
+        PROVIDER_LOCATION_TYPE.local
+    ) {
+      const ld = getLocalAIProviderData(calculatedProviderKey.provider);
+      if (ld) {
+        setLocalData(ld);
+        form.setValue("url", ld.url);
+        form.setValue("models", ld.models);
+      }
+    }
+  }, [calculatedProviderKey, form, getLocalAIProviderData]);
+
   const isCloudProvider =
     provider === "" ||
     PROVIDERS[provider]?.locationType === PROVIDER_LOCATION_TYPE.cloud;
 
-  const title = isEdit
-    ? "Edit AI provider configuration"
-    : "Add AI provider configuration";
+  const isConfiguredProvider = Boolean(calculatedProviderKey);
 
-  const buttonText = isEdit ? "Update configuration" : "Save configuration";
+  const buttonText = provider
+    ? providerKey || calculatedProviderKey
+      ? "Update configuration"
+      : "Add configuration"
+    : "Done";
 
   const localConfigHandler = useCallback(() => {
     const data: LocalAIProviderData = {
@@ -130,10 +162,10 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
     const location = form.getValues("location");
     const isVertex = provider === PROVIDER_TYPE.VERTEX_AI;
 
-    if (isEdit) {
+    if (providerKey || calculatedProviderKey) {
       updateMutate({
         providerKey: {
-          id: providerKey!.id,
+          id: providerKey?.id ?? calculatedProviderKey?.id,
           apiKey,
           location: isVertex ? location : undefined,
         },
@@ -154,11 +186,11 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
     setOpen(false);
   }, [
     form,
-    isEdit,
     provider,
+    providerKey,
+    calculatedProviderKey,
     setOpen,
     updateMutate,
-    providerKey,
     onAddProvider,
     createMutate,
   ]);
@@ -168,31 +200,26 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
     [isCloudProvider, cloudConfigHandler, localConfigHandler],
   );
 
-  const options = useMemo(() => {
-    return isArray(excludedProviders)
-      ? PROVIDERS_OPTIONS.filter(
-          ({ value }) => !excludedProviders.includes(value),
-        )
-      : PROVIDERS_OPTIONS;
-  }, [excludedProviders]);
+  const deleteProviderKeyHandler = useCallback(() => {
+    const config = PROVIDERS[provider as PROVIDER_TYPE];
+    if (config.locationType === PROVIDER_LOCATION_TYPE.local) {
+      deleteLocalAIProviderData(config.value);
+    } else if (calculatedProviderKey) {
+      deleteMutate({
+        providerId: calculatedProviderKey.id,
+      });
+    }
 
-  const renderOption = (option: DropdownOption<string>) => {
-    const Icon = PROVIDERS[option.value as PROVIDER_TYPE]?.icon;
-
-    return (
-      <SelectItem
-        key={option.value}
-        value={option.value}
-        description={<div className="pl-6">{option.description}</div>}
-        withoutCheck
-      >
-        <div className="flex items-center gap-2">
-          <Icon />
-          {option.label}
-        </div>
-      </SelectItem>
-    );
-  };
+    if (isFunction(onDeleteProvider)) {
+      onDeleteProvider(provider as PROVIDER_TYPE);
+    }
+  }, [
+    provider,
+    calculatedProviderKey,
+    onDeleteProvider,
+    deleteLocalAIProviderData,
+    deleteMutate,
+  ]);
 
   const getProviderDetails = () => {
     if (provider === PROVIDER_TYPE.VERTEX_AI) {
@@ -210,7 +237,7 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle>Provider configuration</DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form
@@ -227,25 +254,20 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
                   <FormItem>
                     <Label>Provider</Label>
                     <FormControl>
-                      <SelectBox
-                        disabled={isEdit}
-                        renderOption={renderOption}
-                        value={field.value}
+                      <ProviderSelect
+                        disabled={Boolean(providerKey)}
+                        value={(field.value as PROVIDER_TYPE) || ""}
                         onChange={(v) => {
                           const p = v as PROVIDER_TYPE;
+
                           form.setValue(
                             "locationType",
                             PROVIDERS[p].locationType,
                           );
                           field.onChange(p);
                         }}
-                        options={options}
-                        placeholder="Select a provider"
-                        className={cn({
-                          "border-destructive": Boolean(
-                            validationErrors?.message,
-                          ),
-                        })}
+                        configuredProviderKeys={configuredProviderKeys}
+                        hasError={Boolean(validationErrors?.message)}
                       />
                     </FormControl>
                     <FormMessage />
@@ -253,10 +275,33 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
                 );
               }}
             />
+            {isConfiguredProvider && isCloudProvider && (
+              <Alert>
+                <MessageCircleWarning className="size-4" />
+                <AlertTitle>Editing an existing key</AlertTitle>
+                <AlertDescription>
+                  A key is already set for this provider. Since AI provider
+                  configurations are workspace-wide, adding a new key will
+                  overwrite the existing one for everyone.
+                </AlertDescription>
+              </Alert>
+            )}
             {getProviderDetails()}
           </form>
         </Form>
         <DialogFooter>
+          {isConfiguredProvider && (
+            <>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => setConfirmOpen(true)}
+              >
+                Delete configuration
+              </Button>
+              <div className="flex flex-auto"></div>
+            </>
+          )}
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
@@ -265,8 +310,16 @@ const AddEditAIProviderDialog: React.FC<AddEditAIProviderDialogProps> = ({
           </Button>
         </DialogFooter>
       </DialogContent>
+      <ConfirmDialog
+        open={confirmOpen}
+        setOpen={setConfirmOpen}
+        onConfirm={deleteProviderKeyHandler}
+        title="Delete configuration"
+        description="This configuration is shared across the workspace. Deleting it will remove access for everyone. This action can’t be undone. Are you sure you want to proceed?"
+        confirmText="Delete configuration"
+      />
     </Dialog>
   );
 };
 
-export default AddEditAIProviderDialog;
+export default ManageAIProviderDialog;
