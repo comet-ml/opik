@@ -4,7 +4,7 @@ from typing_extensions import override
 
 from opik.api_objects import opik_client, span
 from opik.decorator import arguments_helpers, base_track_decorator, inspect_helpers
-from tests.testlib import ANY_DICT
+from tests.testlib import ANY_BUT_NONE, ANY_STRING, SpanModel, TraceModel, assert_equal
 
 
 class BrokenOpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
@@ -84,7 +84,7 @@ class BrokenOpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
         opik_.flush()
 
 
-def test_broken_decorator__start_span_preprocessor(fake_backend):
+def test_broken_decorator__start_span_preprocessor__no_error(fake_backend):
     tracker_instance = BrokenOpikTrackDecorator(start_span_preprocessor_error=True)
 
     @tracker_instance.track
@@ -95,17 +95,36 @@ def test_broken_decorator__start_span_preprocessor(fake_backend):
 
     tracker_instance.flush_tracker()
 
+    EXPECTED_TRACE_TREE = TraceModel(
+        end_time=ANY_BUT_NONE,
+        id=ANY_STRING(),
+        input=None,
+        name="f_inner",
+        output={"output": 42},
+        start_time=ANY_BUT_NONE,
+        error_info=None,
+        spans=[
+            SpanModel(
+                end_time=ANY_BUT_NONE,
+                id=ANY_STRING(),
+                input=None,
+                name="f_inner",
+                output={"output": 42},
+                start_time=ANY_BUT_NONE,
+                type="general",
+                spans=[],
+                error_info=None,
+            ),
+        ],
+    )
+
     assert len(fake_backend.trace_trees) == 1
     assert len(fake_backend.span_trees) == 1
 
-    span_data = fake_backend.span_trees[0]
-    assert span_data.name == "f_inner"
-    assert span_data.input is None
-    assert span_data.output == {"output": 42}
-    assert span_data.error_info is None
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_broken_decorator__end_span_preprocessor(fake_backend):
+def test_broken_decorator__end_span_preprocessor__no_error(fake_backend):
     tracker_instance = BrokenOpikTrackDecorator(end_span_preprocessor_error=True)
 
     @tracker_instance.track
@@ -116,11 +135,30 @@ def test_broken_decorator__end_span_preprocessor(fake_backend):
 
     tracker_instance.flush_tracker()
 
+    EXPECTED_TRACE_TREE = TraceModel(
+        end_time=ANY_BUT_NONE,
+        id=ANY_STRING(),
+        input={"num": 42},
+        name="f_inner",
+        output=42,
+        start_time=ANY_BUT_NONE,
+        error_info=None,
+        spans=[
+            SpanModel(
+                end_time=ANY_BUT_NONE,
+                id=ANY_STRING(),
+                input={"num": 42},
+                name="f_inner",
+                output=42,
+                start_time=ANY_BUT_NONE,
+                type="general",
+                spans=[],
+                error_info=None,
+            ),
+        ],
+    )
+
     assert len(fake_backend.trace_trees) == 1
     assert len(fake_backend.span_trees) == 1
 
-    span_data = fake_backend.span_trees[0]
-    assert span_data.name == "f_inner"
-    assert span_data.input == {"num": 42}
-    assert span_data.output == 42
-    assert span_data.error_info == ANY_DICT
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
