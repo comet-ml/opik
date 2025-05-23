@@ -579,11 +579,11 @@ navigation:
           - page: TypeScript SDK
             path: docs/contributing/typescript-sdk.mdx
             slug: typescript-sdk
-            icon: fa-brands fa-typescript
+            icon: fa-brands fa-js
           - page: Opik Optimizer
             path: docs/contributing/agent-optimizer-sdk.mdx
-            slug: opik-optimizer
-            icon: fa-brands fa-gauge-high
+            slug: agent-optimizer-sdk
+            icon: fa-regular fa-gauge-high
           - page: Frontend
             path: docs/contributing/frontend.mdx
             slug: frontend
