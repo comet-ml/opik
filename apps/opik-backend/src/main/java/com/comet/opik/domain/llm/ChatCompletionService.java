@@ -11,6 +11,7 @@ import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ServerErrorException;
@@ -54,15 +55,12 @@ public class ChatCompletionService {
             chatCompletionResponse = retryPolicy.withRetry(() -> llmProviderClient.generate(request, workspaceId));
             log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         } catch (RuntimeException runtimeException) {
+            Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(runtimeException);
+
+            providerError
+                    .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
+
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            llmProviderClient.getLlmProviderError(runtimeException).ifPresent(llmProviderError -> {
-                if (familyOf(llmProviderError.getCode()) == Response.Status.Family.CLIENT_ERROR) {
-                    throw new ClientErrorException(llmProviderError.getMessage(), llmProviderError.getCode());
-                }
-
-                throw new ServerErrorException(llmProviderError.getMessage(), llmProviderError.getCode());
-            });
-
             throw new InternalServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
         }
 
@@ -104,9 +102,26 @@ public class ChatCompletionService {
                     modelParameters.name(), workspaceId);
             return chatResponse;
         } catch (RuntimeException runtimeException) {
+            LlmProviderService provider = llmProviderFactory.getService(workspaceId, modelParameters.name());
+
+            Optional<ErrorMessage> providerError = provider.getLlmProviderError(runtimeException);
+
+            providerError
+                    .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
+
             log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
             throw new InternalServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
         }
+    }
+
+    private void failHandlingLLMProviderError(RuntimeException runtimeException, ErrorMessage llmProviderError) {
+        log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
+
+        if (familyOf(llmProviderError.getCode()) == Response.Status.Family.CLIENT_ERROR) {
+            throw new ClientErrorException(llmProviderError.getMessage(), llmProviderError.getCode());
+        }
+
+        throw new ServerErrorException(llmProviderError.getMessage(), llmProviderError.getCode());
     }
 
     private RetryUtils.RetryPolicy newRetryPolicy() {
@@ -114,20 +129,29 @@ public class ChatCompletionService {
         Optional.ofNullable(llmProviderClientConfig.getMaxAttempts()).ifPresent(retryPolicyBuilder::maxRetries);
         Optional.ofNullable(llmProviderClientConfig.getJitterScale()).ifPresent(retryPolicyBuilder::jitterScale);
         Optional.ofNullable(llmProviderClientConfig.getBackoffExp()).ifPresent(retryPolicyBuilder::backoffExp);
-        return retryPolicyBuilder
-                .delayMillis(llmProviderClientConfig.getDelayMillis())
-                .build();
+        return retryPolicyBuilder.delayMillis(llmProviderClientConfig.getDelayMillis()).build();
     }
 
-    private Consumer<Throwable> getErrorHandler(
-            ChunkedOutputHandlers handlers, LlmProviderService llmProviderClient) {
+    private Consumer<Throwable> getErrorHandler(ChunkedOutputHandlers handlers, LlmProviderService llmProviderClient) {
         return throwable -> {
-            log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
+            Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(throwable);
 
-            var errorMessage = llmProviderClient.getLlmProviderError(throwable)
-                    .orElse(new ErrorMessage(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
+            if (providerError.isPresent()) {
+                log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
+                handlers.handleError(providerError.get());
+            } else {
 
-            handlers.handleError(errorMessage);
+                if (throwable instanceof BadRequestException userMessage) {
+                    log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, userMessage);
+                    handlers.handleError(
+                            new ErrorMessage(userMessage.getResponse().getStatus(), userMessage.getMessage()));
+                    return;
+                }
+
+                log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
+                var errorMessage = new ErrorMessage(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+                handlers.handleError(errorMessage);
+            }
         };
     }
 }
