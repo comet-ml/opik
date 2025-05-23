@@ -16,36 +16,12 @@ export type DatasetItemData = JsonNode & {
  * @template T The type of custom data stored in the dataset item
  */
 export class DatasetItem<T extends DatasetItemData = DatasetItemData> {
-  /**
-   * The unique identifier for this dataset item.
-   */
   public readonly id: string;
-
-  /**
-   * The ID of the trace associated with this dataset item.
-   */
   public readonly traceId?: string;
-
-  /**
-   * The ID of the span associated with this dataset item.
-   */
   public readonly spanId?: string;
-
-  /**
-   * The source of the dataset item. Defaults to SDK.
-   */
   public readonly source: DatasetItemWriteSource;
-
-  /**
-   * Additional data associated with this dataset item.
-   */
   private readonly data: T;
 
-  /**
-   * Creates a new DatasetItem.
-   *
-   * @param params Configuration options for the dataset item
-   */
   constructor(
     params: {
       id?: string;
@@ -67,16 +43,16 @@ export class DatasetItem<T extends DatasetItemData = DatasetItemData> {
    * Gets the content of this dataset item as a JSON object.
    *
    * @param includeId Whether to include the ID in the content
-   * @returns The content as a JSON object
+   * @returns The content as a JSON object, with ID included if true
    */
-  public getContent(includeId = false): T {
-    const content: T = { ...this.data };
-
+  public getContent(includeId: true): T & { id: string };
+  public getContent(includeId?: false): T;
+  public getContent(includeId = false) {
     if (includeId) {
-      content.id = this.id;
+      return { ...this.data, id: this.id };
     }
 
-    return content;
+    return { ...this.data };
   }
 
   /**

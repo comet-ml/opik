@@ -1,6 +1,3 @@
-/**
- * Custom error types for dataset operations
- */
 export class DatasetError extends Error {
   constructor(message: string) {
     super(message);

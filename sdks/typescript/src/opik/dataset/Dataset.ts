@@ -1,7 +1,3 @@
-/**
- * Dataset class for managing datasets and their items.
- * Provides methods for creating, retrieving, and managing datasets and their items.
- */
 import { generateId } from "@/utils/generateId";
 import { DatasetItem, DatasetItemData } from "./DatasetItem";
 import { OpikClient } from "@/client/Client";
@@ -21,12 +17,11 @@ export interface DatasetData {
   id?: string;
 }
 
-export class Dataset {
+export class Dataset<T extends DatasetItemData = DatasetItemData> {
   public readonly id: string;
   public readonly name: string;
   public readonly description?: string;
 
-  // deduplication related
   private idToHash: Map<string, string> = new Map();
   private hashes: Set<string> = new Set();
 
@@ -48,7 +43,7 @@ export class Dataset {
    *
    * @param items List of objects to add to the dataset
    */
-  public async insert(items: DatasetItemData[]): Promise<void> {
+  public async insert(items: T[]): Promise<void> {
     if (!items || items.length === 0) {
       return;
     }
@@ -69,12 +64,11 @@ export class Dataset {
    *
    * @param items List of objects to update in the dataset
    */
-  public async update(items: DatasetItemData[]): Promise<void> {
+  public async update(items: T[]): Promise<void> {
     if (!items || items.length === 0) {
       return;
     }
 
-    // Validate that all items have an ID
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       if (!item.id) {
@@ -82,8 +76,6 @@ export class Dataset {
       }
     }
 
-    // The API uses the same endpoint for create and update
-    // The presence of an ID determines if it's an update
     await this.insert(items);
   }
 
@@ -106,7 +98,6 @@ export class Dataset {
         itemIds: batch,
       });
 
-      // Update local cache
       for (const itemId of batch) {
         if (this.idToHash.has(itemId)) {
           const hash = this.idToHash.get(itemId)!;
@@ -121,18 +112,13 @@ export class Dataset {
    * Delete all items from the dataset.
    */
   public async clear(): Promise<void> {
-    // Get all items from the dataset
     const items = await this.getItems();
-
-    // Extract item IDs
     const itemIds = items.map((item) => item.id).filter(Boolean) as string[];
 
-    // If there are no items, just return
     if (itemIds.length === 0) {
       return;
     }
 
-    // Delete all items
     await this.delete(itemIds);
   }
 
@@ -143,10 +129,7 @@ export class Dataset {
    * @param lastRetrievedId Optional ID of the last retrieved item for pagination
    * @returns A list of objects representing the dataset items
    */
-  public async getItems(
-    nbSamples?: number,
-    lastRetrievedId?: string
-  ): Promise<DatasetItemData[]> {
+  public async getItems(nbSamples?: number, lastRetrievedId?: string) {
     const datasetItems = await this.getItemsAsDataclasses(
       nbSamples,
       lastRetrievedId
@@ -158,14 +141,13 @@ export class Dataset {
   private async getItemsAsDataclasses(
     nbSamples?: number,
     lastRetrievedId?: string
-  ): Promise<DatasetItem[]> {
-    // Prepare the stream request parameters
+  ): Promise<DatasetItem<T>[]> {
     const streamLimit = nbSamples ? Math.min(nbSamples, 2000) : 2000; // API max is 2000
 
     const streamResponse = await this.opik.api.datasets.streamDatasetItems({
       datasetName: this.name,
-      lastRetrievedId, // Include this for pagination if provided
-      steamLimit: streamLimit, // Properly set the stream limit
+      lastRetrievedId,
+      steamLimit: streamLimit,
     });
 
     const rawItems = await parseNdjsonStreamToArray<DatasetItemWrite>(
@@ -188,7 +170,6 @@ export class Dataset {
     keysMapping: Record<string, string> = {},
     ignoreKeys: string[] = []
   ): Promise<void> {
-    // Parse the JSON string to an array of objects
     let parsedItems: unknown;
 
     try {
@@ -197,17 +178,14 @@ export class Dataset {
       throw new JsonParseError(error);
     }
 
-    // Validate that the parsed data is an array
     if (!Array.isArray(parsedItems)) {
       throw new JsonNotArrayError(typeof parsedItems);
     }
 
-    // Handle empty array case
     if (parsedItems.length === 0) {
       return;
     }
 
-    // Validate all items are objects
     for (let i = 0; i < parsedItems.length; i++) {
       const item = parsedItems[i];
       if (typeof item !== "object" || item === null) {
@@ -215,28 +193,22 @@ export class Dataset {
       }
     }
 
-    // Transform the items based on keysMapping and ignoreKeys
     const transformedItems = parsedItems.map((item) => {
-      // Type assertion after validation
       const typedItem = item as Record<string, unknown>;
       const transformedItem: Record<string, unknown> = {};
 
-      // Process each key in the item
       for (const [key, value] of Object.entries(typedItem)) {
-        // Skip keys that should be ignored
         if (ignoreKeys.includes(key)) {
           continue;
         }
 
-        // Map keys if a mapping exists, otherwise use the original key
         const mappedKey = keysMapping[key] || key;
         transformedItem[mappedKey] = value;
       }
 
-      return transformedItem as DatasetItemData;
+      return transformedItem as T;
     });
 
-    // Insert the transformed items into the dataset
     await this.insert(transformedItems);
   }
 
@@ -249,25 +221,25 @@ export class Dataset {
   public async toJson(
     keysMapping: Record<string, string> = {}
   ): Promise<string> {
-    // Get all items from the dataset
     const items = await this.getItems();
 
-    // Apply any key mappings if provided
-    if (Object.keys(keysMapping).length > 0) {
-      // Transform each item using the keysMapping
-      for (const item of items) {
+    const mappedItems: Record<string, unknown>[] = items.map((item) => {
+      const itemCopy = { ...item } as Record<string, unknown>;
+
+      if (Object.keys(keysMapping).length > 0) {
         for (const [key, value] of Object.entries(keysMapping)) {
-          if (key in item) {
-            const content = item[key];
-            delete item[key];
-            item[value] = content;
+          if (key in itemCopy) {
+            const content = itemCopy[key];
+            delete itemCopy[key];
+            itemCopy[value] = content;
           }
         }
       }
-    }
 
-    // Convert to JSON string
-    return JSON.stringify(items);
+      return itemCopy;
+    });
+
+    return JSON.stringify(mappedItems);
   }
 
   /**
@@ -275,13 +247,11 @@ export class Dataset {
    *
    * @returns A list of deduplicated dataset items
    */
-  private async getDeduplicatedItems(
-    items: DatasetItemData[]
-  ): Promise<DatasetItemWrite[]> {
+  private async getDeduplicatedItems(items: T[]): Promise<DatasetItemWrite[]> {
     const deduplicatedItems: DatasetItemWrite[] = [];
 
     for await (const item of items) {
-      const datasetItem = new DatasetItem(item);
+      const datasetItem = new DatasetItem<T>(item);
       const contentHash = await datasetItem.contentHash();
 
       if (this.hashes.has(contentHash)) {

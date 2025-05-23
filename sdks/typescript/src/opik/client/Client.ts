@@ -10,8 +10,7 @@ import { SpanFeedbackScoresBatchQueue } from "./SpanFeedbackScoresBatchQueue";
 import { TraceBatchQueue } from "./TraceBatchQueue";
 import { TraceFeedbackScoresBatchQueue } from "./TraceFeedbackScoresBatchQueue";
 import { DatasetBatchQueue } from "./DatasetBatchQueue";
-import { Dataset } from "../dataset/Dataset";
-import { DatasetNotFoundError } from "@/dataset/errors";
+import { Dataset, DatasetItemData, DatasetNotFoundError } from "@/dataset";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
@@ -97,14 +96,19 @@ export class OpikClient {
    * @returns A Dataset object associated with the specified name
    * @throws Error if the dataset doesn't exist
    */
-  public getDataset = async (name: string): Promise<Dataset> => {
+  public getDataset = async <T extends DatasetItemData = DatasetItemData>(
+    name: string
+  ): Promise<Dataset<T>> => {
     logger.debug(`Getting dataset with name "${name}"`);
     try {
+      // TODO Requires Batch class update to be able use name instead of id and get it from there
+      await this.datasetBatchQueue.flush();
+
       const response = await this.api.datasets.getDatasetByIdentifier({
         datasetName: name,
       });
 
-      return new Dataset(response, this);
+      return new Dataset<T>(response, this);
     } catch (error) {
       if (error instanceof OpikApiError && error.statusCode === 404) {
         throw new DatasetNotFoundError(name);
@@ -120,13 +124,13 @@ export class OpikClient {
    * @param description Optional description of the dataset
    * @returns The created Dataset object
    */
-  public createDataset = async (
+  public createDataset = async <T extends DatasetItemData = DatasetItemData>(
     name: string,
     description?: string
-  ): Promise<Dataset> => {
+  ): Promise<Dataset<T>> => {
     logger.debug(`Creating dataset with name "${name}"`);
 
-    const entity = new Dataset({ name, description }, this);
+    const entity = new Dataset<T>({ name, description }, this);
 
     try {
       this.datasetBatchQueue.create({
@@ -151,10 +155,12 @@ export class OpikClient {
    * @param description Optional description of the dataset (used if created)
    * @returns A promise that resolves to the existing or newly created Dataset object
    */
-  public getOrCreateDataset = async (
+  public getOrCreateDataset = async <
+    T extends DatasetItemData = DatasetItemData,
+  >(
     name: string,
     description?: string
-  ): Promise<Dataset> => {
+  ): Promise<Dataset<T>> => {
     logger.debug(
       `Attempting to retrieve or create dataset with name: "${name}"`
     );
@@ -179,7 +185,9 @@ export class OpikClient {
    * @param maxResults Maximum number of datasets to return (default: 100)
    * @returns List of Dataset objects
    */
-  public getDatasets = async (maxResults: number = 100): Promise<Dataset[]> => {
+  public getDatasets = async <T extends DatasetItemData = DatasetItemData>(
+    maxResults: number = 100
+  ): Promise<Dataset<T>[]> => {
     logger.debug(`Getting all datasets (limit: ${maxResults})`);
 
     try {
@@ -190,10 +198,10 @@ export class OpikClient {
         size: maxResults,
       });
 
-      const datasets: Dataset[] = [];
+      const datasets: Dataset<T>[] = [];
 
       for (const datasetData of response.content || []) {
-        datasets.push(new Dataset(datasetData, this));
+        datasets.push(new Dataset<T>(datasetData, this));
       }
 
       logger.info(`Retrieved ${datasets.length} datasets`);
@@ -213,13 +221,11 @@ export class OpikClient {
     logger.debug(`Deleting dataset with name "${name}"`);
 
     try {
-      // First get the dataset ID
       const dataset = await this.getDataset(name);
       if (!dataset.id) {
         throw new Error(`Cannot delete dataset "${name}": ID not available`);
       }
 
-      // Queue the delete operation
       this.datasetBatchQueue.delete(dataset.id);
     } catch (error) {
       logger.error(`Failed to delete dataset "${name}"`, { error });
