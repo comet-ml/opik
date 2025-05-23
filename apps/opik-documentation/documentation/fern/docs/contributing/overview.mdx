@@ -1,0 +1,96 @@
+# Contributing to Opik
+
+We're excited that you're interested in contributing to Opik! There are many ways to contribute, from writing code to improving the documentation, or even helping us with developer tooling.
+
+## How You Can Help
+
+<CardGroup>
+  <Card
+    title="Report Issues & Request Features"
+    icon="fa-regular fa-bugs"
+    href="#submitting-a-new-issue-or-feature-request"
+  >
+    Help us improve by submitting bug reports and suggesting new features.
+  </Card>
+  <Card title="Contribute to Documentation" icon="fa-regular fa-book" href="/contributing/guides/documentation">
+    Improve our guides, tutorials, and reference materials.
+  </Card>
+  <Card title="Contribute to Python SDK" icon="fa-brands fa-python" href="/contributing/guides/python-sdk">
+    Enhance our Python library for Opik.
+  </Card>
+  <Card title="Contribute to TypeScript SDK" icon="fa-brands fa-js" href="/contributing/guides/typescript-sdk">
+    Help improve our TypeScript library for Opik.
+  </Card>
+  <Card
+    title="Contribute to Opik Agent Optimizer"
+    icon="fa-regular fa-robot"
+    href="/contributing/guides/agent-optimizer-sdk"
+  >
+    Work on our agent optimization tools.
+  </Card>
+  <Card title="Contribute to Frontend" icon="fa-regular fa-window-maximize" href="/contributing/guides/frontend">
+    Develop new features and UI improvements for the Opik web application.
+  </Card>
+  <Card title="Contribute to Backend" icon="fa-regular fa-server" href="/contributing/guides/backend">
+    Work on the core Java services powering Opik.
+  </Card>
+  <Card title="Participate in Bounties" icon="fa-regular fa-gem" href="/contributing/developer-programs/bounties">
+    Get rewarded for tackling specific issues and features.
+  </Card>
+  <Card title="Spread the Word" icon="fa-regular fa-bullhorn">
+    Speak or write about Opik and share your experiences. Let us know on [Comet Chat](https://chat.comet.com)!
+  </Card>
+</CardGroup>
+
+Also, consider reviewing our [Contributor License Agreement (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md).
+
+## Submitting a new issue or feature request
+
+This is a vital way to help us improve Opik!
+
+<AccordionGroup>
+  <Accordion title="Submitting a New Bug Report">
+    Before submitting a new issue, please check the [existing issues](https://github.com/comet-ml/opik/issues) to avoid duplicates.
+
+    To help us understand the issue you're experiencing, please provide:
+    1. Clear steps to reproduce the issue.
+    2. A minimal code snippet that reproduces the issue, if applicable.
+    This helps us diagnose the issue and fix it more quickly.
+
+  </Accordion>
+  <Accordion title="Submitting a New Feature Request">
+    Feature requests are welcome! To help us understand the feature you'd like to see, please provide:
+    1. A short description of the motivation behind this request.
+    2. A detailed description of the feature you'd like to see, including any code snippets if applicable.
+
+    If you are in a position to submit a PR for the feature, feel free to open a PR!
+
+  </Accordion>
+</AccordionGroup>
+
+## Project Setup and Architecture
+
+The Opik project is made up of five main sub-projects:
+
+- `apps/opik-documentation`: The Opik documentation website (this site!)
+- `sdks/python`: The Opik Python SDK
+- `sdks/typescript`: The Opik TypeScript SDK
+- `sdks/opik_optimizer`: The Opik Agent Optimizer SDK
+- `apps/opik-frontend`: The Opik frontend application
+- `apps/opik-backend`: The Opik backend server
+
+Opik relies on: Clickhouse (traces, spans, feedback), MySQL (metadata), and Redis (caching).
+
+The local development environment is based on `docker-compose`. Please see instructions in the [deployment/docker-compose/README.md](https://github.com/comet-ml/opik/blob/main/deployment/docker-compose/README.md) on GitHub.
+
+## Developer Tooling & AI Assistance
+
+To help AI assistants (like Cursor) better understand our codebase, we provide context files:
+
+- **General Context**: [`https://www.comet.com/docs/opik/llms.txt`](https://www.comet.com/docs/opik/llms.txt) - Provides a general overview suitable for most queries.
+- **Full Context**: [`https://www.comet.com/docs/opik/llms-full.txt`](https://www.comet.com/docs/opik/llms-full.txt) - Offers a more comprehensive context for in-depth assistance.
+
+You can point your AI tools to these URLs to provide them with relevant information about Opik.
+
+_Review our [Contributor License Agreement (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md) if you haven't already._
+_Comment on [popular feature requests](https://github.com/comet-ml/opik/issues?q=is%3Aissue+is%3Aopen+label%3A%22feature+request%22) to show your support._
