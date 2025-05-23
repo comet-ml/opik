@@ -456,9 +456,7 @@ class BaseTrackDecorator(abc.ABC):
                         exc_info=True,
                     )
 
-                    end_arguments = arguments_helpers.EndSpanParameters(
-                        output=output
-                    )
+                    end_arguments = arguments_helpers.EndSpanParameters(output=output)
             else:
                 end_arguments = arguments_helpers.EndSpanParameters(
                     error_info=error_info
