@@ -561,17 +561,33 @@ navigation:
             slug: overview
   - tab: contributing
     layout:
-      - section: How to Contribute
-        slug: /how-to-contribute
+      - page: Contribution Overview
+        path: docs/contributing/overview.mdx
+        slug: overview
+        icon: fa-regular fa-compass
+      - section: Specific Contribution Guides
+        slug: /guides
         contents:
-          - page: Contribution Guide
-            path: docs/how-to-contribute.mdx
-            slug: overview
-            icon: fa-regular fa-file-lines
-          - page: Bounty Program
-            path: docs/bounties.mdx
-            slug: bounty-program
-            icon: fa-regular fa-gem
+          - page: Documentation
+            path: docs/contributing/documentation.mdx
+            slug: documentation
+            icon: fa-regular fa-book
+          - page: Python SDK
+            path: docs/contributing/python-sdk.mdx
+            slug: python-sdk
+            icon: fa-brands fa-python
+          - page: Frontend
+            path: docs/contributing/frontend.mdx
+            slug: frontend
+            icon: fa-regular fa-window-maximize
+          - page: Backend
+            path: docs/contributing/backend.mdx
+            slug: backend
+            icon: fa-regular fa-server
+      - page: Bounty Program
+        path: docs/contributing/bounties.mdx
+        slug: bounty-program
+        icon: fa-regular fa-gem
 redirects:
   - source: "/docs/opik/playground"
     destination: "/docs/opik/prompt_engineering/playground"
