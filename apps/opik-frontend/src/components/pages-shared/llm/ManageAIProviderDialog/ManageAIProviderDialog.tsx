@@ -259,7 +259,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                         value={(field.value as PROVIDER_TYPE) || ""}
                         onChange={(v) => {
                           const p = v as PROVIDER_TYPE;
-                          // TODO lala error in console.s
+
                           form.setValue(
                             "locationType",
                             PROVIDERS[p].locationType,
