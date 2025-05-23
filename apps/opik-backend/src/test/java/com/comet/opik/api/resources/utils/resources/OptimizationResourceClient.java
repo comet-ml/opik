@@ -14,7 +14,6 @@ import org.testcontainers.shaded.com.google.common.net.HttpHeaders;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
 
