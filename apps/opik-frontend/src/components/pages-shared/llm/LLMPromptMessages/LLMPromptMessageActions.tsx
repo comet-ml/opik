@@ -10,6 +10,7 @@ import isUndefined from "lodash/isUndefined";
 
 import { OnChangeFn } from "@/types/shared";
 import { LLMMessage } from "@/types/llm";
+import { PromptVersion } from "@/types/prompts";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -66,10 +67,12 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   }, [onChangeMessage, promptData]);
 
   const onSaveHandler = useCallback(
-    (id: string) => {
+    (version: PromptVersion) => {
+      console.log(123, version);
       onChangeMessage({
-        promptId: id,
-        // TODO lala need to add promptVersionId
+        promptId: version.prompt_id,
+        content: version.template ?? "",
+        promptVersionId: version.id,
       });
     },
     [onChangeMessage],

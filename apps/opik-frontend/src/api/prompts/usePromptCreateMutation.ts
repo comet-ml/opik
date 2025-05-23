@@ -26,6 +26,8 @@ const usePromptCreateMutation = () => {
         ...prompt,
       });
 
+      console.log(123); // TODO lala
+
       return data
         ? data
         : {

@@ -31,7 +31,7 @@ import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/Pro
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
-import { PromptWithLatestVersion } from "@/types/prompts";
+import { PromptVersion, PromptWithLatestVersion } from "@/types/prompts";
 import usePromptById from "@/api/prompts/usePromptById";
 import usePromptCreateMutation from "@/api/prompts/usePromptCreateMutation";
 
@@ -46,7 +46,7 @@ type AddNewPromptVersionDialogProps = {
   setOpen: (open: boolean) => void;
   prompt?: PromptWithLatestVersion;
   template: string;
-  onSave: (promptId: string) => void;
+  onSave: (promptId: PromptVersion) => void;
 };
 
 const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
@@ -112,7 +112,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           template,
           changeDescription,
           ...(metadata && { metadata: safelyParseJSON(metadata) }),
-          onSuccess: (data) => onSave(data.prompt_id),
+          onSuccess: (data) => onSave(data),
         });
 
         setOpen(false);
@@ -127,7 +127,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
             ...(description && { description }),
           },
         },
-        { onSuccess: (data) => onSave(data?.id) },
+        { onSuccess: (data) => onSave(data) },
       );
       setOpen(false);
     }
