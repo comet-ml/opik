@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { keepPreviousData } from "@tanstack/react-query";
 import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
@@ -73,6 +73,7 @@ const SELECTED_COLUMNS_KEY = "optimization-experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimization-experiments-columns-width";
 const COLUMNS_ORDER_KEY = "optimization-experiments-columns-order";
 const COLUMNS_SORT_KEY = "optimization-experiments-columns-sort";
+const ROW_HEIGHT_KEY = "optimization-experiments-row-height";
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_NAME_ID],
@@ -127,7 +128,9 @@ const CompareOptimizationsPage: React.FC = () => {
     defaultValue: {},
   });
 
-  const [height, setHeight] = useState<ROW_HEIGHT>(ROW_HEIGHT.small);
+  const [height, setHeight] = useLocalStorageState<ROW_HEIGHT>(ROW_HEIGHT_KEY, {
+    defaultValue: ROW_HEIGHT.small,
+  });
 
   const optimizationId = optimizationsIds?.[0];
 
