@@ -189,10 +189,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                 control={form.control}
                 name="ruleName"
                 render={({ field, formState }) => {
-                  const validationErrors = get(formState.errors, [
-                    "llmJudgeDetails",
-                    "model",
-                  ]);
+                  const validationErrors = get(formState.errors, ["ruleName"]);
                   return (
                     <FormItem>
                       <Label>Name</Label>

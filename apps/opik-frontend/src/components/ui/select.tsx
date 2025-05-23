@@ -113,6 +113,7 @@ interface SelectItemProps
   extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> {
   withoutCheck?: boolean;
   description?: React.ReactNode;
+  Wrapper?: React.ElementType | null;
 }
 
 const SelectItem = React.forwardRef<
@@ -120,7 +121,14 @@ const SelectItem = React.forwardRef<
   SelectItemProps
 >(
   (
-    { className, children, withoutCheck = false, description, ...props },
+    {
+      className,
+      children,
+      withoutCheck = false,
+      description,
+      Wrapper = SelectPrimitive.ItemText,
+      ...props
+    },
     ref,
   ) => (
     <SelectPrimitive.Item
@@ -140,7 +148,7 @@ const SelectItem = React.forwardRef<
             </SelectPrimitive.ItemIndicator>
           </span>
         )}
-        <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+        {Wrapper ? <Wrapper>{children}</Wrapper> : children}
       </div>
       {description && (
         <div className="comet-body-s mt-0.5 whitespace-pre-wrap text-light-slate">

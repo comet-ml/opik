@@ -1,9 +1,11 @@
 import { useCallback, useMemo } from "react";
+import { AxisDomain, AxisInterval } from "recharts/types/util/types";
 import isInteger from "lodash/isInteger";
 import max from "lodash/max";
 import min from "lodash/min";
 import isNull from "lodash/isNull";
-import { AxisDomain, AxisInterval } from "recharts/types/util/types";
+import uniq from "lodash/uniq";
+
 import { getTextWidth } from "@/lib/utils";
 
 const defaultTickFormatter = (value: number, maxDecimalLength?: number) =>
@@ -46,7 +48,7 @@ const generateEvenlySpacedValues = (
     }
   }
 
-  return values;
+  return uniq(values);
 };
 
 const DEFAULT_DOMAIN: AxisDomain = [0, "max"];

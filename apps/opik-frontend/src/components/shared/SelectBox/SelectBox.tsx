@@ -11,20 +11,20 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import { DropdownOption } from "@/types/shared";
 
-export type SelectBoxProps = {
+export type SelectBoxProps<DataType> = {
   value: string;
-  onChange: (value: string) => void;
-  options: DropdownOption<string>[];
+  onChange: (value: DataType) => void;
+  options: DropdownOption<DataType>[];
   className?: string;
   variant?: "outline" | "ghost";
   placeholder?: string;
   disabled?: boolean;
   testId?: string;
-  renderOption?: (option: DropdownOption<string>) => React.ReactNode;
+  renderOption?: (option: DropdownOption<DataType>) => React.ReactNode;
   renderTrigger?: (value: string) => React.ReactNode;
 };
 
-export const SelectBox = ({
+export const SelectBox = <ValueType extends string>({
   value = "",
   onChange,
   options,
@@ -35,7 +35,7 @@ export const SelectBox = ({
   renderOption,
   renderTrigger,
   testId,
-}: SelectBoxProps) => {
+}: SelectBoxProps<ValueType>) => {
   const variantClass =
     variant === "ghost" ? "border-0 focus:ring-0 h-9 bg-transparent" : "";
 

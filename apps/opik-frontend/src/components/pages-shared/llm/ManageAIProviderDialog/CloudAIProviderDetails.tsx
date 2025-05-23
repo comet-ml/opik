@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { CLOUD_PROVIDER_OPTION_TYPE, PROVIDERS } from "@/constants/providers";
 import EyeInput from "@/components/shared/EyeInput/EyeInput";
-import { AIProviderFormType } from "@/components/shared/AddEditAIProviderDialog/schema";
+import { AIProviderFormType } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
 import get from "lodash/get";
 import {
   FormControl,

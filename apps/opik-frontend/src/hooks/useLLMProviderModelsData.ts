@@ -1563,7 +1563,9 @@ const useLLMProviderModelsData = () => {
       lastPickedModel: PROVIDER_MODEL_TYPE | "",
       setupProviders: PROVIDER_TYPE[],
       preferredProvider?: PROVIDER_TYPE | "",
+      config: { structuredOutput?: boolean } = {},
     ) => {
+      const { structuredOutput = false } = config;
       const lastPickedModelProvider = calculateModelProvider(lastPickedModel);
 
       const isLastPickedModelValid =
@@ -1578,20 +1580,33 @@ const useLLMProviderModelsData = () => {
         preferredProvider ?? getDefaultProviderKey(setupProviders);
 
       if (provider) {
-        if (PROVIDERS[provider].locationType === PROVIDER_LOCATION_TYPE.local) {
+        if (
+          PROVIDERS[provider].locationType === PROVIDER_LOCATION_TYPE.local &&
+          !structuredOutput
+        ) {
           return (
             (first(
               (getLocalAIProviderData(provider)?.models || "").split(","),
             )?.trim() as PROVIDER_MODEL_TYPE) ?? ""
           );
-        } else {
-          return PROVIDERS[provider].defaultModel;
+        } else if (
+          PROVIDERS[provider].locationType === PROVIDER_LOCATION_TYPE.cloud
+        ) {
+          if (structuredOutput) {
+            return (
+              first(
+                getProviderModels()[provider].filter((m) => m.structuredOutput),
+              )?.value ?? ""
+            );
+          } else {
+            return PROVIDERS[provider].defaultModel;
+          }
         }
       }
 
       return "";
     },
-    [calculateModelProvider, getLocalAIProviderData],
+    [calculateModelProvider, getLocalAIProviderData, getProviderModels],
   );
 
   return {

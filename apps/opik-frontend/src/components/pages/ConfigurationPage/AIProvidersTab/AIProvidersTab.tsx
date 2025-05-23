@@ -5,7 +5,7 @@ import { convertColumnDataToColumn } from "@/lib/table";
 import { ProviderKey } from "@/types/providers";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import useAppStore from "@/store/AppStore";
-import AddEditAIProviderDialog from "@/components/shared/AddEditAIProviderDialog/AddEditAIProviderDialog";
+import ManageAIProviderDialog from "@/components/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import { formatDate } from "@/lib/date";
@@ -62,11 +62,6 @@ const AIProvidersTab = () => {
   );
 
   const providerKeys = useMemo(() => data?.content ?? [], [data?.content]);
-
-  const configuredProviderKeys = useMemo(
-    () => providerKeys.map((p) => p.provider),
-    [providerKeys],
-  );
 
   const filteredProviderKeys = useMemo(() => {
     if (providerKeys?.length === 0 || search === "") {
@@ -146,8 +141,8 @@ const AIProvidersTab = () => {
           }
         />
       </div>
-      <AddEditAIProviderDialog
-        excludedProviders={configuredProviderKeys}
+      <ManageAIProviderDialog
+        configuredProvidersList={providerKeys}
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}

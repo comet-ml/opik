@@ -38,9 +38,9 @@ const CommitHistory = ({
           <li
             key={version.id}
             className={cn(
-              "cursor-pointer hover:bg-destructive-foreground rounded-sm px-4 py-2.5 flex flex-col",
+              "cursor-pointer hover:bg-primary-foreground rounded-sm px-4 py-2.5 flex flex-col",
               {
-                "bg-destructive-foreground": activeVersionId === version.id,
+                "bg-primary-foreground": activeVersionId === version.id,
               },
             )}
             onMouseEnter={() => setHoveredVersionId(version.id)}
