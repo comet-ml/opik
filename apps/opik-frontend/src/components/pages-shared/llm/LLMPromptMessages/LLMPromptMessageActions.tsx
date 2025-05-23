@@ -61,6 +61,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   const resetHandler = useCallback(() => {
     onChangeMessage({
       content: promptData!.latest_version?.template ?? "",
+      promptVersionId: promptData!.latest_version?.id,
     });
   }, [onChangeMessage, promptData]);
 
@@ -68,6 +69,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     (id: string) => {
       onChangeMessage({
         promptId: id,
+        // TODO lala need to add promptVersionId
       });
     },
     [onChangeMessage],
@@ -98,6 +100,8 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     };
   }, [handleUpdateExternalPromptId, open, resetHandler]);
 
+  // This effect is used to set the template and promptVersionId after it is loaded,
+  // after it was set in handleUpdateExternalPromptId function
   useEffect(() => {
     if (
       selectedPromptIdRef.current &&
@@ -106,7 +110,8 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     ) {
       selectedPromptIdRef.current = undefined;
       onChangeMessage({
-        content: promptData!.latest_version?.template ?? "",
+        content: promptData.latest_version?.template ?? "",
+        promptVersionId: promptData.latest_version?.id,
       });
       setIsLoading(false);
     }
