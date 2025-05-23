@@ -331,6 +331,23 @@
   }
 }
 
+.comet-button-badge {
+  position: relative;
+  --size: 10px;
+
+  &:before {
+    content: "";
+    position: absolute;
+    top: calc(-1 * var(--size)/2);
+    right: calc(-1 * var(--size)/2);
+    width: var(--size);
+    height: var(--size);
+    border-radius: 50%;
+    border: 2px solid hsl(var(--background));
+    background: hsl(var(--destructive));
+  }
+}
+
 .json-view_github.dark {
   color: white;
   --json-property: white;

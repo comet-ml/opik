@@ -5,11 +5,14 @@ import React, {
   useRef,
   useState,
 } from "react";
+import useLocalStorageState from "use-local-storage-state";
 import { RotateCcw, Save } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 
 import { OnChangeFn } from "@/types/shared";
 import { LLMMessage } from "@/types/llm";
+import { PromptVersion } from "@/types/prompts";
+import { PLAYGROUND_SELECTED_DATASET_KEY } from "@/constants/llm";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -38,6 +41,13 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   const selectedPromptIdRef = useRef<string | undefined>();
   const tempPromptIdRef = useRef<string | undefined>();
 
+  const [datasetId] = useLocalStorageState<string | null>(
+    PLAYGROUND_SELECTED_DATASET_KEY,
+    {
+      defaultValue: null,
+    },
+  );
+
   const { promptId, content } = message;
   const { data: promptData } = usePromptById(
     { promptId: promptId! },
@@ -61,13 +71,16 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   const resetHandler = useCallback(() => {
     onChangeMessage({
       content: promptData!.latest_version?.template ?? "",
+      promptVersionId: promptData!.latest_version?.id,
     });
   }, [onChangeMessage, promptData]);
 
   const onSaveHandler = useCallback(
-    (id: string) => {
+    (version: PromptVersion) => {
       onChangeMessage({
-        promptId: id,
+        promptId: version.prompt_id,
+        content: version.template ?? "",
+        promptVersionId: version.id,
       });
     },
     [onChangeMessage],
@@ -80,6 +93,16 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
       message.content === promptData?.latest_version?.template);
 
   const saveDisabled = message.content === "";
+  const saveWarning =
+    !saveDisabled &&
+    promptId &&
+    promptData?.id === promptId &&
+    message.content !== promptData?.latest_version?.template;
+  const saveTooltip = saveWarning
+    ? !datasetId
+      ? "This prompt version hasn't been saved"
+      : "This prompt version hasn't been saved. Save it to link it to the experiment and make comparisons easier."
+    : "Save changes";
 
   const confirmConfig = useMemo(() => {
     const isReset = open === "reset";
@@ -98,6 +121,8 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     };
   }, [handleUpdateExternalPromptId, open, resetHandler]);
 
+  // This effect is used to set the template and promptVersionId after it is loaded,
+  // after it was set in handleUpdateExternalPromptId function
   useEffect(() => {
     if (
       selectedPromptIdRef.current &&
@@ -106,7 +131,8 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     ) {
       selectedPromptIdRef.current = undefined;
       onChangeMessage({
-        content: promptData!.latest_version?.template ?? "",
+        content: promptData.latest_version?.template ?? "",
+        promptVersionId: promptData.latest_version?.id,
       });
       setIsLoading(false);
     }
@@ -145,11 +171,12 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
         </Button>
       </TooltipWrapper>
 
-      <TooltipWrapper content="Save changes">
+      <TooltipWrapper content={saveTooltip}>
         <Button
           variant="outline"
           size="icon-sm"
           disabled={saveDisabled}
+          badge={Boolean(saveWarning)}
           onClick={() => {
             resetKeyRef.current = resetKeyRef.current + 1;
             setOpen("save");
