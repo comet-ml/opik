@@ -3,6 +3,7 @@ import datetime
 from dataclasses import field
 from typing import Optional, Any, Dict, List, Union, Literal
 
+from . import arguments_utils
 from ..rest_api.types import span_write, trace_write
 from ..types import SpanType, ErrorInfoDict, LLMProvider, AttachmentEntityType
 
@@ -34,6 +35,12 @@ class CreateTraceMessage(BaseMessage):
     error_info: Optional[ErrorInfoDict]
     thread_id: Optional[str]
 
+    def __post_init__(self) -> None:
+        if self.input is not None:
+            self.input = arguments_utils.recursive_shallow_copy(self.input)
+        if self.output is not None:
+            self.output = arguments_utils.recursive_shallow_copy(self.output)
+
     def as_payload_dict(self) -> Dict[str, Any]:
         data = super().as_payload_dict()
         data["id"] = data.pop("trace_id")
@@ -55,6 +62,12 @@ class UpdateTraceMessage(BaseMessage):
     tags: Optional[List[str]]
     error_info: Optional[ErrorInfoDict]
     thread_id: Optional[str]
+
+    def __post_init__(self) -> None:
+        if self.input is not None:
+            self.input = arguments_utils.recursive_shallow_copy(self.input)
+        if self.output is not None:
+            self.output = arguments_utils.recursive_shallow_copy(self.output)
 
     def as_payload_dict(self) -> Dict[str, Any]:
         data = super().as_payload_dict()
@@ -82,6 +95,12 @@ class CreateSpanMessage(BaseMessage):
     error_info: Optional[ErrorInfoDict]
     total_cost: Optional[float]
 
+    def __post_init__(self) -> None:
+        if self.input is not None:
+            self.input = arguments_utils.recursive_shallow_copy(self.input)
+        if self.output is not None:
+            self.output = arguments_utils.recursive_shallow_copy(self.output)
+
     def as_payload_dict(self) -> Dict[str, Any]:
         data = super().as_payload_dict()
         data["id"] = data.pop("span_id")
@@ -107,6 +126,12 @@ class UpdateSpanMessage(BaseMessage):
     provider: Optional[Union[LLMProvider, str]]
     error_info: Optional[ErrorInfoDict]
     total_cost: Optional[float]
+
+    def __post_init__(self) -> None:
+        if self.input is not None:
+            self.input = arguments_utils.recursive_shallow_copy(self.input)
+        if self.output is not None:
+            self.output = arguments_utils.recursive_shallow_copy(self.output)
 
     def as_payload_dict(self) -> Dict[str, Any]:
         data = super().as_payload_dict()
