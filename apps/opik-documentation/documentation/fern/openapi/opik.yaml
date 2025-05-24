@@ -1146,6 +1146,34 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/experiments/items/bulk:
+    put:
+      tags:
+      - Experiments
+      summary: Record experiment items in bulk
+      description: "Record experiment items in bulk with traces, spans, and feedback\
+        \ scores. Maximum request size is 4MB."
+      operationId: experimentItemsBulk
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExperimentItemBulkUpload_Write"
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments/feedback-scores/names:
     get:
       tags:
@@ -1623,6 +1651,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+    put:
+      tags:
+      - Optimizations
+      summary: Upsert optimization
+      description: Upsert optimization
+      operationId: upsertOptimization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Optimization_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/optimizations/{id}"
     post:
       tags:
       - Optimizations
@@ -5501,6 +5550,466 @@ components:
           items:
             type: string
             format: uuid
+    Check:
+      type: object
+      properties:
+        name:
+          type: string
+          enum:
+          - TOPIC
+          - PII
+        result:
+          type: string
+          enum:
+          - passed
+          - failed
+    ErrorInfo:
+      required:
+      - exception_type
+      - traceback
+      type: object
+      properties:
+        exception_type:
+          type: string
+        message:
+          type: string
+        traceback:
+          type: string
+    ExperimentItemBulkRecord:
+      required:
+      - dataset_item_id
+      type: object
+      properties:
+        dataset_item_id:
+          type: string
+          format: uuid
+        trace:
+          $ref: "#/components/schemas/Trace"
+        spans:
+          maxItems: 100
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/Span"
+        feedback_scores:
+          maxItems: 100
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackScore"
+    ExperimentItemBulkUpload:
+      required:
+      - dataset_name
+      - experiment_name
+      - items
+      type: object
+      properties:
+        experiment_name:
+          type: string
+        dataset_name:
+          type: string
+        items:
+          maxItems: 250
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentItemBulkRecord"
+    GuardrailsValidation:
+      type: object
+      properties:
+        span_id:
+          type: string
+          format: uuid
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Check"
+      readOnly: true
+    Span:
+      required:
+      - start_time
+      - trace_id
+      - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        trace_id:
+          type: string
+          format: uuid
+        parent_span_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+          - general
+          - tool
+          - llm
+          - guardrail
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        input:
+          $ref: "#/components/schemas/JsonListString"
+        output:
+          $ref: "#/components/schemas/JsonListString"
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+        model:
+          type: string
+        provider:
+          type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        usage:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo"
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScore"
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/Comment"
+        total_estimated_cost:
+          minimum: 0.0
+          exclusiveMinimum: false
+          type: number
+        total_estimated_cost_version:
+          type: string
+        duration:
+          type: number
+          description: Duration in milliseconds as a decimal number to support sub-millisecond
+            precision
+          format: double
+          readOnly: true
+    Trace:
+      required:
+      - start_time
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        input:
+          $ref: "#/components/schemas/JsonListString"
+        output:
+          $ref: "#/components/schemas/JsonListString"
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo"
+        usage:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+            readOnly: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        feedback_scores:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScore"
+        comments:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/Comment"
+        guardrails_validations:
+          type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/GuardrailsValidation"
+        total_estimated_cost:
+          type: number
+          readOnly: true
+        span_count:
+          type: integer
+          format: int32
+          readOnly: true
+        duration:
+          type: number
+          description: Duration in milliseconds as a decimal number to support sub-millisecond
+            precision
+          format: double
+          readOnly: true
+        thread_id:
+          type: string
+    ErrorInfo_Write:
+      required:
+      - exception_type
+      - traceback
+      type: object
+      properties:
+        exception_type:
+          type: string
+        message:
+          type: string
+        traceback:
+          type: string
+    ExperimentItemBulkRecord_Write:
+      required:
+      - dataset_item_id
+      type: object
+      properties:
+        dataset_item_id:
+          type: string
+          format: uuid
+        trace:
+          $ref: "#/components/schemas/Trace_Write"
+        spans:
+          maxItems: 100
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/Span_Write"
+        feedback_scores:
+          maxItems: 100
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackScore_Write"
+    ExperimentItemBulkUpload_Write:
+      required:
+      - dataset_name
+      - experiment_name
+      - items
+      type: object
+      properties:
+        experiment_name:
+          type: string
+        dataset_name:
+          type: string
+        items:
+          maxItems: 250
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentItemBulkRecord_Write"
+    FeedbackScore_Write:
+      required:
+      - name
+      - source
+      - value
+      type: object
+      properties:
+        name:
+          type: string
+        category_name:
+          type: string
+        value:
+          maximum: 999999999.999999999
+          exclusiveMaximum: false
+          minimum: -999999999.999999999
+          exclusiveMinimum: false
+          type: number
+        reason:
+          type: string
+        source:
+          type: string
+          enum:
+          - ui
+          - sdk
+          - online_scoring
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    JsonListString_Write:
+      type: object
+      anyOf:
+      - type: object
+      - type: array
+        items:
+          type: object
+      - type: string
+    Span_Write:
+      required:
+      - start_time
+      - trace_id
+      - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        trace_id:
+          type: string
+          format: uuid
+        parent_span_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+          - general
+          - tool
+          - llm
+          - guardrail
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        input:
+          $ref: "#/components/schemas/JsonListString_Write"
+        output:
+          $ref: "#/components/schemas/JsonListString_Write"
+        metadata:
+          $ref: "#/components/schemas/JsonNode_Write"
+        model:
+          type: string
+        provider:
+          type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        usage:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo_Write"
+        last_updated_at:
+          type: string
+          format: date-time
+        total_estimated_cost:
+          minimum: 0.0
+          exclusiveMinimum: false
+          type: number
+        total_estimated_cost_version:
+          type: string
+    Trace_Write:
+      required:
+      - start_time
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        name:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        input:
+          $ref: "#/components/schemas/JsonListString_Write"
+        output:
+          $ref: "#/components/schemas/JsonListString_Write"
+        metadata:
+          $ref: "#/components/schemas/JsonNode_Write"
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo_Write"
+        last_updated_at:
+          type: string
+          format: date-time
+        thread_id:
+          type: string
     Comment_Public:
       required:
       - text
@@ -6411,7 +6920,6 @@ components:
         last_updated_at:
           type: string
           format: date-time
-          readOnly: true
         last_updated_by:
           type: string
           readOnly: true
@@ -6439,6 +6947,9 @@ components:
           - cancelled
         metadata:
           $ref: "#/components/schemas/JsonNode_Write"
+        last_updated_at:
+          type: string
+          format: date-time
     OptimizationPage_Public:
       type: object
       properties:
@@ -6506,7 +7017,6 @@ components:
         last_updated_at:
           type: string
           format: date-time
-          readOnly: true
         last_updated_by:
           type: string
           readOnly: true
@@ -7216,200 +7726,6 @@ components:
           type: boolean
         guardrailsEnabled:
           type: boolean
-    ErrorInfo:
-      required:
-      - exception_type
-      - traceback
-      type: object
-      properties:
-        exception_type:
-          type: string
-        message:
-          type: string
-        traceback:
-          type: string
-    Span:
-      required:
-      - start_time
-      - trace_id
-      - type
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        project_name:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-          description: "If null, the default project is used"
-        project_id:
-          type: string
-          format: uuid
-          readOnly: true
-        trace_id:
-          type: string
-          format: uuid
-        parent_span_id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        type:
-          type: string
-          enum:
-          - general
-          - tool
-          - llm
-          - guardrail
-        start_time:
-          type: string
-          format: date-time
-        end_time:
-          type: string
-          format: date-time
-        input:
-          $ref: "#/components/schemas/JsonListString"
-        output:
-          $ref: "#/components/schemas/JsonListString"
-        metadata:
-          $ref: "#/components/schemas/JsonNode"
-        model:
-          type: string
-        provider:
-          type: string
-        tags:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-        usage:
-          type: object
-          additionalProperties:
-            type: integer
-            format: int32
-        error_info:
-          $ref: "#/components/schemas/ErrorInfo"
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        last_updated_at:
-          type: string
-          format: date-time
-        created_by:
-          type: string
-          readOnly: true
-        last_updated_by:
-          type: string
-          readOnly: true
-        feedback_scores:
-          type: array
-          readOnly: true
-          items:
-            $ref: "#/components/schemas/FeedbackScore"
-        comments:
-          type: array
-          readOnly: true
-          items:
-            $ref: "#/components/schemas/Comment"
-        total_estimated_cost:
-          minimum: 0.0
-          exclusiveMinimum: false
-          type: number
-        total_estimated_cost_version:
-          type: string
-        duration:
-          type: number
-          description: Duration in milliseconds as a decimal number to support sub-millisecond
-            precision
-          format: double
-          readOnly: true
-    ErrorInfo_Write:
-      required:
-      - exception_type
-      - traceback
-      type: object
-      properties:
-        exception_type:
-          type: string
-        message:
-          type: string
-        traceback:
-          type: string
-    JsonListString_Write:
-      type: object
-      anyOf:
-      - type: object
-      - type: array
-        items:
-          type: object
-      - type: string
-    Span_Write:
-      required:
-      - start_time
-      - trace_id
-      - type
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        project_name:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-          description: "If null, the default project is used"
-        trace_id:
-          type: string
-          format: uuid
-        parent_span_id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        type:
-          type: string
-          enum:
-          - general
-          - tool
-          - llm
-          - guardrail
-        start_time:
-          type: string
-          format: date-time
-        end_time:
-          type: string
-          format: date-time
-        input:
-          $ref: "#/components/schemas/JsonListString_Write"
-        output:
-          $ref: "#/components/schemas/JsonListString_Write"
-        metadata:
-          $ref: "#/components/schemas/JsonNode_Write"
-        model:
-          type: string
-        provider:
-          type: string
-        tags:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-        usage:
-          type: object
-          additionalProperties:
-            type: integer
-            format: int32
-        error_info:
-          $ref: "#/components/schemas/ErrorInfo_Write"
-        last_updated_at:
-          type: string
-          format: date-time
-        total_estimated_cost:
-          minimum: 0.0
-          exclusiveMinimum: false
-          type: number
-        total_estimated_cost_version:
-          type: string
     SpanBatch:
       required:
       - spans
@@ -7820,155 +8136,6 @@ components:
           type: number
         error_info:
           $ref: "#/components/schemas/ErrorInfo"
-    Check:
-      type: object
-      properties:
-        name:
-          type: string
-          enum:
-          - TOPIC
-          - PII
-        result:
-          type: string
-          enum:
-          - passed
-          - failed
-    GuardrailsValidation:
-      type: object
-      properties:
-        span_id:
-          type: string
-          format: uuid
-        checks:
-          type: array
-          items:
-            $ref: "#/components/schemas/Check"
-      readOnly: true
-    Trace:
-      required:
-      - start_time
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        project_name:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-          description: "If null, the default project is used"
-        project_id:
-          type: string
-          format: uuid
-          readOnly: true
-        name:
-          type: string
-        start_time:
-          type: string
-          format: date-time
-        end_time:
-          type: string
-          format: date-time
-        input:
-          $ref: "#/components/schemas/JsonListString"
-        output:
-          $ref: "#/components/schemas/JsonListString"
-        metadata:
-          $ref: "#/components/schemas/JsonNode"
-        tags:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-        error_info:
-          $ref: "#/components/schemas/ErrorInfo"
-        usage:
-          type: object
-          additionalProperties:
-            type: integer
-            format: int64
-            readOnly: true
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        last_updated_at:
-          type: string
-          format: date-time
-        created_by:
-          type: string
-          readOnly: true
-        last_updated_by:
-          type: string
-          readOnly: true
-        feedback_scores:
-          type: array
-          readOnly: true
-          items:
-            $ref: "#/components/schemas/FeedbackScore"
-        comments:
-          type: array
-          readOnly: true
-          items:
-            $ref: "#/components/schemas/Comment"
-        guardrails_validations:
-          type: array
-          readOnly: true
-          items:
-            $ref: "#/components/schemas/GuardrailsValidation"
-        total_estimated_cost:
-          type: number
-          readOnly: true
-        span_count:
-          type: integer
-          format: int32
-          readOnly: true
-        duration:
-          type: number
-          description: Duration in milliseconds as a decimal number to support sub-millisecond
-            precision
-          format: double
-          readOnly: true
-        thread_id:
-          type: string
-    Trace_Write:
-      required:
-      - start_time
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        project_name:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-          description: "If null, the default project is used"
-        name:
-          type: string
-        start_time:
-          type: string
-          format: date-time
-        end_time:
-          type: string
-          format: date-time
-        input:
-          $ref: "#/components/schemas/JsonListString_Write"
-        output:
-          $ref: "#/components/schemas/JsonListString_Write"
-        metadata:
-          $ref: "#/components/schemas/JsonNode_Write"
-        tags:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-        error_info:
-          $ref: "#/components/schemas/ErrorInfo_Write"
-        last_updated_at:
-          type: string
-          format: date-time
-        thread_id:
-          type: string
     TraceBatch:
       required:
       - traces

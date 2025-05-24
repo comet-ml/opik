@@ -115,6 +115,9 @@ from .error_message_detailed import ErrorMessageDetailed
 from .error_message_public import ErrorMessagePublic
 from .experiment import Experiment
 from .experiment_item import ExperimentItem
+from .experiment_item_bulk_record import ExperimentItemBulkRecord
+from .experiment_item_bulk_record_write import ExperimentItemBulkRecordWrite
+from .experiment_item_bulk_upload import ExperimentItemBulkUpload
 from .experiment_item_compare import ExperimentItemCompare
 from .experiment_item_public import ExperimentItemPublic
 from .experiment_page_public import ExperimentPagePublic
@@ -144,6 +147,8 @@ from .feedback_score_names import FeedbackScoreNames
 from .feedback_score_public import FeedbackScorePublic
 from .feedback_score_public_source import FeedbackScorePublicSource
 from .feedback_score_source import FeedbackScoreSource
+from .feedback_score_write import FeedbackScoreWrite
+from .feedback_score_write_source import FeedbackScoreWriteSource
 from .feedback_update import FeedbackUpdate, FeedbackUpdate_Categorical, FeedbackUpdate_Numerical
 from .function import Function
 from .function_call import FunctionCall
@@ -201,6 +206,8 @@ from .optimization_page_public import OptimizationPagePublic
 from .optimization_public import OptimizationPublic
 from .optimization_public_status import OptimizationPublicStatus
 from .optimization_status import OptimizationStatus
+from .optimization_write import OptimizationWrite
+from .optimization_write_status import OptimizationWriteStatus
 from .page_columns import PageColumns
 from .percentage_value_stat_public import PercentageValueStatPublic
 from .percentage_values import PercentageValues
@@ -382,6 +389,9 @@ __all__ = [
     "ErrorMessagePublic",
     "Experiment",
     "ExperimentItem",
+    "ExperimentItemBulkRecord",
+    "ExperimentItemBulkRecordWrite",
+    "ExperimentItemBulkUpload",
     "ExperimentItemCompare",
     "ExperimentItemPublic",
     "ExperimentPagePublic",
@@ -413,6 +423,8 @@ __all__ = [
     "FeedbackScorePublic",
     "FeedbackScorePublicSource",
     "FeedbackScoreSource",
+    "FeedbackScoreWrite",
+    "FeedbackScoreWriteSource",
     "FeedbackUpdate",
     "FeedbackUpdate_Categorical",
     "FeedbackUpdate_Numerical",
@@ -474,6 +486,8 @@ __all__ = [
     "OptimizationPublic",
     "OptimizationPublicStatus",
     "OptimizationStatus",
+    "OptimizationWrite",
+    "OptimizationWriteStatus",
     "PageColumns",
     "PercentageValueStatPublic",
     "PercentageValues",
