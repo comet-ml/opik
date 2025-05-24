@@ -868,7 +868,9 @@ class SpanDAO {
                 avgMap(usage) as usage,
                 avgMap(feedback_scores) AS feedback_scores,
                 avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
-                toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg
+                toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
+                sumIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_sum_,
+                toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum
             FROM spans_final s
             LEFT JOIN feedback_scores_agg AS f ON s.id = f.entity_id
             GROUP BY project_id

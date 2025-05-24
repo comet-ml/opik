@@ -65,6 +65,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "total_estimated_cost",
+  "total_estimated_cost_sum",
   "duration.p50",
   "last_updated_at",
   "created_at",
@@ -116,7 +117,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         cell: DurationCell as never,
       },
       {
-        id: "total_estimated_cost",
+        id: "total_estimated_cost_sum",
         label: "Total cost",
         type: COLUMN_TYPE.cost,
         cell: CostCell as never,

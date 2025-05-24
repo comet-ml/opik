@@ -1,0 +1,8 @@
+import { describe, it, expect } from "vitest";
+import { DEFAULT_SELECTED_COLUMNS } from "./ProjectsPage";
+
+describe("ProjectsPage constants", () => {
+  it("should include total cost sum column by default", () => {
+    expect(DEFAULT_SELECTED_COLUMNS).toContain("total_estimated_cost_sum");
+  });
+});
