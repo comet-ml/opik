@@ -58,7 +58,9 @@ public record Trace(
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) int spanCount,
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision") Double duration,
-        @JsonView({Trace.View.Public.class, Trace.View.Write.class}) String threadId){
+        @JsonView({Trace.View.Public.class, Trace.View.Write.class}) String threadId,
+        @JsonView({
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) VisibilityMode visibilityMode){
 
     @Builder(toBuilder = true)
     public record TracePage(
@@ -95,7 +97,9 @@ public record Trace(
         TOTAL_ESTIMATED_COST("total_estimated_cost"),
         SPAN_COUNT("span_count"),
         DURATION("duration"),
-        THREAD_ID("thread_id");
+        THREAD_ID("thread_id"),
+        VISIBILITY_MODE("visibility_mode"),
+        ;
 
         @JsonValue
         private final String value;
