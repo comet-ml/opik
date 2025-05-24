@@ -4,21 +4,25 @@ subtitle: "Optimize few-shot examples for chat prompts with Bayesian techniques.
 description: "Learn how to use the Few-Shot Bayesian Optimizer to find optimal few-shot examples for your chat-based prompts using Bayesian optimization techniques."
 pytest_codeblocks_skip: true
 ---
+
 The FewShotBayesianOptimizer is a sophisticated prompt optimization tool that combines few-shot learning with Bayesian optimization techniques. It's designed to iteratively improve prompts by learning from examples and systematically exploring the optimization space, specifically for chat-based prompts.
 
 <Note>
   **When to Use This Optimizer:**
   Use `FewShotBayesianOptimizer` when your primary goal is to find the optimal number and combination of few-shot examples (demonstrations) to accompany your main instruction prompt, particularly for **chat models**. If your task performance heavily relies on the quality and relevance of in-context examples, this optimizer is ideal.
 
-  **Key Trade-offs:**
-  - Focuses exclusively on selecting examples from the provided dataset; it does *not* optimize the `instruction_prompt` text itself.
-  - The search space can be very large if the dataset for example selection is massive; `n_iterations` needs to be sufficient for adequate exploration.
-  - Effectiveness depends on the quality and diversity of the examples within your dataset.
+**Key Trade-offs:**
+
+- Focuses exclusively on selecting examples from the provided dataset; it does _not_ optimize the `instruction_prompt` text itself.
+- The search space can be very large if the dataset for example selection is massive; `n_iterations` needs to be sufficient for adequate exploration.
+- Effectiveness depends on the quality and diversity of the examples within your dataset.
+
 </Note>
 
 <Info>
-  Have questions about `FewShotBayesianOptimizer`? 
-  Our [Optimizer & SDK FAQ](/agent_optimization/opik_optimizer/faq) answers common questions, including when to use this optimizer, how parameters like `min_examples` and `n_iterations` work, and whether it modifies the main instruction prompt.
+  Have questions about `FewShotBayesianOptimizer`? Our [Optimizer & SDK FAQ](/agent_optimization/opik_optimizer/faq)
+  answers common questions, including when to use this optimizer, how parameters like `min_examples` and `n_iterations`
+  work, and whether it modifies the main instruction prompt.
 </Info>
 
 ## How It Works
@@ -28,29 +32,32 @@ This optimizer focuses on finding the optimal set and number of few-shot example
 1.  **Problem Definition**: The core task is to select the best combination of few-shot examples from your provided dataset to append to the `instruction_prompt` (defined in `TaskConfig`). The number of examples to select can range from `min_examples` to `max_examples`.
 
 2.  **Search Space**: For each trial, Optuna suggests:
-    *   `n_examples`: The number of few-shot examples to use for this particular trial (within the `min_examples` and `max_examples` range).
-    *   `example_indices`: A list of specific indices pointing to items in your dataset that will serve as these `n_examples`.
+
+    - `n_examples`: The number of few-shot examples to use for this particular trial (within the `min_examples` and `max_examples` range).
+    - `example_indices`: A list of specific indices pointing to items in your dataset that will serve as these `n_examples`.
 
 3.  **Prompt Construction**: For each trial, a complete chat prompt is constructed:
-    *   The system message is your `TaskConfig.instruction_prompt`.
-    *   A sequence of user/assistant turn pairs is created using the selected `n_examples` from the dataset. Each example typically maps to a user message (e.g., from `input_dataset_fields`) and an assistant message (from `output_dataset_field`).
+
+    - The system message is your `TaskConfig.instruction_prompt`.
+    - A sequence of user/assistant turn pairs is created using the selected `n_examples` from the dataset. Each example typically maps to a user message (e.g., from `input_dataset_fields`) and an assistant message (from `output_dataset_field`).
 
 4.  **Evaluation**: This constructed few-shot prompt (system instruction + example turns) is then evaluated against a portion (or all) of your dataset using the specified `metric_config`. The evaluation measures how well this particular combination of few-shot examples helps the model perform the task.
 
 5.  **Bayesian Optimization (via Optuna)**:
-    *   Optuna uses a Bayesian optimization algorithm (typically TPESampler - Tree-structured Parzen Estimator Sampler) to decide which combinations of `n_examples` and `example_indices` to try next.
-    *   It builds a probabilistic model of how different example choices affect the evaluation score and uses this model to balance exploration (trying new, uncertain combinations) and exploitation (focusing on combinations likely to yield high scores).
-    *   This process is repeated for `n_iterations` (number of trials).
+
+    - Optuna uses a Bayesian optimization algorithm (typically TPESampler - Tree-structured Parzen Estimator Sampler) to decide which combinations of `n_examples` and `example_indices` to try next.
+    - It builds a probabilistic model of how different example choices affect the evaluation score and uses this model to balance exploration (trying new, uncertain combinations) and exploitation (focusing on combinations likely to yield high scores).
+    - This process is repeated for `n_iterations` (number of trials).
 
 6.  **Result**: After all trials, the optimizer returns the `instruction_prompt` paired with the combination of few-shot examples that achieved the best score.
 
 Essentially, the `FewShotBayesianOptimizer` intelligently searches through the vast space of possible few-shot example combinations to find the set that best primes your chat model for the task.
 
 <Tip>
-  The core of this optimizer relies on robust evaluation (Step 4) where each combination of few-shot examples is assessed using your `MetricConfig` against the `dataset`. Understanding Opik's evaluation platform is key to effective use:
-  - [Evaluation Overview](/evaluation/overview)
-  - [Evaluate Prompts](/evaluation/evaluate_prompt)
-  - [Metrics Overview](/evaluation/metrics/overview)
+  The core of this optimizer relies on robust evaluation (Step 4) where each combination of few-shot examples is
+  assessed using your `MetricConfig` against the `dataset`. Understanding Opik's evaluation platform is key to effective
+  use: - [Evaluation Overview](/evaluation/overview) - [Evaluate Prompts](/evaluation/evaluate_prompt) - [Metrics
+  Overview](/evaluation/metrics/overview)
 </Tip>
 
 ## Configuration Options
@@ -94,7 +101,7 @@ from opik_optimizer import (
     from_llm_response_text,
     from_dataset_field,
 )
-from opik_optimizer.demo import get_or_create_dataset
+from opik_optimizer import datasets
 
 # Initialize optimizer
 optimizer = FewShotBayesianOptimizer(
@@ -104,7 +111,7 @@ optimizer = FewShotBayesianOptimizer(
 )
 
 # Prepare dataset
-dataset = get_or_create_dataset("hotpot-300")
+dataset = datasets.hotpot_300()
 
 # Define metric and task configuration (see docs for more options)
 metric_config = MetricConfig(
