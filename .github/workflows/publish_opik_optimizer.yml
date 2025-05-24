@@ -1,6 +1,10 @@
 name: "Publish Optimizer SDK"
 run-name: "Publish Optimizer SDK ${{ github.ref_name }} by @${{ github.actor }}"
 
+permissions:
+    contents: read
+    packages: write
+
 on:
     workflow_dispatch:
 
