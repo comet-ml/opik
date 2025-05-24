@@ -107,7 +107,7 @@ from opik_optimizer import (
     from_llm_response_text,
     from_dataset_field,
 )
-from opik_optimizer.demo import get_or_create_dataset
+from opik_optimizer import datasets
 
 # Initialize optimizer
 optimizer = MetaPromptOptimizer(
@@ -119,7 +119,7 @@ optimizer = MetaPromptOptimizer(
 )
 
 # Prepare dataset
-dataset = get_or_create_dataset("hotpot-300")
+dataset = datasets.hotpot_300()
 
 # Define metric and task configuration (see docs for more options)
 metric_config = MetricConfig(
