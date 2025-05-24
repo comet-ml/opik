@@ -8,6 +8,7 @@ import { FeedbackScoreName } from "@/types/shared";
 type UseTracesOrSpansScoresColumnsParams = {
   projectId: string;
   type: TRACE_DATA_TYPE;
+  spanType?: SPAN_TYPE;
 };
 
 type UseTracesOrSpansScoresColumnsResponse = {
@@ -35,7 +36,8 @@ export default function useTracesOrSpansScoresColumns(
     useSpansFeedbackScoresNames(
       {
         ...params,
-        type: SPAN_TYPE.llm,
+        type:
+          !isTracesData && params.spanType ? params.spanType : SPAN_TYPE.llm,
       },
       {
         ...config,

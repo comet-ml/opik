@@ -18,6 +18,8 @@ const NoTracesPage = () => {
     switch (type) {
       case TRACE_DATA_TYPE.traces:
         return noDataTracesImageUrl;
+      case TRACE_DATA_TYPE.spans:
+        return noDataSpansImageUrl;
       case TRACE_DATA_TYPE.llm:
         return noDataSpansImageUrl;
       case "metrics":
@@ -32,7 +34,7 @@ const NoTracesPage = () => {
       title="Log your first trace"
       description="Logging traces helps you understand the flow of your application and identify specific points in your application that may be causing issues."
       imageUrl={imageUrl}
-      height={188}
+      height={type === TRACE_DATA_TYPE.spans ? 220 : 188}
       className="px-6"
       buttons={
         <>

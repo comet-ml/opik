@@ -14,6 +14,7 @@ import useSpansStatistic from "@/api/traces/useSpansStatistic";
 type UseTracesOrSpansStatisticParams = {
   projectId: string;
   type: TRACE_DATA_TYPE;
+  spanType?: SPAN_TYPE;
   filters?: Filters;
   search?: string;
 };
@@ -57,7 +58,7 @@ export default function useTracesOrSpansStatistic(
   } = useSpansStatistic(
     {
       ...params,
-      type: SPAN_TYPE.llm,
+      type: !isTracesData && params.spanType ? params.spanType : SPAN_TYPE.llm,
     },
     {
       ...config,
