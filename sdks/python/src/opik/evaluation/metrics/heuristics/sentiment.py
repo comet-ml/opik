@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from opik.evaluation.metrics import base_metric, score_result
 
@@ -13,15 +13,15 @@ except ImportError:
 class Sentiment(base_metric.BaseMetric):
     """
     A metric that analyzes the sentiment of text using NLTK's VADER sentiment analyzer.
-    
+
     Returns sentiment scores for positive, neutral, negative, and compound sentiment.
-    The compound score is a normalized score between -1.0 (extremely negative) and 
+    The compound score is a normalized score between -1.0 (extremely negative) and
     1.0 (extremely positive).
 
     Args:
         name: The name of the metric. Defaults to "sentiment_metric".
         track: Whether to track the metric. Defaults to True.
-        project_name: Optional project name to track the metric in for the cases when 
+        project_name: Optional project name to track the metric in for the cases when
             there are no parent span/trace to inherit project name from.
 
     Example:
@@ -55,12 +55,10 @@ class Sentiment(base_metric.BaseMetric):
             self._analyzer = SentimentIntensityAnalyzer()
         except LookupError:
             # If vader_lexicon is not downloaded, attempt to download it
-            nltk.download('vader_lexicon')
+            nltk.download("vader_lexicon")
             self._analyzer = SentimentIntensityAnalyzer()
 
-    def score(
-        self, output: str, **ignored_kwargs: Any
-    ) -> score_result.ScoreResult:
+    def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
         """
         Analyze the sentiment of the provided text.
 
@@ -85,14 +83,14 @@ class Sentiment(base_metric.BaseMetric):
 
         sentiment_scores = self._analyzer.polarity_scores(output)
         compound_score = sentiment_scores["compound"]
-        
+
         if compound_score >= 0.05:
             sentiment_category = "positive"
         elif compound_score <= -0.05:
             sentiment_category = "negative"
         else:
             sentiment_category = "neutral"
-            
+
         return score_result.ScoreResult(
             value=compound_score,
             name=self.name,
