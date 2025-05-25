@@ -1,5 +1,5 @@
-import React, { useCallback, useRef, useState } from "react";
-import { Database, Trash } from "lucide-react";
+import React, { useState, useRef, useCallback } from "react";
+import { Database, Tag, Trash } from "lucide-react";
 import first from "lodash/first";
 import get from "lodash/get";
 import slugify from "slugify";
@@ -13,6 +13,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutation";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
+import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
@@ -20,6 +21,7 @@ type TracesActionsPanelProps = {
   columnsToExport: string[];
   projectName: string;
   projectId: string;
+  onClearSelection?: () => void;
 };
 
 const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
@@ -28,6 +30,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   columnsToExport,
   projectName,
   projectId,
+  onClearSelection,
 }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | number>(false);
@@ -95,6 +98,15 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         description="Are you sure you want to delete all selected traces?"
         confirmText="Delete traces"
       />
+      <AddTagDialog
+        key={`tag-${resetKeyRef.current}`}
+        rows={rows}
+        open={open === 3}
+        setOpen={setOpen}
+        projectId={projectId}
+        type={type}
+        onSuccess={onClearSelection}
+      />
       <TooltipWrapper content="Add to dataset">
         <Button
           variant="outline"
@@ -107,6 +119,20 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         >
           <Database className="mr-2 size-4" />
           Add to dataset
+        </Button>
+      </TooltipWrapper>
+      <TooltipWrapper content="Add tags">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setOpen(3);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={disabled}
+        >
+          <Tag className="mr-2 size-4" />
+          Add tags
         </Button>
       </TooltipWrapper>
       <ExportToButton
