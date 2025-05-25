@@ -46,6 +46,17 @@ public class OptimizationResourceClient {
         }
     }
 
+    public UUID upsert(Optimization optimization, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(optimization))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
+            return TestUtils.getIdFromLocation(response.getLocation());
+        }
+    }
+
     public UUID create(String apiKey, String workspaceName) {
         var optimization = createPartialOptimization().build();
         return create(optimization, apiKey, workspaceName);

@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
 
 _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
+
 class MetaPromptOptimizer(BaseOptimizer):
     """Optimizer that uses meta-prompting to improve prompts based on examples and performance."""
 
@@ -100,6 +101,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         adaptive_trial_threshold: Optional[float] = DEFAULT_ADAPTIVE_THRESHOLD,
         num_threads: int = 12,
         project_name: Optional[str] = None,
+        verbose: int = 1,
+        enable_context: bool = True,
         **model_kwargs,
     ):
         """
@@ -116,6 +119,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             adaptive_trial_threshold: If not None, prompts scoring below `best_score * adaptive_trial_threshold` after initial trials won't get max trials.
             num_threads: Number of threads for parallel evaluation
             project_name: Optional project name for tracking
+            verbose: Controls internal logging/progress bars (0=off, 1=on).
+            enable_context: Whether to include task-specific context (metrics, examples) in the reasoning prompt.
             **model_kwargs: Additional model parameters
         """
         super().__init__(model=model, project_name=project_name, **model_kwargs)
@@ -127,9 +132,12 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.max_trials = max_trials_per_candidate
         self.adaptive_threshold = adaptive_trial_threshold
         self.num_threads = num_threads
+        self.verbose = verbose
         self.dataset = None
         self.task_config = None
         self._opik_client = opik_client.get_client_cached()
+        self.llm_call_counter = 0
+        self.enable_context = enable_context
         logger.debug(
             f"Initialized MetaPromptOptimizer with model={model}, reasoning_model={self.reasoning_model}"
         )
@@ -150,6 +158,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         experiment_config: Optional[Dict] = None,
         n_samples: Optional[int] = None,
         optimization_id: Optional[str] = None,
+        verbose: int = 1,
     ) -> float:
         """
         Evaluate a prompt using the given dataset and metric configuration.
@@ -176,6 +185,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             experiment_config=experiment_config,
             n_samples=n_samples,
             optimization_id=optimization_id,
+            verbose=self.verbose,
         )
 
     @_throttle.rate_limited(_rate_limiter)
@@ -187,12 +197,21 @@ class MetaPromptOptimizer(BaseOptimizer):
         optimization_id: Optional[str] = None,
     ) -> str:
         """Call the model with the given prompt and return the response."""
+        self.llm_call_counter += 1
         # Note: Basic retry logic could be added here using tenacity
         try:
             # Basic LLM parameters (e.g., temperature, max_tokens)
+            base_temperature = getattr(self, "temperature", 0.3)
+            base_max_tokens = getattr(self, "max_tokens", 1000)
+
+            # Use potentially different settings for reasoning calls
+            reasoning_temperature = base_temperature # Keep same temp unless specified otherwise
+            # Increase max_tokens for reasoning to ensure JSON fits, unless already high
+            reasoning_max_tokens = max(base_max_tokens, 3000) if is_reasoning else base_max_tokens 
+
             llm_config_params = {
-                "temperature": getattr(self, "temperature", 0.3),
-                "max_tokens": getattr(self, "max_tokens", 1000),
+                "temperature": reasoning_temperature if is_reasoning else base_temperature,
+                "max_tokens": reasoning_max_tokens,
                 "top_p": getattr(self, "top_p", 1.0),
                 "frequency_penalty": getattr(self, "frequency_penalty", 0.0),
                 "presence_penalty": getattr(self, "presence_penalty", 0.0),
@@ -241,7 +260,10 @@ class MetaPromptOptimizer(BaseOptimizer):
             )
 
             response = litellm.completion(
-                model=model_to_use, messages=messages, **final_call_params
+                model=model_to_use, 
+                messages=messages, 
+                num_retries=6,
+                **final_call_params
             )
             return response.choices[0].message.content
         except litellm.exceptions.RateLimitError as e:
@@ -270,6 +292,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         experiment_config: Optional[Dict],
         n_samples: Optional[int],
         optimization_id: Optional[str] = None,
+        verbose: int = 1,
     ) -> float:
         # Calculate subset size for trials
         if not use_full_dataset:
@@ -428,6 +451,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             n_samples=subset_size,  # Use subset_size for trials, None for full dataset
             experiment_config=experiment_config,
             optimization_id=optimization_id,
+            verbose=self.verbose,
         )
         logger.debug(f"Evaluation score: {score:.4f}")
         return score
@@ -473,7 +497,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         optimization = None
         try:
             optimization = self._opik_client.create_optimization(
-                dataset_name=dataset.name, objective_name=metric_config.metric.name
+                dataset_name=dataset.name,
+                objective_name=metric_config.metric.name,
+                metadata={"optimizer": self.__class__.__name__},
             )
             logger.info(f"Created optimization with ID: {optimization.id}")
         except Exception as e:
@@ -518,6 +544,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.auto_continue = auto_continue
         self.dataset = dataset
         self.task_config = task_config
+        self.llm_call_counter = 0 # Reset counter for run
 
         current_prompt = task_config.instruction_prompt
         experiment_config = experiment_config or {}
@@ -549,6 +576,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             n_samples=n_samples,
             experiment_config=experiment_config,
             use_full_dataset=n_samples is None,
+            verbose=self.verbose,
         )
         best_score = initial_score
         best_prompt = current_prompt
@@ -616,6 +644,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                             n_samples=n_samples,
                             use_full_dataset=False,
                             experiment_config=experiment_config,
+                            verbose=self.verbose,
                         )
                         scores.append(score)
                         logger.debug(f"Trial {trial+1} score: {score:.4f}")
@@ -658,6 +687,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                                 n_samples=n_samples,
                                 use_full_dataset=False,
                                 experiment_config=experiment_config,
+                                verbose=self.verbose,
                             )
                             scores.append(score)
                             logger.debug(
@@ -709,6 +739,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     experiment_config=experiment_config,
                     n_samples=n_samples,
                     use_full_dataset=n_samples is None,
+                    verbose=self.verbose,
                 )
                 logger.info(
                     f"Final evaluation score for best candidate: {final_score_best_cand:.4f}"
@@ -748,7 +779,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 improvement,
             )
             rounds.append(round_data)
-            self._add_to_history(round_data.dict())
+            self._add_to_history(round_data.model_dump())
 
             if (
                 improvement < self.improvement_threshold and round_num > 0
@@ -866,17 +897,19 @@ class MetaPromptOptimizer(BaseOptimizer):
             "rounds": rounds,
             "total_rounds": len(rounds),
             "stopped_early": stopped_early,
-            "metric_config": metric_config.dict(),
-            "task_config": task_config.dict(),
+            "metric_config": metric_config.model_dump(),
+            "task_config": task_config.model_dump(),
             "model": self.model,
             "temperature": self.model_kwargs.get("temperature"),
         }
 
         return OptimizationResult(
+            optimizer=self.__class__.__name__,
             prompt=best_prompt,
             score=best_score,
             metric_name=metric_config.metric.name,
             details=details,
+            llm_calls=self.llm_call_counter
         )
 
     def _get_task_context(self, metric_config: MetricConfig) -> str:
@@ -950,20 +983,35 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         # Pass single metric_config
         history_context = self._build_history_context(previous_rounds)
-        task_context = self._get_task_context(metric_config=metric_config)
+        task_context_str = ""
+        analysis_instruction = ""
+        metric_focus_instruction = ""
+        improvement_point_1 = ""
+
+        if self.enable_context:
+            task_context_str = self._get_task_context(metric_config=metric_config)
+            analysis_instruction = "Analyze the example provided (if any), the metric description (if any), and the history of scores."
+            metric_focus_instruction = f"Focus on improving the score for the metric: {metric_config.metric.name}."
+            improvement_point_1 = "1. Be more specific and clear about expectations based on the metric and task."
+            logger.debug("Task context and metric-specific instructions enabled for reasoning prompt.")
+        else:
+            analysis_instruction = "Analyze the history of scores and the current prompt\'s performance."
+            metric_focus_instruction = "Focus on generating diverse and effective prompt variations based on the history."
+            improvement_point_1 = "1. Be more specific and clear about expectations based on the task."
+            logger.debug("Task context and metric-specific instructions disabled for reasoning prompt.")
 
         user_prompt = f"""Current prompt: {current_prompt}
         Current score: {best_score}
         {history_context}
-        {task_context}
+        {task_context_str}
 
-        Analyze the example provided, the metric description, and the history of scores.
+        {analysis_instruction}
         Generate {self.num_prompts_per_round} improved versions of this prompt.
-        Focus on improving the score for the metric: {metric_config.metric.name}.
+        {metric_focus_instruction}
         Each version should aim to:
-        1. Be more specific and clear about expectations based on the metric and task.
-        2. Provide necessary context and constraints.
-        3. Guide the model to produce the desired output format suitable for the metric.
+        {improvement_point_1}
+        2. Provide necessary context and constraints (if applicable, without relying on disabled external context).
+        3. Guide the model to produce the desired output format suitable for the task.
         4. Remove ambiguity and unnecessary elements.
         5. Maintain conciseness while being complete.
 

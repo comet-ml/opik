@@ -23,6 +23,7 @@ from .optimization_config.mappers import (
 )
 
 from opik.evaluation.models.litellm import warning_filters
+from . import datasets
 
 warning_filters.add_warning_filters()
 
@@ -42,4 +43,5 @@ __all__ = [
     "from_llm_response_text",
     "OptimizationResult",
     "setup_logging",
+    "datasets",
 ]

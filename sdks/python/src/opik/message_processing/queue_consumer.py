@@ -51,8 +51,8 @@ class QueueConsumer(threading.Thread):
             elif message.delivery_time <= now:
                 self._message_processor.process(message)
             else:
-                # put back to keep an order in the queue
-                self._put_back_message(message)
+                # put a message back to keep an order in the queue
+                self._push_message_back(message)
 
         except Empty:
             time.sleep(SLEEP_BETWEEN_LOOP_ITERATIONS)
@@ -67,8 +67,8 @@ class QueueConsumer(threading.Thread):
             self.next_message_time = now + limit_exception.retry_after
             if message is not None:
                 message.delivery_time = self.next_message_time
-                # put back to keep an order in the queue
-                self._put_back_message(message)
+                # put a message back to keep an order in the queue
+                self._push_message_back(message)
         except Exception as ex:
             LOGGER.error(
                 "Failed to process message, unexpected error: %s", ex, exc_info=ex
@@ -78,7 +78,7 @@ class QueueConsumer(threading.Thread):
     def close(self) -> None:
         self._processing_stopped = True
 
-    def _put_back_message(self, message: messages.BaseMessage) -> None:
+    def _push_message_back(self, message: messages.BaseMessage) -> None:
         if self._message_queue.accept_put_without_discarding() is False:
             _logging.log_once_at_level(
                 logging.WARNING,

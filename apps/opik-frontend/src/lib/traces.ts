@@ -34,12 +34,10 @@ type PrettifyMessageResponse = {
   prettified: boolean;
 };
 
-export const prettifyMessage = (
+const prettifyOpenAIMessageLogic = (
   message: object | string | undefined,
-  config: PrettifyMessageConfig = {
-    type: "input",
-  },
-) => {
+  config: PrettifyMessageConfig,
+): string | undefined => {
   if (
     config.type === "input" &&
     isObject(message) &&
@@ -47,12 +45,9 @@ export const prettifyMessage = (
     isArray(message.messages)
   ) {
     const lastMessage = last(message.messages);
-    if (lastMessage && "content" in lastMessage) {
+    if (lastMessage && isObject(lastMessage) && "content" in lastMessage) {
       if (isString(lastMessage.content) && lastMessage.content.length > 0) {
-        return {
-          message: lastMessage.content,
-          prettified: true,
-        } as PrettifyMessageResponse;
+        return lastMessage.content;
       } else if (isArray(lastMessage.content)) {
         const lastTextContent = findLast(
           lastMessage.content,
@@ -65,10 +60,7 @@ export const prettifyMessage = (
           isString(lastTextContent.text) &&
           lastTextContent.text.length > 0
         ) {
-          return {
-            message: lastTextContent.text,
-            prettified: true,
-          };
+          return lastTextContent.text;
         }
       }
     }
@@ -87,13 +79,95 @@ export const prettifyMessage = (
       isString(lastChoice.message.content) &&
       lastChoice.message.content.length > 0
     ) {
-      return {
-        message: lastChoice.message.content,
-        prettified: true,
-      } as PrettifyMessageResponse;
+      return lastChoice.message.content;
     }
   }
+};
 
+const prettifyADKMessageLogic = (
+  message: object | string | undefined,
+  config: PrettifyMessageConfig,
+): string | undefined => {
+  if (config.type === "input" && isObject(message)) {
+    const unwrappedMessage =
+      !("parts" in message) &&
+      "contents" in message &&
+      isArray(message.contents)
+        ? last(message.contents)
+        : message;
+
+    if (
+      isObject(unwrappedMessage) &&
+      "parts" in unwrappedMessage &&
+      isArray(unwrappedMessage.parts)
+    ) {
+      const lastPart = last(unwrappedMessage.parts);
+      if (isObject(lastPart) && "text" in lastPart && isString(lastPart.text)) {
+        return lastPart.text;
+      }
+    }
+  } else if (
+    config.type === "output" &&
+    isObject(message) &&
+    "content" in message &&
+    isObject(message.content) &&
+    "parts" in message.content &&
+    isArray(message.content.parts)
+  ) {
+    const lastPart = last(message.content.parts);
+    if (isObject(lastPart) && "text" in lastPart && isString(lastPart.text)) {
+      return lastPart.text;
+    }
+  }
+};
+
+const prettifyLangGraphLogic = (
+  message: object | string | undefined,
+  config: PrettifyMessageConfig,
+): string | undefined => {
+  if (
+    config.type === "input" &&
+    isObject(message) &&
+    "messages" in message &&
+    isArray(message.messages)
+  ) {
+    const lastMessage = last(message.messages);
+    if (
+      lastMessage &&
+      isArray(lastMessage) &&
+      lastMessage.length === 2 &&
+      isString(lastMessage[1])
+    ) {
+      return lastMessage[1];
+    }
+  } else if (
+    config.type === "output" &&
+    isObject(message) &&
+    "messages" in message &&
+    isArray(message.messages) &&
+    message.messages.every((m) => isObject(m))
+  ) {
+    const divider = `\n\n  ----------------- \n\n`;
+
+    const humanMessages = message.messages.filter(
+      (m) =>
+        "type" in m &&
+        m.type === "human" &&
+        "content" in m &&
+        isString(m.content) &&
+        m.content !== "",
+    );
+
+    if (humanMessages.length > 0) {
+      return humanMessages.map((m) => m.content).join(divider);
+    }
+  }
+};
+
+const prettifyGenericLogic = (
+  message: object | string | undefined,
+  config: PrettifyMessageConfig,
+): string | undefined => {
   const PREDEFINED_KEYS_MAP = {
     input: ["question", "messages", "user_input", "query", "input_prompt"],
     output: ["answer", "output", "response"],
@@ -106,37 +180,56 @@ export const prettifyMessage = (
   }
 
   if (isString(unwrappedMessage)) {
-    return {
-      message: unwrappedMessage,
-      prettified: message !== unwrappedMessage,
-    } as PrettifyMessageResponse;
+    return unwrappedMessage;
   }
 
   if (isObject(unwrappedMessage)) {
     if (Object.keys(unwrappedMessage).length === 1) {
-      const value = get(message, Object.keys(unwrappedMessage)[0]);
+      const value = get(unwrappedMessage, Object.keys(unwrappedMessage)[0]);
 
       if (isString(value)) {
-        return {
-          message: value,
-          prettified: true,
-        } as PrettifyMessageResponse;
+        return value;
       }
     } else {
       for (const key of PREDEFINED_KEYS_MAP[config.type]) {
         const value = get(unwrappedMessage, key);
         if (isString(value)) {
-          return {
-            message: value,
-            prettified: true,
-          } as PrettifyMessageResponse;
+          return value;
         }
       }
     }
   }
+};
+
+export const prettifyMessage = (
+  message: object | string | undefined,
+  config: PrettifyMessageConfig = {
+    type: "input",
+  },
+) => {
+  if (isString(message)) {
+    return {
+      message,
+      prettified: false,
+    } as PrettifyMessageResponse;
+  }
+
+  let processedMessage = prettifyOpenAIMessageLogic(message, config);
+
+  if (!isString(processedMessage)) {
+    processedMessage = prettifyADKMessageLogic(message, config);
+  }
+
+  if (!isString(processedMessage)) {
+    processedMessage = prettifyLangGraphLogic(message, config);
+  }
+
+  if (!isString(processedMessage)) {
+    processedMessage = prettifyGenericLogic(message, config);
+  }
 
   return {
-    message,
-    prettified: false,
+    message: processedMessage ? processedMessage : message,
+    prettified: Boolean(processedMessage),
   } as PrettifyMessageResponse;
 };

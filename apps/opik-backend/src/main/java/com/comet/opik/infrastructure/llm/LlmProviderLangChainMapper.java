@@ -1,6 +1,8 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.infrastructure.llm.gemini.GeminiErrorObject;
+import com.comet.opik.infrastructure.llm.openai.OpenAiErrorMessage;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterErrorMessage;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -16,8 +18,10 @@ import dev.langchain4j.model.openai.internal.chat.SystemMessage;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
 import dev.langchain4j.model.openai.internal.shared.Usage;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import io.dropwizard.util.Throwables;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
+import org.apache.commons.lang3.StringUtils;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.Named;
@@ -34,6 +38,7 @@ public interface LlmProviderLangChainMapper {
     String ERR_ROLE_MSG_TYPE_MISMATCH = "role and message instance are not matching, role: '%s', instance: '%s'";
 
     LlmProviderLangChainMapper INSTANCE = Mappers.getMapper(LlmProviderLangChainMapper.class);
+    String CANNOT_BE_NULL_OR_EMPTY = "Message content cannot be null or empty";
 
     default ChatMessage toChatMessage(@NonNull Message message) {
         if (!List.of(Role.ASSISTANT, Role.USER, Role.SYSTEM).contains(message.role())) {
@@ -43,16 +48,19 @@ public interface LlmProviderLangChainMapper {
         switch (message.role()) {
             case ASSISTANT -> {
                 if (message instanceof AssistantMessage assistantMessage) {
+                    validateMessageContent(assistantMessage.content());
                     return AiMessage.from(assistantMessage.content());
                 }
             }
             case USER -> {
                 if (message instanceof UserMessage userMessage) {
+                    validateMessageContent(userMessage.content().toString());
                     return dev.langchain4j.data.message.UserMessage.from(userMessage.content().toString());
                 }
             }
             case SYSTEM -> {
                 if (message instanceof SystemMessage systemMessage) {
+                    validateMessageContent(systemMessage.content());
                     return dev.langchain4j.data.message.SystemMessage.from(systemMessage.content());
                 }
             }
@@ -60,6 +68,12 @@ public interface LlmProviderLangChainMapper {
 
         throw new BadRequestException(ERR_ROLE_MSG_TYPE_MISMATCH.formatted(message.role(),
                 message.getClass().getSimpleName()));
+    }
+
+    private void validateMessageContent(String content) {
+        if (StringUtils.isBlank(content)) {
+            throw new BadRequestException(CANNOT_BE_NULL_OR_EMPTY);
+        }
     }
 
     @Mapping(expression = "java(request.model())", target = "model")
@@ -96,25 +110,57 @@ public interface LlmProviderLangChainMapper {
         return request.messages().stream().map(this::toChatMessage).toList();
     }
 
-    default Optional<ErrorMessage> getGeminiErrorObject(@NonNull Throwable throwable, Logger log) {
-        if (throwable.getMessage() == null) {
-            log.warn("failed to parse Gemini error message", throwable);
-            return Optional.empty();
-        }
-        String message = throwable.getMessage();
-        var openBraceIndex = message.indexOf('{');
-        if (openBraceIndex >= 0) {
-            String jsonPart = message.substring(openBraceIndex); // Extract JSON part
-            try {
-                var geminiError = JsonUtils.readValue(jsonPart, GeminiErrorObject.class);
-                return geminiError.toErrorMessage();
-            } catch (UncheckedIOException e) {
-                log.warn("failed to parse Gemini error message", e);
-                return Optional.empty();
-            }
-        }
-
-        return Optional.empty();
+    default Optional<ErrorMessage> getGeminiErrorObject(@NonNull Throwable throwable, @NonNull Logger log) {
+        return getErrorMessage(throwable, log, GeminiErrorObject.class);
     }
 
+    private <E, T extends LlmProviderError<E>> Optional<ErrorMessage> getErrorMessage(Throwable throwable, Logger log,
+            Class<T> errorType) {
+        Optional<Throwable> llmProviderError = Throwables.findThrowableInChain(this::findError, throwable);
+
+        String failToGetErrorMessage = "failed to parse %s message".formatted(errorType.getSimpleName());
+
+        if (llmProviderError.isEmpty()) {
+            log.warn(failToGetErrorMessage, throwable);
+            return Optional.empty();
+        }
+
+        String message = llmProviderError.get().getMessage();
+        int openBraceIndex = message.indexOf('{');
+        String jsonPart = message.substring(openBraceIndex);
+
+        Optional<T> error = parseError(log, jsonPart, errorType);
+        return error.map(LlmProviderError::toErrorMessage);
+    }
+
+    private <E, T extends LlmProviderError<E>> Optional<T> parseError(Logger log, String jsonPart, Class<T> errorType) {
+
+        String failToGetErrorMessage = "failed to parse %s message".formatted(errorType.getSimpleName());
+
+        try {
+            var error = JsonUtils.readValue(jsonPart, errorType);
+            if (error.error() == null) {
+                return Optional.empty();
+            }
+            return Optional.of(error);
+        } catch (UncheckedIOException e) {
+            log.warn(failToGetErrorMessage, e);
+            return Optional.empty();
+        }
+    }
+
+    private boolean findError(Throwable t) {
+        return t.getMessage() != null && t.getMessage().contains("{");
+    }
+
+    default Optional<ErrorMessage> getErrorObject(@NonNull Throwable throwable, @NonNull Logger log) {
+
+        Optional<ErrorMessage> errorMessage = getErrorMessage(throwable, log, OpenRouterErrorMessage.class);
+
+        if (errorMessage.isPresent()) {
+            return errorMessage;
+        }
+
+        return getErrorMessage(throwable, log, OpenAiErrorMessage.class);
+    }
 }

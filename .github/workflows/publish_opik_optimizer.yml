@@ -1,0 +1,33 @@
+name: "Publish Optimizer SDK"
+run-name: "Publish Optimizer SDK ${{ github.ref_name }} by @${{ github.actor }}"
+
+permissions:
+    contents: read
+    packages: write
+
+on:
+    workflow_dispatch:
+
+jobs:
+    build-and-publish:
+        runs-on: ubuntu-latest
+        steps:
+        - name: Checkout
+          uses: actions/checkout@v4.1.1
+
+        - name: Set up Python 3.9
+          uses: actions/setup-python@v3
+          with:
+                python-version: 3.9
+
+        - name: Build pip package
+          run: |
+                cd sdks/opik_optimizer
+                pip3 install -U pip build
+                python3 -m build --sdist --wheel --outdir dist/ .
+                
+        - name: Publish package distributions to PyPI
+          uses: pypa/gh-action-pypi-publish@v1.12.4
+          with:
+            password: ${{ secrets.PYPI_API_TOKEN }}
+            packages-dir: sdks/opik_optimizer/dist

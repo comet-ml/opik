@@ -110,14 +110,15 @@ clickhouse:
 ```yaml
 clickhouse:
   backup:
-    serviceAccount:
-      enabled: true
-      annotations:
-        eks.amazonaws.com/role-arn: <your IAM role arn>
     enabled: true
-    bucketURL: https://<your bucket.s3.<region>.amazonaws.com
+    bucketURL: https://<your bucket>.s3.<region>.amazonaws.com
     schedule: <your cron schedule, like "00 03 * * *">
     baseBackup: ""
+    serviceAccount:
+      enabled: true
+      create: true
+      annotations:
+        eks.amazonaws.com/role-arn: <your IAM role arn>
 ```
 
 ## Configure replication for Clickhouse
@@ -143,7 +144,6 @@ clickhouse:
 component:
   backend:
     env:
-      IS_MINIO: "false"
       S3_BUCKET: <your_bucket_name>
       S3_REGION: <aws_region>
       AWS_ACCESS_KEY_ID: <your AWS Key>
@@ -158,11 +158,8 @@ If your IAM role is configured for the k8s nodes, the only things you will need 
 component:
   backend:
     env:
-      IS_MINIO: "false"
       S3_BUCKET: <your_bucket_name>
-      S3_REGION: <aws_region>
-      AWS_ACCESS_KEY_ID: ""
-      AWS_SECRET_ACCESS_KEY: ""
+      S3_REGION: <aws_region> 
 ```
 
 If your role should be used by opik-backend serviceAccount, in addition you need to set:
@@ -219,6 +216,20 @@ component:
 ...
 clickhouse:
     enabled: false
+```
+
+# Delete your installation 
+
+Before deleting opik installation with helm, make sure to remove finilizer on the clickhouse resource:
+
+```bash
+kubectl patch -n opik chi opik-clickhouse --type json --patch='[ { "op": "remove", "path": "/metadata/finalizers" } ]'
+```
+
+Then, uninstall the opik:
+
+```bash
+helm uninstall opik -n opik
 ```
 
 # Troubleshooting

@@ -15,6 +15,7 @@ import {
   generateDefaultPrompt,
   getDefaultConfigByProvider,
 } from "@/lib/playground";
+import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
 import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import PromptModelSelect from "@/components/pages-shared/llm/PromptModelSelect/PromptModelSelect";
@@ -34,8 +35,6 @@ import {
   ModelResolver,
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
-
-export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
 
 interface PlaygroundPromptProps {
   workspaceName: string;
@@ -160,6 +159,11 @@ const PlaygroundPrompt = ({
     ],
   );
 
+  const handleDeleteProvider = useCallback(() => {
+    // initialize a model validation process described in the next useEffect hook, as soon as the providers list will be returned from BE
+    checkedIfModelIsValidRef.current = false;
+  }, []);
+
   useEffect(() => {
     // on init, to check if a prompt has a model from valid providers: (f.e., remove a provider after setting a model)
     if (!checkedIfModelIsValidRef.current && !isPendingProviderKeys) {
@@ -211,6 +215,7 @@ const PlaygroundPrompt = ({
               provider={provider}
               workspaceName={workspaceName}
               onAddProvider={handleAddProvider}
+              onDeleteProvider={handleDeleteProvider}
               hasError={!model}
             />
           </div>
@@ -247,6 +252,7 @@ const PlaygroundPrompt = ({
         onChange={handleUpdateMessage}
         onAddMessage={handleAddMessage}
         hint={hintMessage}
+        hidePromptActions={false}
       />
     </div>
   );

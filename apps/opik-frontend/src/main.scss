@@ -39,7 +39,7 @@
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 348 86% 61%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 214.3 31.8% 91.4%;
@@ -191,7 +191,7 @@
   }
 
   .comet-table-row-active[data-row-active="true"] td {
-    background: hsl(var(--destructive-foreground));
+    background: hsl(var(--primary-foreground));
   }
 
   code,
@@ -320,9 +320,14 @@
   font-weight: 400;
   letter-spacing: 0.02em;
   max-width: 100%;
+  overflow-wrap: break-word;
+  word-break: break-word;
 
   pre code {
     font-size: 0.875rem !important;
+    white-space: preserve-breaks;
+    overflow-wrap: break-word;
+    word-break: break-word;
   }
 }
 

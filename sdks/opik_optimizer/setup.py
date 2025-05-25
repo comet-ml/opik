@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="opik_optimizer",
-    version="0.7.4",
+    version="0.8.1",
     description="Agent optimization with Opik",
     author="Comet ML",
     author_email="support@comet.com",
@@ -31,7 +31,6 @@ setup(
     # dev requirements
     extras_require={
         "dev": [
-            "adalflow",
             "pytest",
             "pytest-conv"
         ],
