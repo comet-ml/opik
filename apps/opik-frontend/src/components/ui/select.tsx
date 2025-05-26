@@ -112,8 +112,8 @@ SelectLabel.displayName = SelectPrimitive.Label.displayName;
 interface SelectItemProps
   extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> {
   withoutCheck?: boolean;
+  wrapperAsChild?: boolean;
   description?: React.ReactNode;
-  Wrapper?: React.ElementType | null;
 }
 
 const SelectItem = React.forwardRef<
@@ -125,8 +125,8 @@ const SelectItem = React.forwardRef<
       className,
       children,
       withoutCheck = false,
+      wrapperAsChild = false,
       description,
-      Wrapper = SelectPrimitive.ItemText,
       ...props
     },
     ref,
@@ -148,7 +148,9 @@ const SelectItem = React.forwardRef<
             </SelectPrimitive.ItemIndicator>
           </span>
         )}
-        {Wrapper ? <Wrapper>{children}</Wrapper> : children}
+        <SelectPrimitive.ItemText asChild={wrapperAsChild}>
+          {children}
+        </SelectPrimitive.ItemText>
       </div>
       {description && (
         <div className="comet-body-s mt-0.5 whitespace-pre-wrap text-light-slate">
