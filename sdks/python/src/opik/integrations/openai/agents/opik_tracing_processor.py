@@ -32,9 +32,16 @@ class OpikTracingProcessor(tracing.TracingProcessor):
         self._trace_id_to_last_llm_span: Dict[str, span_data.SpanData] = {}
 
     def on_trace_start(self, trace: tracing.Trace) -> None:
+        trace_metadata = trace.metadata or {}
+        trace_metadata["created_from"] = "openai-agents"
+        if trace.trace_id:
+            trace_metadata["agents-trace-id"] = trace.trace_id
         try:
             opik_trace_data = trace_data.TraceData(
-                name=trace.name, project_name=self._project_name
+                name=trace.name,
+                project_name=self._project_name,
+                thread_id=trace.group_id,
+                metadata=trace_metadata,
             )
             self._created_traces_data_map[trace.trace_id] = opik_trace_data
         except Exception:
