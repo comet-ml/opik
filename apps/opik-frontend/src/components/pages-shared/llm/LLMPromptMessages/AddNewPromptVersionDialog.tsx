@@ -19,6 +19,7 @@ import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Description } from "@/components/ui/description";
 import { Button } from "@/components/ui/button";
 import {
   Accordion,
@@ -154,40 +155,41 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
               refetchOnMount={true}
               asNewOption={true}
             />
+            {isEdit ? (
+              <Description>
+                Saving your changes to {selectedPrompt?.name ?? ""} will
+                automatically create a new commit. You can view previous
+                versions anytime in the
+                <Link
+                  onClick={(event) => event.stopPropagation()}
+                  to="/$workspaceName/prompts/$promptId"
+                  params={{ workspaceName, promptId: promptId! }}
+                  target="_blank"
+                >
+                  <Button variant="link" size="sm" className="px-1">
+                    Prompt library
+                    <SquareArrowOutUpRight className="ml-1.5 mt-1 size-3.5 shrink-0" />
+                  </Button>
+                </Link>
+              </Description>
+            ) : (
+              <Description>
+                A new prompt will be created in the
+                <Link
+                  onClick={(event) => event.stopPropagation()}
+                  to="/$workspaceName/prompts"
+                  params={{ workspaceName }}
+                  target="_blank"
+                >
+                  <Button variant="link" size="sm" className="px-1">
+                    Prompt library
+                    <SquareArrowOutUpRight className="ml-1.5 mt-1 size-3.5 shrink-0" />
+                  </Button>
+                </Link>
+              </Description>
+            )}
           </div>
-          {isEdit ? (
-            <p className="comet-body-s whitespace-pre-wrap break-words pb-4 text-muted-slate">
-              Saving your changes to {selectedPrompt?.name ?? ""} will
-              automatically create a new commit. You can view previous versions
-              anytime in the
-              <Link
-                onClick={(event) => event.stopPropagation()}
-                to="/$workspaceName/prompts/$promptId"
-                params={{ workspaceName, promptId: promptId! }}
-                target="_blank"
-              >
-                <Button variant="link" size="sm">
-                  Prompt library
-                  <SquareArrowOutUpRight className="ml-1.5 mt-1 size-3.5 shrink-0" />
-                </Button>
-              </Link>
-            </p>
-          ) : (
-            <p className="comet-body-s pb-4 text-muted-slate">
-              A new prompt and first commit will be created in the
-              <Link
-                onClick={(event) => event.stopPropagation()}
-                to="/$workspaceName/prompts"
-                params={{ workspaceName }}
-                target="_blank"
-              >
-                <Button variant="link" size="sm">
-                  Prompt library
-                  <SquareArrowOutUpRight className="ml-1.5 mt-1 size-3.5 shrink-0" />
-                </Button>
-              </Link>
-            </p>
-          )}
+
           {isEdit ? (
             <div className="flex flex-col gap-2 pb-4">
               <Label htmlFor="promptMetadata">Commit message</Label>

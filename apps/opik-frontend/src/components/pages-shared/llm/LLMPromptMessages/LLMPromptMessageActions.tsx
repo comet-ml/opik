@@ -40,6 +40,8 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   const [open, setOpen] = useState<boolean | ConfirmType>(false);
   const selectedPromptIdRef = useRef<string | undefined>();
   const tempPromptIdRef = useRef<string | undefined>();
+  const isPromptSelectBoxOpenedRef = useRef<boolean>(false);
+  const isPromptSaveWarningRef = useRef<boolean>(false);
 
   const [datasetId] = useLocalStorageState<string | null>(
     PLAYGROUND_SELECTED_DATASET_KEY,
@@ -93,16 +95,28 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
       message.content === promptData?.latest_version?.template);
 
   const saveDisabled = message.content === "";
-  const saveWarning =
+  const saveWarning = Boolean(
     !saveDisabled &&
-    promptId &&
-    promptData?.id === promptId &&
-    message.content !== promptData?.latest_version?.template;
+      promptId &&
+      promptData?.id === promptId &&
+      message.content !== promptData?.latest_version?.template,
+  );
+  isPromptSaveWarningRef.current = saveWarning;
   const saveTooltip = saveWarning
     ? !datasetId
       ? "This prompt version hasn't been saved"
       : "This prompt version hasn't been saved. Save it to link it to the experiment and make comparisons easier."
     : "Save changes";
+
+  const onPromptSelectBoxOpenChange = useCallback(
+    (open: boolean) => {
+      isPromptSelectBoxOpenedRef.current = open;
+      setIsHoldActionsVisible(
+        isPromptSelectBoxOpenedRef.current || isPromptSaveWarningRef.current,
+      );
+    },
+    [setIsHoldActionsVisible],
+  );
 
   const confirmConfig = useMemo(() => {
     const isReset = open === "reset";
@@ -120,6 +134,12 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
       confirmText: isReset ? "Reset prompt" : "Load prompt",
     };
   }, [handleUpdateExternalPromptId, open, resetHandler]);
+
+  // This effect is used to set the visibility of hold actions
+  // based on the prompt select box state and save warning
+  useEffect(() => {
+    setIsHoldActionsVisible(isPromptSelectBoxOpenedRef.current || saveWarning);
+  }, [saveWarning, setIsHoldActionsVisible]);
 
   // This effect is used to set the template and promptVersionId after it is loaded,
   // after it was set in handleUpdateExternalPromptId function
@@ -154,7 +174,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
               }
             }
           }}
-          onOpenChange={setIsHoldActionsVisible}
+          onOpenChange={onPromptSelectBoxOpenChange}
         />
       </div>
       <TooltipWrapper content="Discard changes">
@@ -176,7 +196,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           variant="outline"
           size="icon-sm"
           disabled={saveDisabled}
-          badge={Boolean(saveWarning)}
+          badge={saveWarning}
           onClick={() => {
             resetKeyRef.current = resetKeyRef.current + 1;
             setOpen("save");
