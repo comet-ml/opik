@@ -8,6 +8,7 @@ from opik.evaluation import evaluator as opik_evaluator
 
 logger = logging.getLogger(__name__)
 
+
 def evaluate(
     dataset: opik.Dataset,
     evaluated_task: Callable[[Dict[str, Any]], Dict[str, Any]],

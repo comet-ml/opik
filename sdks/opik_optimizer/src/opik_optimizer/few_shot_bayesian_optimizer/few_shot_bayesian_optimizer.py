@@ -1,26 +1,23 @@
+import json
+import logging
 import random
-from typing import Any, Dict, List, Tuple, Union, Optional, Literal
+from datetime import datetime
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+
+import litellm
 import opik
 import optuna
 import optuna.samplers
-import logging
-import json
-from datetime import datetime
-
 from opik import Dataset
-from opik_optimizer.optimization_config import mappers
-
-from opik_optimizer.optimization_config.configs import TaskConfig, MetricConfig
-from opik_optimizer import base_optimizer
-
-from . import prompt_parameter
-from . import prompt_templates
-from .. import _throttle
-from .. import optimization_result, task_evaluator
-
-import litellm
-
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
+
+from opik_optimizer import base_optimizer
+from opik_optimizer.optimization_config import mappers
+from opik_optimizer.optimization_config.configs import MetricConfig, TaskConfig
+
+from .. import _throttle, optimization_result, task_evaluator
+from ..optimization_config import chat_prompt
+from . import prompt_parameter, prompt_templates
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -103,9 +100,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
     def _optimize_prompt(
         self,
-        dataset: Union[str, Dataset],
+        dataset: Dataset,
         metric_config: MetricConfig,
-        task_config: TaskConfig,
+        task_config: TaskConfig = None,
+        prompt: chat_prompt.ChatPrompt = None,
         n_trials: int = 10,
         optimization_id: Optional[str] = None,
         experiment_config: Optional[Dict] = None,
@@ -113,6 +111,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     ) -> optimization_result.OptimizationResult:
         random.seed(self.seed)
         self.llm_call_counter = 0
+
+        if not prompt and not task_config:
+            raise ValueError(
+                "A `task_config` or `prompt` must be provided"
+            )
 
         if not task_config.use_chat_prompt:
             raise ValueError(
@@ -122,12 +125,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         opik_dataset: opik.Dataset = dataset
 
         # Load the dataset
-        if isinstance(dataset, str):
-            opik_dataset = self._opik_client.get_dataset(dataset)
-            dataset_items = opik_dataset.get_items()
-        else:
-            opik_dataset = dataset
-            dataset_items = opik_dataset.get_items()
+        opik_dataset = dataset
+        dataset_items = opik_dataset.get_items()
 
         experiment_config = experiment_config or {}
         base_experiment_config = {  # Base config for reuse
@@ -142,7 +141,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         # Evaluate Initial (Zero-Shot) Prompt
         logger.info("Evaluating initial (zero-shot) prompt...")
-        initial_instruction = task_config.instruction_prompt
+        # initial_instruction = task_config.instruction_prompt
         zero_shot_param = prompt_parameter.ChatPromptParameter(
             name="zero_shot_prompt",
             instruction=initial_instruction,
@@ -352,13 +351,19 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
     def optimize_prompt(
         self,
-        dataset: Union[str, Dataset],
+        dataset: Dataset,
         metric_config: MetricConfig,
-        task_config: TaskConfig,
+        task_config: TaskConfig = None,
+        prompt: chat_prompt.ChatPrompt = None,
         n_trials: int = 10,
         experiment_config: Optional[Dict] = None,
         n_samples: int = None,
     ) -> optimization_result.OptimizationResult:
+        if not prompt and not task_config:
+            raise ValueError(
+                "A `task_config` or `prompt` must be provided"
+            )
+        
         optimization = None
         try:
             optimization = self._opik_client.create_optimization(
@@ -378,6 +383,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 dataset=dataset,
                 metric_config=metric_config,
                 task_config=task_config,
+                prompt=prompt,
                 n_trials=n_trials,
                 experiment_config=experiment_config,
                 n_samples=n_samples,

@@ -1,16 +1,10 @@
 """Utility functions and constants for the optimizer package."""
 
-import opik
 import logging
 import random
 import string
-from opik.api_objects.opik_client import Opik
+from typing import Any
 
-from typing import List, Dict, Any, Optional, Callable, TYPE_CHECKING
-
-# Type hint for OptimizationResult without circular import
-if TYPE_CHECKING:
-    from .optimization_result import OptimizationResult
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +69,7 @@ def get_random_seed() -> int:
     import random
 
     return random.randint(0, 2**32 - 1)
+
 
 def random_chars(n: int) -> str:
     return "".join(random.choice(string.ascii_letters) for _ in range(n))
