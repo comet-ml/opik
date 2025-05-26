@@ -19,6 +19,7 @@ import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Description } from "@/components/ui/description";
 import { Button } from "@/components/ui/button";
 import {
   Accordion,
@@ -31,7 +32,7 @@ import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/Pro
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
-import { PromptWithLatestVersion } from "@/types/prompts";
+import { PromptVersion, PromptWithLatestVersion } from "@/types/prompts";
 import usePromptById from "@/api/prompts/usePromptById";
 import usePromptCreateMutation from "@/api/prompts/usePromptCreateMutation";
 
@@ -46,7 +47,7 @@ type AddNewPromptVersionDialogProps = {
   setOpen: (open: boolean) => void;
   prompt?: PromptWithLatestVersion;
   template: string;
-  onSave: (promptId: string) => void;
+  onSave: (version: PromptVersion) => void;
 };
 
 const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
@@ -112,7 +113,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           template,
           changeDescription,
           ...(metadata && { metadata: safelyParseJSON(metadata) }),
-          onSuccess: (data) => onSave(data.prompt_id),
+          onSuccess: (data) => onSave(data),
         });
 
         setOpen(false);
@@ -126,8 +127,13 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
             ...(metadata && { metadata: safelyParseJSON(metadata) }),
             ...(description && { description }),
           },
+          withResponse: true,
         },
-        { onSuccess: (data) => onSave(data?.id) },
+        {
+          onSuccess: (data?: PromptWithLatestVersion) => {
+            if (data?.latest_version) onSave(data.latest_version);
+          },
+        },
       );
       setOpen(false);
     }
@@ -149,40 +155,41 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
               refetchOnMount={true}
               asNewOption={true}
             />
+            {isEdit ? (
+              <Description>
+                Saving your changes to {selectedPrompt?.name ?? ""} will
+                automatically create a new commit. You can view previous
+                versions anytime in the
+                <Link
+                  onClick={(event) => event.stopPropagation()}
+                  to="/$workspaceName/prompts/$promptId"
+                  params={{ workspaceName, promptId: promptId! }}
+                  target="_blank"
+                >
+                  <Button variant="link" size="sm" className="px-1">
+                    Prompt library
+                    <SquareArrowOutUpRight className="ml-1.5 mt-1 size-3.5 shrink-0" />
+                  </Button>
+                </Link>
+              </Description>
+            ) : (
+              <Description>
+                A new prompt will be created in the
+                <Link
+                  onClick={(event) => event.stopPropagation()}
+                  to="/$workspaceName/prompts"
+                  params={{ workspaceName }}
+                  target="_blank"
+                >
+                  <Button variant="link" size="sm" className="px-1">
+                    Prompt library
+                    <SquareArrowOutUpRight className="ml-1.5 mt-1 size-3.5 shrink-0" />
+                  </Button>
+                </Link>
+              </Description>
+            )}
           </div>
-          {isEdit ? (
-            <p className="comet-body-s whitespace-pre-wrap break-words pb-4 text-muted-slate">
-              Saving your changes to {selectedPrompt?.name ?? ""} will
-              automatically create a new commit. You can view previous versions
-              anytime in the
-              <Link
-                onClick={(event) => event.stopPropagation()}
-                to="/$workspaceName/prompts/$promptId"
-                params={{ workspaceName, promptId: promptId! }}
-                target="_blank"
-              >
-                <Button variant="link" size="sm">
-                  Prompt library
-                  <SquareArrowOutUpRight className="ml-1.5 mt-1 size-3.5 shrink-0" />
-                </Button>
-              </Link>
-            </p>
-          ) : (
-            <p className="comet-body-s pb-4 text-muted-slate">
-              A new prompt and first commit will be created in the
-              <Link
-                onClick={(event) => event.stopPropagation()}
-                to="/$workspaceName/prompts"
-                params={{ workspaceName }}
-                target="_blank"
-              >
-                <Button variant="link" size="sm">
-                  Prompt library
-                  <SquareArrowOutUpRight className="ml-1.5 mt-1 size-3.5 shrink-0" />
-                </Button>
-              </Link>
-            </p>
-          )}
+
           {isEdit ? (
             <div className="flex flex-col gap-2 pb-4">
               <Label htmlFor="promptMetadata">Commit message</Label>
