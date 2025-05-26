@@ -941,7 +941,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                                         "output": score_result.ScoreResult(
                                             name="equals_metric",
                                             value=1.0,
-                                        ),
+                                        ).__dict__,
                                     },
                                     start_time=ANY_BUT_NONE,
                                     end_time=ANY_BUT_NONE,
@@ -961,7 +961,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                                         "output": score_result.ScoreResult(
                                             name="contains_metric",
                                             value=1.0,
-                                        ),
+                                        ).__dict__,
                                     },
                                     start_time=ANY_BUT_NONE,
                                     end_time=ANY_BUT_NONE,
@@ -972,7 +972,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                 ),
             ],
             feedback_scores=[
-                # both contains and equals metrics will add to aggregated result
+                # both contains and equals metrics will add to an aggregated result
                 FeedbackScoreModel(
                     id=ANY_BUT_NONE,
                     name="aggregated_metric_result",
@@ -1051,7 +1051,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                                         "output": score_result.ScoreResult(
                                             name="equals_metric",
                                             value=0.0,
-                                        ),
+                                        ).__dict__,
                                     },
                                     start_time=ANY_BUT_NONE,
                                     end_time=ANY_BUT_NONE,
@@ -1071,7 +1071,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                                         "output": score_result.ScoreResult(
                                             name="contains_metric",
                                             value=1.0,
-                                        ),
+                                        ).__dict__,
                                     },
                                     start_time=ANY_BUT_NONE,
                                     end_time=ANY_BUT_NONE,
@@ -1082,7 +1082,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                 ),
             ],
             feedback_scores=[
-                # only contains metric will add to aggregated result
+                # only contains metric will add to an aggregated result
                 FeedbackScoreModel(
                     id=ANY_BUT_NONE,
                     name="aggregated_metric_result",

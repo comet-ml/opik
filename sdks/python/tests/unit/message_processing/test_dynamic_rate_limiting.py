@@ -25,7 +25,9 @@ def steamer_with_mock_message_processor():
     streamer.close(None)
 
 
-def test_dynamic_rate_limiting(steamer_with_mock_message_processor):
+def test_dynamic_rate_limiting__check_queue_messages_are_put_back(
+    steamer_with_mock_message_processor,
+):
     streamer, mock_message_processor = steamer_with_mock_message_processor
 
     # to allow a few skipped loop iterations
@@ -54,7 +56,7 @@ def test_dynamic_rate_limiting(steamer_with_mock_message_processor):
     assert streamer.queue_size() == 0
 
 
-def test_dynamic_rate_limiting__check_queue_size_bounded(
+def test_dynamic_rate_limiting__check_queue_size_is_bounded_by_max_queue_size(
     steamer_with_mock_message_processor,
 ):
     streamer, mock_message_processor = steamer_with_mock_message_processor

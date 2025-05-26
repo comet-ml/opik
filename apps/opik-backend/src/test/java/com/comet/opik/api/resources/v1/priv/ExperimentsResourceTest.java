@@ -7,6 +7,8 @@ import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentItemBulkRecord;
+import com.comet.opik.api.ExperimentItemBulkUpload;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
@@ -105,12 +107,14 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -166,6 +170,9 @@ class ExperimentsResourceTest {
             "lastUpdatedBy", "comments"};
     public static final String[] ITEM_IGNORED_FIELDS = {"input", "output", "feedbackScores", "createdAt",
             "lastUpdatedAt", "createdBy", "lastUpdatedBy", "comments"};
+
+    public static final String[] EXPERIMENT_ITEMS_IGNORED_FIELDS = {"id", "experimentId", "createdAt", "lastUpdatedAt",
+            "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt"};
 
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
@@ -3772,5 +3779,323 @@ class ExperimentsResourceTest {
 
     private String getExperimentItemsPath() {
         return URL_TEMPLATE.formatted(baseURI) + ITEMS_PATH;
+    }
+
+    @Nested
+    @DisplayName("Bulk Upload:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class BulkUpload {
+
+        @Test
+        void experimentItemsBulk__whenProcessingValidBatch__thenReturnNoContent() {
+            // given
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    TEST_WORKSPACE,
+                    API_KEY);
+
+            // Create a bulk upload request with a single item
+            var trace = createTrace();
+
+            var span = creatrSpan();
+
+            var feedbackScore = createScore();
+
+            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, trace, feedbackScore);
+
+            var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+            var bulkRecord = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem.id())
+                    .trace(trace)
+                    .spans(List.of(span))
+                    .feedbackScores(List.of(feedbackScore))
+                    .build();
+
+            var bulkUpload = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(dataset.name())
+                    .items(List.of(bulkRecord))
+                    .build();
+
+            // when
+            experimentResourceClient.bulkUploadExperimentItem(bulkUpload, API_KEY, TEST_WORKSPACE);
+
+            // then
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+
+            assertItems(actualExperimentItems, expectedItems, EXPERIMENT_ITEMS_IGNORED_FIELDS);
+        }
+
+        private List<ExperimentItem> getExpectedItem(DatasetItem datasetItem, Trace trace,
+                FeedbackScore feedbackScore) {
+            return List.of(
+                    ExperimentItem.builder()
+                            .datasetItemId(datasetItem.id())
+                            .traceId(Optional.ofNullable(trace).map(Trace::id).orElse(null))
+                            .duration(Optional.ofNullable(trace)
+                                    .map(t -> DurationUtils.getDurationInMillisWithSubMilliPrecision(t.startTime(),
+                                            t.endTime()))
+                                    .orElse(0.0))
+                            .input(Optional.ofNullable(trace).map(Trace::input).orElse(null))
+                            .output(Optional.ofNullable(trace).map(Trace::output).orElse(null))
+                            .feedbackScores(List.of(feedbackScore))
+                            .createdAt(Optional.ofNullable(trace).map(Trace::createdAt).orElse(null))
+                            .lastUpdatedAt(Optional.ofNullable(trace).map(Trace::lastUpdatedAt).orElse(null))
+                            .createdBy(USER)
+                            .lastUpdatedBy(USER)
+                            .build());
+        }
+
+        private FeedbackScore createScore() {
+            return podamFactory.manufacturePojo(FeedbackScore.class).toBuilder()
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+        }
+
+        private Span creatrSpan() {
+            return podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .id(podamFactory.manufacturePojo(UUID.class))
+                    .startTime(Instant.now())
+                    .endTime(Instant.now().plusSeconds(1))
+                    .usage(null)
+                    .totalEstimatedCost(null)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+        }
+
+        private Trace createTrace() {
+            return podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .id(podamFactory.manufacturePojo(UUID.class))
+                    .startTime(Instant.now())
+                    .endTime(Instant.now().plusSeconds(1))
+                    .usage(null)
+                    .totalEstimatedCost(null)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+        }
+
+        @Test
+        void experimentItemsBulk__whenProcessingBatchWithNoTraceButWithFeedbackScores__thenReturnNoContent() {
+            // given
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    TEST_WORKSPACE,
+                    API_KEY);
+
+            // Create a bulk upload request with a single item
+
+            var feedbackScore = createScore();
+
+            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, null, feedbackScore);
+
+            var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+            var bulkItemRecord = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem.id())
+                    .feedbackScores(List.of(feedbackScore))
+                    .build();
+
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(dataset.name())
+                    .items(List.of(bulkItemRecord))
+                    .build();
+
+            // when
+            experimentResourceClient.bulkUploadExperimentItem(bulkUploadRequest, API_KEY, TEST_WORKSPACE);
+
+            // then
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+
+            String[] ignoringFields = Stream
+                    .concat(Arrays.stream(EXPERIMENT_ITEMS_IGNORED_FIELDS), Stream.of("traceId"))
+                    .toArray(String[]::new);
+
+            assertItems(actualExperimentItems, expectedItems, ignoringFields);
+        }
+
+        private void assertItems(List<ExperimentItem> actual, List<ExperimentItem> expected, String[] ignoringFields) {
+            assertThat(actual).hasSize(expected.size());
+
+            assertThat(actual)
+                    .usingRecursiveComparison()
+                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                    .ignoringCollectionOrder()
+                    .ignoringFields(ignoringFields)
+                    .isEqualTo(expected);
+
+            if (ignoringFields != null && Set.of(ignoringFields).contains("traceId")) {
+                assertThat(actual.getFirst().traceId()).isNotNull();
+            }
+        }
+
+        @Test
+        void experimentItemsBulk__whenProcessingBatchWithExceedLimit__thenReturnBadRequest() {
+            // given
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    TEST_WORKSPACE,
+                    API_KEY);
+
+            // Create a large string that will cause the request to exceed the max size
+            // Each item will have a large input and output to exceed the 4MB limit
+            String largeString = generateLargeString(1024 * 1024); // 1MB string
+
+            // Create multiple items with large inputs and outputs
+            List<ExperimentItemBulkRecord> items = PodamFactoryUtils.manufacturePojoList(podamFactory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .id(null)
+                            .startTime(Instant.now())
+                            .endTime(Instant.now().plusSeconds(1))
+                            .input(JsonUtils.readTree("{\"text\": \"" + largeString + "\"}"))
+                            .output(JsonUtils.readTree("{\"text\": \"" + largeString + "\"}"))
+                            .build())
+                    .map(trace -> ExperimentItemBulkRecord.builder()
+                            .datasetItemId(datasetItem.id())
+                            .trace(trace)
+                            .build())
+                    .toList();
+            // 5 items with large data should exceed 4MB
+
+            var bulkUpload = ExperimentItemBulkUpload.builder()
+                    .experimentName("Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(8))
+                    .datasetName(dataset.name())
+                    .items(items)
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUpload, API_KEY,
+                    TEST_WORKSPACE)) {
+
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var errorMessage = response.readEntity(com.comet.opik.api.error.ErrorMessage.class);
+
+                assertThat(errorMessage.errors())
+                        .contains("The request body Request size exceeds the maximum allowed size of 4MB");
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void experimentItemsBulk__whenProcessingBatchWithEmptyItems__thenReturnBadRequest(ExperimentItemBulkUpload bulk,
+                String expectedErrorMessage) {
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulk, API_KEY, TEST_WORKSPACE)) {
+
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var errorMessage = response.readEntity(com.comet.opik.api.error.ErrorMessage.class);
+
+                assertThat(errorMessage.errors()).contains(expectedErrorMessage);
+            }
+        }
+
+        Stream<Arguments> experimentItemsBulk__whenProcessingBatchWithEmptyItems__thenReturnBadRequest() {
+            return Stream.of(
+                    arguments(
+                            ExperimentItemBulkUpload.builder()
+                                    .experimentName("Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(8))
+                                    .datasetName("Test Dataset")
+                                    .items(null)
+                                    .build(),
+                            "items must not be null"),
+                    arguments(
+                            ExperimentItemBulkUpload.builder()
+                                    .experimentName("Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(8))
+                                    .datasetName("Test Dataset")
+                                    .items(List.of())
+                                    .build(),
+                            "items size must be between 1 and 250"));
+        }
+
+        @Test
+        void experimentItemsBulk__whenProcessingBatchSizeIsHigherThanLimit__thenReturnBadRequest() {
+            // given
+            var bulkUpload = ExperimentItemBulkUpload.builder()
+                    .experimentName("Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(8))
+                    .datasetName("Test Dataset")
+                    .items(IntStream.range(0, 251)
+                            .mapToObj(i -> ExperimentItemBulkRecord.builder()
+                                    .datasetItemId(UUID.randomUUID())
+                                    .trace(Trace.builder()
+                                            .id(UUID.randomUUID())
+                                            .startTime(Instant.now())
+                                            .endTime(Instant.now().plusSeconds(1))
+                                            .build())
+                                    .build())
+                            .toList())
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUpload, API_KEY,
+                    TEST_WORKSPACE)) {
+
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var errorMessage = response.readEntity(com.comet.opik.api.error.ErrorMessage.class);
+
+                assertThat(errorMessage.errors()).contains("items size must be between 1 and 250");
+            }
+        }
+
+        @Test
+        void experimentItemsBulk__whenProcessingBatchHasSpansAndNoTrace__thenReturnBadRequest() {
+            // given
+            var bulkUpload = ExperimentItemBulkUpload.builder()
+                    .experimentName("Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(8))
+                    .datasetName("Test Dataset")
+                    .items(List.of(ExperimentItemBulkRecord.builder()
+                            .datasetItemId(UUID.randomUUID())
+                            .trace(null)
+                            .spans(List.of(Span.builder()
+                                    .id(UUID.randomUUID())
+                                    .traceId(UUID.randomUUID())
+                                    .startTime(Instant.now())
+                                    .endTime(Instant.now().plusSeconds(1))
+                                    .name(UUID.randomUUID().toString())
+                                    .type(SpanType.llm)
+                                    .build()))
+                            .build()))
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUpload, API_KEY,
+                    TEST_WORKSPACE)) {
+
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                var errorMessage = response.readEntity(ErrorMessage.class);
+
+                assertThat(errorMessage.getMessage()).contains("Trace is required when spans are provided");
+            }
+        }
+
+        private String generateLargeString(int size) {
+            return "a".repeat(Math.max(0, size));
+        }
     }
 }

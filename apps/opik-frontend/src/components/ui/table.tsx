@@ -43,7 +43,7 @@ const TableFooter = React.forwardRef<
   <tfoot
     ref={ref}
     className={cn(
-      "border-t bg-destructive-foreground font-medium [&>tr]:last:border-b-0",
+      "border-t bg-primary-foreground font-medium [&>tr]:last:border-b-0",
       className,
     )}
     {...props}
@@ -88,7 +88,7 @@ const TableCell = React.forwardRef<
   <td
     ref={ref}
     className={cn(
-      "comet-fix-cell-height relative p-0 align-middle [&:has([role=checkbox])]:pr-0 [&:first-child_[data-cell-wrapper=true]]:pl-5 [&:last-child_[data-cell-wrapper=true]]:pr-5 group-hover/row:bg-destructive-foreground",
+      "comet-fix-cell-height relative p-0 align-middle [&:has([role=checkbox])]:pr-0 [&:first-child_[data-cell-wrapper=true]]:pl-5 [&:last-child_[data-cell-wrapper=true]]:pr-5 group-hover/row:bg-primary-foreground",
       className,
     )}
     {...props}
