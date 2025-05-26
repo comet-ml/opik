@@ -66,6 +66,7 @@ const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
       generateDefaultLLMPromptMessage({
         content: prompt?.latest_version?.template ?? "",
         promptId: prompt?.id,
+        promptVersionId: prompt?.latest_version?.id,
       }),
     ];
 
