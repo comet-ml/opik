@@ -24,6 +24,7 @@ import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
 import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
+import com.comet.opik.infrastructure.servlet.PrometheusMetricsServlet;
 import com.comet.opik.infrastructure.usagelimit.UsageLimitModule;
 import com.comet.opik.utils.JsonBigDecimalDeserializer;
 import com.comet.opik.utils.OpenAiMessageJsonDeserializer;
@@ -38,6 +39,8 @@ import io.dropwizard.configuration.SubstitutingSourceProvider;
 import io.dropwizard.core.Application;
 import io.dropwizard.core.setup.Bootstrap;
 import io.dropwizard.core.setup.Environment;
+import io.prometheus.client.CollectorRegistry;
+import io.prometheus.client.dropwizard.DropwizardExports;
 import org.glassfish.jersey.server.ServerProperties;
 import org.jdbi.v3.jackson2.Jackson2Plugin;
 import org.jdbi.v3.sqlobject.SqlObjectPlugin;
@@ -112,5 +115,11 @@ public class OpikApplication extends Application<OpikConfiguration> {
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);
 
         jersey.register(JsonProcessingExceptionMapper.class);
+
+        // Register Dropwizard metrics
+        CollectorRegistry prometheusRegistry = CollectorRegistry.defaultRegistry;
+        prometheusRegistry.register(new DropwizardExports(environment.metrics()));
+        environment.servlets().addServlet("prometheusMetrics", new PrometheusMetricsServlet(prometheusRegistry))
+                .addMapping("/metrics");
     }
 }
