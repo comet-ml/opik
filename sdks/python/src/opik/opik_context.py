@@ -10,7 +10,7 @@ from . import context_storage, exceptions
 
 def get_current_span_data() -> Optional[span.SpanData]:
     """
-    Returns current span created by track() decorator or None if no span was found.
+    Returns the current span created by track() decorator or None if no span was found.
     """
     span_data = context_storage.top_span_data()
     if span_data is None:
@@ -21,7 +21,7 @@ def get_current_span_data() -> Optional[span.SpanData]:
 
 def get_current_trace_data() -> Optional[trace.TraceData]:
     """
-    Returns current trace created by track() decorator or None if no trace was found.
+    Returns the current trace created by track() decorator or None if no trace was found.
     """
     trace_data = context_storage.get_trace_data()
     if trace_data is None:
@@ -32,7 +32,7 @@ def get_current_trace_data() -> Optional[trace.TraceData]:
 
 def get_distributed_trace_headers() -> DistributedTraceHeadersDict:
     """
-    Returns headers dictionary to be passed into tracked function on remote node.
+    Returns headers' dictionary to be passed into tracked function on remote node.
     Requires an existing span in the context, otherwise raises an error.
     """
     current_span_data = context_storage.top_span_data()

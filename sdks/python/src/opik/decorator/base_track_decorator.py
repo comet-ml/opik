@@ -524,7 +524,7 @@ def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
     from the current context, returns popped objects.
 
     Decorator can't attach any child objects to the popped ones because
-    they are no longer in context stack.
+    they are no longer in the context stack.
     """
     span_data_to_end = context_storage.pop_span_data()
     assert (
