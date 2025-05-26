@@ -100,6 +100,9 @@ from .types import (
     ErrorMessagePublic,
     Experiment,
     ExperimentItem,
+    ExperimentItemBulkRecord,
+    ExperimentItemBulkRecordWrite,
+    ExperimentItemBulkUpload,
     ExperimentItemCompare,
     ExperimentItemPublic,
     ExperimentPagePublic,
@@ -131,6 +134,8 @@ from .types import (
     FeedbackScorePublic,
     FeedbackScorePublicSource,
     FeedbackScoreSource,
+    FeedbackScoreWrite,
+    FeedbackScoreWriteSource,
     FeedbackUpdate,
     FeedbackUpdate_Categorical,
     FeedbackUpdate_Numerical,
@@ -192,6 +197,8 @@ from .types import (
     OptimizationPublic,
     OptimizationPublicStatus,
     OptimizationStatus,
+    OptimizationWrite,
+    OptimizationWriteStatus,
     PageColumns,
     PercentageValueStatPublic,
     PercentageValues,
@@ -314,7 +321,7 @@ from .environment import OpikApiEnvironment
 from .experiments import ExperimentWriteType
 from .feedback_definitions import FindFeedbackDefinitionsRequestType
 from .llm_provider_key import ProviderApiKeyWriteProvider
-from .optimizations import OptimizationUpdateStatus, OptimizationWriteStatus
+from .optimizations import OptimizationUpdateStatus
 from .projects import (
     ProjectMetricRequestPublicInterval,
     ProjectMetricRequestPublicMetricType,
@@ -434,6 +441,9 @@ __all__ = [
     "ErrorMessagePublic",
     "Experiment",
     "ExperimentItem",
+    "ExperimentItemBulkRecord",
+    "ExperimentItemBulkRecordWrite",
+    "ExperimentItemBulkUpload",
     "ExperimentItemCompare",
     "ExperimentItemPublic",
     "ExperimentPagePublic",
@@ -466,6 +476,8 @@ __all__ = [
     "FeedbackScorePublic",
     "FeedbackScorePublicSource",
     "FeedbackScoreSource",
+    "FeedbackScoreWrite",
+    "FeedbackScoreWriteSource",
     "FeedbackUpdate",
     "FeedbackUpdate_Categorical",
     "FeedbackUpdate_Numerical",
@@ -537,6 +549,7 @@ __all__ = [
     "OptimizationPublicStatus",
     "OptimizationStatus",
     "OptimizationUpdateStatus",
+    "OptimizationWrite",
     "OptimizationWriteStatus",
     "PageColumns",
     "PercentageValueStatPublic",
