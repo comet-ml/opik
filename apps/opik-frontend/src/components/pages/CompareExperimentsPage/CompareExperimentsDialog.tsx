@@ -124,7 +124,7 @@ const CompareExperimentsDialog: React.FC<CompareExperimentsDialogProps> = ({
             placeholder="Search by name"
           ></SearchInput>
           <Alert className="mt-4">
-            <MessageCircleWarning className="size-4" />
+            <MessageCircleWarning />
             <AlertDescription>
               Only experiments using the same dataset as the baseline can be
               added to compare.
