@@ -23,6 +23,7 @@ class ProjectDetailed(UniversalBaseModel):
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAverageDetailed]] = None
     duration: typing.Optional[PercentageValuesDetailed] = None
     total_estimated_cost: typing.Optional[float] = None
+    total_estimated_cost_sum: typing.Optional[float] = None
     usage: typing.Optional[typing.Dict[str, float]] = None
     trace_count: typing.Optional[int] = None
     guardrails_failed_count: typing.Optional[int] = None

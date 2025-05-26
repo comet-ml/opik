@@ -19,6 +19,10 @@ export const ProjectStatsSummaryItem: core.serialization.ObjectSchema<
     ),
     duration: PercentageValues.optional(),
     totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
+    totalEstimatedCostSum: core.serialization.property(
+        "total_estimated_cost_sum",
+        core.serialization.number().optional(),
+    ),
     usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
     traceCount: core.serialization.property("trace_count", core.serialization.number().optional()),
     guardrailsFailedCount: core.serialization.property(
@@ -33,6 +37,7 @@ export declare namespace ProjectStatsSummaryItem {
         feedback_scores?: FeedbackScoreAverage.Raw[] | null;
         duration?: PercentageValues.Raw | null;
         total_estimated_cost?: number | null;
+        total_estimated_cost_sum?: number | null;
         usage?: Record<string, number> | null;
         trace_count?: number | null;
         guardrails_failed_count?: number | null;

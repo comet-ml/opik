@@ -1,0 +1,147 @@
+# Contributing to the Agent Optimizer SDK
+
+<Warning>
+  The Agent Optimizer SDK is currently in public preview. Some features, including tests and benchmarks, might be broken
+  or not working as expected. We're actively working on improving stability and reliability.
+</Warning>
+
+This guide will help you get started with contributing to the Agent Optimizer SDK, our tool for optimizing prompts and improving model performance.
+
+Before you start, please review our general [Contribution Overview](/contributing/overview) and the [Contributor License Agreement (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md).
+
+## Project Structure
+
+The Agent Optimizer is located in the `sdks/opik_optimizer` directory. Here's an overview of the key components:
+
+- `src/`: Main source code
+- `benchmarks/`: Benchmarking tools and results
+- `notebooks/`: Example notebooks and tutorials
+- `tests/`: Test files
+- `docs/`: Additional documentation
+- `scripts/`: Utility scripts
+- `setup.py`: Package configuration
+- `requirements.txt`: Python dependencies
+
+## Setup
+
+<Steps>
+  <Step title="Create virtual environment">
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    ```
+  </Step>
+  <Step title="Install dependencies">
+    ```bash
+    cd sdks/opik_optimizer
+    pip install -r requirements.txt
+    pip install -e .
+    ```
+  </Step>
+  <Step title="Run tests">
+    ```bash
+    pytest tests/
+    ```
+
+    Note: The tests are still in development and therefore likely to be unstable.
+
+  </Step>
+</Steps>
+
+## Development Workflow
+
+<Steps>
+  <Step title="Create branch">Create a new branch for your changes</Step>
+  <Step title="Make changes">Make your changes</Step>
+  <Step title="Add tests">Add tests for new functionality</Step>
+  <Step title="Run tests">Run the test suite</Step>
+  <Step title="Run benchmarks">Run benchmarks if applicable</Step>
+  <Step title="Submit PR">Submit a pull request</Step>
+</Steps>
+
+## Testing
+
+We use pytest for testing. When adding new features:
+
+<Steps>
+  <Step title="Write unit tests">Write unit tests in the `tests/` directory</Step>
+  <Step title="Run tests">Ensure all tests pass with `pytest tests/`</Step>
+</Steps>
+
+## Benchmarking
+
+<Warning>
+  The benchmarking tools are still in development. Results may vary and some features might not work as expected.
+</Warning>
+
+The optimizer includes benchmarking tools to measure performance improvements:
+
+<Steps>
+  <Step title="Run benchmarks">```bash cd benchmarks python run_benchmark.py ```</Step>
+  <Step title="View results">View results in the `benchmark_results/` directory</Step>
+  <Step title="Add benchmarks">Add new benchmarks for new optimization strategies</Step>
+</Steps>
+
+## Documentation
+
+When adding new features or making changes:
+
+<Steps>
+  <Step title="Update README">Update the README.md</Step>
+  <Step title="Add docstrings">Add docstrings for new functions and classes</Step>
+  <Step title="Add examples">Include examples in the `notebooks/` directory</Step>
+  <Step title="Update docs">
+    Update the main documentation if necessary. See the [Documentation Guide](documentation) for details.
+  </Step>
+</Steps>
+
+## Code Style
+
+We follow PEP 8 guidelines. Before submitting a PR:
+
+<Steps>
+  <Step title="Run linter">Run `flake8` to check for style issues</Step>
+  <Step title="Fix issues">Fix any linting errors</Step>
+  <Step title="Check style">Ensure your code follows Python best practices</Step>
+</Steps>
+
+## Pull Request Process
+
+<Steps>
+  <Step title="Fork repository">Fork the repository</Step>
+  <Step title="Create branch">Create your feature branch</Step>
+  <Step title="Make changes">Make your changes</Step>
+  <Step title="Run checks">Run tests and benchmarks</Step>
+  <Step title="Submit PR">Submit a pull request</Step>
+</Steps>
+
+Your PR should:
+
+- Have a clear description of the changes
+- Include tests for new functionality
+- Pass all CI checks
+- Follow the project's coding standards
+- Include benchmark results if applicable
+
+## Notebooks and Examples
+
+The `notebooks/` directory contains examples and tutorials. When adding new features:
+
+<Steps>
+  <Step title="Create notebook">Create a new notebook demonstrating the feature</Step>
+  <Step title="Add explanations">Include clear explanations and comments</Step>
+  <Step title="Show usage">Show both basic and advanced usage</Step>
+  <Step title="Add comparisons">Add performance comparisons if relevant</Step>
+</Steps>
+
+## Need Help?
+
+If you need help or have questions:
+
+- Open an issue on GitHub
+- Join our [Comet Chat](https://chat.comet.com) community
+- Check the existing documentation and notebooks
+
+---
+
+_Remember to review our [Contributor License Agreement (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md) before contributing._

@@ -111,6 +111,20 @@ class Opik:
         """
         return self._config.model_copy()
 
+    @property
+    def rest_client(self) -> rest_api_client.OpikApi:
+        """
+        Provides direct access to the underlying REST API client.
+
+        WARNING: This client is not guaranteed to be backward compatible with future SDK versions.
+        While it provides a convenient way to use the current REST API of Opik.
+        However, it's not considered safe to heavily rely on its API as Opik's REST API contracts may change.
+
+        Returns:
+            OpikApi: The REST client used by the Opik client.
+        """
+        return self._rest_client
+
     def _initialize_streamer(
         self,
         url_override: str,
