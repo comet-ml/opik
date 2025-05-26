@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.domain.SpanType;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -27,6 +28,7 @@ public record SpanUpdate(
         @NotNull UUID traceId,
         UUID parentSpanId,
         String name,
+        SpanType type,
         Instant endTime,
         @Schema(implementation = JsonListString.class) JsonNode input,
         @Schema(implementation = JsonListString.class) JsonNode output,

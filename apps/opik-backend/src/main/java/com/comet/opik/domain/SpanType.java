@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import java.util.Arrays;
-import java.util.Optional;
 
 public enum SpanType {
     general,
@@ -10,17 +9,15 @@ public enum SpanType {
     guardrail,
     ;
 
+    /**
+     * Not defining a span type equivalent to this value, to prevent ingestion.
+     */
+    public static final String UNKNOWN_VALUE = "unknown";
+
     public static SpanType fromString(String value) {
-        Optional<SpanType> type = Arrays.stream(SpanType.values())
-                .filter(v -> v.name().equalsIgnoreCase(value))
-                .findFirst();
-
-        if (type.isPresent()) {
-            return type.get();
-        } else if ("unknown".equalsIgnoreCase(value)) {
-            return null;
-        }
-
-        throw new IllegalArgumentException("Invalid SpanType: " + value);
+        return Arrays.stream(SpanType.values())
+                .filter(spanType -> spanType.name().equalsIgnoreCase(value))
+                .findFirst()
+                .orElse(null);
     }
 }

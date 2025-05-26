@@ -41,7 +41,7 @@ public record Span(
         @JsonView({Span.View.Public.class, Span.View.Write.class,
                 ExperimentItemBulkUpload.View.Write.class}) String name,
         @JsonView({Span.View.Public.class, Span.View.Write.class,
-                ExperimentItemBulkUpload.View.Write.class}) @NotNull SpanType type,
+                ExperimentItemBulkUpload.View.Write.class}) SpanType type,
         @JsonView({Span.View.Public.class, Span.View.Write.class,
                 ExperimentItemBulkUpload.View.Write.class}) @NotNull Instant startTime,
         @JsonView({Span.View.Public.class, Span.View.Write.class,
