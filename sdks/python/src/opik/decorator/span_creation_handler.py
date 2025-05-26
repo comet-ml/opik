@@ -34,7 +34,7 @@ def create_span_for_current_context(
         #
         # NOTE: We can have a situation when span data is in context, but there is no trace data
         # because we are in a distributed environment and trace data was created in another thread.
-        # See:
+        # See: https://github.com/comet-ml/opik/pull/2244
         if current_trace_data is None:
             show_warning = False
         else:
