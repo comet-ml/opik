@@ -1,8 +1,15 @@
 import logging
 from functools import wraps
-from typing import Any, Callable, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Tuple, Union, TYPE_CHECKING
+
+from google.adk import models as adk_models
 
 from ... import LLMProvider
+
+if TYPE_CHECKING:
+    import litellm
+else:
+    litellm = None
 
 LOGGER = logging.Logger(__name__)
 
@@ -24,7 +31,7 @@ def parse_provider_and_model(
 
 def generate_content_response_decorator(func: Callable) -> Callable:
     @wraps(func)
-    def wrapper(*args: Any, **kwargs: Any):
+    def wrapper(*args: Any, **kwargs: Any) -> adk_models.LlmResponse:
         """
         This wrapper puts token usage data into custom metadata to use it later
         """
@@ -49,7 +56,7 @@ def generate_content_response_decorator(func: Callable) -> Callable:
 
 def litellm_client_acompletion_decorator(func: Callable) -> Callable:
     @wraps(func)
-    async def wrapper(*args: Any, **kwargs: Any):
+    async def wrapper(*args: Any, **kwargs: Any) -> "litellm.types.utils.ModelResponse":
         """
         this adds more precise provider/model name and it's version
         """

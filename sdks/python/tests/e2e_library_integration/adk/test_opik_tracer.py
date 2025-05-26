@@ -59,7 +59,6 @@ def _create_user_session(
 def start_api_server(request):
     cwd = os.path.dirname(os.path.abspath(__file__))
     os.environ["OPIK_FILE_LOGGING_LEVEL"] = "DEBUG"
-    os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "TRUE"
 
     agent_name = getattr(request, "param", None)
     if agent_name is None:
@@ -100,8 +99,7 @@ def start_api_server(request):
 
 @pytest.mark.parametrize("start_api_server", ["sample_agent"], indirect=True)
 def test_opik_tracer_with_sample_agent(
-    opik_client_unique_project_name,
-    start_api_server
+    opik_client_unique_project_name, start_api_server
 ) -> None:
     base_url = start_api_server
 
@@ -138,13 +136,11 @@ def test_opik_tracer_with_sample_agent(
     assert spans[2].provider == adk_helpers.get_adk_provider()
 
 
-# @pytest.mark.parametrize("start_api_server", ["sample_agent_openai"], indirect=True)
+@pytest.mark.parametrize("start_api_server", ["sample_agent_openai"], indirect=True)
 def test_opik_tracer_with_sample_agent__openai(
-    opik_client_unique_project_name,
-    # start_api_server
+    opik_client_unique_project_name, start_api_server
 ) -> None:
-    # base_url = start_api_server
-    base_url = f"http://localhost:{ADK_SERVER_PORT}"
+    base_url = start_api_server
 
     # send the request to the ADK API server
     json_data = {
