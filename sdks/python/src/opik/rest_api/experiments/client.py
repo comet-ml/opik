@@ -5,6 +5,7 @@ import typing
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.experiment_item import ExperimentItem
+from ..types.experiment_item_bulk_record_write import ExperimentItemBulkRecordWrite
 from ..types.experiment_item_public import ExperimentItemPublic
 from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.experiment_public import ExperimentPublic
@@ -239,6 +240,44 @@ class ExperimentsClient:
         client.experiments.delete_experiments_by_id(ids=['ids'], )
         """
         _response = self._raw_client.delete_experiments_by_id(ids=ids, request_options=request_options)
+        return _response.data
+
+    def experiment_items_bulk(
+        self,
+        *,
+        experiment_name: str,
+        dataset_name: str,
+        items: typing.Sequence[ExperimentItemBulkRecordWrite],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Record experiment items in bulk with traces, spans, and feedback scores. Maximum request size is 4MB.
+
+        Parameters
+        ----------
+        experiment_name : str
+
+        dataset_name : str
+
+        items : typing.Sequence[ExperimentItemBulkRecordWrite]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        from Opik import ExperimentItemBulkRecordWrite
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.experiments.experiment_items_bulk(experiment_name='experiment_name', dataset_name='dataset_name', items=[ExperimentItemBulkRecordWrite(dataset_item_id='dataset_item_id', )], )
+        """
+        _response = self._raw_client.experiment_items_bulk(
+            experiment_name=experiment_name, dataset_name=dataset_name, items=items, request_options=request_options
+        )
         return _response.data
 
     def find_feedback_score_names(
@@ -634,6 +673,47 @@ class AsyncExperimentsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.delete_experiments_by_id(ids=ids, request_options=request_options)
+        return _response.data
+
+    async def experiment_items_bulk(
+        self,
+        *,
+        experiment_name: str,
+        dataset_name: str,
+        items: typing.Sequence[ExperimentItemBulkRecordWrite],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Record experiment items in bulk with traces, spans, and feedback scores. Maximum request size is 4MB.
+
+        Parameters
+        ----------
+        experiment_name : str
+
+        dataset_name : str
+
+        items : typing.Sequence[ExperimentItemBulkRecordWrite]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        from Opik import ExperimentItemBulkRecordWrite
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.experiments.experiment_items_bulk(experiment_name='experiment_name', dataset_name='dataset_name', items=[ExperimentItemBulkRecordWrite(dataset_item_id='dataset_item_id', )], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.experiment_items_bulk(
+            experiment_name=experiment_name, dataset_name=dataset_name, items=items, request_options=request_options
+        )
         return _response.data
 
     async def find_feedback_score_names(

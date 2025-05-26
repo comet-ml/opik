@@ -3,6 +3,5 @@
 # isort: skip_file
 
 from .optimization_update_status import OptimizationUpdateStatus
-from .optimization_write_status import OptimizationWriteStatus
 
-__all__ = ["OptimizationUpdateStatus", "OptimizationWriteStatus"]
+__all__ = ["OptimizationUpdateStatus"]

@@ -2,6 +2,6 @@
 
 # isort: skip_file
 
-from .types import OptimizationUpdateStatus, OptimizationWriteStatus
+from .types import OptimizationUpdateStatus
 
-__all__ = ["OptimizationUpdateStatus", "OptimizationWriteStatus"]
+__all__ = ["OptimizationUpdateStatus"]
