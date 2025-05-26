@@ -1007,6 +1007,8 @@ class TraceDAOImpl implements TraceDAO {
                 avgMap(f.feedback_scores) AS feedback_scores,
                 avgIf(s.total_estimated_cost, s.total_estimated_cost > 0) AS total_estimated_cost_,
                 toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
+                sumIf(s.total_estimated_cost, s.total_estimated_cost > 0) AS total_estimated_cost_sum_,
+                toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum,
                 sum(g.failed_count) AS guardrails_failed_count
             FROM trace_final t
             LEFT JOIN spans_agg AS s ON t.id = s.trace_id
