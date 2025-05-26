@@ -1,7 +1,6 @@
 import logging
 import uuid
-from functools import wraps
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Union
 
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models import LlmRequest, LlmResponse, lite_llm
@@ -49,11 +48,15 @@ class OpikTracer:
         create_wrapper = llm_response_wrapper.LlmResponseCreateWrapper(old_function)
         LlmResponse.create = create_wrapper
 
-        lite_llm.LiteLLMClient.acompletion = litellm_wrappers.litellm_client_acompletion_decorator(
-            lite_llm.LiteLLMClient.acompletion
+        lite_llm.LiteLLMClient.acompletion = (
+            litellm_wrappers.litellm_client_acompletion_decorator(
+                lite_llm.LiteLLMClient.acompletion
+            )
         )
-        lite_llm._model_response_to_generate_content_response = litellm_wrappers.generate_content_response_decorator(
-            lite_llm._model_response_to_generate_content_response
+        lite_llm._model_response_to_generate_content_response = (
+            litellm_wrappers.generate_content_response_decorator(
+                lite_llm._model_response_to_generate_content_response
+            )
         )
 
     def _attach_span_to_existing_span(
@@ -63,7 +66,7 @@ class OpikTracer:
         input: Dict[str, Any],
         type: SpanType,
         metadata: Optional[Dict[str, Any]] = None,
-        provider: Optional[LLMProvider] = None,
+        provider: Optional[Union[str, LLMProvider]] = None,
         model: Optional[str] = None,
     ) -> None:
         project_name = helpers.resolve_child_span_project_name(
@@ -93,7 +96,7 @@ class OpikTracer:
         input: Dict[str, Any],
         type: SpanType,
         metadata: Optional[Dict[str, Any]] = None,
-        provider: Optional[LLMProvider] = None,
+        provider: Optional[Union[str, LLMProvider]] = None,
         model: Optional[str] = None,
     ) -> None:
         project_name = helpers.resolve_child_span_project_name(

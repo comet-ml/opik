@@ -1,13 +1,15 @@
 import logging
 from functools import wraps
-from typing import Optional, Tuple
+from typing import Any, Callable, Optional, Tuple, Union
 
 from ... import LLMProvider
 
 LOGGER = logging.Logger(__name__)
 
 
-def parse_provider_and_model(model: str) -> Tuple[Optional[LLMProvider], str]:
+def parse_provider_and_model(
+    model: str,
+) -> Tuple[Optional[Union[LLMProvider, str]], str]:
     parts = model.split("/", 1)
     if len(parts) != 2:
         return None, parts[0]
@@ -20,9 +22,9 @@ def parse_provider_and_model(model: str) -> Tuple[Optional[LLMProvider], str]:
     return provider, parts[1]
 
 
-def generate_content_response_decorator(func):
+def generate_content_response_decorator(func: Callable) -> Callable:
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any):
         """
         This wrapper puts token usage data into custom metadata to use it later
         """
@@ -45,9 +47,9 @@ def generate_content_response_decorator(func):
     return wrapper
 
 
-def litellm_client_acompletion_decorator(func):
+def litellm_client_acompletion_decorator(func: Callable) -> Callable:
     @wraps(func)
-    async def wrapper(*args, **kwargs):
+    async def wrapper(*args: Any, **kwargs: Any):
         """
         this adds more precise provider/model name and it's version
         """

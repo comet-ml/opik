@@ -23,18 +23,18 @@ EXPECTED_USAGE_KEYS_GOOGLE = [
 ]
 
 EXPECTED_USAGE_KEYS_OPENAI = [
-    'completion_tokens',
-    'original_usage.completion_tokens',
-    'original_usage.completion_tokens_details.accepted_prediction_tokens',
-    'original_usage.completion_tokens_details.audio_tokens',
-    'original_usage.completion_tokens_details.reasoning_tokens',
-    'original_usage.completion_tokens_details.rejected_prediction_tokens',
-    'original_usage.prompt_tokens',
-    'original_usage.prompt_tokens_details.audio_tokens',
-    'original_usage.prompt_tokens_details.cached_tokens',
-    'original_usage.total_tokens',
-    'prompt_tokens',
-    'total_tokens',
+    "completion_tokens",
+    "original_usage.completion_tokens",
+    "original_usage.completion_tokens_details.accepted_prediction_tokens",
+    "original_usage.completion_tokens_details.audio_tokens",
+    "original_usage.completion_tokens_details.reasoning_tokens",
+    "original_usage.completion_tokens_details.rejected_prediction_tokens",
+    "original_usage.prompt_tokens",
+    "original_usage.prompt_tokens_details.audio_tokens",
+    "original_usage.prompt_tokens_details.cached_tokens",
+    "original_usage.total_tokens",
+    "prompt_tokens",
+    "total_tokens",
 ]
 
 
@@ -63,7 +63,7 @@ def start_api_server(request):
 
     agent_name = getattr(request, "param", None)
     if agent_name is None:
-        agent_name = "sample_agent"  # default
+        agent_name = "sample_agent_openai"  # default
 
     with subprocess.Popen(
         ["adk", "api_server", "--port", str(ADK_SERVER_PORT)],
@@ -138,12 +138,13 @@ def test_opik_tracer_with_sample_agent(
     assert spans[2].provider == adk_helpers.get_adk_provider()
 
 
-@pytest.mark.parametrize("start_api_server", ["sample_agent_openai"], indirect=True)
+# @pytest.mark.parametrize("start_api_server", ["sample_agent_openai"], indirect=True)
 def test_opik_tracer_with_sample_agent__openai(
     opik_client_unique_project_name,
-    start_api_server
+    # start_api_server
 ) -> None:
-    base_url = start_api_server
+    # base_url = start_api_server
+    base_url = f"http://localhost:{ADK_SERVER_PORT}"
 
     # send the request to the ADK API server
     json_data = {
