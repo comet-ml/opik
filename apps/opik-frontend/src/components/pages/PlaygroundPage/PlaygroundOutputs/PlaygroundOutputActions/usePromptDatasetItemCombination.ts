@@ -140,6 +140,14 @@ const usePromptDatasetItemCombination = ({
           transformMessageIntoProviderMessage(m, datasetItemData),
         );
 
+        const promptLibraryVersions = (
+          prompt.messages
+            .map((m) => m.promptVersionId)
+            .filter(Boolean) as string[]
+        ).map((id) => ({
+          id,
+        }));
+
         const run = await runStreaming({
           url: getLocalIAProviderURL(prompt.provider),
           model: prompt.model,
@@ -163,6 +171,7 @@ const usePromptDatasetItemCombination = ({
         logProcessor.log({
           ...run,
           providerMessages,
+          promptLibraryVersions,
           configs: prompt.configs,
           model: prompt.model,
           provider: prompt.provider,

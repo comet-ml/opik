@@ -2,6 +2,7 @@ import React, { useId, useState } from "react";
 import { Input, InputProps } from "@/components/ui/input";
 import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 interface EyeInputProps extends InputProps {}
 
@@ -10,6 +11,7 @@ const EyeInput = (props: EyeInputProps) => {
   const id = useId();
 
   const Icon = hidden ? Eye : EyeOff;
+  const buttonDisabled = !props.value || props.disabled;
 
   return (
     <div className="relative">
@@ -24,15 +26,18 @@ const EyeInput = (props: EyeInputProps) => {
         }
         className={cn(props.className, "pr-8")}
       />
-      <div
-        className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer"
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute right-0 top-1/2 -translate-y-1/2"
         onClick={(e) => {
           e.preventDefault();
           setHidden((h) => !h);
         }}
+        disabled={buttonDisabled}
       >
         <Icon className="size-4 text-light-slate" />
-      </div>
+      </Button>
     </div>
   );
 };

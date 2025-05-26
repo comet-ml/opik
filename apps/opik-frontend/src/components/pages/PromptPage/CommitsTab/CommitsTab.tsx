@@ -29,6 +29,7 @@ interface CommitsTabInterface {
 }
 
 const PAGINATION_SIZE_KEY = "prompt-commits-pagination-size";
+const COLUMNS_WIDTH_KEY = "prompt-commits-columns-width";
 
 export const COMMITS_DEFAULT_COLUMNS = [
   generateSelectColumDef<PromptVersion>(),
@@ -92,6 +93,11 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
   });
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [columnsWidth, setColumnsWidth] = useLocalStorageState<
+    Record<string, number>
+  >(COLUMNS_WIDTH_KEY, {
+    defaultValue: {},
+  });
 
   const { data, isPending } = usePromptVersionsById(
     {
@@ -109,6 +115,15 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
   const versions = useMemo(() => data?.content ?? [], [data?.content]);
   const total = data?.total ?? 0;
   const noDataText = "There are no commits yet";
+
+  const resizeConfig = useMemo(
+    () => ({
+      enabled: true,
+      columnSizing: columnsWidth,
+      onColumnResize: setColumnsWidth,
+    }),
+    [columnsWidth, setColumnsWidth],
+  );
 
   const selectedRows: PromptVersion[] = useMemo(() => {
     return versions.filter((row) => rowSelection[row.id]);
@@ -128,6 +143,7 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
       <DataTable
         columns={COMMITS_DEFAULT_COLUMNS}
         data={versions}
+        resizeConfig={resizeConfig}
         selectionConfig={{
           rowSelection,
           setRowSelection,

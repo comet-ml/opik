@@ -2,12 +2,12 @@ import React, { useEffect, useMemo } from "react";
 import { Loader } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
 
+import { PLAYGROUND_SELECTED_DATASET_KEY } from "@/constants/llm";
 import PlaygroundOutputs from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputs";
 import useAppStore from "@/store/AppStore";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import ResizablePromptContainer from "@/components/pages/PlaygroundPage/ResizablePromptContainer";
 
-const PLAYGROUND_SELECTED_DATASET_KEY = "playground-selected-dataset";
 const LEGACY_PLAYGROUND_PROMPTS_KEY = "playground-prompts-state";
 
 const PlaygroundPage = () => {

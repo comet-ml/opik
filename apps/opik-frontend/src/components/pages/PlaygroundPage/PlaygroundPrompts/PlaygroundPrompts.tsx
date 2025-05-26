@@ -32,6 +32,7 @@ const PlaygroundPrompts = ({
   const addPrompt = useAddPrompt();
   const setPromptMap = useSetPromptMap();
   const resetKeyRef = useRef(0);
+  const scrollToPromptRef = useRef<string>("");
   const [open, setOpen] = useState<boolean>(false);
 
   const promptIds = usePromptIds();
@@ -50,6 +51,7 @@ const PlaygroundPrompts = ({
       modelResolver: calculateDefaultModel,
     });
     addPrompt(newPrompt);
+    scrollToPromptRef.current = newPrompt.id;
   };
 
   const resetPlayground = useCallback(() => {
@@ -113,6 +115,7 @@ const PlaygroundPrompts = ({
             isPendingProviderKeys={isPendingProviderKeys}
             providerResolver={calculateModelProvider}
             modelResolver={calculateDefaultModel}
+            scrollToPromptRef={scrollToPromptRef}
           />
         ))}
       </div>
