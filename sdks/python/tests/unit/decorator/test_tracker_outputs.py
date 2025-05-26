@@ -1634,8 +1634,8 @@ def test_track__function_called_with_mutable_input_which_changed_afterward__chec
     trace_tree = fake_backend.trace_trees[0]
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-    
-    
+
+
 def test_track__using_distributed_headers__spans_are_created_correctly(fake_backend):
     @tracker.track
     def inner_thread(x):
@@ -1775,4 +1775,3 @@ def test_track__using_distributed_headers__through_node__spans_are_created_corre
     trace_tree = fake_backend.trace_trees[0]
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-    
