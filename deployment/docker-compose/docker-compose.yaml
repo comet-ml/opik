@@ -140,7 +140,7 @@ services:
       JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0"
       REDIS_URL: redis://:opik@redis:6379/
       OPIK_OTEL_SDK_ENABLED: false
-      OTEL_VERSION: 2.12.0
+      OTEL_VERSION: 2.16.0
       OTEL_PROPAGATORS: "tracecontext,baggage,b3"
       OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED: true
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: BASE2_EXPONENTIAL_BUCKET_HISTOGRAM
