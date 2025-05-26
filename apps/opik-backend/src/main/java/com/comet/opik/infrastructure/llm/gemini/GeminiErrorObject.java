@@ -1,18 +1,13 @@
 package com.comet.opik.infrastructure.llm.gemini;
 
+import com.comet.opik.infrastructure.llm.LlmProviderError;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.dropwizard.jersey.errors.ErrorMessage;
 
-import java.util.Optional;
-
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record GeminiErrorObject(GeminiError error) {
-    public Optional<ErrorMessage> toErrorMessage() {
-        if (error != null) {
-            return Optional.of(new ErrorMessage(error.code(), error.message(), error().status()));
-        }
-
-        return Optional.empty();
+public record GeminiErrorObject(GeminiError error) implements LlmProviderError<GeminiError> {
+    public ErrorMessage toErrorMessage() {
+        return new ErrorMessage(error.code(), error.message(), error().status());
     }
 }
 

@@ -45,7 +45,7 @@ const prettifyOpenAIMessageLogic = (
     isArray(message.messages)
   ) {
     const lastMessage = last(message.messages);
-    if (lastMessage && "content" in lastMessage) {
+    if (lastMessage && isObject(lastMessage) && "content" in lastMessage) {
       if (isString(lastMessage.content) && lastMessage.content.length > 0) {
         return lastMessage.content;
       } else if (isArray(lastMessage.content)) {

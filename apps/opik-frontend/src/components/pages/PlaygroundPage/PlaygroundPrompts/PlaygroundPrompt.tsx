@@ -159,6 +159,11 @@ const PlaygroundPrompt = ({
     ],
   );
 
+  const handleDeleteProvider = useCallback(() => {
+    // initialize a model validation process described in the next useEffect hook, as soon as the providers list will be returned from BE
+    checkedIfModelIsValidRef.current = false;
+  }, []);
+
   useEffect(() => {
     // on init, to check if a prompt has a model from valid providers: (f.e., remove a provider after setting a model)
     if (!checkedIfModelIsValidRef.current && !isPendingProviderKeys) {
@@ -210,6 +215,7 @@ const PlaygroundPrompt = ({
               provider={provider}
               workspaceName={workspaceName}
               onAddProvider={handleAddProvider}
+              onDeleteProvider={handleDeleteProvider}
               hasError={!model}
             />
           </div>
