@@ -12,7 +12,7 @@ export interface SpanPublic {
     traceId: string;
     parentSpanId?: string;
     name?: string;
-    type: OpikApi.SpanPublicType;
+    type?: OpikApi.SpanPublicType;
     startTime: Date;
     endTime?: Date;
     input?: OpikApi.JsonListStringPublic;

@@ -13,7 +13,9 @@ from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_request_error import BadRequestError
 from ..errors.not_found_error import NotFoundError
+from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.experiment_item import ExperimentItem
+from ..types.experiment_item_bulk_record_write import ExperimentItemBulkRecordWrite
 from ..types.experiment_item_public import ExperimentItemPublic
 from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.experiment_public import ExperimentPublic
@@ -299,6 +301,78 @@ class RawExperimentsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return HttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def experiment_items_bulk(
+        self,
+        *,
+        experiment_name: str,
+        dataset_name: str,
+        items: typing.Sequence[ExperimentItemBulkRecordWrite],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Record experiment items in bulk with traces, spans, and feedback scores. Maximum request size is 4MB.
+
+        Parameters
+        ----------
+        experiment_name : str
+
+        dataset_name : str
+
+        items : typing.Sequence[ExperimentItemBulkRecordWrite]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/items/bulk",
+            method="PUT",
+            json={
+                "experiment_name": experiment_name,
+                "dataset_name": dataset_name,
+                "items": convert_and_respect_annotation_metadata(
+                    object_=items, annotation=typing.Sequence[ExperimentItemBulkRecordWrite], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -843,6 +917,78 @@ class AsyncRawExperimentsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return AsyncHttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def experiment_items_bulk(
+        self,
+        *,
+        experiment_name: str,
+        dataset_name: str,
+        items: typing.Sequence[ExperimentItemBulkRecordWrite],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Record experiment items in bulk with traces, spans, and feedback scores. Maximum request size is 4MB.
+
+        Parameters
+        ----------
+        experiment_name : str
+
+        dataset_name : str
+
+        items : typing.Sequence[ExperimentItemBulkRecordWrite]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/items/bulk",
+            method="PUT",
+            json={
+                "experiment_name": experiment_name,
+                "dataset_name": dataset_name,
+                "items": convert_and_respect_annotation_metadata(
+                    object_=items, annotation=typing.Sequence[ExperimentItemBulkRecordWrite], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
