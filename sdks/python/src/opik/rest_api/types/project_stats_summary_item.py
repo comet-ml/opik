@@ -13,6 +13,7 @@ class ProjectStatsSummaryItem(UniversalBaseModel):
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None
     duration: typing.Optional[PercentageValues] = None
     total_estimated_cost: typing.Optional[float] = None
+    total_estimated_cost_sum: typing.Optional[float] = None
     usage: typing.Optional[typing.Dict[str, float]] = None
     trace_count: typing.Optional[int] = None
     guardrails_failed_count: typing.Optional[int] = None

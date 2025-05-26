@@ -5629,7 +5629,6 @@ components:
       required:
       - start_time
       - trace_id
-      - type
       type: object
       properties:
         id:
@@ -5910,7 +5909,6 @@ components:
       required:
       - start_time
       - trace_id
-      - type
       type: object
       properties:
         id:
@@ -7078,6 +7076,10 @@ components:
           type: number
           format: double
           readOnly: true
+        total_estimated_cost_sum:
+          type: number
+          format: double
+          readOnly: true
         usage:
           type: object
           additionalProperties:
@@ -7265,6 +7267,9 @@ components:
         total_estimated_cost:
           type: number
           format: double
+        total_estimated_cost_sum:
+          type: number
+          format: double
         usage:
           type: object
           additionalProperties:
@@ -7341,6 +7346,10 @@ components:
         duration:
           $ref: "#/components/schemas/PercentageValues_Detailed"
         total_estimated_cost:
+          type: number
+          format: double
+          readOnly: true
+        total_estimated_cost_sum:
           type: number
           format: double
           readOnly: true
@@ -7819,7 +7828,6 @@ components:
       required:
       - start_time
       - trace_id
-      - type
       type: object
       properties:
         id:
@@ -8107,6 +8115,13 @@ components:
           format: uuid
         name:
           type: string
+        type:
+          type: string
+          enum:
+          - general
+          - tool
+          - llm
+          - guardrail
         end_time:
           type: string
           format: date-time

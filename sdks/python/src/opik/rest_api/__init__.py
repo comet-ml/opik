@@ -334,6 +334,7 @@ from .spans import (
     GetSpanStatsRequestType,
     GetSpansByProjectRequestType,
     SpanSearchStreamRequestPublicType,
+    SpanUpdateType,
 )
 
 __all__ = [
@@ -614,6 +615,7 @@ __all__ = [
     "SpanPublicType",
     "SpanSearchStreamRequestPublicType",
     "SpanType",
+    "SpanUpdateType",
     "SpanWrite",
     "SpanWriteType",
     "SpansCountResponse",

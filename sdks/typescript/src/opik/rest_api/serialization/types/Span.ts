@@ -19,7 +19,7 @@ export const Span: core.serialization.ObjectSchema<serializers.Span.Raw, OpikApi
     traceId: core.serialization.property("trace_id", core.serialization.string()),
     parentSpanId: core.serialization.property("parent_span_id", core.serialization.string().optional()),
     name: core.serialization.string().optional(),
-    type: SpanType,
+    type: SpanType.optional(),
     startTime: core.serialization.property("start_time", core.serialization.date()),
     endTime: core.serialization.property("end_time", core.serialization.date().optional()),
     input: JsonListString.optional(),
@@ -52,7 +52,7 @@ export declare namespace Span {
         trace_id: string;
         parent_span_id?: string | null;
         name?: string | null;
-        type: SpanType.Raw;
+        type?: SpanType.Raw | null;
         start_time: string;
         end_time?: string | null;
         input?: JsonListString.Raw | null;
