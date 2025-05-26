@@ -205,6 +205,7 @@ public class StatsUtils {
         stats.add(new CountValueStat(StatsMapper.METADATA, metadata));
         stats.add(new AvgValueStat(StatsMapper.TAGS, (tags / expectedEntities.size())));
         stats.add(new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, totalEstimatedCostValue.doubleValue()));
+        stats.add(new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST_SUM, totalEstimatedCost.doubleValue()));
 
         usage.keySet()
                 .stream()

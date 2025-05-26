@@ -135,7 +135,8 @@ class ProjectsResourceTest {
     public static final String URL_TEMPLATE = "%s/v1/private/projects";
     public static final String URL_TEMPLATE_TRACE = "%s/v1/private/traces";
     public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
-            "lastUpdatedTraceAt", "feedbackScores", "duration", "totalEstimatedCost", "usage", "traceCount",
+            "lastUpdatedTraceAt", "feedbackScores", "duration", "totalEstimatedCost", "totalEstimatedCostSum", "usage",
+            "traceCount",
             "guardrailsFailedCount"};
     public static final String[] IGNORED_FIELD_MIN = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
             "lastUpdatedTraceAt"};
@@ -1301,6 +1302,7 @@ class ProjectsResourceTest {
                     .map(project -> ProjectStatsSummaryItem.builder()
                             .duration(project.duration())
                             .totalEstimatedCost(project.totalEstimatedCost())
+                            .totalEstimatedCostSum(project.totalEstimatedCostSum())
                             .usage(project.usage())
                             .feedbackScores(project.feedbackScores())
                             .projectId(project.id())
@@ -1334,6 +1336,7 @@ class ProjectsResourceTest {
                     .map(project -> ProjectStatsSummaryItem.builder()
                             .duration(null)
                             .totalEstimatedCost(null)
+                            .totalEstimatedCostSum(null)
                             .usage(null)
                             .feedbackScores(null)
                             .projectId(project.id())
@@ -1551,9 +1554,12 @@ class ProjectsResourceTest {
                         .toList(),
                 List.of(0.5, 0.90, 0.99));
 
+        double costSum = getTotalEstimatedCostSum(traces);
+
         return project.toBuilder()
                 .duration(new PercentageValues(durations.get(0), durations.get(1), durations.get(2)))
                 .totalEstimatedCost(getTotalEstimatedCost(traces))
+                .totalEstimatedCostSum(costSum)
                 .usage(traces.stream()
                         .map(Trace::usage)
                         .flatMap(usage -> usage.entrySet().stream())
@@ -1597,6 +1603,15 @@ class ProjectsResourceTest {
                 .map(Trace::totalEstimatedCost)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .divide(BigDecimal.valueOf(count), ValidationUtils.SCALE, RoundingMode.HALF_UP).doubleValue();
+    }
+
+    private double getTotalEstimatedCostSum(List<Trace> traces) {
+        return traces.stream()
+                .map(Trace::totalEstimatedCost)
+                .filter(Objects::nonNull)
+                .filter(cost -> cost.compareTo(BigDecimal.ZERO) > 0)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .doubleValue();
     }
 
     @Nested
