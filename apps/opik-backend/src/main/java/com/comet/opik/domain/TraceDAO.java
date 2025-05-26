@@ -250,7 +250,7 @@ class TraceDAOImpl implements TraceDAO {
                     new_trace.thread_id
                 ) as thread_id,
                 multiIf(
-                    CAST(old_trace.visibility_mode, 'Int8') > 0, old_trace.visibility_mode,
+                    notEquals(old_trace.visibility_mode, 'unknown'), old_trace.visibility_mode,
                     new_trace.visibility_mode
                 ) as visibility_mode
             FROM (
@@ -822,7 +822,7 @@ class TraceDAOImpl implements TraceDAO {
                     new_trace.thread_id
                 ) as thread_id,
                 multiIf(
-                    CAST(old_trace.visibility_mode, 'Int8') > 0, old_trace.visibility_mode,
+                    notEquals(old_trace.visibility_mode, 'unknown'), old_trace.visibility_mode,
                     new_trace.visibility_mode
                 ) as visibility_mode
             FROM (
@@ -1443,7 +1443,7 @@ class TraceDAOImpl implements TraceDAO {
                         getValue(exclude, Trace.TraceField.THREAD_ID, row, "thread_id", String.class), null))
                 .visibilityMode(Optional.ofNullable(
                         getValue(exclude, Trace.TraceField.VISIBILITY_MODE, row, "visibility_mode", String.class))
-                        .map(VisibilityMode::fromString)
+                        .flatMap(VisibilityMode::fromString)
                         .orElse(null))
                 .build());
     }

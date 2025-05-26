@@ -24,7 +24,7 @@ public class ExperimentTestAssertions {
         assertThat(actual)
                 .usingRecursiveComparison()
                 .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                .ignoringCollectionOrder()
+                .ignoringCollectionOrderInFields("feedbackScores", "comments")
                 .ignoringFields(ignoringFields)
                 .isEqualTo(expected);
 
@@ -53,7 +53,7 @@ public class ExperimentTestAssertions {
                 .usingRecursiveComparison()
                 .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                 .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
-                .ignoringCollectionOrderInFields("feedbackScores")
+                .ignoringCollectionOrderInFields("feedbackScores", "comments")
                 .ignoringFields(EXPERIMENT_ITEMS_IGNORED_FIELDS)
                 .isEqualTo(expectedExperimentItems);
 
