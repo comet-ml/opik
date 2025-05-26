@@ -619,14 +619,14 @@ redirects:
     destination: "/docs/opik/prompt_engineering/prompt_management"
     permanent: true
   - source: "/docs/opik/prompt_engineering/prompt_optimization"
-    destination: "/docs/opik/agent_optimization/best-practices/prompt_engineering"
+    destination: "/docs/opik/agent_optimization/best_practices/prompt_engineering"
     permanent: true
   - source: "/docs/opik/prompt_engineering/agent_optimization"
     destination: "/docs/opik/agent_optimization/overview"
     permanent: true
-  - source: "docs/prompt_engineering/agent_optimization"
-    destination: "docs/agent_optimization/overview"
+  - source: "/docs/opik/prompt_engineering/agent_optimization"
+    destination: "/docs/opik/agent_optimization/overview"
     permanent: true
-  - source: "docs/agent_optimization/best-practices/prompt_engineering"
-    destination: "/docs/agent_optimization/best_practices/prompt_engineering"
+  - source: "/docs/opik/agent_optimization/best-practices/prompt_engineering"
+    destination: "/docs/opik/agent_optimization/best_practices/prompt_engineering"
     permanent: true
