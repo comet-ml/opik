@@ -23,8 +23,8 @@ class Span(UniversalBaseModel):
     project_id: typing.Optional[str] = None
     trace_id: str
     parent_span_id: typing.Optional[str] = None
-    name: str
-    type: SpanType
+    name: typing.Optional[str] = None
+    type: typing.Optional[SpanType] = None
     start_time: dt.datetime
     end_time: typing.Optional[dt.datetime] = None
     input: typing.Optional[JsonListString] = None

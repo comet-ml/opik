@@ -1,0 +1,98 @@
+# Using Opik with Smolagents
+
+Opik integrates seamlessly with Smolagents, a framework from HuggingFace to create Agents. The integration leverages Opik's built-in OpenTelemetry support.
+
+## Creating an account on Comet.com
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=openai&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=openai&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=openai&utm_campaign=opik) for more information.
+
+
+```python
+%pip install 'smolagents[telemetry,toolkit]' opik
+```
+
+
+```python
+import opik
+
+opik.configure(use_local=False)
+```
+
+## Preparing our environment
+
+The Opik integration supports all Smolagents clients, for this demo we will be using the OpenAI client and will therefore set our OpenAI API keys.
+
+
+```python
+import os
+import getpass
+
+if "OPENAI_API_KEY" not in os.environ:
+    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
+```
+
+We now need to configure the OpenTelemetry environment variables:
+
+
+```python
+import opik
+import os
+
+opik_config = opik.config.get_from_user_inputs()
+
+os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = (
+    "https://www.comet.com/opik/api/v1/private/otel"
+)
+os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = (
+    f"Authorization={opik_config.api_key},projectName={opik_config.project_name},Comet-Workspace={opik_config.workspace}"
+)
+```
+
+*Note 1:* The `projectName` and `Comet-Workspace` headers are optional and can be set to `Default` and `default` respectively.
+
+*Note 2:* If you are using the self-hosted version of Opik, you will need to update the environment variables defined above. You can learn more about this in the [Opik OpenTelemetry documentation](https://www.comet.com/docs/opik/tracing/opentelemetry/overview).
+
+## Setting up OpenTelemetry for SmolAgents
+
+To set up the Telemetry, you will need to add the following to your code:
+
+
+```python
+from opentelemetry.sdk.trace import TracerProvider
+
+from openinference.instrumentation.smolagents import SmolagentsInstrumentor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+
+trace_provider = TracerProvider()
+trace_provider.add_span_processor(SimpleSpanProcessor(OTLPSpanExporter()))
+
+SmolagentsInstrumentor().instrument(tracer_provider=trace_provider)
+```
+
+## Using the Smolagents library
+
+Now that everything is set up, we can use the Smolagents library and track the corresponding traces in Opik:
+
+
+```python
+from smolagents import CodeAgent, WebSearchTool, OpenAIServerModel
+
+model = OpenAIServerModel(
+    model_id="gpt-4o",
+)
+
+agent = CodeAgent(tools=[WebSearchTool()], model=model, stream_outputs=True)
+
+agent.run(
+    "How many seconds would it take for a leopard at full speed to run through Pont des Arts?"
+)
+```
+
+As we have configured the OpenTelemetry logging, the agent execution and all it's intermediate steps will be logged in Opik:
+
+![Smolagents Integration](https://raw.githubusercontent.com/comet-ml/opik/main/apps/opik-documentation/documentation/fern/img/cookbook/smolagents_trace_cookbook.png)
+
+

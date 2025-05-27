@@ -20,8 +20,8 @@ class SpanWrite(UniversalBaseModel):
 
     trace_id: str
     parent_span_id: typing.Optional[str] = None
-    name: str
-    type: SpanWriteType
+    name: typing.Optional[str] = None
+    type: typing.Optional[SpanWriteType] = None
     start_time: dt.datetime
     end_time: typing.Optional[dt.datetime] = None
     input: typing.Optional[JsonListStringWrite] = None

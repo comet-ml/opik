@@ -15,6 +15,7 @@ import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple3;
 
 import java.lang.reflect.Method;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -86,7 +87,7 @@ class RateLimitInterceptor implements MethodInterceptor {
         try {
             return invocation.proceed();
         } finally {
-            setLimitHeaders(limits);
+            setLimitHeaders(limits, null);
         }
     }
 
@@ -121,14 +122,14 @@ class RateLimitInterceptor implements MethodInterceptor {
                     .block();
 
             if (Boolean.TRUE.equals(limitExceeded)) {
-                setLimitHeaders(limitConfigs);
+                setLimitHeaders(limitConfigs, limitConfig);
                 throw new ClientErrorException("Too Many Requests: %s".formatted(limitConfig.errorMessage()),
                         HttpStatus.SC_TOO_MANY_REQUESTS);
             }
         });
     }
 
-    private void setLimitHeaders(Map<String, LimitConfig> limitConfigs) {
+    private void setLimitHeaders(Map<String, LimitConfig> limitConfigs, LimitConfig limitExceededConfig) {
 
         List<Tuple3<Long, Long, LimitConfig>> limits = Flux.fromIterable(limitConfigs.entrySet())
                 .flatMap(entry -> Mono.zip(
@@ -142,6 +143,12 @@ class RateLimitInterceptor implements MethodInterceptor {
             var ttl = tuple.getT1();
             var remainingLimit = tuple.getT2();
             var limitConfig = tuple.getT3();
+
+            Optional.ofNullable(limitExceededConfig)
+                    .filter(config -> config.equals(limitConfig))
+                    .ifPresent(config -> requestContext.get().getHeaders()
+                            .put(RequestContext.RATE_LIMIT_RESET,
+                                    List.of(String.valueOf(Math.max(Duration.ofMillis(ttl).toSeconds(), 1)))));
 
             requestContext.get().getHeaders().put(RequestContext.LIMIT.formatted(limitConfig.headerName()),
                     List.of(limitConfig.userFacingBucketName()));
