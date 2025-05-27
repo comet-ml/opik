@@ -5,17 +5,15 @@ import io.prometheus.client.exporter.common.TextFormat;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 
 import java.io.IOException;
 import java.io.Writer;
 
+@RequiredArgsConstructor
 public class PrometheusMetricsServlet extends HttpServlet {
 
     private final CollectorRegistry registry;
-
-    public PrometheusMetricsServlet(CollectorRegistry registry) {
-        this.registry = registry;
-    }
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {

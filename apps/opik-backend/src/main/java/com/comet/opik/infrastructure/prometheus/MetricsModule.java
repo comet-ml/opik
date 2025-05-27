@@ -6,14 +6,12 @@ import com.google.inject.Singleton;
 import io.dropwizard.core.setup.Environment;
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.dropwizard.DropwizardExports;
+import lombok.RequiredArgsConstructor;
 
+@RequiredArgsConstructor
 public class MetricsModule extends AbstractModule {
 
     private final Environment environment;
-
-    public MetricsModule(Environment environment) {
-        this.environment = environment;
-    }
 
     @Override
     protected void configure() {
