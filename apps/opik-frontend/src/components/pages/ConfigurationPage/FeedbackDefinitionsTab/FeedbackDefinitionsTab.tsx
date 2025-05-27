@@ -13,6 +13,7 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import TagCell from "@/components/shared/DataTableCells/TagCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import Loader from "@/components/shared/Loader/Loader";
+import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
@@ -186,6 +187,10 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
 
   return (
     <div>
+      <CalloutAlert
+        description="Create custom fields to manually rate LLM outputs. Use them to collect structured feedback and track quality over time."
+        className="mb-4"
+      />
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
           searchText={search}
