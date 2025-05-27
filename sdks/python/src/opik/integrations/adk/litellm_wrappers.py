@@ -51,7 +51,9 @@ def generate_content_response_decorator(func: Callable) -> Callable:
 
         result.custom_metadata["opik_usage"] = model_response_dict["usage"]
         result.custom_metadata["provider"] = provider
-        result.custom_metadata["model_version"] = model_response_dict.get("model", model)
+        result.custom_metadata["model_version"] = model_response_dict.get(
+            "model", model
+        )
 
         return result
 

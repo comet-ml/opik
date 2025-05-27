@@ -48,7 +48,9 @@ class OpikTracer:
         create_wrapper = llm_response_wrapper.LlmResponseCreateWrapper(old_function)
         LlmResponse.create = create_wrapper
 
-        if hasattr(lite_llm, "LiteLLMClient") and hasattr(lite_llm.LiteLLMClient, "acompletion"):
+        if hasattr(lite_llm, "LiteLLMClient") and hasattr(
+            lite_llm.LiteLLMClient, "acompletion"
+        ):
             lite_llm.LiteLLMClient.acompletion = (
                 litellm_wrappers.litellm_client_acompletion_decorator(
                     lite_llm.LiteLLMClient.acompletion
