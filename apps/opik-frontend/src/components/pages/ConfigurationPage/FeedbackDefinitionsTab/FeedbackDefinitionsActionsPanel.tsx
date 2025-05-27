@@ -40,7 +40,7 @@ const FeedbackDefinitionsActionsPanel: React.FunctionComponent<
       <TooltipWrapper content="Delete">
         <Button
           variant="outline"
-          size="icon"
+          size="icon-sm"
           onClick={() => {
             setOpen(true);
             resetKeyRef.current = resetKeyRef.current + 1;
