@@ -11,7 +11,6 @@ const EyeInput = (props: EyeInputProps) => {
   const id = useId();
 
   const Icon = hidden ? Eye : EyeOff;
-  const buttonDisabled = !props.value || props.disabled;
 
   return (
     <div className="relative">
@@ -34,7 +33,7 @@ const EyeInput = (props: EyeInputProps) => {
           e.preventDefault();
           setHidden((h) => !h);
         }}
-        disabled={buttonDisabled}
+        disabled={props.disabled}
       >
         <Icon className="size-4 text-light-slate" />
       </Button>

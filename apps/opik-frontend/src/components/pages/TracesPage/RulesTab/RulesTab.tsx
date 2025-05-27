@@ -41,6 +41,7 @@ import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowAct
 import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
 
 const getRowId = (d: EvaluatorsRule) => d.id;
 
@@ -232,6 +233,16 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
 
   return (
     <>
+      <PageBodyStickyContainer
+        className="pb-4"
+        direction="horizontal"
+        limitWidth
+      >
+        <CalloutAlert
+          description="Automatically score your production traces by defining LLM-as-a-Judge or code metrics."
+          docLink="/production/rules"
+        />
+      </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
