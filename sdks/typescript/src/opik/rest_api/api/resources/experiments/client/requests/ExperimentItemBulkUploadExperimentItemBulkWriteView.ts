@@ -14,8 +14,8 @@ import * as OpikApi from "../../../../index";
  *             }]
  *     }
  */
-export interface ExperimentItemBulkUploadWrite {
+export interface ExperimentItemBulkUploadExperimentItemBulkWriteView {
     experimentName: string;
     datasetName: string;
-    items: OpikApi.ExperimentItemBulkRecordWrite[];
+    items: OpikApi.ExperimentItemBulkRecordExperimentItemBulkWriteView[];
 }
