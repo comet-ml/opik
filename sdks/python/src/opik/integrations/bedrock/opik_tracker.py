@@ -1,4 +1,5 @@
 from typing import Optional, TYPE_CHECKING
+from opik.config import is_tracing_active
 
 from . import chunks_aggregator, converse_decorator, invoke_agent_decorator
 
@@ -22,6 +23,17 @@ def track_bedrock(
     Returns:
         The modified bedrock client with Opik tracking enabled.
     """
+    # Check if tracing is active
+    if not is_tracing_active():
+        return client
+        
+    # Check if client is already tracked
+    if hasattr(client, "opik_tracked"):
+        return client
+        
+    # Mark client as tracked to avoid double tracking
+    client.opik_tracked = True
+    
     decorator_for_converse = converse_decorator.BedrockConverseDecorator()
     decorator_for_invoke_agent = invoke_agent_decorator.BedrockInvokeAgentDecorator()
 

@@ -80,6 +80,25 @@ my_llm_function("Hello, Opik!")
 ```
 Traces will appear in your configured Opik project. Opik also offers many direct [integrations](https://www.comet.com/docs/opik/tracing/integrations/overview/) for popular LLM frameworks.
 
+## Dynamic Tracing Control
+
+You can dynamically enable or disable tracing at runtime:
+
+```python
+from opik.config import set_tracing_active, is_tracing_active
+
+# Check if tracing is active
+is_active = is_tracing_active()  # Returns True by default
+
+# Disable tracing
+set_tracing_active(False)
+
+# Re-enable tracing
+set_tracing_active(True)
+```
+
+When tracing is disabled, all `@track` decorators and integration trackers will not create traces, allowing you to control tracing behavior at runtime without modifying your code.
+
 ## Development & Contribution Guidelines
 
 For a more general contribution guide (backend + frontend + SDK) see our root [Contribution guide](../../CONTRIBUTING.md).

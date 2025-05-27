@@ -361,8 +361,14 @@ class OpikTracer(BaseTracer):
         return self._created_traces
 
     def _skip_tracking(self) -> bool:
+        """Check if tracking should be skipped."""
         config = self._opik_client.config
         if config.track_disable:
+            return True
+        
+        # Add check for dynamic tracing state
+        from opik.config import is_tracing_active
+        if not is_tracing_active():
             return True
 
         return False
