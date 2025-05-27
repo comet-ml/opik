@@ -360,7 +360,6 @@ export class Spans {
      *
      * @example
      *     await client.spans.createSpan({
-     *         traceId: "trace_id",
      *         startTime: "2024-01-15T09:30:00Z"
      *     })
      */
@@ -445,7 +444,6 @@ export class Spans {
      * @example
      *     await client.spans.createSpans({
      *         spans: [{
-     *                 traceId: "trace_id",
      *                 startTime: "2024-01-15T09:30:00Z"
      *             }]
      *     })

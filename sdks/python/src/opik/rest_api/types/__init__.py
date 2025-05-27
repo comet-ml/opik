@@ -280,8 +280,10 @@ from .trace_filter_public import TraceFilterPublic
 from .trace_filter_public_operator import TraceFilterPublicOperator
 from .trace_page_public import TracePagePublic
 from .trace_public import TracePublic
+from .trace_public_visibility_mode import TracePublicVisibilityMode
 from .trace_thread import TraceThread
 from .trace_thread_page import TraceThreadPage
+from .trace_visibility_mode import TraceVisibilityMode
 from .trace_write import TraceWrite
 from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
@@ -558,8 +560,10 @@ __all__ = [
     "TraceFilterPublicOperator",
     "TracePagePublic",
     "TracePublic",
+    "TracePublicVisibilityMode",
     "TraceThread",
     "TraceThreadPage",
+    "TraceVisibilityMode",
     "TraceWrite",
     "Usage",
     "UserDefinedMetricPythonCode",
