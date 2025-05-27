@@ -1,10 +1,10 @@
 import React, { useCallback } from "react";
-
 import cloneDeep from "lodash/cloneDeep";
 import get from "lodash/get";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, UseFormReturn } from "react-hook-form";
+import { MessageCircleWarning } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,7 @@ import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
 import useRuleUpdateMutation from "@/api/automations/useRuleUpdateMutation";
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
 import PythonCodeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/PythonCodeRuleDetails";
 import LLMJudgeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/LLMJudgeRuleDetails";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
@@ -180,6 +181,14 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <DialogAutoScrollBody>
+          {isEdit && (
+            <CalloutAlert
+              Icon={MessageCircleWarning}
+              title="Editing an existing rule"
+              description="Changes will only apply to new traces. Existing traces won’t be affected."
+              className="mb-2"
+            />
+          )}
           <Form {...form}>
             <form
               className="flex flex-col gap-4 pb-4"

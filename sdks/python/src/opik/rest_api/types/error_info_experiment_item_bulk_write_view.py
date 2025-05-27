@@ -4,16 +4,12 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .feedback_score_write import FeedbackScoreWrite
-from .span_write import SpanWrite
-from .trace_write import TraceWrite
 
 
-class ExperimentItemBulkRecordWrite(UniversalBaseModel):
-    dataset_item_id: str
-    trace: typing.Optional[TraceWrite] = None
-    spans: typing.Optional[typing.List[SpanWrite]] = None
-    feedback_scores: typing.Optional[typing.List[FeedbackScoreWrite]] = None
+class ErrorInfoExperimentItemBulkWriteView(UniversalBaseModel):
+    exception_type: str
+    message: typing.Optional[str] = None
+    traceback: str
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
