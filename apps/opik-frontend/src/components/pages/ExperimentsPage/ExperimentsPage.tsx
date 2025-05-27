@@ -34,6 +34,7 @@ import {
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
+  COLUMN_METADATA_ID,
   COLUMN_TYPE,
   ColumnData,
   DynamicColumn,
@@ -50,6 +51,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
+import useExperimentsConfigurationKeys from "@/api/datasets/useExperimentsConfigurationKeys";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
@@ -75,6 +77,7 @@ const COLUMNS_WIDTH_KEY = "experiments-columns-width";
 const COLUMNS_ORDER_KEY = "experiments-columns-order";
 const COLUMNS_SORT_KEY = "experiments-columns-sort";
 const COLUMNS_SCORES_ORDER_KEY = "experiments-scores-columns-order";
+const COLUMNS_CONFIG_ORDER_KEY = "experiments-config-columns-order";
 
 export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   {
@@ -209,6 +212,19 @@ const ExperimentsPage: React.FunctionComponent = () => {
       },
     );
 
+  const { data: configurationKeysData, isPending: isConfigurationKeysPending } =
+    useExperimentsConfigurationKeys(
+      {
+        workspaceName,
+        datasetId: datasetId!,
+        promptId: undefined,
+      },
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval: 30000,
+      },
+    );
+
   const experiments = useMemo(() => data?.content ?? [], [data?.content]);
 
   const sortableBy: string[] = useMemo(
@@ -243,6 +259,12 @@ const ExperimentsPage: React.FunctionComponent = () => {
     defaultValue: [],
   });
 
+  const [configColumnsOrder, setConfigColumnsOrder] = useLocalStorageState<
+    string[]
+  >(COLUMNS_CONFIG_ORDER_KEY, {
+    defaultValue: [],
+  });
+
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
   >(COLUMNS_WIDTH_KEY, {
@@ -258,6 +280,16 @@ const ExperimentsPage: React.FunctionComponent = () => {
         columnType: COLUMN_TYPE.number,
       }));
   }, [feedbackScoresData?.scores]);
+
+  const dynamicConfigColumns = useMemo(() => {
+    return (configurationKeysData?.keys ?? [])
+      .sort((c1, c2) => c1.label.localeCompare(c2.label))
+      .map<DynamicColumn>((c) => ({
+        id: `${COLUMN_METADATA_ID}.${c.id}`,
+        label: c.label,
+        columnType: c.columnType || COLUMN_TYPE.string,
+      }));
+  }, [configurationKeysData?.keys]);
 
   const scoresColumnsData = useMemo(() => {
     return [
@@ -275,6 +307,23 @@ const ExperimentsPage: React.FunctionComponent = () => {
       ),
     ];
   }, [dynamicScoresColumns]);
+
+  const configColumnsData = useMemo(() => {
+    return [
+      ...dynamicConfigColumns.map(
+        ({ label, id, columnType }) =>
+          ({
+            id,
+            label,
+            type: columnType,
+            accessorFn: (row) => {
+              const key = id.replace(`${COLUMN_METADATA_ID}.`, "");
+              return get(row, ["metadata", key], "");
+            },
+          }) as ColumnData<GroupedExperiment>,
+      ),
+    ];
+  }, [dynamicConfigColumns]);
 
   const selectedRows: Array<GroupedExperiment> = useMemo(() => {
     return experiments.filter(
@@ -311,6 +360,14 @@ const ExperimentsPage: React.FunctionComponent = () => {
         },
       ),
       ...convertColumnDataToColumn<GroupedExperiment, GroupedExperiment>(
+        configColumnsData,
+        {
+          columnsOrder: configColumnsOrder,
+          selectedColumns,
+          sortableColumns: sortableBy,
+        },
+      ),
+      ...convertColumnDataToColumn<GroupedExperiment, GroupedExperiment>(
         scoresColumnsData,
         {
           columnsOrder: scoresColumnsOrder,
@@ -327,6 +384,8 @@ const ExperimentsPage: React.FunctionComponent = () => {
     sortableBy,
     columnsOrder,
     selectedColumns,
+    configColumnsData,
+    configColumnsOrder,
     scoresColumnsData,
     scoresColumnsOrder,
   ]);
@@ -384,15 +443,28 @@ const ExperimentsPage: React.FunctionComponent = () => {
   const columnSections = useMemo(() => {
     return [
       {
+        title: "Configuration",
+        columns: configColumnsData,
+        order: configColumnsOrder,
+        onOrderChange: setConfigColumnsOrder,
+      },
+      {
         title: "Feedback scores",
         columns: scoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
       },
     ];
-  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+  }, [
+    configColumnsData,
+    configColumnsOrder,
+    setConfigColumnsOrder,
+    scoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+  ]);
 
-  if (isPending || isFeedbackScoresPending) {
+  if (isPending || isFeedbackScoresPending || isConfigurationKeysPending) {
     return <Loader />;
   }
 
