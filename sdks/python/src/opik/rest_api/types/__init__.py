@@ -107,6 +107,7 @@ from .delete_feedback_score import DeleteFeedbackScore
 from .delete_ids_holder import DeleteIdsHolder
 from .delta import Delta
 from .error_info import ErrorInfo
+from .error_info_experiment_item_bulk_write_view import ErrorInfoExperimentItemBulkWriteView
 from .error_info_public import ErrorInfoPublic
 from .error_info_write import ErrorInfoWrite
 from .error_message import ErrorMessage
@@ -116,7 +117,9 @@ from .error_message_public import ErrorMessagePublic
 from .experiment import Experiment
 from .experiment_item import ExperimentItem
 from .experiment_item_bulk_record import ExperimentItemBulkRecord
-from .experiment_item_bulk_record_write import ExperimentItemBulkRecordWrite
+from .experiment_item_bulk_record_experiment_item_bulk_write_view import (
+    ExperimentItemBulkRecordExperimentItemBulkWriteView,
+)
 from .experiment_item_bulk_upload import ExperimentItemBulkUpload
 from .experiment_item_compare import ExperimentItemCompare
 from .experiment_item_public import ExperimentItemPublic
@@ -143,12 +146,12 @@ from .feedback_score_batch_item import FeedbackScoreBatchItem
 from .feedback_score_batch_item_source import FeedbackScoreBatchItemSource
 from .feedback_score_compare import FeedbackScoreCompare
 from .feedback_score_compare_source import FeedbackScoreCompareSource
+from .feedback_score_experiment_item_bulk_write_view import FeedbackScoreExperimentItemBulkWriteView
+from .feedback_score_experiment_item_bulk_write_view_source import FeedbackScoreExperimentItemBulkWriteViewSource
 from .feedback_score_names import FeedbackScoreNames
 from .feedback_score_public import FeedbackScorePublic
 from .feedback_score_public_source import FeedbackScorePublicSource
 from .feedback_score_source import FeedbackScoreSource
-from .feedback_score_write import FeedbackScoreWrite
-from .feedback_score_write_source import FeedbackScoreWriteSource
 from .feedback_update import FeedbackUpdate, FeedbackUpdate_Categorical, FeedbackUpdate_Numerical
 from .function import Function
 from .function_call import FunctionCall
@@ -163,10 +166,12 @@ from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
 from .json_list_string import JsonListString
 from .json_list_string_compare import JsonListStringCompare
+from .json_list_string_experiment_item_bulk_write_view import JsonListStringExperimentItemBulkWriteView
 from .json_list_string_public import JsonListStringPublic
 from .json_list_string_write import JsonListStringWrite
 from .json_node import JsonNode
 from .json_node_detail import JsonNodeDetail
+from .json_node_experiment_item_bulk_write_view import JsonNodeExperimentItemBulkWriteView
 from .json_node_public import JsonNodePublic
 from .json_node_write import JsonNodeWrite
 from .json_schema import JsonSchema
@@ -260,6 +265,8 @@ from .score_name import ScoreName
 from .service_toggles_config import ServiceTogglesConfig
 from .span import Span
 from .span_batch import SpanBatch
+from .span_experiment_item_bulk_write_view import SpanExperimentItemBulkWriteView
+from .span_experiment_item_bulk_write_view_type import SpanExperimentItemBulkWriteViewType
 from .span_filter_public import SpanFilterPublic
 from .span_filter_public_operator import SpanFilterPublicOperator
 from .span_page_public import SpanPagePublic
@@ -276,12 +283,15 @@ from .tool_call import ToolCall
 from .trace import Trace
 from .trace_batch import TraceBatch
 from .trace_count_response import TraceCountResponse
+from .trace_experiment_item_bulk_write_view import TraceExperimentItemBulkWriteView
 from .trace_filter_public import TraceFilterPublic
 from .trace_filter_public_operator import TraceFilterPublicOperator
 from .trace_page_public import TracePagePublic
 from .trace_public import TracePublic
+from .trace_public_visibility_mode import TracePublicVisibilityMode
 from .trace_thread import TraceThread
 from .trace_thread_page import TraceThreadPage
+from .trace_visibility_mode import TraceVisibilityMode
 from .trace_write import TraceWrite
 from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
@@ -381,6 +391,7 @@ __all__ = [
     "DeleteIdsHolder",
     "Delta",
     "ErrorInfo",
+    "ErrorInfoExperimentItemBulkWriteView",
     "ErrorInfoPublic",
     "ErrorInfoWrite",
     "ErrorMessage",
@@ -390,7 +401,7 @@ __all__ = [
     "Experiment",
     "ExperimentItem",
     "ExperimentItemBulkRecord",
-    "ExperimentItemBulkRecordWrite",
+    "ExperimentItemBulkRecordExperimentItemBulkWriteView",
     "ExperimentItemBulkUpload",
     "ExperimentItemCompare",
     "ExperimentItemPublic",
@@ -419,12 +430,12 @@ __all__ = [
     "FeedbackScoreBatchItemSource",
     "FeedbackScoreCompare",
     "FeedbackScoreCompareSource",
+    "FeedbackScoreExperimentItemBulkWriteView",
+    "FeedbackScoreExperimentItemBulkWriteViewSource",
     "FeedbackScoreNames",
     "FeedbackScorePublic",
     "FeedbackScorePublicSource",
     "FeedbackScoreSource",
-    "FeedbackScoreWrite",
-    "FeedbackScoreWriteSource",
     "FeedbackUpdate",
     "FeedbackUpdate_Categorical",
     "FeedbackUpdate_Numerical",
@@ -443,10 +454,12 @@ __all__ = [
     "GuardrailsValidationPublic",
     "JsonListString",
     "JsonListStringCompare",
+    "JsonListStringExperimentItemBulkWriteView",
     "JsonListStringPublic",
     "JsonListStringWrite",
     "JsonNode",
     "JsonNodeDetail",
+    "JsonNodeExperimentItemBulkWriteView",
     "JsonNodePublic",
     "JsonNodeWrite",
     "JsonSchema",
@@ -538,6 +551,8 @@ __all__ = [
     "ServiceTogglesConfig",
     "Span",
     "SpanBatch",
+    "SpanExperimentItemBulkWriteView",
+    "SpanExperimentItemBulkWriteViewType",
     "SpanFilterPublic",
     "SpanFilterPublicOperator",
     "SpanPagePublic",
@@ -554,12 +569,15 @@ __all__ = [
     "Trace",
     "TraceBatch",
     "TraceCountResponse",
+    "TraceExperimentItemBulkWriteView",
     "TraceFilterPublic",
     "TraceFilterPublicOperator",
     "TracePagePublic",
     "TracePublic",
+    "TracePublicVisibilityMode",
     "TraceThread",
     "TraceThreadPage",
+    "TraceVisibilityMode",
     "TraceWrite",
     "Usage",
     "UserDefinedMetricPythonCode",

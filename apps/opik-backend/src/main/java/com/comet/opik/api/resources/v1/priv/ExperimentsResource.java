@@ -333,8 +333,7 @@ public class ExperimentsResource {
     @RateLimited
     @UsageLimited
     public Response experimentItemsBulk(
-            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentItemBulkUpload.class))) @JsonView({
-                    ExperimentItemBulkUpload.View.Write.class}) @NotNull @Valid ExperimentItemBulkUpload request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentItemBulkUpload.class))) @NotNull @Valid @JsonView(ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class) ExperimentItemBulkUpload request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();

@@ -11,6 +11,7 @@ import { ErrorInfoPublic } from "./ErrorInfoPublic";
 import { FeedbackScorePublic } from "./FeedbackScorePublic";
 import { CommentPublic } from "./CommentPublic";
 import { GuardrailsValidationPublic } from "./GuardrailsValidationPublic";
+import { TracePublicVisibilityMode } from "./TracePublicVisibilityMode";
 
 export const TracePublic: core.serialization.ObjectSchema<serializers.TracePublic.Raw, OpikApi.TracePublic> =
     core.serialization.object({
@@ -42,6 +43,7 @@ export const TracePublic: core.serialization.ObjectSchema<serializers.TracePubli
         spanCount: core.serialization.property("span_count", core.serialization.number().optional()),
         duration: core.serialization.number().optional(),
         threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
+        visibilityMode: core.serialization.property("visibility_mode", TracePublicVisibilityMode.optional()),
     });
 
 export declare namespace TracePublic {
@@ -68,5 +70,6 @@ export declare namespace TracePublic {
         span_count?: number | null;
         duration?: number | null;
         thread_id?: string | null;
+        visibility_mode?: TracePublicVisibilityMode.Raw | null;
     }
 }

@@ -6,11 +6,11 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 
-export const FeedbackScoreWriteSource: core.serialization.Schema<
-    serializers.FeedbackScoreWriteSource.Raw,
-    OpikApi.FeedbackScoreWriteSource
+export const FeedbackScoreExperimentItemBulkWriteViewSource: core.serialization.Schema<
+    serializers.FeedbackScoreExperimentItemBulkWriteViewSource.Raw,
+    OpikApi.FeedbackScoreExperimentItemBulkWriteViewSource
 > = core.serialization.enum_(["ui", "sdk", "online_scoring"]);
 
-export declare namespace FeedbackScoreWriteSource {
+export declare namespace FeedbackScoreExperimentItemBulkWriteViewSource {
     export type Raw = "ui" | "sdk" | "online_scoring";
 }

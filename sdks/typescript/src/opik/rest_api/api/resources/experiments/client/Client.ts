@@ -497,7 +497,7 @@ export class Experiments {
     /**
      * Record experiment items in bulk with traces, spans, and feedback scores. Maximum request size is 4MB.
      *
-     * @param {OpikApi.ExperimentItemBulkUploadWrite} request
+     * @param {OpikApi.ExperimentItemBulkUploadExperimentItemBulkWriteView} request
      * @param {Experiments.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.BadRequestError}
@@ -513,14 +513,14 @@ export class Experiments {
      *     })
      */
     public experimentItemsBulk(
-        request: OpikApi.ExperimentItemBulkUploadWrite,
+        request: OpikApi.ExperimentItemBulkUploadExperimentItemBulkWriteView,
         requestOptions?: Experiments.RequestOptions,
     ): core.HttpResponsePromise<void> {
         return core.HttpResponsePromise.fromPromise(this.__experimentItemsBulk(request, requestOptions));
     }
 
     private async __experimentItemsBulk(
-        request: OpikApi.ExperimentItemBulkUploadWrite,
+        request: OpikApi.ExperimentItemBulkUploadExperimentItemBulkWriteView,
         requestOptions?: Experiments.RequestOptions,
     ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
@@ -544,7 +544,9 @@ export class Experiments {
             },
             contentType: "application/json",
             requestType: "json",
-            body: serializers.ExperimentItemBulkUploadWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            body: serializers.ExperimentItemBulkUploadExperimentItemBulkWriteView.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+            }),
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
             withCredentials: true,

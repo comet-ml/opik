@@ -5,15 +5,15 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .feedback_score_write_source import FeedbackScoreWriteSource
+from .feedback_score_experiment_item_bulk_write_view_source import FeedbackScoreExperimentItemBulkWriteViewSource
 
 
-class FeedbackScoreWrite(UniversalBaseModel):
+class FeedbackScoreExperimentItemBulkWriteView(UniversalBaseModel):
     name: str
     category_name: typing.Optional[str] = None
     value: float
     reason: typing.Optional[str] = None
-    source: FeedbackScoreWriteSource
+    source: FeedbackScoreExperimentItemBulkWriteViewSource
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
