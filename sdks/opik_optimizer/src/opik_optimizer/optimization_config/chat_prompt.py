@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class Tool(BaseModel):
-    name: Field(
+    name: str =Field(
         ...,
         description="Name of the tool"
     )
@@ -38,9 +38,9 @@ class ChatPrompt:
     def _standardize_prompts(
         self, **kwargs: Any
     ) -> List[Dict[Literal["role", "content"], str]]:
-        if (self.prompt is None and self.messages is None):
+        if (self.system is None and self.prompt is None and self.messages is None):
             raise ValueError(
-                "At least one of `prompt` or `messages` must be provided"
+                "At least one of `system`, `prompt` or `messages` must be provided"
             )
 
         if (self.prompt is not None and self.messages is not None):

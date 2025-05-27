@@ -73,3 +73,22 @@ def get_random_seed() -> int:
 
 def random_chars(n: int) -> str:
     return "".join(random.choice(string.ascii_letters) for _ in range(n))
+
+
+def disable_experiment_reporting():
+    import opik
+    opik.evaluation.report._patch_display_experiment_results = opik.evaluation.report.display_experiment_results
+    opik.evaluation.report._patch_display_experiment_link = opik.evaluation.report.display_experiment_link
+    opik.evaluation.report.display_experiment_results = lambda *args, **kwargs: None
+    opik.evaluation.report.display_experiment_link = lambda *args, **kwargs: None
+
+def enable_experiment_reporting():
+    import opik
+
+    try:
+        opik.evaluation.report.display_experiment_results = opik.evaluation.report._patch_display_experiment_results
+        opik.evaluation.report.display_experiment_link = opik.evaluation.report._patch_display_experiment_link
+    except AttributeError:
+        pass
+    
+    
