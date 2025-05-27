@@ -22,9 +22,9 @@ import com.comet.opik.infrastructure.llm.gemini.GeminiModule;
 import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
+import com.comet.opik.infrastructure.prometheus.MetricsModule;
 import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
-import com.comet.opik.infrastructure.servlet.PrometheusMetricsServlet;
 import com.comet.opik.infrastructure.usagelimit.UsageLimitModule;
 import com.comet.opik.utils.JsonBigDecimalDeserializer;
 import com.comet.opik.utils.OpenAiMessageJsonDeserializer;
@@ -33,14 +33,14 @@ import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.google.inject.Guice;
+import com.google.inject.Injector;
 import dev.langchain4j.model.openai.internal.chat.Message;
 import io.dropwizard.configuration.EnvironmentVariableSubstitutor;
 import io.dropwizard.configuration.SubstitutingSourceProvider;
 import io.dropwizard.core.Application;
 import io.dropwizard.core.setup.Bootstrap;
 import io.dropwizard.core.setup.Environment;
-import io.prometheus.client.CollectorRegistry;
-import io.prometheus.client.dropwizard.DropwizardExports;
 import org.glassfish.jersey.server.ServerProperties;
 import org.jdbi.v3.jackson2.Jackson2Plugin;
 import org.jdbi.v3.sqlobject.SqlObjectPlugin;
@@ -117,9 +117,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
         jersey.register(JsonProcessingExceptionMapper.class);
 
         // Register Dropwizard metrics
-        CollectorRegistry prometheusRegistry = CollectorRegistry.defaultRegistry;
-        prometheusRegistry.register(new DropwizardExports(environment.metrics()));
-        environment.servlets().addServlet("prometheusMetrics", new PrometheusMetricsServlet(prometheusRegistry))
-                .addMapping("/metrics");
+        Injector injector = Guice.createInjector(
+                new MetricsModule(environment));
     }
 }

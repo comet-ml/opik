@@ -34,6 +34,7 @@
         <opentelmetry.version>2.16.0</opentelmetry.version>
         <aws.java.sdk.version>2.31.1</aws.java.sdk.version>
         <json-path.version>2.9.0</json-path.version>
+        <prometheus.version>0.16.0</prometheus.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
 
@@ -201,22 +202,22 @@
         <dependency>
             <groupId>io.prometheus</groupId>
             <artifactId>simpleclient</artifactId>
-            <version>0.16.0</version>
+            <version>${prometheus.version}</version>
         </dependency>
         <dependency>
             <groupId>io.prometheus</groupId>
             <artifactId>simpleclient_dropwizard</artifactId>
-            <version>0.16.0</version>
+            <version>${prometheus.version}</version>
         </dependency>
         <dependency>
             <groupId>io.prometheus</groupId>
             <artifactId>simpleclient_servlet</artifactId>
-            <version>0.16.0</version>
+            <version>${prometheus.version}</version>
         </dependency>
         <dependency>
             <groupId>io.prometheus</groupId>
             <artifactId>simpleclient_common</artifactId>
-            <version>0.16.0</version>
+            <version>${prometheus.version}</version>
         </dependency>
 
         <dependency>

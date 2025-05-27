@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.servlet;
+package com.comet.opik.infrastructure.prometheus;
 
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.exporter.common.TextFormat;
