@@ -46,6 +46,8 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
   const handleAddTag = () => {
     if (!newTag) return;
 
+    const promises: Promise<any>[] = [];
+
     rows.forEach((row) => {
       const currentTags = row.tags || [];
 
@@ -54,45 +56,55 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
       const newTags = [...currentTags, newTag];
 
       if (type === TRACE_DATA_TYPE.traces) {
-        traceUpdateMutation.mutate({
-          projectId,
-          traceId: row.id,
-          trace: {
-            workspace_name: workspaceName,
-            project_id: projectId,
-            tags: newTags,
-          },
-        });
+        promises.push(
+          traceUpdateMutation.mutateAsync({
+            projectId,
+            traceId: row.id,
+            trace: {
+              workspace_name: workspaceName,
+              project_id: projectId,
+              tags: newTags,
+            },
+          })
+        );
       } else {
         const span = row as Span;
         const parentId = span.parent_span_id;
 
-        spanUpdateMutation.mutate({
-          projectId,
-          spanId: span.id,
-          span: {
-            workspace_name: workspaceName,
-            project_id: projectId,
-            ...(parentId && { parent_span_id: parentId }),
-            trace_id: span.trace_id,
-            tags: newTags,
-          },
-        });
+        promises.push(
+          spanUpdateMutation.mutateAsync({
+            projectId,
+            spanId: span.id,
+            span: {
+              workspace_name: workspaceName,
+              project_id: projectId,
+              ...(parentId && { parent_span_id: parentId }),
+              trace_id: span.trace_id,
+              tags: newTags,
+            },
+          })
+        );
       }
     });
 
-    toast({
-      title: "Success",
-      description: `Tag "${newTag}" added to ${rows.length} selected ${
-        type === TRACE_DATA_TYPE.traces ? "traces" : "spans"
-      }`,
-    });
+    Promise.all(promises)
+      .then(() => {
+        toast({
+          title: "Success",
+          description: `Tag "${newTag}" added to ${rows.length} selected ${
+            type === TRACE_DATA_TYPE.traces ? "traces" : "spans"
+          }`,
+        });
 
-    if (onSuccess) {
-      onSuccess();
-    }
+        if (onSuccess) {
+          onSuccess();
+        }
 
-    handleClose();
+        handleClose();
+      })
+      .catch((error) => {
+        // Error handling is already done by the mutation hooks,this just ensures we don't close the dialog on error
+      });
   };
 
   return (
