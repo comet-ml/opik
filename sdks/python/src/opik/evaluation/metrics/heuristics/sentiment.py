@@ -1,13 +1,14 @@
 from typing import Any, Optional
 
 from opik.evaluation.metrics import base_metric, score_result
+from opik.exceptions import MetricComputationError
 
 try:
     import nltk
-    from nltk.sentiment.vader import SentimentIntensityAnalyzer
+    from nltk.sentiment import vader
 except ImportError:
     nltk = None
-    SentimentIntensityAnalyzer = None
+    vader = None
 
 
 class Sentiment(base_metric.BaseMetric):
@@ -29,7 +30,7 @@ class Sentiment(base_metric.BaseMetric):
         >>> sentiment_metric = Sentiment()
         >>> result = sentiment_metric.score("I love this product! It's amazing.")
         >>> print(result.value)  # Compound score (e.g., 0.8802)
-        >>> print(result.details)  # All sentiment scores
+        >>> print(result.metadata)  # All sentiment scores
     """
 
     def __init__(
@@ -44,7 +45,7 @@ class Sentiment(base_metric.BaseMetric):
             project_name=project_name,
         )
 
-        if nltk is None or SentimentIntensityAnalyzer is None:
+        if nltk is None or vader is None:
             raise ImportError(
                 "`nltk` library is required for sentiment analysis. "
                 "Install via `pip install nltk` and then download the vader_lexicon: "
@@ -52,11 +53,11 @@ class Sentiment(base_metric.BaseMetric):
             )
 
         try:
-            self._analyzer = SentimentIntensityAnalyzer()
+            self._analyzer = vader.SentimentIntensityAnalyzer()
         except LookupError:
             # If vader_lexicon is not downloaded, attempt to download it
             nltk.download("vader_lexicon")
-            self._analyzer = SentimentIntensityAnalyzer()
+            self._analyzer = vader.SentimentIntensityAnalyzer()
 
     def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
         """
@@ -72,14 +73,12 @@ class Sentiment(base_metric.BaseMetric):
                 - name: The metric name
                 - reason: A brief explanation of the sentiment analysis
                 - metadata: Dictionary containing all sentiment scores (pos, neu, neg, compound)
+
+        Raises:
+            MetricComputationError: If the input text is empty.
         """
         if not output.strip():
-            return score_result.ScoreResult(
-                value=0.0,
-                name=self.name,
-                reason="Empty text provided for sentiment analysis.",
-                metadata={"pos": 0.0, "neu": 0.0, "neg": 0.0, "compound": 0.0},
-            )
+            raise MetricComputationError("Empty text provided for sentiment analysis.")
 
         sentiment_scores = self._analyzer.polarity_scores(output)
         compound_score = sentiment_scores["compound"]
