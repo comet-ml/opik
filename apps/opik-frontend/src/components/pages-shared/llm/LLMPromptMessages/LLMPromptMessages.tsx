@@ -112,7 +112,7 @@ const LLMPromptMessages = ({
           items={messages}
           strategy={verticalListSortingStrategy}
         >
-          <div className="flex flex-col gap-2 overflow-hidden">
+          <div className="flex flex-col gap-2">
             {messages.map((message, messageIdx) => (
               <LLMPromptMessage
                 key={message.id}
