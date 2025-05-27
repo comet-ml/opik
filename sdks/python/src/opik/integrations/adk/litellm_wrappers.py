@@ -40,14 +40,18 @@ def generate_content_response_decorator(func: Callable) -> Callable:
         model_response = args[0]
         model_response_dict = model_response.to_dict()
 
+        provider_and_model = model_response_dict.get("provider_and_model", None)
+        if provider_and_model is None:
+            return result
+
         if result.custom_metadata is None:
             result.custom_metadata = {}
 
-        provider, model = parse_provider_and_model(model_response_dict["provider"])
+        provider, model = parse_provider_and_model(provider_and_model)
 
         result.custom_metadata["opik_usage"] = model_response_dict["usage"]
         result.custom_metadata["provider"] = provider
-        result.custom_metadata["model_version"] = model_response_dict["model"]
+        result.custom_metadata["model_version"] = model_response_dict.get("model", model)
 
         return result
 
@@ -61,7 +65,7 @@ def litellm_client_acompletion_decorator(func: Callable) -> Callable:
         this adds more precise provider/model name and it's version
         """
         result = await func(*args, **kwargs)
-        result.provider = kwargs.get("model", None)
+        result.provider_and_model = kwargs.get("model", None)
         return result
 
     return wrapper
