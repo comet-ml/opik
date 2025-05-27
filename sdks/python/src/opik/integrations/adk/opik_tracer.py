@@ -48,16 +48,18 @@ class OpikTracer:
         create_wrapper = llm_response_wrapper.LlmResponseCreateWrapper(old_function)
         LlmResponse.create = create_wrapper
 
-        lite_llm.LiteLLMClient.acompletion = (
-            litellm_wrappers.litellm_client_acompletion_decorator(
-                lite_llm.LiteLLMClient.acompletion
+        if hasattr(lite_llm, "LiteLLMClient") and hasattr(lite_llm.LiteLLMClient, "acompletion"):
+            lite_llm.LiteLLMClient.acompletion = (
+                litellm_wrappers.litellm_client_acompletion_decorator(
+                    lite_llm.LiteLLMClient.acompletion
+                )
             )
-        )
-        lite_llm._model_response_to_generate_content_response = (
-            litellm_wrappers.generate_content_response_decorator(
-                lite_llm._model_response_to_generate_content_response
+        if hasattr(lite_llm, "_model_response_to_generate_content_response"):
+            lite_llm._model_response_to_generate_content_response = (
+                litellm_wrappers.generate_content_response_decorator(
+                    lite_llm._model_response_to_generate_content_response
+                )
             )
-        )
 
     def _attach_span_to_existing_span(
         self,
