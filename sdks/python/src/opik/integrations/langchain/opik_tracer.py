@@ -109,7 +109,9 @@ class OpikTracer(BaseTracer):
 
         self._opik_context_storage = context_storage.get_current_context_instance()
 
-        self._last_external_span_id: contextvars.ContextVar[str] = contextvars.ContextVar("last_external_span_id", default=None)
+        self._last_external_span_id: contextvars.ContextVar[Optional[str]] = (
+            contextvars.ContextVar("last_external_span_id", default=None)
+        )
 
     def _persist_run(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
@@ -143,12 +145,17 @@ class OpikTracer(BaseTracer):
 
     def _ensure_no_hanging_opik_tracer_spans(self) -> None:
         last_external_span_id = self._last_external_span_id.get()
-        there_were_no_external_spans_before_chain_invocation = last_external_span_id is None
+        there_were_no_external_spans_before_chain_invocation = (
+            last_external_span_id is None
+        )
 
         if there_were_no_external_spans_before_chain_invocation:
             self._opik_context_storage.clear_spans()
         else:
-            self._opik_context_storage.trim_span_data_stack_to_certain_span(last_external_span_id)
+            assert last_external_span_id is not None
+            self._opik_context_storage.trim_span_data_stack_to_certain_span(
+                last_external_span_id
+            )
 
     def _track_root_run(
         self, run_dict: Dict[str, Any]
@@ -165,7 +172,9 @@ class OpikTracer(BaseTracer):
             return None, new_span_data
 
         current_span_data = opik_context.get_current_span_data()
-        self._last_external_span_id.set(current_span_data.id if current_span_data is not None else None)
+        self._last_external_span_id.set(
+            current_span_data.id if current_span_data is not None else None
+        )
         if current_span_data is not None:
             new_span_data = self._attach_span_to_existing_span(
                 run_dict=run_dict,
