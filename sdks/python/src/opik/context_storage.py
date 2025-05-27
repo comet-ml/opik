@@ -62,9 +62,9 @@ class OpikContextStorage:
         until the span with the given id is at the top.
 
         Intended to be used in the modules that perform unsafe manipulations with the
-        span data stack (when there is a risk of missing the add or pop operation, e.g. in callback-based integrations).
+        span data stack (when there is a risk of missing the pop operation, e.g. in callback-based integrations).
 
-        In such cases, where the id of the span that SHOULD be on top is known, we can trim
+        When the id of the span that SHOULD be on top is known, we can trim
         the stack to remove hanged spans if there are any.
 
         Args:
