@@ -1,5 +1,7 @@
 package com.comet.opik.api;
 
+import com.comet.opik.api.validate.InRange;
+import com.comet.opik.api.validate.InRangeValidator;
 import com.comet.opik.domain.SpanType;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonValue;
@@ -43,9 +45,9 @@ public record Span(
         @JsonView({Span.View.Public.class, Span.View.Write.class,
                 ExperimentItemBulkUpload.View.Write.class}) SpanType type,
         @JsonView({Span.View.Public.class, Span.View.Write.class,
-                ExperimentItemBulkUpload.View.Write.class}) @NotNull Instant startTime,
+                ExperimentItemBulkUpload.View.Write.class}) @NotNull @InRange Instant startTime,
         @JsonView({Span.View.Public.class, Span.View.Write.class,
-                ExperimentItemBulkUpload.View.Write.class}) Instant endTime,
+                ExperimentItemBulkUpload.View.Write.class}) @InRange Instant endTime,
         @Schema(implementation = JsonListString.class) @JsonView({Span.View.Public.class,
                 Span.View.Write.class, ExperimentItemBulkUpload.View.Write.class}) JsonNode input,
         @Schema(implementation = JsonListString.class) @JsonView({Span.View.Public.class,
@@ -64,7 +66,7 @@ public record Span(
                 ExperimentItemBulkUpload.View.Write.class}) ErrorInfo errorInfo,
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({Span.View.Public.class, Span.View.Write.class,
-                ExperimentItemBulkUpload.View.Write.class}) Instant lastUpdatedAt,
+                ExperimentItemBulkUpload.View.Write.class}) @InRange(before = InRangeValidator.MAX_ANALYTICS_DB) Instant lastUpdatedAt,
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
         @JsonView({
