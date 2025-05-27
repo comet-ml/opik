@@ -8,8 +8,6 @@ from ... import LLMProvider
 
 if TYPE_CHECKING:
     import litellm
-else:
-    litellm = None
 
 LOGGER = logging.Logger(__name__)
 
