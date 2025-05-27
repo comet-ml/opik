@@ -26,6 +26,7 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -40,6 +41,7 @@ import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
+import com.comet.opik.api.resources.utils.resources.ExperimentTestAssertions;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
@@ -127,7 +129,6 @@ import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
-import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoresIgnoredFieldsAndSetThemToNull;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
@@ -168,11 +169,6 @@ class ExperimentsResourceTest {
     private static final String[] EXPERIMENT_IGNORED_FIELDS = new String[]{
             "id", "datasetId", "name", "feedbackScores", "traceCount", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "comments"};
-    public static final String[] ITEM_IGNORED_FIELDS = {"input", "output", "feedbackScores", "createdAt",
-            "lastUpdatedAt", "createdBy", "lastUpdatedBy", "comments"};
-
-    public static final String[] EXPERIMENT_ITEMS_IGNORED_FIELDS = {"id", "experimentId", "createdAt", "lastUpdatedAt",
-            "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt"};
 
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
@@ -760,7 +756,13 @@ class ExperimentsResourceTest {
                         .map(item -> item.toBuilder()
                                 .usage(null)
                                 .duration(null)
+                                .output(null)
+                                .feedbackScores(null)
+                                .input(null)
                                 .totalEstimatedCost(null)
+                                .comments(null)
+                                .lastUpdatedBy(USER)
+                                .createdBy(USER)
                                 .build())
                         .collect(toSet()))
                 .build();
@@ -2966,7 +2968,9 @@ class ExperimentsResourceTest {
         void delete() {
             var createRequest = getExperimentItemsBatch();
             createAndAssert(createRequest, API_KEY, TEST_WORKSPACE);
-            createRequest.experimentItems().forEach(item -> getAndAssert(item, TEST_WORKSPACE, API_KEY));
+            createRequest.experimentItems()
+                    .stream()
+                    .forEach(item -> getAndAssert(item, TEST_WORKSPACE, API_KEY));
 
             var ids = createRequest.experimentItems().stream().map(ExperimentItem::id).collect(toSet());
             var deleteRequest = ExperimentItemsDelete.builder().ids(ids).build();
@@ -3107,12 +3111,22 @@ class ExperimentsResourceTest {
                             traceIdToScoresMap.values().stream().flatMap(List::stream)).toList())
                     .build();
 
+            Instant scoreCreatedAt = Instant.now();
+
             createScoreAndAssert(feedbackScoreBatch, apiKey, workspaceName);
 
             // Add comments to trace
             List<Comment> expectedComments = IntStream.range(0, 5)
-                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(traceWithScores2.getKey().id(), apiKey,
-                            workspaceName, HttpStatus.SC_CREATED))
+                    .mapToObj(i -> {
+                        Instant commentCreatedAt = Instant.now();
+                        return traceResourceClient.generateAndCreateComment(traceWithScores2.getKey().id(), apiKey,
+                                workspaceName, HttpStatus.SC_CREATED).toBuilder()
+                                .createdBy(USER)
+                                .lastUpdatedBy(USER)
+                                .createdAt(commentCreatedAt)
+                                .lastUpdatedAt(commentCreatedAt)
+                                .build();
+                    })
                     .toList();
 
             var experiment1 = generateExperiment();
@@ -3176,10 +3190,19 @@ class ExperimentsResourceTest {
                             .input(traceWithScores2.getLeft().input())
                             .output(traceWithScores2.getLeft().output())
                             .feedbackScores(traceWithScores2.getRight().stream()
-                                    .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
+                                    .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
+                                    .map(score -> score.toBuilder()
+                                            .createdBy(USER)
+                                            .lastUpdatedBy(USER)
+                                            .lastUpdatedAt(scoreCreatedAt)
+                                            .createdAt(scoreCreatedAt)
+                                            .build())
+                                    .toList())
                             .comments(expectedComments)
                             .totalEstimatedCost(null)
                             .usage(null)
+                            .createdBy(USER)
+                            .lastUpdatedBy(USER)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceWithScores2.getLeft().startTime(), traceWithScores2.getLeft().endTime()))
                             .build())
@@ -3189,10 +3212,19 @@ class ExperimentsResourceTest {
                             .input(traceWithScores1.getLeft().input())
                             .output(traceWithScores1.getLeft().output())
                             .feedbackScores(traceWithScores1.getRight().stream()
-                                    .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
+                                    .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
+                                    .map(score -> score.toBuilder()
+                                            .createdBy(USER)
+                                            .lastUpdatedBy(USER)
+                                            .lastUpdatedAt(scoreCreatedAt)
+                                            .createdAt(scoreCreatedAt)
+                                            .build())
+                                    .toList())
                             .comments(null)
                             .totalEstimatedCost(null)
                             .usage(null)
+                            .createdBy(USER)
+                            .lastUpdatedBy(USER)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceWithScores1.getLeft().startTime(), traceWithScores1.getLeft().endTime()))
                             .build())
@@ -3288,6 +3320,8 @@ class ExperimentsResourceTest {
                     .input(trace1.input())
                     .comments(null)
                     .feedbackScores(null)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
                     .build();
 
             var experimentItem2 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
@@ -3301,6 +3335,8 @@ class ExperimentsResourceTest {
                     .input(trace2.input())
                     .comments(null)
                     .feedbackScores(null)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
                     .build();
 
             var createRequest1 = ExperimentItemsBatch.builder().experimentItems(Set.of(experimentItem, experimentItem2))
@@ -3379,6 +3415,12 @@ class ExperimentsResourceTest {
                                     .totalEstimatedCost(null)
                                     .usage(null)
                                     .duration(null)
+                                    .comments(null)
+                                    .createdBy(USER)
+                                    .lastUpdatedBy(USER)
+                                    .feedbackScores(null)
+                                    .input(null)
+                                    .output(null)
                                     .build())
                             .collect(toSet()))
                     .build();
@@ -3668,54 +3710,7 @@ class ExperimentsResourceTest {
 
             var actualExperimentItem = actualResponse.readEntity(ExperimentItem.class);
 
-            assertThat(actualExperimentItem)
-                    .usingRecursiveComparison()
-                    .ignoringFields(ITEM_IGNORED_FIELDS)
-                    .isEqualTo(expectedExperimentItem);
-
-            assertIgnoredFieldsWithoutFeedbacks(actualExperimentItem, expectedExperimentItem);
-        }
-    }
-
-    private void assertIgnoredFields(
-            List<ExperimentItem> actualExperimentItems, List<ExperimentItem> expectedExperimentItems) {
-        assertThat(actualExperimentItems).hasSameSizeAs(expectedExperimentItems);
-        for (int i = 0; i < actualExperimentItems.size(); i++) {
-            assertIgnoredFieldsFullContent(actualExperimentItems.get(i), expectedExperimentItems.get(i));
-        }
-    }
-
-    private void assertIgnoredFieldsFullContent(ExperimentItem actualExperimentItem,
-            ExperimentItem expectedExperimentItem) {
-        assertIgnoredFields(actualExperimentItem, expectedExperimentItem, true);
-    }
-
-    private void assertIgnoredFieldsWithoutFeedbacks(ExperimentItem actualExperimentItem,
-            ExperimentItem expectedExperimentItem) {
-        assertIgnoredFields(actualExperimentItem, expectedExperimentItem, false);
-    }
-
-    private void assertIgnoredFields(ExperimentItem actualExperimentItem, ExperimentItem expectedExperimentItem,
-            boolean isFullContent) {
-        assertThat(actualExperimentItem.createdAt()).isAfter(expectedExperimentItem.createdAt());
-        assertThat(actualExperimentItem.lastUpdatedAt()).isAfter(expectedExperimentItem.lastUpdatedAt());
-        assertThat(actualExperimentItem.createdBy()).isEqualTo(USER);
-        assertThat(actualExperimentItem.lastUpdatedBy()).isEqualTo(USER);
-        if (isFullContent) {
-            actualExperimentItem = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(actualExperimentItem, USER);
-
-            assertThat(actualExperimentItem.feedbackScores())
-                    .usingRecursiveComparison()
-                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                    .ignoringCollectionOrder()
-                    .isEqualTo(expectedExperimentItem.feedbackScores());
-            assertThat(actualExperimentItem.input()).isEqualTo(expectedExperimentItem.input());
-            assertThat(actualExperimentItem.output()).isEqualTo(expectedExperimentItem.output());
-            CommentAssertionUtils.assertComments(expectedExperimentItem.comments(), actualExperimentItem.comments());
-        } else {
-            assertThat(actualExperimentItem.input()).isNull();
-            assertThat(actualExperimentItem.output()).isNull();
-            assertThat(actualExperimentItem.feedbackScores()).isNull();
+            ExperimentTestAssertions.assertExperimentResults(actualExperimentItem, expectedExperimentItem, USER);
         }
     }
 
@@ -3756,20 +3751,8 @@ class ExperimentsResourceTest {
             var actualExperimentItems = experimentResourceClient.getStreamed(
                     actualResponse, EXPERIMENT_ITEM_TYPE_REFERENCE);
 
-            assertThat(actualExperimentItems)
-                    .usingRecursiveComparison()
-                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
-                    .ignoringFields(ITEM_IGNORED_FIELDS)
-                    .isEqualTo(expectedExperimentItems);
-
-            assertIgnoredFields(actualExperimentItems, expectedExperimentItems);
-
-            if (!unexpectedExperimentItems.isEmpty()) {
-                assertThat(actualExperimentItems)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(ITEM_IGNORED_FIELDS)
-                        .doesNotContainAnyElementsOf(unexpectedExperimentItems);
-            }
+            ExperimentTestAssertions.assertExperimentResults(actualExperimentItems, expectedExperimentItems,
+                    unexpectedExperimentItems, USER);
         }
     }
 
@@ -3830,7 +3813,10 @@ class ExperimentsResourceTest {
             List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
                     API_KEY, TEST_WORKSPACE);
 
-            assertItems(actualExperimentItems, expectedItems, EXPERIMENT_ITEMS_IGNORED_FIELDS);
+            ExperimentTestAssertions.assertExperimentResultsIgnoringFields(actualExperimentItems, expectedItems,
+                    Stream.concat(Arrays.stream(ExperimentTestAssertions.EXPERIMENT_ITEMS_IGNORED_FIELDS),
+                            Stream.of("id", "experimentId"))
+                            .toArray(String[]::new));
         }
 
         private List<ExperimentItem> getExpectedItem(DatasetItem datasetItem, Trace trace,
@@ -3924,25 +3910,18 @@ class ExperimentsResourceTest {
                     API_KEY, TEST_WORKSPACE);
 
             String[] ignoringFields = Stream
-                    .concat(Arrays.stream(EXPERIMENT_ITEMS_IGNORED_FIELDS), Stream.of("traceId"))
+                    .concat(Arrays.stream(ExperimentTestAssertions.EXPERIMENT_ITEMS_IGNORED_FIELDS),
+                            Stream.of("traceId", "id", "experimentId"))
                     .toArray(String[]::new);
 
-            assertItems(actualExperimentItems, expectedItems, ignoringFields);
-        }
+            ExperimentTestAssertions.assertExperimentResultsIgnoringFields(actualExperimentItems, expectedItems,
+                    ignoringFields);
 
-        private void assertItems(List<ExperimentItem> actual, List<ExperimentItem> expected, String[] ignoringFields) {
-            assertThat(actual).hasSize(expected.size());
+            Trace trace = traceResourceClient.getById(actualExperimentItems.getFirst().traceId(), TEST_WORKSPACE,
+                    API_KEY);
 
-            assertThat(actual)
-                    .usingRecursiveComparison()
-                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                    .ignoringCollectionOrder()
-                    .ignoringFields(ignoringFields)
-                    .isEqualTo(expected);
-
-            if (ignoringFields != null && Set.of(ignoringFields).contains("traceId")) {
-                assertThat(actual.getFirst().traceId()).isNotNull();
-            }
+            assertThat(trace).isNotNull();
+            assertThat(trace.visibilityMode()).isEqualTo(VisibilityMode.HIDDEN);
         }
 
         @Test
