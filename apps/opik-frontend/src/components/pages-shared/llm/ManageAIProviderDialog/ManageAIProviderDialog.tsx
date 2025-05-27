@@ -23,7 +23,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   LocalAIProviderData,
   PROVIDER_LOCATION_TYPE,
@@ -32,6 +31,7 @@ import {
 } from "@/types/providers";
 
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
+import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
 import useProviderKeysDeleteMutation from "@/api/provider-keys/useProviderKeysDeleteMutation";
 import ProviderSelect from "@/components/pages-shared/llm/ProviderSelect/ProviderSelect";
 import useProviderKeysUpdateMutation from "@/api/provider-keys/useProviderKeysUpdateMutation";
@@ -275,16 +275,12 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                 );
               }}
             />
-            {isConfiguredProvider && isCloudProvider && (
-              <Alert>
-                <MessageCircleWarning className="size-4" />
-                <AlertTitle>Editing an existing key</AlertTitle>
-                <AlertDescription>
-                  A key is already set for this provider. Since AI provider
-                  configurations are workspace-wide, adding a new key will
-                  overwrite the existing one for everyone.
-                </AlertDescription>
-              </Alert>
+            {(isConfiguredProvider || providerKey) && isCloudProvider && (
+              <CalloutAlert
+                title="Editing an existing key"
+                description="A key is already set for this provider. Since AI provider configurations are workspace-wide, adding a new key will overwrite the existing one for everyone."
+                Icon={MessageCircleWarning}
+              />
             )}
             {getProviderDetails()}
           </form>

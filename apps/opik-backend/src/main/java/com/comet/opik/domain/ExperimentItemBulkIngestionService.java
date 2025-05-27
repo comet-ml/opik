@@ -8,6 +8,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.AsyncUtils;
 import com.google.inject.ImplementedBy;
@@ -145,6 +146,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                         .projectName(ProjectService.DEFAULT_PROJECT)
                         .startTime(now)
                         .endTime(now)
+                        .visibilityMode(VisibilityMode.HIDDEN)
                         .build();
             } else {
                 trace = item.trace();

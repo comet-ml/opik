@@ -43,6 +43,7 @@ import {
 } from "@/lib/table";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
+import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
@@ -671,6 +672,22 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   return (
     <>
+      <PageBodyStickyContainer
+        className="pb-4"
+        direction="horizontal"
+        limitWidth
+      >
+        <CalloutAlert
+          description={
+            type === TRACE_DATA_TYPE.traces
+              ? "A trace is a step-by-step record of how your LLM application processes a single input, including LLM calls and other operations."
+              : "An LLM call is a single interaction with a language model—usually a prompt and its response. Use LLM calls to debug, monitor, and evaluate model behavior."
+          }
+          docLink={
+            type === TRACE_DATA_TYPE.traces ? "/tracing/log_traces" : undefined
+          }
+        />
+      </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"

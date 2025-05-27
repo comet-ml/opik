@@ -20,6 +20,7 @@ import CompareExperimentsConfigCell, {
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import Loader from "@/components/shared/Loader/Loader";
+import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
 import { convertColumnDataToColumn } from "@/lib/table";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Experiment } from "@/types/datasets";
@@ -164,6 +165,17 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
 
   return (
     <>
+      <PageBodyStickyContainer
+        className="pb-4"
+        direction="horizontal"
+        limitWidth
+      >
+        <CalloutAlert
+          description="The experiment configuration captures key settings, like the prompt, model, and temperature, to keep experiments reproducible and easy to analyze."
+          docLink="/evaluation/concepts"
+          docHash="#experiment-configuration"
+        />
+      </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
         direction="bidirectional"
