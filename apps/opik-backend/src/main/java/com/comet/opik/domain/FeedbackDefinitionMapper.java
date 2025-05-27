@@ -5,9 +5,7 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 
-import java.time.Instant;
-
-@Mapper(imports = Instant.class)
+@Mapper
 interface FeedbackDefinitionMapper {
 
     FeedbackDefinitionMapper INSTANCE = Mappers.getMapper(FeedbackDefinitionMapper.class);

@@ -9,9 +9,7 @@ import org.mapstruct.MappingTarget;
 import org.mapstruct.NullValuePropertyMappingStrategy;
 import org.mapstruct.factory.Mappers;
 
-import java.time.Instant;
-
-@Mapper(imports = Instant.class)
+@Mapper
 public interface SpanMapper {
 
     SpanMapper INSTANCE = Mappers.getMapper(SpanMapper.class);
