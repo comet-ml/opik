@@ -16,15 +16,15 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <dropwizard.version>4.0.12</dropwizard.version>
-        <swagger.version>2.2.28</swagger.version>
-        <lombok.version>1.18.36</lombok.version>
+        <dropwizard.version>4.0.14</dropwizard.version>
+        <swagger.version>2.2.30</swagger.version>
+        <lombok.version>1.18.38</lombok.version>
         <mysql.version>9.3.0</mysql.version>
         <dropwizard-guicey.version>7.2.1</dropwizard-guicey.version>
-        <stringtemplate.version>3.49.0</stringtemplate.version>
+        <stringtemplate.version>3.49.4</stringtemplate.version>
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
-        <clickhouse-java.version>0.8.2</clickhouse-java.version>
+        <clickhouse-java.version>0.8.6</clickhouse-java.version>
         <google-protobuf.version>4.31.0</google-protobuf.version>
         <org.mapstruct.version>1.6.3</org.mapstruct.version>
         <testcontainers.version>1.21.0</testcontainers.version>
@@ -32,7 +32,7 @@
         <wiremock.version>3.13.0</wiremock.version>
         <redisson.version>3.47.0</redisson.version>
         <opentelmetry.version>2.16.0</opentelmetry.version>
-        <aws.java.sdk.version>2.31.1</aws.java.sdk.version>
+        <aws.java.sdk.version>2.31.50</aws.java.sdk.version>
         <json-path.version>2.9.0</json-path.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
@@ -70,14 +70,14 @@
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-bom</artifactId>
-                <version>4.2.0.Final</version>
+                <version>4.2.1.Final</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
             <dependency>
                 <groupId>org.apache.httpcomponents.core5</groupId>
                 <artifactId>httpcore5</artifactId>
-                <version>5.3.3</version>
+                <version>5.3.4</version>
             </dependency>
             <dependency>
                 <groupId>net.minidev</groupId>
@@ -114,7 +114,7 @@
         <dependency>
             <groupId>software.amazon.jdbc</groupId>
             <artifactId>aws-advanced-jdbc-wrapper</artifactId>
-            <version>2.5.4</version>
+            <version>2.5.6</version>
         </dependency>
         <dependency>
             <groupId>io.dropwizard</groupId>
@@ -289,7 +289,7 @@
         <dependency>
             <groupId>io.projectreactor</groupId>
             <artifactId>reactor-test</artifactId>
-            <version>3.7.3</version>
+            <version>3.7.6</version>
             <scope>test</scope>
         </dependency>
 
@@ -348,7 +348,7 @@
         <dependency>
             <groupId>com.clickhouse</groupId>
             <artifactId>clickhouse-jdbc</artifactId>
-            <version>0.8.2</version>
+            <version>0.8.6</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -359,7 +359,7 @@
         <dependency>
             <groupId>com.redis</groupId>
             <artifactId>testcontainers-redis</artifactId>
-            <version>2.2.3</version>
+            <version>2.2.4</version>
             <scope>test</scope>
         </dependency>
         <dependency>
