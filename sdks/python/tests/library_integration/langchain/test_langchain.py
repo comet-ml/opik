@@ -649,3 +649,108 @@ def test_langchain_callback__disabled_tracking(fake_backend):
 
         assert len(fake_backend.trace_trees) == 0
         assert len(callback.created_traces()) == 0
+
+
+def test_langchain__happyflow(
+    fake_backend,
+    project_name,
+    expected_project_name,
+):
+    llm = fake.FakeListLLM(
+        responses=["I'm sorry, I don't think I'm talented enough to write a synopsis"]
+    )
+
+    template = "Given the title of play, write a synopsys for that. Title: {title}."
+
+    prompt_template = PromptTemplate(input_variables=["title"], template=template)
+
+    synopsis_chain = prompt_template | llm
+    test_prompts = {"title": "Documentary about Bigfoot in Paris"}
+
+    callback = OpikTracer(
+        project_name=project_name, tags=["tag1", "tag2"], metadata={"a": "b"}
+    )
+    synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
+
+    callback.flush()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="RunnableSequence",
+        input={"title": "Documentary about Bigfoot in Paris"},
+        output={
+            "output": "I'm sorry, I don't think I'm talented enough to write a synopsis"
+        },
+        tags=["tag1", "tag2"],
+        metadata={
+            "a": "b",
+            "created_from": "langchain",
+        },
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        project_name=expected_project_name,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="RunnableSequence",
+                input={"title": "Documentary about Bigfoot in Paris"},
+                output=ANY_DICT,
+                tags=["tag1", "tag2"],
+                metadata={
+                    "a": "b",
+                    "created_from": "langchain",
+                },
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=expected_project_name,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        type="tool",
+                        name="PromptTemplate",
+                        input={"title": "Documentary about Bigfoot in Paris"},
+                        output=ANY_DICT,
+                        metadata={
+                            "created_from": "langchain",
+                        },
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        project_name=expected_project_name,
+                        spans=[],
+                    ),
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        type="llm",
+                        name="FakeListLLM",
+                        input={
+                            "prompts": [
+                                "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
+                            ]
+                        },
+                        output=ANY_DICT,
+                        metadata={
+                            "invocation_params": {
+                                "responses": [
+                                    "I'm sorry, I don't think I'm talented enough to write a synopsis"
+                                ],
+                                "_type": "fake-list",
+                                "stop": None,
+                            },
+                            "options": {"stop": None},
+                            "batch_size": 1,
+                            "metadata": ANY_BUT_NONE,
+                            "created_from": "langchain",
+                        },
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        project_name=expected_project_name,
+                        spans=[],
+                    ),
+                ],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert len(callback.created_traces()) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

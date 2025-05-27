@@ -156,9 +156,12 @@ class OpikContextStorage:
     def set_trace_data(self, trace: Optional[trace.TraceData]) -> None:
         self._current_trace_data_context.set(trace)
 
+    def clear_spans(self) -> None:
+        self._spans_data_stack_context.set([])
+
     def clear_all(self) -> None:
         self._current_trace_data_context.set(None)
-        self._spans_data_stack_context.set([])
+        self.clear_spans()
 
 
 _context_storage = OpikContextStorage()
