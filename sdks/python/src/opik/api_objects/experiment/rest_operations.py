@@ -1,6 +1,7 @@
-from typing import List
+from typing import List, Optional
 
 from opik import exceptions
+from .. import rest_stream_parser
 from opik.rest_api import OpikApi
 from opik.rest_api.types import experiment_public
 
@@ -12,25 +13,33 @@ def get_experiment_data_by_name(
     #  deprecated Opik.get_experiment_by_name() will be removed.
     #  This function should not be used anywhere else except for deprecated logic as it is confusing and misleading
 
-    while True:
-        experiment_page_public = rest_client.experiments.find_experiments(name=name)
-        if len(experiment_page_public.content) == 0:
-            raise exceptions.ExperimentNotFound(
-                f"Experiment with the name {name} not found."
-            )
+    experiments = get_experiments_data_by_name(rest_client, name)
+    for experiment in experiments:
+        if experiment.name == name:
+            return experiment
 
-        for experiment in experiment_page_public.content:
-            if experiment.name == name:
-                return experiment
+    raise exceptions.ExperimentNotFound(f"No experiment found with the name '{name}'.")
 
 
 def get_experiments_data_by_name(
-    rest_client: OpikApi, name: str
+    rest_client: OpikApi,
+    name: str,
+    max_results: Optional[int] = None,
 ) -> List[experiment_public.ExperimentPublic]:
-    experiment_page_public = rest_client.experiments.find_experiments(name=name)
-    if len(experiment_page_public.content) == 0:
+    experiments = rest_stream_parser.read_and_parse_full_stream(
+        read_source=lambda current_batch_size,
+        last_retrieved_id: rest_client.experiments.stream_experiments(
+            name=name,
+            limit=current_batch_size,
+            last_retrieved_id=last_retrieved_id,
+        ),
+        max_results=max_results,
+        parsed_item_class=experiment_public.ExperimentPublic,
+    )
+
+    if len(experiments) == 0:
         raise exceptions.ExperimentNotFound(
-            f"Experiment with the name {name} not found."
+            f"No experiment(s) found with the name '{name}'."
         )
 
-    return experiment_page_public.content
+    return experiments

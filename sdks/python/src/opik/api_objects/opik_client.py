@@ -819,7 +819,7 @@ class Opik:
 
     def get_experiments_by_name(self, name: str) -> List[experiment.Experiment]:
         """
-        Returns an existing experiments by its name.
+        Returns a list of existing experiments by its name.
 
         Args:
             name: The name of the experiment(s).
@@ -914,36 +914,23 @@ class Opik:
             max_results: The maximum number of traces to return.
             truncate: Whether to truncate image data stored in input, output or metadata
         """
-
-        traces: List[trace_public.TracePublic] = []
-
         filter_expressions = opik_query_language.OpikQueryLanguage(
             filter_string
         ).get_filter_expressions()
         filters_ = helpers.parse_search_span_expressions(filter_expressions)
 
-        # this is the constant for maximum objects sent from backend side
-        max_endpoint_batch_size = 2_000
-
-        while len(traces) < max_results:
-            spans_amount_left = max_results - len(traces)
-            current_batch_size = min(spans_amount_left, max_endpoint_batch_size)
-
-            traces_stream = self._rest_client.traces.search_traces(
+        traces = rest_stream_parser.read_and_parse_full_stream(
+            read_source=lambda current_batch_size,
+            last_retrieved_id: self._rest_client.traces.search_traces(
                 project_name=project_name or self._project_name,
                 filters=filters_,
                 limit=current_batch_size,
                 truncate=truncate,
-                last_retrieved_id=traces[-1].id if len(traces) > 0 else None,
-            )
-
-            new_traces = rest_stream_parser.read_and_parse_stream(
-                stream=traces_stream, item_class=trace_public.TracePublic
-            )
-            traces.extend(new_traces)
-
-            if current_batch_size > len(new_traces):
-                break
+                last_retrieved_id=last_retrieved_id,
+            ),
+            max_results=max_results,
+            parsed_item_class=trace_public.TracePublic,
+        )
 
         return traces
 
@@ -966,36 +953,24 @@ class Opik:
             max_results: The maximum number of spans to return.
             truncate: Whether to truncate image data stored in input, output or metadata
         """
-        spans: List[span_public.SpanPublic] = []
-
         filter_expressions = opik_query_language.OpikQueryLanguage(
             filter_string
         ).get_filter_expressions()
         filters = helpers.parse_search_span_expressions(filter_expressions)
 
-        # this is the constant for maximum object sent from backend side
-        max_endpoint_batch_size = 2_000
-
-        while len(spans) < max_results:
-            spans_amount_left = max_results - len(spans)
-            current_batch_size = min(spans_amount_left, max_endpoint_batch_size)
-
-            spans_stream = self._rest_client.spans.search_spans(
+        spans = rest_stream_parser.read_and_parse_full_stream(
+            read_source=lambda current_batch_size,
+            last_retrieved_id: self._rest_client.spans.search_spans(
                 trace_id=trace_id,
                 project_name=project_name or self._project_name,
                 filters=filters,
                 limit=current_batch_size,
                 truncate=truncate,
-                last_retrieved_id=spans[-1].id if len(spans) > 0 else None,
-            )
-
-            new_spans = rest_stream_parser.read_and_parse_stream(
-                stream=spans_stream, item_class=span_public.SpanPublic
-            )
-            spans.extend(new_spans)
-
-            if current_batch_size > len(new_spans):
-                break
+                last_retrieved_id=last_retrieved_id,
+            ),
+            max_results=max_results,
+            parsed_item_class=span_public.SpanPublic,
+        )
 
         return spans
 

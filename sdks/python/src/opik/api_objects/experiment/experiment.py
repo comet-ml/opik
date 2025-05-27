@@ -104,9 +104,7 @@ class Experiment:
 
         """
         result: List[experiment_item.ExperimentItemContent] = []
-
-        # this is the constant for the maximum number of objects sent from the backend side
-        max_endpoint_batch_size = 2_000
+        max_endpoint_batch_size = rest_stream_parser.MAX_ENDPOINT_BATCH_SIZE
 
         while True:
             if max_results is None:
