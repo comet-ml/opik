@@ -5,7 +5,7 @@ import { convertColumnDataToColumn } from "@/lib/table";
 import { ProviderKey } from "@/types/providers";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import useAppStore from "@/store/AppStore";
-import AddEditAIProviderDialog from "@/components/shared/AddEditAIProviderDialog/AddEditAIProviderDialog";
+import ManageAIProviderDialog from "@/components/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import { formatDate } from "@/lib/date";
@@ -15,6 +15,7 @@ import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import AIProvidersRowActionsCell from "@/components/pages/ConfigurationPage/AIProvidersTab/AIProvidersRowActionsCell";
 import { areAllProvidersConfigured } from "@/lib/provider";
 import Loader from "@/components/shared/Loader/Loader";
+import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
@@ -63,11 +64,6 @@ const AIProvidersTab = () => {
 
   const providerKeys = useMemo(() => data?.content ?? [], [data?.content]);
 
-  const configuredProviderKeys = useMemo(
-    () => providerKeys.map((p) => p.provider),
-    [providerKeys],
-  );
-
   const filteredProviderKeys = useMemo(() => {
     if (providerKeys?.length === 0 || search === "") {
       return providerKeys;
@@ -112,47 +108,49 @@ const AIProvidersTab = () => {
   }
 
   return (
-    <>
-      <div>
-        <div className="mb-4 flex w-full items-center justify-between">
-          <SearchInput
-            searchText={search}
-            setSearchText={setSearch}
-            className="w-[320px]"
-            placeholder="Search by name"
-            dimension="sm"
-          />
-          <Button
-            onClick={handleAddConfigurationClick}
-            size="sm"
-            disabled={areAllProvidersConfigured(providerKeys)}
-          >
-            Add configuration
-          </Button>
-        </div>
-
-        <DataTable
-          columns={columns}
-          data={filteredProviderKeys}
-          columnPinning={DEFAULT_COLUMN_PINNING}
-          noData={
-            <DataTableNoData title={noDataLabel}>
-              {search === "" && (
-                <Button variant="link" onClick={handleAddConfigurationClick}>
-                  Add configuration
-                </Button>
-              )}
-            </DataTableNoData>
-          }
+    <div>
+      <CalloutAlert
+        description="Connect AI providers to send prompts and receive responses from different LLMs . Set up a provider to test prompts live and preview model behavior in the Playground, and to automatically score traces using online evaluation rules."
+        className="mb-4"
+      />
+      <div className="mb-4 flex w-full items-center justify-between">
+        <SearchInput
+          searchText={search}
+          setSearchText={setSearch}
+          className="w-[320px]"
+          placeholder="Search by name"
+          dimension="sm"
         />
+        <Button
+          onClick={handleAddConfigurationClick}
+          size="sm"
+          disabled={areAllProvidersConfigured(providerKeys)}
+        >
+          Add configuration
+        </Button>
       </div>
-      <AddEditAIProviderDialog
-        excludedProviders={configuredProviderKeys}
+
+      <DataTable
+        columns={columns}
+        data={filteredProviderKeys}
+        columnPinning={DEFAULT_COLUMN_PINNING}
+        noData={
+          <DataTableNoData title={noDataLabel}>
+            {search === "" && (
+              <Button variant="link" onClick={handleAddConfigurationClick}>
+                Add configuration
+              </Button>
+            )}
+          </DataTableNoData>
+        }
+      />
+      <ManageAIProviderDialog
+        configuredProvidersList={providerKeys}
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
       />
-    </>
+    </div>
   );
 };
 

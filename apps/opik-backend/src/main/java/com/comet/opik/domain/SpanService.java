@@ -22,7 +22,6 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -64,16 +63,6 @@ public class SpanService {
         searchCriteria = findProjectAndVerifyVisibility(searchCriteria);
 
         return spanDAO.find(page, size, searchCriteria);
-    }
-
-    private Mono<List<Project>> findProject(SpanSearchCriteria searchCriteria) {
-        return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-
-            return Mono
-                    .fromCallable(() -> projectService.findByNames(workspaceId, List.of(searchCriteria.projectName())))
-                    .subscribeOn(Schedulers.boundedElastic());
-        });
     }
 
     private SpanSearchCriteria findProjectAndVerifyVisibility(SpanSearchCriteria searchCriteria) {
@@ -118,9 +107,7 @@ public class SpanService {
     private Mono<UUID> insertSpan(Span span, Project project, UUID id, Span partialExistingSpan) {
         return Mono.defer(() -> {
             // Check if a partial span exists caused by a patch request, if so, proceed to insert.
-            if (StringUtils.isBlank(partialExistingSpan.name())
-                    && Instant.EPOCH.equals(partialExistingSpan.startTime())
-                    && partialExistingSpan.type() == null) {
+            if (Instant.EPOCH.equals(partialExistingSpan.startTime())) {
                 return create(span, project, id);
             }
             // Otherwise, a non-partial span already exists, so we ignore the insertion and just return the id.

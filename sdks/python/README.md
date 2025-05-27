@@ -1,5 +1,87 @@
 # Opik Python SDK
 
+[![PyPI version](https://img.shields.io/pypi/v/opik.svg)](https://pypi.org/project/opik/)
+[![Python versions](https://img.shields.io/pypi/pyversions/opik.svg)](https://pypi.org/project/opik/)
+[![Downloads](https://static.pepy.tech/badge/opik)](https://pepy.tech/project/opik)
+[![License](https://img.shields.io/github/license/comet-ml/opik)](https://github.com/comet-ml/opik/blob/main/LICENSE)
+
+The Opik Python SDK allows you to integrate your Python applications with the Opik platform, enabling comprehensive tracing, evaluation, and monitoring of your LLM systems. Opik helps you build, evaluate, and optimize LLM systems that run better, faster, and cheaper.
+
+Opik is an open-source LLM evaluation platform by [Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=github&utm_content=python_sdk_readme&utm_campaign=opik). For more information about the broader Opik ecosystem, visit our main [GitHub repository](https://github.com/comet-ml/opik), [Website](https://www.comet.com/site/products/opik/), or [Documentation](https://www.comet.com/docs/opik/).
+
+## Quickstart
+
+Get started quickly with Opik using our interactive notebook:
+
+<a href="https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/opik_quickstart.ipynb">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open Quickstart In Colab"/>
+</a>
+
+## Installation
+
+Install the `opik` package using pip or uv:
+
+```bash
+# using pip
+pip install opik
+
+# using uv (faster)
+uv pip install opik
+```
+
+## Configuration
+
+Configure the Python SDK by running the `opik configure` command. This will prompt you for your Opik server address (for self-hosted instances) or your API key and workspace (for Comet.com):
+
+```bash
+opik configure
+```
+
+You can also configure the SDK programmatically in your Python code:
+```python
+import opik
+
+# For Comet.com Cloud
+opik.configure(
+    api_key="YOUR_API_KEY",
+    workspace="YOUR_WORKSPACE", # Usually found in your Comet URL: https://www.comet.com/YOUR_WORKSPACE/...
+    project_name="optional-project-name" # Optional: set a default project for traces
+)
+
+# For self-hosted Opik instances
+# opik.configure(use_local=True, project_name="optional-project-name")
+```
+Refer to the [Python SDK documentation](https://www.comet.com/docs/opik/python-sdk-reference/) for more configuration options.
+
+## Basic Usage: Tracing
+
+The easiest way to log traces is to use the `@opik.track` decorator:
+
+```python
+import opik
+
+# Ensure Opik is configured (see Configuration section above)
+# opik.configure(...)
+
+@opik.track
+def my_llm_function(user_question: str) -> str:
+    # Your LLM call or business logic here
+    # For example:
+    # response = openai.ChatCompletion.create(...)
+    response = f"Echoing: {user_question}"
+
+    # You can add metadata to your trace
+    opik.set_tags(["example", "basic-usage"])
+    opik.log_metadata({"question_length": len(user_question)})
+
+    return response
+
+my_llm_function("Hello, Opik!")
+```
+Traces will appear in your configured Opik project. Opik also offers many direct [integrations](https://www.comet.com/docs/opik/tracing/integrations/overview/) for popular LLM frameworks.
+
+## Development & Contribution Guidelines
+
 For a more general contribution guide (backend + frontend + SDK) see our root [Contribution guide](../../CONTRIBUTING.md).
 
 # Coding guidelines

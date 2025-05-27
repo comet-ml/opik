@@ -19,8 +19,8 @@ export const SpanPublic: core.serialization.ObjectSchema<serializers.SpanPublic.
         projectId: core.serialization.property("project_id", core.serialization.string().optional()),
         traceId: core.serialization.property("trace_id", core.serialization.string()),
         parentSpanId: core.serialization.property("parent_span_id", core.serialization.string().optional()),
-        name: core.serialization.string(),
-        type: SpanPublicType,
+        name: core.serialization.string().optional(),
+        type: SpanPublicType.optional(),
         startTime: core.serialization.property("start_time", core.serialization.date()),
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
         input: JsonListStringPublic.optional(),
@@ -55,8 +55,8 @@ export declare namespace SpanPublic {
         project_id?: string | null;
         trace_id: string;
         parent_span_id?: string | null;
-        name: string;
-        type: SpanPublicType.Raw;
+        name?: string | null;
+        type?: SpanPublicType.Raw | null;
         start_time: string;
         end_time?: string | null;
         input?: JsonListStringPublic.Raw | null;
