@@ -15,7 +15,9 @@ from ..errors.bad_request_error import BadRequestError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.experiment_item import ExperimentItem
-from ..types.experiment_item_bulk_record_write import ExperimentItemBulkRecordWrite
+from ..types.experiment_item_bulk_record_experiment_item_bulk_write_view import (
+    ExperimentItemBulkRecordExperimentItemBulkWriteView,
+)
 from ..types.experiment_item_public import ExperimentItemPublic
 from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.experiment_public import ExperimentPublic
@@ -311,7 +313,7 @@ class RawExperimentsClient:
         *,
         experiment_name: str,
         dataset_name: str,
-        items: typing.Sequence[ExperimentItemBulkRecordWrite],
+        items: typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -323,7 +325,7 @@ class RawExperimentsClient:
 
         dataset_name : str
 
-        items : typing.Sequence[ExperimentItemBulkRecordWrite]
+        items : typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -339,7 +341,9 @@ class RawExperimentsClient:
                 "experiment_name": experiment_name,
                 "dataset_name": dataset_name,
                 "items": convert_and_respect_annotation_metadata(
-                    object_=items, annotation=typing.Sequence[ExperimentItemBulkRecordWrite], direction="write"
+                    object_=items,
+                    annotation=typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
+                    direction="write",
                 ),
             },
             headers={
@@ -927,7 +931,7 @@ class AsyncRawExperimentsClient:
         *,
         experiment_name: str,
         dataset_name: str,
-        items: typing.Sequence[ExperimentItemBulkRecordWrite],
+        items: typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -939,7 +943,7 @@ class AsyncRawExperimentsClient:
 
         dataset_name : str
 
-        items : typing.Sequence[ExperimentItemBulkRecordWrite]
+        items : typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -955,7 +959,9 @@ class AsyncRawExperimentsClient:
                 "experiment_name": experiment_name,
                 "dataset_name": dataset_name,
                 "items": convert_and_respect_annotation_metadata(
-                    object_=items, annotation=typing.Sequence[ExperimentItemBulkRecordWrite], direction="write"
+                    object_=items,
+                    annotation=typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
+                    direction="write",
                 ),
             },
             headers={
