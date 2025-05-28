@@ -1158,7 +1158,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ExperimentItemBulkUpload_Write"
+              $ref: "#/components/schemas/ExperimentItemBulkUpload_ExperimentItemBulkWriteView"
       responses:
         "204":
           description: No content
@@ -5807,7 +5807,13 @@ components:
           readOnly: true
         thread_id:
           type: string
-    ErrorInfo_Write:
+        visibility_mode:
+          type: string
+          readOnly: true
+          enum:
+          - default
+          - hidden
+    ErrorInfo_ExperimentItemBulkWriteView:
       required:
       - exception_type
       - traceback
@@ -5819,7 +5825,7 @@ components:
           type: string
         traceback:
           type: string
-    ExperimentItemBulkRecord_Write:
+    ExperimentItemBulkRecord_ExperimentItemBulkWriteView:
       required:
       - dataset_item_id
       type: object
@@ -5828,20 +5834,20 @@ components:
           type: string
           format: uuid
         trace:
-          $ref: "#/components/schemas/Trace_Write"
+          $ref: "#/components/schemas/Trace_ExperimentItemBulkWriteView"
         spans:
           maxItems: 100
           minItems: 0
           type: array
           items:
-            $ref: "#/components/schemas/Span_Write"
+            $ref: "#/components/schemas/Span_ExperimentItemBulkWriteView"
         feedback_scores:
           maxItems: 100
           minItems: 0
           type: array
           items:
-            $ref: "#/components/schemas/FeedbackScore_Write"
-    ExperimentItemBulkUpload_Write:
+            $ref: "#/components/schemas/FeedbackScore_ExperimentItemBulkWriteView"
+    ExperimentItemBulkUpload_ExperimentItemBulkWriteView:
       required:
       - dataset_name
       - experiment_name
@@ -5857,8 +5863,8 @@ components:
           minItems: 1
           type: array
           items:
-            $ref: "#/components/schemas/ExperimentItemBulkRecord_Write"
-    FeedbackScore_Write:
+            $ref: "#/components/schemas/ExperimentItemBulkRecord_ExperimentItemBulkWriteView"
+    FeedbackScore_ExperimentItemBulkWriteView:
       required:
       - name
       - source
@@ -5897,7 +5903,7 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-    JsonListString_Write:
+    JsonListString_ExperimentItemBulkWriteView:
       type: object
       anyOf:
       - type: object
@@ -5905,20 +5911,14 @@ components:
         items:
           type: object
       - type: string
-    Span_Write:
+    JsonNode_ExperimentItemBulkWriteView:
+      type: object
+    Span_ExperimentItemBulkWriteView:
       required:
       - start_time
-      - trace_id
       type: object
       properties:
         id:
-          type: string
-          format: uuid
-        project_name:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-          description: "If null, the default project is used"
-        trace_id:
           type: string
           format: uuid
         parent_span_id:
@@ -5940,11 +5940,11 @@ components:
           type: string
           format: date-time
         input:
-          $ref: "#/components/schemas/JsonListString_Write"
+          $ref: "#/components/schemas/JsonListString_ExperimentItemBulkWriteView"
         output:
-          $ref: "#/components/schemas/JsonListString_Write"
+          $ref: "#/components/schemas/JsonListString_ExperimentItemBulkWriteView"
         metadata:
-          $ref: "#/components/schemas/JsonNode_Write"
+          $ref: "#/components/schemas/JsonNode_ExperimentItemBulkWriteView"
         model:
           type: string
         provider:
@@ -5960,7 +5960,7 @@ components:
             type: integer
             format: int32
         error_info:
-          $ref: "#/components/schemas/ErrorInfo_Write"
+          $ref: "#/components/schemas/ErrorInfo_ExperimentItemBulkWriteView"
         last_updated_at:
           type: string
           format: date-time
@@ -5970,7 +5970,7 @@ components:
           type: number
         total_estimated_cost_version:
           type: string
-    Trace_Write:
+    Trace_ExperimentItemBulkWriteView:
       required:
       - start_time
       type: object
@@ -5991,18 +5991,18 @@ components:
           type: string
           format: date-time
         input:
-          $ref: "#/components/schemas/JsonListString_Write"
+          $ref: "#/components/schemas/JsonListString_ExperimentItemBulkWriteView"
         output:
-          $ref: "#/components/schemas/JsonListString_Write"
+          $ref: "#/components/schemas/JsonListString_ExperimentItemBulkWriteView"
         metadata:
-          $ref: "#/components/schemas/JsonNode_Write"
+          $ref: "#/components/schemas/JsonNode_ExperimentItemBulkWriteView"
         tags:
           uniqueItems: true
           type: array
           items:
             type: string
         error_info:
-          $ref: "#/components/schemas/ErrorInfo_Write"
+          $ref: "#/components/schemas/ErrorInfo_ExperimentItemBulkWriteView"
         last_updated_at:
           type: string
           format: date-time
@@ -7735,6 +7735,91 @@ components:
           type: boolean
         guardrailsEnabled:
           type: boolean
+    ErrorInfo_Write:
+      required:
+      - exception_type
+      - traceback
+      type: object
+      properties:
+        exception_type:
+          type: string
+        message:
+          type: string
+        traceback:
+          type: string
+    JsonListString_Write:
+      type: object
+      anyOf:
+      - type: object
+      - type: array
+        items:
+          type: object
+      - type: string
+    Span_Write:
+      required:
+      - start_time
+      - trace_id
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        trace_id:
+          type: string
+          format: uuid
+        parent_span_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+          - general
+          - tool
+          - llm
+          - guardrail
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        input:
+          $ref: "#/components/schemas/JsonListString_Write"
+        output:
+          $ref: "#/components/schemas/JsonListString_Write"
+        metadata:
+          $ref: "#/components/schemas/JsonNode_Write"
+        model:
+          type: string
+        provider:
+          type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        usage:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo_Write"
+        last_updated_at:
+          type: string
+          format: date-time
+        total_estimated_cost:
+          minimum: 0.0
+          exclusiveMinimum: false
+          type: number
+        total_estimated_cost_version:
+          type: string
     SpanBatch:
       required:
       - spans
@@ -8151,6 +8236,44 @@ components:
           type: number
         error_info:
           $ref: "#/components/schemas/ErrorInfo"
+    Trace_Write:
+      required:
+      - start_time
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        name:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        input:
+          $ref: "#/components/schemas/JsonListString_Write"
+        output:
+          $ref: "#/components/schemas/JsonListString_Write"
+        metadata:
+          $ref: "#/components/schemas/JsonNode_Write"
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo_Write"
+        last_updated_at:
+          type: string
+          format: date-time
+        thread_id:
+          type: string
     TraceBatch:
       required:
       - traces
@@ -8299,6 +8422,12 @@ components:
           readOnly: true
         thread_id:
           type: string
+        visibility_mode:
+          type: string
+          readOnly: true
+          enum:
+          - default
+          - hidden
     TraceThread:
       type: object
       properties:

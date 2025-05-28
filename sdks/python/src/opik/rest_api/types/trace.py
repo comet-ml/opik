@@ -11,6 +11,7 @@ from .feedback_score import FeedbackScore
 from .guardrails_validation import GuardrailsValidation
 from .json_list_string import JsonListString
 from .json_node import JsonNode
+from .trace_visibility_mode import TraceVisibilityMode
 
 
 class Trace(UniversalBaseModel):
@@ -45,6 +46,7 @@ class Trace(UniversalBaseModel):
     """
 
     thread_id: typing.Optional[str] = None
+    visibility_mode: typing.Optional[TraceVisibilityMode] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

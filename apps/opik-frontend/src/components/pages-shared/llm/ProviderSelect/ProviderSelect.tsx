@@ -61,7 +61,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
         value={option.value}
         description={<div className="pl-6">{option.description}</div>}
         withoutCheck
-        Wrapper={null}
+        wrapperAsChild={true}
       >
         <div className="flex w-full items-center justify-between">
           <div className="flex items-center gap-2">

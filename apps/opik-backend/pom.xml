@@ -17,7 +17,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <dropwizard.version>4.0.14</dropwizard.version>
-        <swagger.version>2.2.30</swagger.version>
+        <swagger.version>2.2.28</swagger.version> 
         <lombok.version>1.18.38</lombok.version>
         <mysql.version>9.3.0</mysql.version>
         <dropwizard-guicey.version>7.2.1</dropwizard-guicey.version>
