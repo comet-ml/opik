@@ -40,7 +40,6 @@ class Trace(UniversalBaseModel):
     guardrails_validations: typing.Optional[typing.List[GuardrailsValidation]] = None
     total_estimated_cost: typing.Optional[float] = None
     span_count: typing.Optional[int] = None
-    llm_call_count: typing.Optional[int] = None
     duration: typing.Optional[float] = pydantic.Field(default=None)
     """
     Duration in milliseconds as a decimal number to support sub-millisecond precision
