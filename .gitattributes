@@ -1,5 +1,2 @@
 *.java linguist-detectable=false
 *.mdx linguist-detectable=false
-# Force bash/shell scripts to use LF line endings
-*.sh text eol=lf
-*.bash text eol=lf
