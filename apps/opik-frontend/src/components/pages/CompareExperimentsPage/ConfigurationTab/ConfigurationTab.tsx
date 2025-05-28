@@ -27,6 +27,7 @@ import { Experiment } from "@/types/datasets";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-config-columns-width";
 
@@ -171,9 +172,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         limitWidth
       >
         <CalloutAlert
-          description="The experiment configuration captures key settings, like the prompt, model, and temperature, to keep experiments reproducible and easy to analyze."
-          docLink="/evaluation/concepts"
-          docHash="#experiment-configuration"
+          {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_experiment_configuration]}
         />
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
@@ -194,7 +193,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
           <CompareExperimentsActionsPanel />
           {isCompare && (
             <>
-              <Separator orientation="vertical" className="mx-1 h-4" />
+              <Separator orientation="vertical" className="mx-2 h-4" />
               <div className="flex items-center space-x-2">
                 <Label htmlFor="show-doff-only">Show differences only</Label>
                 <Switch

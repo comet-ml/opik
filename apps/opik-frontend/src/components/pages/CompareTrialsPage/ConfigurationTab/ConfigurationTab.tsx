@@ -28,6 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { OPTIMIZATION_METADATA_EXCLUDED_KEY } from "@/constants/experiments";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const COLUMNS_WIDTH_KEY = "compare-trials-config-columns-width";
 
@@ -175,7 +176,11 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         direction="horizontal"
         limitWidth
       >
-        <CalloutAlert description="The evaluation run configuration captures key settings—like the metric, and optimizer—to keep evaluation runs reproducible and easy to analyze." />
+        <CalloutAlert
+          {...EXPLAINERS_MAP[
+            EXPLAINER_ID.whats_the_evaluation_run_configuration
+          ]}
+        />
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
@@ -194,7 +199,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         <div className="flex items-center gap-2">
           {isCompare && (
             <>
-              <Separator orientation="vertical" className="mx-1 h-4" />
+              <Separator orientation="vertical" className="mx-2 h-4" />
               <div className="flex items-center space-x-2">
                 <Label htmlFor="show-doff-only">Show differences only</Label>
                 <Switch
