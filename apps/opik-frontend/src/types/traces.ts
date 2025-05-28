@@ -51,6 +51,7 @@ export interface BaseTraceData {
 
 export interface Trace extends BaseTraceData {
   span_count?: number;
+  llm_call_count?: number;
   thread_id?: string;
   project_id: string;
   workspace_name?: string;

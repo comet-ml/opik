@@ -490,6 +490,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               accessorFn: (row: BaseTraceData) => get(row, "span_count", "-"),
             },
             {
+              id: "llm_call_count",
+              label: "LLM calls count",
+              type: COLUMN_TYPE.number,
+              accessorFn: (row: BaseTraceData) =>
+                get(row, "llm_call_count", "-"),
+            },
+            {
               id: "thread_id",
               label: "Thread ID",
               type: COLUMN_TYPE.string,

@@ -27,6 +27,7 @@ export interface Trace {
     guardrailsValidations?: OpikApi.GuardrailsValidation[];
     totalEstimatedCost?: number;
     spanCount?: number;
+    llmCallCount?: number;
     /** Duration in milliseconds as a decimal number to support sub-millisecond precision */
     duration?: number;
     threadId?: string;

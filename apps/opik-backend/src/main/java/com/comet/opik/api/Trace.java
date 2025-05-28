@@ -60,6 +60,8 @@ public record Trace(
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) int spanCount,
         @JsonView({
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) int llmCallCount,
+        @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision") Double duration,
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) String threadId,
         @JsonView({
@@ -99,6 +101,7 @@ public record Trace(
         GUARDRAILS_VALIDATIONS("guardrails_validations"),
         TOTAL_ESTIMATED_COST("total_estimated_cost"),
         SPAN_COUNT("span_count"),
+        LLM_CALL_COUNT("llm_call_count"),
         DURATION("duration"),
         THREAD_ID("thread_id"),
         VISIBILITY_MODE("visibility_mode"),
