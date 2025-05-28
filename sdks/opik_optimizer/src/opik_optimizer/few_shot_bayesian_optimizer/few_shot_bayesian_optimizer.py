@@ -2,7 +2,7 @@ import json
 import logging
 import random
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import litellm
 import opik
@@ -14,12 +14,11 @@ from pydantic import BaseModel
 
 from opik_optimizer import base_optimizer
 from opik_optimizer.optimization_config import mappers
-from opik_optimizer.optimization_config.configs import MetricConfig, TaskConfig
+from opik_optimizer.optimization_config.configs import MetricConfig
 
 from .. import _throttle, optimization_result, task_evaluator, utils
 from ..optimization_config import chat_prompt
-from . import prompt_parameter, prompt_templates
-from . import reporting
+from . import prompt_parameter, reporting
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -426,7 +425,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
             # Step 1. Compute the baseline evaluation
             with reporting.display_evaluation(message="First we will establish the baseline performance:") as eval_report:
-                baseline_score = self.evaluate_prompt_2(
+                baseline_score = self.evaluate_prompt(
                     prompt=prompt,
                     dataset=dataset,
                     metric_config=metric_config,
@@ -470,7 +469,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             utils.enable_experiment_reporting()
             raise e
 
-    def evaluate_prompt_2(
+    def evaluate_prompt(
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
@@ -527,79 +526,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         return score
 
-
-    def evaluate_prompt(
-        self,
-        prompt: List[Dict[Literal["role", "content"], str]],
-        dataset: opik.Dataset,
-        metric_config: MetricConfig,
-        task_config: Optional[TaskConfig] = None,
-        dataset_item_ids: Optional[List[str]] = None,
-        experiment_config: Optional[Dict] = None,
-        n_samples: int = None,
-    ) -> float:
-        if isinstance(prompt, str):
-            if task_config is None:
-                raise ValueError(
-                    "To use a string prompt, please pass in task_config to evaluate_prompt()"
-                )
-
-            questions = {
-                field: ("{{%s}}" % field) for field in task_config.input_dataset_fields
-            }
-            prompt = [
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": json.dumps(questions)},
-            ]
-
-        # Ensure prompt is correctly formatted
-        if not all(
-            isinstance(item, dict) and "role" in item and "content" in item
-            for item in prompt
-        ):
-            raise ValueError(
-                "A ChatPrompt must be a list of dictionaries with 'role' and 'content' keys."
-            )
-
-        template = prompt_templates.ChatPromptTemplate(
-            prompt, validate_placeholders=False
-        )
-        llm_task = self._build_task_from_prompt_template(template)
-
-        experiment_config = experiment_config or {}
-        experiment_config = {
-            **experiment_config,
-            **{
-                "optimizer": self.__class__.__name__,
-                "metric": metric_config.metric.name,
-                "dataset": dataset.name,
-                "configuration": {
-                    "examples": prompt,
-                },
-            },
-        }
-
-        if n_samples is not None:
-            if dataset_item_ids is not None:
-                raise Exception("Can't use n_samples and dataset_item_ids")
-
-            all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
-            dataset_item_ids = random.sample(all_ids, n_samples)
-
-        logger.debug(f"Starting FewShotBayesian evaluation...")
-        score = task_evaluator.evaluate(
-            dataset=dataset,
-            dataset_item_ids=dataset_item_ids,
-            metric_config=metric_config,
-            evaluated_task=llm_task,
-            num_threads=self.n_threads,
-            project_name=self.project_name,
-            experiment_config=experiment_config,
-            verbose=self.verbose,
-        )
-        logger.debug(f"Evaluation score: {score:.4f}")
-
-        return score
 
     def _build_task_from_messages(
         self, messages: List[Dict[str, str]]

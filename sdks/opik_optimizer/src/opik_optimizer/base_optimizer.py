@@ -23,10 +23,10 @@ logger = logging.getLogger(__name__)
 
 class OptimizationRound(BaseModel):
     round_number: int
-    current_prompt: str
+    current_prompt: List[Dict[str, Any]]
     current_score: float
     generated_prompts: List[Dict[str, Any]]
-    best_prompt: str
+    best_prompt: List[Dict[str, Any]]
     best_score: float
     improvement: float
 
