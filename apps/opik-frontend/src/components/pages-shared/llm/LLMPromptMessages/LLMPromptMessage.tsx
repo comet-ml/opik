@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import { ChevronDown, CopyPlus, GripHorizontal, Trash } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
@@ -19,9 +19,11 @@ import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import Loader from "@/components/shared/Loader/Loader";
 import { mustachePlugin } from "@/constants/codeMirrorPlugins";
 import { DropdownOption } from "@/types/shared";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
+import LLMPromptMessageActions from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -58,9 +60,12 @@ const theme = EditorView.theme({
   },
 });
 
-interface LLMPromptMessageProps extends LLMMessage {
+interface LLMPromptMessageProps {
+  message: LLMMessage;
   hideRemoveButton: boolean;
   hideDragButton: boolean;
+  hidePromptActions: boolean;
+  showAlwaysActionsPanel?: boolean;
   onRemoveMessage: () => void;
   onDuplicateMessage: () => void;
   errorText?: string;
@@ -69,17 +74,21 @@ interface LLMPromptMessageProps extends LLMMessage {
 }
 
 const LLMPromptMessage = ({
-  id,
-  content,
-  role,
+  message,
   hideRemoveButton,
   hideDragButton,
+  hidePromptActions,
+  showAlwaysActionsPanel = false,
   errorText,
   possibleTypes = MESSAGE_TYPE_OPTIONS,
   onChangeMessage,
   onDuplicateMessage,
   onRemoveMessage,
 }: LLMPromptMessageProps) => {
+  const [isHoldActionsVisible, setIsHoldActionsVisible] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const { id, role, content } = message;
+
   const { active, attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
 
@@ -99,88 +108,106 @@ const LLMPromptMessage = ({
           editorViewRef.current?.focus();
         }}
         {...attributes}
-        className={cn(
-          "group py-2 px-3 relative [&:focus-within]:border-primary",
-          {
-            "z-10": id === active?.id,
-            "border-destructive": Boolean(errorText),
-          },
-        )}
+        className={cn("group py-2 px-3 [&:focus-within]:border-primary", {
+          "z-10": id === active?.id,
+          "border-destructive": Boolean(errorText),
+        })}
       >
-        <div className="absolute right-2 top-2 hidden gap-1 group-hover:flex">
-          {!hideRemoveButton && (
-            <TooltipWrapper content="Delete a message">
-              <Button
-                variant="outline"
-                size="icon-sm"
-                onClick={onRemoveMessage}
-                type="button"
-              >
-                <Trash />
-              </Button>
-            </TooltipWrapper>
-          )}
-          <TooltipWrapper content="Duplicate a message">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={onDuplicateMessage}
-              type="button"
-            >
-              <CopyPlus />
-            </Button>
-          </TooltipWrapper>
-          {!hideDragButton && (
-            <Button
-              variant="outline"
-              className="cursor-move"
-              size="icon-sm"
-              type="button"
-              {...listeners}
-            >
-              <GripHorizontal />
-            </Button>
-          )}
-        </div>
-
         <CardContent className="p-0">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="minimal" size="sm" className="min-w-4 p-0">
-                {LLM_MESSAGE_ROLE_NAME_MAP[role] || role}
-                <ChevronDown className="ml-1 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {possibleTypes.map(({ label, value }) => {
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={value}
-                    onSelect={() => onChangeMessage({ role: value })}
-                    checked={role === value}
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-background shadow-[0_6px_6px_-1px_rgba(255,255,255,1)]">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="minimal" size="sm" className="min-w-4 p-0">
+                  {LLM_MESSAGE_ROLE_NAME_MAP[role] || role}
+                  <ChevronDown className="ml-1 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {possibleTypes.map(({ label, value }) => {
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={value}
+                      onSelect={() => onChangeMessage({ role: value })}
+                      checked={role === value}
+                    >
+                      {label}
+                    </DropdownMenuCheckboxItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <div
+              className={cn(
+                "gap-2 group-hover:flex",
+                showAlwaysActionsPanel || isHoldActionsVisible
+                  ? "flex"
+                  : "hidden",
+              )}
+            >
+              {!hidePromptActions && (
+                <LLMPromptMessageActions
+                  message={message}
+                  onChangeMessage={onChangeMessage}
+                  setIsLoading={setIsLoading}
+                  setIsHoldActionsVisible={setIsHoldActionsVisible}
+                />
+              )}
+              {!hideRemoveButton && (
+                <TooltipWrapper content="Delete a message">
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    onClick={onRemoveMessage}
+                    type="button"
                   >
-                    {label}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <CodeMirror
-            onCreateEditor={(view) => {
-              editorViewRef.current = view;
-            }}
-            theme={theme}
-            value={content}
-            onChange={(c) => onChangeMessage({ content: c })}
-            placeholder="Type your message"
-            basicSetup={{
-              foldGutter: false,
-              allowMultipleSelections: false,
-              lineNumbers: false,
-              highlightActiveLine: false,
-            }}
-            extensions={[EditorView.lineWrapping, mustachePlugin]}
-          />
+                    <Trash />
+                  </Button>
+                </TooltipWrapper>
+              )}
+              <TooltipWrapper content="Duplicate a message">
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={onDuplicateMessage}
+                  type="button"
+                >
+                  <CopyPlus />
+                </Button>
+              </TooltipWrapper>
+              {!hideDragButton && (
+                <Button
+                  variant="outline"
+                  className="cursor-move"
+                  size="icon-sm"
+                  type="button"
+                  {...listeners}
+                >
+                  <GripHorizontal />
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {isLoading ? (
+            <Loader className="min-h-32" />
+          ) : (
+            <CodeMirror
+              onCreateEditor={(view) => {
+                editorViewRef.current = view;
+              }}
+              theme={theme}
+              value={content}
+              onChange={(c) => onChangeMessage({ content: c })}
+              placeholder="Type your message"
+              basicSetup={{
+                foldGutter: false,
+                allowMultipleSelections: false,
+                lineNumbers: false,
+                highlightActiveLine: false,
+              }}
+              extensions={[EditorView.lineWrapping, mustachePlugin]}
+            />
+          )}
         </CardContent>
       </Card>
       {errorText && (

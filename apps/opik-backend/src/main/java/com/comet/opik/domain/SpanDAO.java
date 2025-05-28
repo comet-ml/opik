@@ -179,7 +179,7 @@ class SpanDAO {
                     new_span.name
                 ) as name,
                 multiIf(
-                    CAST(old_span.type, 'Int8') > 0, old_span.type,
+                    notEquals(old_span.type, 'unknown'), old_span.type,
                     new_span.type
                 ) as type,
                 multiIf(
@@ -247,7 +247,7 @@ class SpanDAO {
                     :trace_id as trace_id,
                     :parent_span_id as parent_span_id,
                     :name as name,
-                    CAST(:type, 'Enum8(\\'unknown\\' = 0 , \\'general\\' = 1, \\'tool\\' = 2, \\'llm\\' = 3, \\'guardrail\\' = 4)') as type,
+                    :type as type,
                     parseDateTime64BestEffort(:start_time, 9) as start_time,
                     <if(end_time)> parseDateTime64BestEffort(:end_time, 9) as end_time, <else> null as end_time, <endif>
                     :input as input,
@@ -311,8 +311,8 @@ class SpanDAO {
             	workspace_id,
             	trace_id,
             	parent_span_id,
-            	name,
-            	type,
+                <if(name)> :name <else> name <endif> as name,
+            	<if(type)> :type <else> type <endif> as type,
             	start_time,
             	<if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> end_time <endif> as end_time,
             	<if(input)> :input <else> input <endif> as input,
@@ -372,11 +372,13 @@ class SpanDAO {
                 ) as parent_span_id,
                 multiIf(
                     LENGTH(new_span.name) > 0, new_span.name,
-                    old_span.name
+                    LENGTH(old_span.name) > 0, old_span.name,
+                    new_span.name
                 ) as name,
                 multiIf(
-                    CAST(new_span.type, 'Int8') > 0 , new_span.type,
-                    old_span.type
+                    notEquals(new_span.type, 'unknown'), new_span.type,
+                    notEquals(old_span.type, 'unknown'), old_span.type,
+                    new_span.type
                 ) as type,
                 multiIf(
                     notEquals(old_span.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND old_span.start_time >= toDateTime64('1970-01-01 00:00:00.000', 9), old_span.start_time,
@@ -453,8 +455,8 @@ class SpanDAO {
                     :workspace_id as workspace_id,
                     :trace_id as trace_id,
                     :parent_span_id as parent_span_id,
-                    '' as name,
-                    CAST('unknown', 'Enum8(\\'unknown\\' = 0 , \\'general\\' = 1, \\'tool\\' = 2, \\'llm\\' = 3)') as type,
+                    <if(name)> :name <else> '' <endif> as name,
+                    <if(type)> :type <else> 'unknown' <endif> as type,
                     toDateTime64('1970-01-01 00:00:00.000', 9) as start_time,
                     <if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> null <endif> as end_time,
                     <if(input)> :input <else> '' <endif> as input,
@@ -553,8 +555,6 @@ class SpanDAO {
 
     private static final String SELECT_PARTIAL_BY_ID = """
             SELECT
-                name,
-                type,
                 start_time
             FROM spans
             WHERE workspace_id = :workspace_id
@@ -868,7 +868,9 @@ class SpanDAO {
                 avgMap(usage) as usage,
                 avgMap(feedback_scores) AS feedback_scores,
                 avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
-                toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg
+                toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
+                sumIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_sum_,
+                toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum
             FROM spans_final s
             LEFT JOIN feedback_scores_agg AS f ON s.id = f.entity_id
             GROUP BY project_id
@@ -936,15 +938,15 @@ class SpanDAO {
                 statement.bind("id" + i, span.id())
                         .bind("project_id" + i, span.projectId())
                         .bind("trace_id" + i, span.traceId())
-                        .bind("name" + i, span.name())
-                        .bind("type" + i, span.type().toString())
+                        .bind("name" + i, StringUtils.defaultIfBlank(span.name(), ""))
+                        .bind("type" + i, Objects.toString(span.type(), SpanType.UNKNOWN_VALUE))
                         .bind("start_time" + i, span.startTime().toString())
                         .bind("parent_span_id" + i, span.parentSpanId() != null ? span.parentSpanId() : "")
                         .bind("input" + i, span.input() != null ? span.input().toString() : "")
                         .bind("output" + i, span.output() != null ? span.output().toString() : "")
                         .bind("metadata" + i, span.metadata() != null ? span.metadata().toString() : "")
-                        .bind("model" + i, span.model() != null ? span.model() : "")
-                        .bind("provider" + i, span.provider() != null ? span.provider() : "")
+                        .bind("model" + i, StringUtils.defaultIfBlank(span.model(), ""))
+                        .bind("provider" + i, StringUtils.defaultIfBlank(span.provider(), ""))
                         .bind("tags" + i, span.tags() != null ? span.tags().toArray(String[]::new) : new String[]{})
                         .bind("error_info" + i,
                                 span.errorInfo() != null ? JsonUtils.readTree(span.errorInfo()).toString() : "")
@@ -1001,9 +1003,14 @@ class SpanDAO {
                 .bind("id", span.id())
                 .bind("project_id", span.projectId())
                 .bind("trace_id", span.traceId())
-                .bind("name", span.name())
-                .bind("type", span.type().toString())
-                .bind("start_time", span.startTime().toString());
+                .bind("name", StringUtils.defaultIfBlank(span.name(), ""))
+                .bind("type", Objects.toString(span.type(), SpanType.UNKNOWN_VALUE))
+                .bind("start_time", span.startTime().toString())
+                .bind("input", Objects.toString(span.input(), ""))
+                .bind("output", Objects.toString(span.output(), ""))
+                .bind("metadata", Objects.toString(span.metadata(), ""))
+                .bind("model", StringUtils.defaultIfBlank(span.model(), ""))
+                .bind("provider", StringUtils.defaultIfBlank(span.provider(), ""));
         if (span.parentSpanId() != null) {
             statement.bind("parent_span_id", span.parentSpanId());
         } else {
@@ -1011,31 +1018,6 @@ class SpanDAO {
         }
         if (span.endTime() != null) {
             statement.bind("end_time", span.endTime().toString());
-        }
-        if (span.input() != null) {
-            statement.bind("input", span.input().toString());
-        } else {
-            statement.bind("input", "");
-        }
-        if (span.output() != null) {
-            statement.bind("output", span.output().toString());
-        } else {
-            statement.bind("output", "");
-        }
-        if (span.metadata() != null) {
-            statement.bind("metadata", span.metadata().toString());
-        } else {
-            statement.bind("metadata", "");
-        }
-        if (span.model() != null) {
-            statement.bind("model", span.model());
-        } else {
-            statement.bind("model", "");
-        }
-        if (span.provider() != null) {
-            statement.bind("provider", span.provider());
-        } else {
-            statement.bind("provider", "");
         }
 
         if (span.tags() != null) {
@@ -1143,6 +1125,11 @@ class SpanDAO {
     }
 
     private void bindUpdateParams(SpanUpdate spanUpdate, Statement statement, boolean isManualCostExist) {
+        if (StringUtils.isNotBlank(spanUpdate.name())) {
+            statement.bind("name", spanUpdate.name());
+        }
+        Optional.ofNullable(spanUpdate.type())
+                .ifPresent(type -> statement.bind("type", type.toString()));
         Optional.ofNullable(spanUpdate.input())
                 .ifPresent(input -> statement.bind("input", input.toString()));
         Optional.ofNullable(spanUpdate.output())
@@ -1165,10 +1152,12 @@ class SpanDAO {
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
         Optional.ofNullable(spanUpdate.metadata())
                 .ifPresent(metadata -> statement.bind("metadata", metadata.toString()));
-        Optional.ofNullable(spanUpdate.model())
-                .ifPresent(model -> statement.bind("model", model));
-        Optional.ofNullable(spanUpdate.provider())
-                .ifPresent(provider -> statement.bind("provider", provider));
+        if (StringUtils.isNotBlank(spanUpdate.model())) {
+            statement.bind("model", spanUpdate.model());
+        }
+        if (StringUtils.isNotBlank(spanUpdate.provider())) {
+            statement.bind("provider", spanUpdate.provider());
+        }
         Optional.ofNullable(spanUpdate.errorInfo())
                 .ifPresent(errorInfo -> statement.bind("error_info", JsonUtils.readTree(errorInfo).toString()));
 
@@ -1188,6 +1177,12 @@ class SpanDAO {
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist) {
         var template = new ST(sql);
+
+        if (StringUtils.isNotBlank(spanUpdate.name())) {
+            template.add("name", spanUpdate.name());
+        }
+        Optional.ofNullable(spanUpdate.type())
+                .ifPresent(type -> template.add("type", type.toString()));
         Optional.ofNullable(spanUpdate.input())
                 .ifPresent(input -> template.add("input", input.toString()));
         Optional.ofNullable(spanUpdate.output())
@@ -1196,10 +1191,12 @@ class SpanDAO {
                 .ifPresent(tags -> template.add("tags", tags.toString()));
         Optional.ofNullable(spanUpdate.metadata())
                 .ifPresent(metadata -> template.add("metadata", metadata.toString()));
-        Optional.ofNullable(spanUpdate.model())
-                .ifPresent(model -> template.add("model", model));
-        Optional.ofNullable(spanUpdate.provider())
-                .ifPresent(provider -> template.add("provider", provider));
+        if (StringUtils.isNotBlank(spanUpdate.model())) {
+            template.add("model", spanUpdate.model());
+        }
+        if (StringUtils.isNotBlank(spanUpdate.provider())) {
+            template.add("provider", spanUpdate.provider());
+        }
         Optional.ofNullable(spanUpdate.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime.toString()));
         Optional.ofNullable(spanUpdate.usage())
@@ -1288,11 +1285,8 @@ class SpanDAO {
                         .filter(str -> !str.isBlank())
                         .map(UUID::fromString)
                         .orElse(null))
-                .name(getValue(exclude, SpanField.NAME, row, "name", String.class))
-                .type(Optional.ofNullable(
-                        getValue(exclude, SpanField.TYPE, row, "type", String.class))
-                        .map(SpanType::fromString)
-                        .orElse(null))
+                .name(StringUtils.defaultIfBlank(getValue(exclude, SpanField.NAME, row, "name", String.class), null))
+                .type(SpanType.fromString(getValue(exclude, SpanField.TYPE, row, "type", String.class)))
                 .startTime(getValue(exclude, SpanField.START_TIME, row, "start_time", Instant.class))
                 .endTime(getValue(exclude, SpanField.END_TIME, row, "end_time", Instant.class))
                 .input(Optional.ofNullable(getValue(exclude, SpanField.INPUT, row, "input", String.class))
@@ -1308,20 +1302,17 @@ class SpanDAO {
                         .filter(str -> !str.isBlank())
                         .map(JsonUtils::getJsonNodeFromString)
                         .orElse(null))
-                .model(Optional.ofNullable(getValue(exclude, SpanField.MODEL, row, "model", String.class))
-                        .filter(str -> !str.isBlank())
-                        .orElse(null))
-                .provider(Optional
-                        .ofNullable(getValue(exclude, SpanField.PROVIDER, row, "provider", String.class))
-                        .filter(str -> !str.isBlank())
-                        .orElse(null))
+                .model(StringUtils.defaultIfBlank(getValue(exclude, SpanField.MODEL, row, "model", String.class), null))
+                .provider(StringUtils.defaultIfBlank(
+                        getValue(exclude, SpanField.PROVIDER, row, "provider", String.class), null))
                 .totalEstimatedCost(
                         Optional.ofNullable(getValue(exclude, SpanField.TOTAL_ESTIMATED_COST, row,
                                 "total_estimated_cost", BigDecimal.class))
                                 .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
                                 .orElse(null))
-                .totalEstimatedCostVersion(getValue(exclude, SpanField.TOTAL_ESTIMATED_COST_VERSION, row,
-                        "total_estimated_cost_version", String.class))
+                .totalEstimatedCostVersion(
+                        StringUtils.defaultIfBlank(getValue(exclude, SpanField.TOTAL_ESTIMATED_COST_VERSION, row,
+                                "total_estimated_cost_version", String.class), null))
                 .feedbackScores(Optional
                         .ofNullable(getValue(exclude, SpanField.FEEDBACK_SCORES, row, "feedback_scores_list",
                                 List.class))
@@ -1379,8 +1370,6 @@ class SpanDAO {
 
     private Publisher<Span> mapToPartialDto(Result result) {
         return result.map((row, rowMetadata) -> Span.builder()
-                .name(row.get("name", String.class))
-                .type(SpanType.fromString(row.get("type", String.class)))
                 .startTime(row.get("start_time", Instant.class))
                 .build());
     }

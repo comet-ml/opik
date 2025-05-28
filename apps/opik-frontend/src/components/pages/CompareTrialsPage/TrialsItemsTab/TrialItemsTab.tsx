@@ -38,6 +38,7 @@ import CompareExperimentsNameHeader from "@/components/pages-shared/experiments/
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import Loader from "@/components/shared/Loader/Loader";
+import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
 import { Experiment, ExperimentsCompare } from "@/types/datasets";
@@ -50,6 +51,7 @@ import {
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsColumns";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import ExperimentsFeedbackScoresSelect from "@/components/pages-shared/experiments/ExperimentsFeedbackScoresSelect/ExperimentsFeedbackScoresSelect";
 import { calculateHeightStyle } from "@/components/shared/DataTable/utils";
@@ -57,6 +59,7 @@ import { calculateLineHeight } from "@/lib/experiments";
 import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -74,6 +77,8 @@ const COLUMNS_ORDER_KEY = "compare-trials-columns-order";
 const DYNAMIC_COLUMNS_KEY = "compare-trials-dynamic-columns";
 const COLUMNS_SCORES_ORDER_KEY = "compare-trials-scores-columns-order";
 const COLUMNS_OUTPUT_ORDER_KEY = "compare-trials-output-columns-order";
+const PAGINATION_SIZE_KEY = "compare-trials-pagination-size";
+const ROW_HEIGHT_KEY = "compare-trials-row-height";
 
 export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
@@ -122,17 +127,25 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
     updateType: "replaceIn",
   });
 
-  const [size = 100, setSize] = useQueryParam("size", NumberParam, {
-    updateType: "replaceIn",
+  const [size, setSize] = useQueryParamAndLocalStorageState<
+    number | null | undefined
+  >({
+    localStorageKey: PAGINATION_SIZE_KEY,
+    queryKey: "size",
+    defaultValue: 100,
+    queryParamConfig: NumberParam,
+    syncQueryWithLocalStorageOnInit: true,
   });
 
-  const [height = ROW_HEIGHT.small, setHeight] = useQueryParam(
-    "height",
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
+  const [height, setHeight] = useQueryParamAndLocalStorageState<
+    string | null | undefined
+  >({
+    localStorageKey: ROW_HEIGHT_KEY,
+    queryKey: "height",
+    defaultValue: ROW_HEIGHT.small,
+    queryParamConfig: StringParam,
+    syncQueryWithLocalStorageOnInit: true,
+  });
 
   const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
     updateType: "replaceIn",
@@ -493,6 +506,13 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
 
   return (
     <>
+      <PageBodyStickyContainer
+        className="pb-4"
+        direction="horizontal"
+        limitWidth
+      >
+        <CalloutAlert {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_trial_items]} />
+      </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
         direction="bidirectional"

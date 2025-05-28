@@ -21,6 +21,7 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import Loader from "@/components/shared/Loader/Loader";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,8 @@ import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowAct
 import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const getRowId = (d: EvaluatorsRule) => d.id;
 
@@ -91,6 +94,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 const SELECTED_COLUMNS_KEY = "project-rules-selected-columns";
 const COLUMNS_WIDTH_KEY = "project-rules-columns-width";
 const COLUMNS_ORDER_KEY = "project-rules-columns-order";
+const PAGINATION_SIZE_KEY = "project-rules-pagination-size";
 
 type RulesTabProps = {
   projectId: string;
@@ -108,8 +112,14 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
     updateType: "replaceIn",
   });
 
-  const [size = 10, setSize] = useQueryParam("size", NumberParam, {
-    updateType: "replaceIn",
+  const [size, setSize] = useQueryParamAndLocalStorageState<
+    number | null | undefined
+  >({
+    localStorageKey: PAGINATION_SIZE_KEY,
+    queryKey: "size",
+    defaultValue: 10,
+    queryParamConfig: NumberParam,
+    syncQueryWithLocalStorageOnInit: true,
   });
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -225,6 +235,15 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   return (
     <>
       <PageBodyStickyContainer
+        className="pb-4"
+        direction="horizontal"
+        limitWidth
+      >
+        <CalloutAlert
+          {...EXPLAINERS_MAP[EXPLAINER_ID.whats_online_evaluation]}
+        />
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
         limitWidth
@@ -240,7 +259,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
         </div>
         <div className="flex items-center gap-2">
           <RulesActionsPanel rules={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}

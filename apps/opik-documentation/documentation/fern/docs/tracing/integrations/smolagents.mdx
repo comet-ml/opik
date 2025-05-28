@@ -1,0 +1,127 @@
+Smolagents is a framework from HuggingFace that allows you to create AI agents
+with various capabilities. The framework provides a simple way to build agents
+that can perform tasks like coding, searching the web, and more.
+
+Opik integrates seamlessly with Smolagents through OpenTelemetry, allowing you
+to trace and monitor your agent executions in detail.
+
+<Frame>
+  <img src="/img/cookbook/smolagents_trace_cookbook.png" />
+</Frame>
+
+## Getting started
+
+First, ensure you have both `opik` and `smolagents` packages installed with the
+telemetry components:
+
+```bash
+pip install opik 'smolagents[telemetry,toolkit]'
+```
+
+In addition, you can configure Opik using the `opik configure` command:
+
+```bash
+opik configure
+```
+
+Or programmatically:
+
+```python
+import opik
+opik.configure(use_local=False)  # Set to True if using a local Opik server
+```
+
+## Setting up OpenTelemetry for SmolAgents
+
+To enable tracing of your SmolAgents execution with Opik, you need to set up
+OpenTelemetry. First, configure the necessary environment variables:
+
+```python
+import opik
+import os
+
+opik_config = opik.config.get_from_user_inputs()
+
+# Set the OpenTelemetry endpoint
+endpoint = "https://www.comet.com/opik/api/v1/private/otel"
+os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = endpoint
+
+# Set the headers with authorization and project information
+headers = (
+    f"Authorization={opik_config.api_key},"
+    f"projectName={opik_config.project_name},"
+    f"Comet-Workspace={opik_config.workspace}"
+)
+os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = headers
+```
+
+<Tip>
+  The `projectName` and `Comet-Workspace` headers are optional and can be set to `Default` and `default` respectively.
+  If you are using the self-hosted version of Opik, you will need to update the endpoint URL. You can learn more about
+  this in the [Opik OpenTelemetry documentation](https://www.comet.com/docs/opik/tracing/opentelemetry/overview).
+</Tip>
+
+Next, set up the instrumentation for SmolAgents:
+
+```python
+# Import telemetry components
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+
+# Import SmolAgents instrumentation
+from openinference.instrumentation.smolagents import (
+    SmolagentsInstrumentor
+)
+
+# Import OTLP exporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+    OTLPSpanExporter
+)
+
+# Set up the tracer provider with span processor
+trace_provider = TracerProvider()
+trace_provider.add_span_processor(
+    SimpleSpanProcessor(OTLPSpanExporter())
+)
+
+# Instrument SmolAgents
+SmolagentsInstrumentor().instrument(tracer_provider=trace_provider)
+```
+
+## Using SmolAgents with Opik
+
+After setting up the instrumentation, you can use SmolAgents as usual. All agent
+executions will be automatically traced and sent to Opik:
+
+```python
+from smolagents import CodeAgent, WebSearchTool, OpenAIServerModel
+
+model = OpenAIServerModel(
+    model_id="gpt-4o",
+)
+
+agent = CodeAgent(
+    tools=[WebSearchTool()],
+    model=model,
+    stream_outputs=True
+)
+
+agent.run("How many seconds would it take for a leopard at full speed to run through Pont des Arts?")
+```
+
+With the OpenTelemetry configuration in place, all agent executions, including
+intermediate steps and tool usage, will be logged in Opik. This allows you to visualize the entire execution flow, examine inputs and outputs, and analyze the performance of your agents.
+
+## Features
+
+The Opik integration with SmolAgents provides:
+
+1. Detailed tracing of agent execution flows
+2. Visualization of tool calls and their results
+3. Tracking of LLM inputs and outputs
+4. Performance metrics for agent executions
+
+## Further improvements
+
+If you would like to see us improve this integration, simply open a new feature
+request on [Github](https://github.com/comet-ml/opik/issues).

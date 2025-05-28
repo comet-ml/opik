@@ -1,0 +1,111 @@
+# Contributing to the TypeScript SDK
+
+This guide will help you get started with contributing to the Opik TypeScript SDK.
+
+<Tip>
+  Before you start, please review our general [Contribution Overview](/contributing/overview) and the [Contributor
+  License Agreement (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md).
+</Tip>
+
+## Project Structure
+
+The TypeScript SDK is located in the `sdks/typescript` directory. Here's an overview of the key files and directories:
+
+- `src/`: Contains the main source code
+- `tests/`: Contains test files
+- `examples/`: Contains example usage of the SDK
+- `package.json`: Project dependencies and scripts
+- `tsconfig.json`: TypeScript configuration
+- `tsup.config.ts`: Build configuration
+- `vitest.config.ts`: Test configuration
+
+## Setup
+
+<Steps>
+  <Step title="Install dependencies">```bash cd sdks/typescript npm install ```</Step>
+  <Step title="Build the SDK">```bash npm run build ```</Step>
+  <Step title="Run tests">```bash npm test ```</Step>
+</Steps>
+
+## Development Workflow
+
+<Steps>
+  <Step title="Create a new branch">Create a new branch for your changes</Step>
+  <Step title="Make your changes">Implement your changes</Step>
+  <Step title="Add tests">Add tests for new functionality</Step>
+  <Step title="Run test suite">Run the test suite to ensure everything works</Step>
+  <Step title="Build the SDK">Build the SDK to ensure it compiles correctly</Step>
+  <Step title="Submit PR">Submit a pull request</Step>
+</Steps>
+
+## Testing
+
+We use Vitest for testing. Tests are located in the `tests/` directory. When adding new features:
+
+<Steps>
+  <Step title="Write unit tests">Write unit tests for your changes</Step>
+  <Step title="Run tests">Ensure all tests pass with `npm test`</Step>
+  <Step title="Check coverage">Maintain or improve test coverage</Step>
+</Steps>
+
+## Building
+
+The SDK is built using tsup. To build:
+
+```bash
+npm run build
+```
+
+This will create the distribution files in the `dist/` directory.
+
+## Documentation
+
+When adding new features or making changes:
+
+<Steps>
+  <Step title="Update README">Update the README.md if necessary</Step>
+  <Step title="Add JSDoc">Add JSDoc comments for new functions and classes</Step>
+  <Step title="Add examples">Include examples in the `examples/` directory</Step>
+  <Step title="Update docs">
+    Update the main documentation if necessary. See the [Documentation Guide](documentation) for details.
+  </Step>
+</Steps>
+
+## Code Style
+
+We use ESLint for code style enforcement. The configuration is in `eslint.config.js`. Before submitting a PR:
+
+<Steps>
+  <Step title="Run linter">Run `npm run lint` to check for style issues</Step>
+  <Step title="Fix issues">Fix any linting errors</Step>
+  <Step title="Check style">Ensure your code follows the project's style guidelines</Step>
+</Steps>
+
+## Pull Request Process
+
+<Steps>
+  <Step title="Fork repository">Fork the repository</Step>
+  <Step title="Create branch">Create your feature branch</Step>
+  <Step title="Make changes">Make your changes</Step>
+  <Step title="Run checks">Run tests and linting</Step>
+  <Step title="Submit PR">Submit a pull request</Step>
+</Steps>
+
+Your PR should:
+
+- Have a clear description of the changes
+- Include tests for new functionality
+- Pass all CI checks
+- Follow the project's coding standards
+
+## Need Help?
+
+If you need help or have questions:
+
+- Open an issue on GitHub
+- Join our [Comet Chat](https://chat.comet.com) community
+- Check the existing documentation
+
+---
+
+_Remember to review our [Contributor License Agreement (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md) before contributing._

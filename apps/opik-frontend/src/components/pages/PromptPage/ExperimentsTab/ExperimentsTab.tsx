@@ -50,6 +50,7 @@ import { Separator } from "@/components/ui/separator";
 import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const SELECTED_COLUMNS_KEY = "prompt-experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "prompt-experiments-columns-width";
@@ -73,6 +74,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
         activeVersionId: get(data, "id", null),
       }),
     },
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
   },
   {
     id: "created_at",
@@ -314,11 +316,8 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   }
 
   return (
-    <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Experiments</h1>
-      </div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+    <div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={search}
@@ -334,7 +333,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         </div>
         <div className="flex items-center gap-2">
           <ExperimentsActionsPanel experiments={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}

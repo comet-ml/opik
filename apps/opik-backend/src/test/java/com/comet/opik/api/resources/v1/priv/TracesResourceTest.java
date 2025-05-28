@@ -20,6 +20,7 @@ import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.Filter;
@@ -62,6 +63,7 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.usagelimit.Quota;
+import com.comet.opik.podam.InRangeStrategy;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -146,6 +148,9 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
+import static com.comet.opik.api.validate.InRangeValidator.MAX_ANALYTICS_DB;
+import static com.comet.opik.api.validate.InRangeValidator.MAX_ANALYTICS_DB_PRECISION_9;
+import static com.comet.opik.api.validate.InRangeValidator.MIN_ANALYTICS_DB;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -198,6 +203,7 @@ class TracesResourceTest {
                 it -> it.toBuilder().totalEstimatedCost(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.THREAD_ID, it -> it.toBuilder().threadId(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.DURATION, it -> it.toBuilder().duration(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.VISIBILITY_MODE, it -> it.toBuilder().visibilityMode(null).build());
     }
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -5654,9 +5660,10 @@ class TracesResourceTest {
         @Test
         void createWithMissingFields() {
             var trace = Trace.builder()
-                    .projectName("project" + RandomStringUtils.secure().nextAlphanumeric(32))
+                    .projectName("project-" + RandomStringUtils.secure().nextAlphanumeric(32))
                     .startTime(Instant.now())
                     .createdAt(Instant.now())
+                    .visibilityMode(VisibilityMode.DEFAULT)
                     .build();
             var id = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
@@ -5771,11 +5778,12 @@ class TracesResourceTest {
 
         @Test
         void batch__whenMissingFields__thenReturnNoContent() {
-            var projectName = "project" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
             var expectedTraces = IntStream.range(0, 5)
                     .mapToObj(i -> Trace.builder()
                             .projectName(projectName)
                             .startTime(Instant.now())
+                            .visibilityMode(VisibilityMode.DEFAULT)
                             .build())
                     .toList();
             traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
@@ -5791,6 +5799,7 @@ class TracesResourceTest {
                             .id(generator.generate())
                             .startTime(Instant.now())
                             .createdAt(Instant.now())
+                            .visibilityMode(VisibilityMode.DEFAULT)
                             .build())
                     .toList();
             traceResourceClient.batchCreateTraces(expectedTraces0, API_KEY, TEST_WORKSPACE);
@@ -5872,6 +5881,100 @@ class TracesResourceTest {
                     expectedTraces2.reversed(), // finds the previous
                     unexpectedTraces, // Does not find the update attempt
                     API_KEY);
+        }
+
+        Stream<Arguments> testInRange() {
+            return Stream.of(
+                    arguments(
+                            Instant.parse(MIN_ANALYTICS_DB),
+                            Instant.parse(MIN_ANALYTICS_DB),
+                            Instant.parse(MIN_ANALYTICS_DB)),
+                    arguments(
+                            Instant.parse(MAX_ANALYTICS_DB_PRECISION_9).minusNanos(1),
+                            Instant.parse(MAX_ANALYTICS_DB_PRECISION_9).minusNanos(1),
+                            Instant.parse(MAX_ANALYTICS_DB).minus(1, ChronoUnit.MICROS)),
+                    arguments(
+                            InRangeStrategy.INSTANCE.getRandomInstant(MIN_ANALYTICS_DB, MAX_ANALYTICS_DB_PRECISION_9),
+                            InRangeStrategy.INSTANCE.getRandomInstant(MIN_ANALYTICS_DB, MAX_ANALYTICS_DB_PRECISION_9),
+                            InRangeStrategy.INSTANCE.getRandomInstant(MIN_ANALYTICS_DB, MAX_ANALYTICS_DB)),
+                    arguments(
+                            Instant.now(),
+                            Instant.now(),
+                            Instant.now()),
+                    arguments(
+                            Instant.now(),
+                            null,
+                            null));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void testInRange(Instant startTime, Instant endTime, Instant lastUpdatedAt) {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var expectedTraces = IntStream.range(0, 1)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .startTime(startTime)
+                            .endTime(endTime)
+                            .lastUpdatedAt(lastUpdatedAt)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(startTime, endTime))
+                            .comments(null)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
+
+            getAndAssertPage(
+                    TEST_WORKSPACE,
+                    projectName,
+                    null,
+                    List.of(),
+                    List.of(),
+                    expectedTraces.reversed(),
+                    List.of(),
+                    API_KEY);
+        }
+
+        Stream<Arguments> testInRangeError() {
+            return Stream.of(
+                    arguments(
+                            Instant.parse(MIN_ANALYTICS_DB).minusNanos(1),
+                            Instant.parse(MIN_ANALYTICS_DB).minusNanos(1),
+                            Instant.parse(MIN_ANALYTICS_DB).minusNanos(1)),
+                    arguments(
+                            Instant.parse(MAX_ANALYTICS_DB_PRECISION_9),
+                            Instant.parse(MAX_ANALYTICS_DB_PRECISION_9),
+                            Instant.parse(MAX_ANALYTICS_DB)));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void testInRangeError(Instant startTime, Instant endTime, Instant lastUpdatedAt) {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var expectedTraces = IntStream.range(0, 1)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .startTime(startTime)
+                            .endTime(endTime)
+                            .lastUpdatedAt(lastUpdatedAt)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(startTime, endTime))
+                            .comments(null)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            try (var actualResponse = traceResourceClient.callBatchCreateTraces(
+                    expectedTraces, API_KEY, TEST_WORKSPACE)) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedErrors = List.of(
+                        "traces[0].startTime must be after or equal 1970-01-01T00:00:00.000000Z and before 2262-04-11T23:47:16.000000000Z",
+                        "traces[0].endTime must be after or equal 1970-01-01T00:00:00.000000Z and before 2262-04-11T23:47:16.000000000Z",
+                        "traces[0].lastUpdatedAt must be after or equal 1970-01-01T00:00:00.000000Z and before 2300-01-01T00:00:00.000000Z");
+                var actualError = actualResponse.readEntity(ErrorMessage.class);
+                assertThat(actualError.errors()).containsExactlyInAnyOrderElementsOf(expectedErrors);
+            }
         }
 
         @ParameterizedTest
@@ -6301,6 +6404,7 @@ class TracesResourceTest {
                     .id(generator.generate())
                     .startTime(Instant.now().minusSeconds(10))
                     .createdAt(Instant.now())
+                    .visibilityMode(VisibilityMode.DEFAULT)
                     .build();
             id = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
         }

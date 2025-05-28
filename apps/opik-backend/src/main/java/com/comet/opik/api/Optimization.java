@@ -1,5 +1,7 @@
 package com.comet.opik.api;
 
+import com.comet.opik.api.validate.InRange;
+import com.comet.opik.api.validate.InRangeValidator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -31,8 +33,8 @@ public record Optimization(
                 Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScoreAverage> feedbackScores,
         @JsonView({Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
-        @JsonView({
-                Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
+        @JsonView({Optimization.View.Public.class,
+                Optimization.View.Write.class}) @InRange(before = InRangeValidator.MAX_ANALYTICS_DB) Instant lastUpdatedAt,
         @JsonView({
                 Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy){
 

@@ -26,7 +26,45 @@ jobs:
                   echo "$OUTPUT"
                   URL=$(echo "$OUTPUT" | grep -oP 'Published docs to \K.*(?= \()')
                   echo "Preview URL: $URL"
+                  echo "URL=$URL" >> $GITHUB_OUTPUT
                   echo "🌿 Preview your docs: $URL" > preview_url.txt
+
+            - name: Check for broken links
+              id: check-broken-links
+              working-directory: apps/opik-documentation/documentation
+              run: |
+                echo -e "\n\n" >> preview_url.txt
+                npx linkinator ${{ steps.generate-docs.outputs.URL }} \
+                  --recurse \
+                  --skip "search\/v2\/key" \
+                  --skip "https://ai.google.dev/gemini-api" \
+                  --skip "https://chat.comet.com/" \
+                  --skip "https://github.com" \
+                  --skip "http://localhost" \
+                  --skip "http://localhost:5173" \
+                  --format csv | awk -F',' '
+                    BEGIN { found_broken = 0 }
+                    NR==1 {next}
+                    {
+                      # Remove leading/trailing quotes from each field
+                      gsub(/^"|"$/, "", $1)
+                      gsub(/^"|"$/, "", $2)
+                      gsub(/^"|"$/, "", $4)
+                      if ($3 != "OK" && $2 != "403") {
+                        if (found_broken == 0) {
+                          print "**The following broken links where found:**\n\n" >> "preview_url.txt"
+                          found_broken = 1
+                        }
+                        
+                        printf "Page: %s\n❌ Broken link: %s (%s)\n\n", $4, $1, $2 >> "preview_url.txt"
+                      }
+                    }
+                    END {
+                      if (found_broken == 0) {
+                        print "No broken links found" >> "preview_url.txt"
+                      }
+                    }
+                  '
 
             - name: Comment URL in PR
               uses: thollander/actions-comment-pull-request@v2.4.3

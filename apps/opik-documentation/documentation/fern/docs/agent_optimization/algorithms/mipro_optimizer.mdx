@@ -1,29 +1,59 @@
+---
+title: "MIPRO Optimizer: Agent & Complex Optimization"
+subtitle: "Optimize complex agent behaviors and tool-using prompts."
+description: "Learn how to use the MIPRO Optimizer to optimize complex agent behaviors and tool-using prompts through multi-agent interactive optimization."
+pytest_codeblocks_skip: true
+---
+
 The MiproOptimizer is a specialized prompt optimization tool that implements the MIPRO (Multi-agent Interactive Prompt Optimization) algorithm. It's designed to handle complex optimization tasks through multi-agent collaboration and interactive refinement.
+
+<Note>
+  **When to Use This Optimizer:**
+  `MiproOptimizer` is the preferred choice for complex tasks, especially those involving **tool use** or requiring **multi-step reasoning**. If you are building an agent that needs to interact with external tools or follow a sophisticated chain of thought, and you want to optimize the underlying prompts and agent structure, `MiproOptimizer` (which leverages DSPy) is highly suitable.
+
+**Key Trade-offs:**
+
+- The optimization process can be more involved than single-prompt optimizers due to its reliance on the DSPy framework and compilation process.
+- Understanding basic DSPy concepts (like Modules, Signatures, Teleprompters) can be beneficial for advanced customization and debugging, though Opik abstracts much of this.
+- Debugging can sometimes be more complex as you are optimizing a program/agent structure, not just a single string.
+
+</Note>
+
+<Info>
+  Got questions about `MiproOptimizer` or its use with DSPy? The [Optimizer & SDK
+  FAQ](/agent_optimization/opik_optimizer/faq) covers topics such as when to use `MiproOptimizer`, its relationship with
+  DSPy, the role of `num_candidates`, and using it without deep DSPy knowledge.
+</Info>
 
 ## How It Works
 
-1. **Multi-agent System**
+The `MiproOptimizer` leverages the [DSPy](https://dspy.ai/) library, specifically an internal version of its MIPRO (Modular Instruction Programming and Optimization) teleprompter, to optimize potentially complex prompt structures, including those for tool-using agents.
 
-   - Specialized agents for different aspects of optimization
-   - Collaborative prompt generation and refinement
-   - Distributed evaluation and feedback
+Here's a simplified overview of the process:
 
-2. **Interactive Optimization**
+1.  **DSPy Program Representation**: Your task, as defined by `TaskConfig` (including the `instruction_prompt`, input/output fields, and any `tools`), is translated into a DSPy program structure. If tools are provided, this often involves creating a `dspy.ReAct` or similar agent module.
 
-   - Real-time feedback integration
-   - Dynamic prompt adjustment
-   - Continuous learning from interactions
+2.  **Candidate Generation (Compilation)**: The core of MIPRO involves compiling this DSPy program. This "compilation" is an optimization process itself:
 
-3. **Performance Evaluation**
+    - It explores different ways to formulate the instructions within the DSPy program's modules (e.g., the main instruction, tool usage instructions if applicable).
+    - It also optimizes the selection of few-shot demonstrations to include within the prompts for these modules, if the DSPy program structure uses them.
+    - This is guided by an internal DSPy teleprompter algorithm (like `MIPROv2` in the codebase) which uses techniques like bootstrapping demonstrations and proposing instruction variants.
 
-   - Multi-metric assessment
-   - Parallel testing capabilities
-   - Comprehensive logging
+3.  **Evaluation**: Each candidate program (representing a specific configuration of instructions and/or demonstrations) is evaluated on your training dataset (`dataset`) using the specified `metric_config`. The `MiproOptimizer` uses DSPy's evaluation mechanisms, which can handle complex interactions, especially for tool-using agents.
 
-4. **Adaptive Learning**
-   - Experience-based improvement
-   - Context-aware optimization
-   - Dynamic strategy adjustment
+4.  **Iterative Refinement**: The teleprompter iteratively refines the program based on these evaluations, aiming to find a program configuration that maximizes the metric score. The `num_candidates` parameter in `optimize_prompt` influences how many of these configurations are explored.
+
+5.  **Result**: The `MiproOptimizer` returns an `OptimizationResult` containing the best-performing DSPy program structure found. This might be a single optimized prompt string or, for more complex agents, a collection of optimized prompts that make up the agent's internal logic (e.g., `tool_prompts` in the `OptimizationResult`).
+
+Essentially, `MiproOptimizer` uses MIPRO algorithm to not just optimize a single string prompt, but potentially a whole system of prompts and few-shot examples that define how an LLM (or an LLM-based agent) should behave to accomplish a task.
+
+<Tip>
+  The evaluation of each candidate program (Step 3) is crucial. It uses your `MetricConfig` and `dataset` to score how
+  well a particular set of agent instructions or prompts performs. Since `MiproOptimizer` often deals with agentic
+  behavior, understanding Opik's broader evaluation tools is beneficial: - [Evaluation Overview](/evaluation/overview) -
+  [Evaluate Agents](/evaluation/evaluate_agents) (particularly relevant) - [Evaluate
+  Prompts](/evaluation/evaluate_prompt) - [Metrics Overview](/evaluation/metrics/overview)
+</Tip>
 
 ## Configuration Options
 
@@ -44,128 +74,120 @@ optimizer = MiproOptimizer(
 
 ### Advanced Configuration
 
-```python
-optimizer = MiproOptimizer(
-    model="openai/gpt-4",
-    project_name="my-project",
-    temperature=0.1,
-    max_tokens=5000,
-    num_threads=8,
-    seed=42,
-    num_agents=3,           # Number of optimization agents
-    interaction_rounds=5,   # Number of interaction rounds
-    exploration_rate=0.3,   # Exploration vs exploitation balance
-    feedback_weight=0.7,    # Weight of feedback in optimization
-    convergence_threshold=0.01  # Optimization convergence threshold
-)
-```
+The `MiproOptimizer` leverages the [DSPy](https://dspy.ai/) library for its optimization capabilities, specifically using an internal implementation similar to DSPy's MIPRO teleprompter (referred to as `MIPROv2` in the codebase).
+
+The constructor for `MiproOptimizer` is simple (`model`, `project_name`, `**model_kwargs`). The complexity of the optimization is managed within the DSPy framework when `optimize_prompt` is called.
+
+Key aspects passed to `optimize_prompt` that influence the DSPy optimization include:
+
+- `task_config`: This defines the overall task, including the initial `instruction_prompt`, `input_dataset_fields`, and `output_dataset_field`. If `task_config.tools` are provided, `MiproOptimizer` will attempt to build and optimize a DSPy agent that uses these tools.
+- `metric_config`: Defines how candidate DSPy programs (prompts/agents) are scored.
+- `num_candidates`: This parameter from `optimize_prompt` controls how many different program configurations are explored during optimization.
 
 ## Example Usage
 
 ```python
-from opik_optimizer import MiproOptimizer
+from opik_optimizer import MiproOptimizer, TaskConfig, MetricConfig, from_llm_response_text, from_dataset_field
 from opik.evaluation.metrics import LevenshteinRatio
-from opik_optimizer import (
-    MetricConfig,
-    TaskConfig,
-    from_llm_response_text,
-    from_dataset_field,
-)
-from opik_optimizer.demo import get_or_create_dataset
+from opik_optimizer import datasets
 
 # Initialize optimizer
 optimizer = MiproOptimizer(
     model="openai/gpt-4",
+    project_name="mipro_optimization_project",
     temperature=0.1,
     max_tokens=5000
 )
 
 # Prepare dataset
-dataset = get_or_create_dataset("hotpot-300")
+dataset = datasets.hotpot_300()
 
-# Define metric and task configuration (see docs for more options)
+# Define metric and task configuration
 metric_config = MetricConfig(
     metric=LevenshteinRatio(),
     inputs={
-        "output": from_llm_response_text(),  # Model's output
-        "reference": from_dataset_field(name="answer"),  # Ground truth
+        "output": from_llm_response_text(),
+        "reference": from_dataset_field(name="answer"),
     }
 )
+
+# Define some tools
+def calculator(expression):
+    """Perform mathematical calculations"""
+    return str(eval(expression))
+
+def search(query):
+    """Search for information on a given topic"""
+    # placeholder for search functionality
+    return "hello_world"
+
+# Define task configuration with tools
 task_config = TaskConfig(
-    type="text_generation",
-    instruction_prompt="Provide an answer to the question.",
+    instruction_prompt="Complete the task using the provided tools.",
     input_dataset_fields=["question"],
-    output_dataset_field="answer"
+    output_dataset_field="answer",
+    use_chat_prompt=True,
+    tools=[search, calculator]
 )
 
 # Run optimization
 results = optimizer.optimize_prompt(
     dataset=dataset,
-    num_trials=10,
     metric_config=metric_config,
-    task_config=task_config
+    task_config=task_config,
+    num_candidates=1  # Number of different program configurations to explore
 )
 
 # Access results
-print(f"Best prompt: {results.best_prompt}")
-print(f"Improvement: {results.improvement_percentage}%")
+results.display()
 ```
 
 ## Model Support
 
-The MiproOptimizer supports all models available through LiteLLM. For a complete list of supported models and providers, see the [LiteLLM documentation](https://docs.litellm.ai/docs/providers) documentation.
+The `MiproOptimizer` supports all models available through LiteLLM. This includes models from OpenAI, Azure OpenAI, Anthropic, Google (Vertex AI / AI Studio), Mistral AI, Cohere, locally hosted models (e.g., via Ollama), and many others.
 
-### Common Providers
-
-- OpenAI (gpt-4, gpt-3.5-turbo, etc.)
-- Azure OpenAI
-- Anthropic (Claude)
-- Google (Gemini)
-- Mistral
-- Cohere
-
-### Configuration Example
-
-```python
-optimizer = MiproOptimizer(
-    model="anthropic/claude-3-opus",  # or any LiteLLM supported model
-    project_name="my-project",
-    temperature=0.1,
-    max_tokens=5000
-)
-```
+For detailed instructions on how to specify different models and configure providers, please refer to the main [LiteLLM Support for Optimizers documentation page](/agent_optimization/opik_optimizer/litellm_support).
 
 ## Best Practices
 
-1. **Agent Configuration**
+1. **Task Complexity Assessment**
 
-   - Start with 2-3 agents for simple tasks
-   - Increase agents for complex problems
-   - Monitor agent interactions
+   - Use `MiproOptimizer` for tasks requiring multi-step reasoning or tool use
+   - Consider simpler optimizers for single-prompt tasks
+   - Evaluate if your task benefits from DSPy's programmatic approach
 
-2. **Interaction Strategy**
+2. **Tool Configuration**
 
-   - Balance exploration and exploitation
-   - Use appropriate feedback weights
-   - Monitor convergence metrics
+   - Provide clear, detailed tool descriptions
+   - Include example usage in tool descriptions
+   - Ensure tool parameters are well-defined
 
-3. **Performance Tuning**
+3. **Dataset Preparation**
 
-   - Adjust num_threads based on resources
-   - Optimize interaction rounds
-   - Fine-tune exploration rate
+   - Include examples of tool usage in your dataset
+   - Ensure examples cover various tool combinations
+   - Include edge cases and error scenarios
 
-4. **Resource Management**
-   - Monitor memory usage
-   - Balance agent count and performance
-   - Optimize parallel processing
+4. **Optimization Strategy**
+
+   - Start with a reasonable `num_candidates` (5-10)
+   - Monitor optimization progress
+   - Adjust based on task complexity
+
+5. **Evaluation Metrics**
+   - Choose metrics that reflect tool usage success
+   - Consider composite metrics for complex tasks
+   - Include task-specific evaluation criteria
 
 ## Research and References
 
-- [Multi-agent Systems for Optimization](https://arxiv.org/abs/2103.12345)
-- [Interactive Prompt Optimization](https://arxiv.org/abs/2201.12345)
-- [Adaptive Learning in Multi-agent Systems](https://arxiv.org/abs/2301.12345)
+- [MIPRO Paper - Optimizing Instructions and Demonstrations for Multi-Stage Language Model Programs](https://arxiv.org/abs/2406.11695)
+- [DSPy Documentation](https://dspy.ai/)
+- [ReAct: Synergizing Reasoning and Acting in Language Models](https://arxiv.org/abs/2210.03629)
 
 ## Next Steps
 
-- Learn about [DSPy](https://dspy.ai/)
+- Explore other [Optimization Algorithms](/agent_optimization/overview#optimization-algorithms)
+- Learn about [Tool Integration](/agent_optimization/opik_optimizer/tools) for agent optimization
+- Try the [Example Projects & Cookbooks](/agent_optimization/cookbook) for runnable Colab notebooks using this optimizer
+- Read the [DSPy Documentation](https://dspy.ai/) to understand the underlying optimization framework

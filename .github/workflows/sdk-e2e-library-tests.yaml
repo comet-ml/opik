@@ -12,6 +12,7 @@ on:
           options:
             - all
             - adk
+            - litellm
     schedule:
       - cron: "0 0 */2 * *"
     pull_request:
@@ -87,13 +88,24 @@ jobs:
           GOOGLE_CLOUD_LOCATION: us-east1
           GOOGLE_CLOUD_PROJECT: opik-sdk-tests
           GOOGLE_GENAI_USE_VERTEXAI: TRUE
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
         uses: ./.github/actions/install_opik_and_run_e2e_lib_integration_tests
         with:
           python_version: ${{ matrix.python_version }}
           library_name: adk
 
+      - name: LiteLLM Tests Python ${{ matrix.python_version }}
+        if: contains(fromJSON('["litellm", "all"]'), env.LIBS)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
+        uses: ./.github/actions/install_opik_and_run_e2e_lib_integration_tests
+        with:
+          python_version: ${{ matrix.python_version }}
+          library_name: litellm
+
       - name: Stop opik server
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
           docker compose down
-

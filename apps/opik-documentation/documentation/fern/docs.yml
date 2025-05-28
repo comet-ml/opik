@@ -7,6 +7,9 @@ metadata:
   og:title: "Opik LLM development Platform | Observability, Evaluation & Security"
   og:description: "Debug, evaluate, and monitor your LLM applications, RAG systems, and agentic workflows with comprehensive tracing, automated evaluations, and production-ready dashboards."
   og:url: "https://www.comet.com/docs/opik"
+  og:locale: "en_US"
+  twitter:title: "Opik Documentation"
+  twitter:description: "Debug, evaluate, and monitor your LLM applications, RAG systems, and agentic workflows with comprehensive tracing, automated evaluations, and production-ready dashboards."
 
 title: Opik Documentation
 favicon: img/logo.svg
@@ -16,6 +19,8 @@ js:
     strategy: afterInteractive
   - path: ./dify_chatbot.js
     strategy: lazyOnload
+css: ./styles.css
+
 layout:
   searchbar-placement: header
   tabs-placement: header
@@ -59,9 +64,13 @@ tabs:
     icon: fa-regular fa-server
     slug: /self-host
   reference:
-    display-name: SDK and API reference
+    display-name: SDK & API reference
     icon: fa-regular fa-square-terminal
     slug: /reference
+  contributing:
+    display-name: Contributing
+    icon: fa-regular fa-code-branch
+    slug: /contributing
 navigation:
   - tab: documentation
     layout:
@@ -139,15 +148,21 @@ navigation:
               - page: Langchain
                 path: docs/tracing/integrations/langchain.mdx
                 slug: langchain
+              - page: Agent Development Kit
+                path: docs/tracing/integrations/adk.mdx
+                slug: adk
               - page: AIsuite
                 path: docs/tracing/integrations/aisuite.mdx
                 slug: aisuite
-              - page: AG2
-                path: docs/tracing/integrations/ag2.mdx
-                slug: ag2
               - page: Autogen
                 path: docs/tracing/integrations/autogen.mdx
                 slug: autogen
+              - page: AG2
+                path: docs/tracing/integrations/ag2.mdx
+                slug: ag2
+              - page: Agno
+                path: docs/tracing/integrations/agno.mdx
+                slug: agno
               - page: Anthropic
                 path: docs/tracing/integrations/anthropic.mdx
                 slug: anthropic
@@ -202,21 +217,27 @@ navigation:
               - page: Ragas
                 path: docs/tracing/integrations/ragas.mdx
                 slug: ragas
+              - page: Smolagents
+                path: docs/tracing/integrations/smolagents.mdx
+                slug: smolagents
+              - page: Strands Agents
+                path: docs/tracing/integrations/strands-agents.mdx
+                slug: strands-agents
               - page: Vercel AI SDK
                 path: docs/tracing/integrations/vercel-ai-sdk.mdx
                 slug: vercel-ai-sdk
               - page: WatsonX
                 path: docs/tracing/integrations/watsonx.mdx
                 slug: watsonx
-              - page: Agent Development Kit
-                path: docs/tracing/integrations/adk.mdx
-                slug: adk
           - section: OpenTelemetry
             slug: /opentelemetry
             contents:
               - page: Get Started
                 path: docs/tracing/opentelemetry/overview.mdx
                 slug: overview
+              - page: Python SDK
+                path: docs/tracing/opentelemetry/python-sdk.mdx
+                slug: python-sdk
       - section: Evaluation
         slug: /evaluation
         contents:
@@ -312,51 +333,81 @@ navigation:
             slug: guardrails
   - tab: agent-optimization
     layout:
-      - page: Overview
+      - page: Opik Agent Optimizer
         icon: fa-regular fa-house
         path: docs/agent_optimization/overview.mdx
         slug: overview
-      - section: Opik Optimizer
+      - section: Opik Agent Optimizer Guide
         slug: /opik_optimizer
         contents:
-          - page: Quickstart
+          - page: Optimizer Quickstart
             icon: fa-regular fa-bolt
             path: docs/agent_optimization/opik_optimizer/quickstart.mdx
             slug: quickstart
-          - page: Concepts
+          - page: Optimizer Concepts
             icon: fa-regular fa-lightbulb
             path: docs/agent_optimization/opik_optimizer/concepts.mdx
             slug: concepts
-          - page: Datasets and testing
+          - page: Datasets for Optimization
             icon: fa-regular fa-database
             path: docs/agent_optimization/opik_optimizer/datasets.mdx
             slug: datasets
-          - page: Reference
+          - page: LiteLLM Model Support
+            icon: fa-regular fa-rocket
+            path: docs/agent_optimization/opik_optimizer/litellm_support.mdx
+            slug: litellm_support
+          - page: API Reference
             icon: fa-regular fa-square-terminal
             path: docs/agent_optimization/opik_optimizer/reference.mdx
             slug: reference
-          - page: FAQ
+          - page: Optimizer & SDK FAQ
             icon: fa-regular fa-question
             path: docs/agent_optimization/opik_optimizer/faq.mdx
             slug: faq
-      - section: Best Practices
+      - section: Optimization Algorithms
+        slug: /algorithms
         contents:
-          - page: Prompt engineering
+          - page: Evolutionary Optimizer
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/evolutionary_optimizer.mdx
+            slug: evolutionary_optimizer
+          - page: Few-Shot Bayesian Optimizer
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
+            slug: fewshot_bayesian_optimizer
+          - page: MetaPrompt Optimizer
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
+            slug: metaprompt_optimizer
+          - page: MIPRO Optimizer
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
+            slug: mipro_optimizer
+      - section: Optimization Best Practices
+        slug: /best_practices
+        contents:
+          - page: Prompt Engineering
             icon: fa-regular fa-book
             path: docs/agent_optimization/best_practices/prompt_engineering.mdx
             slug: prompt_engineering
-      - section: Prompt Optimization algorithms
-        slug: /algorithms
+      - section: Example Projects and Cookbooks
+        slug: /optimizer-cookbooks
         contents:
-          - page: MetaPrompt Optimization
-            path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
-            slug: metaprompt_optimizer
-          - page: Few-shot Bayesian Optimization
-            path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
-            slug: fewshot_bayesian_optimizer
-          - page: Mipro Optimization
-            path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
-            slug: mipro_optimizer
+          - page: Introduction Example
+            icon: fa-regular fa-book
+            path: docs/agent_optimization/cookbook/optimizer_introduction_cookbook.mdx
+            slug: optimizer_introduction_cookbook
+          - page: Synthetic Data
+            icon: fa-regular fa-book
+            path: docs/agent_optimization/cookbook/synthetic_data_optimizer_cookbook.mdx
+            slug: synthetic_data_optimizer_cookbook
+      - section: Advanced Topics
+        slug: /advanced
+        contents:
+          - page: Extending Optimizers
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/extending_optimizers.mdx
+            slug: extending_optimizers
   - tab: self-host
     layout:
       - page: Overview
@@ -447,6 +498,9 @@ navigation:
           - page: Ragas
             path: docs/cookbook/ragas.mdx
             slug: ragas
+          - page: Smolagents
+            path: docs/cookbook/smolagents.mdx
+            slug: smolagents
           - page: WatsonX
             path: docs/cookbook/watsonx.mdx
             slug: watsonx
@@ -487,6 +541,9 @@ navigation:
               - page: LangChain
                 path: docs/reference/typescript-sdk/integrations/langchain.mdx
                 slug: langchain
+              - page: OpenAI
+                path: docs/reference/typescript-sdk/integrations/openai.mdx
+                slug: openai
       - section: Rest API
         slug: rest-api
         contents:
@@ -502,6 +559,46 @@ navigation:
           - page: Overview
             path: docs/reference/ruby-otel-sdk/overview.mdx
             slug: overview
+  - tab: contributing
+    layout:
+      - page: Contribution Overview
+        path: docs/contributing/overview.mdx
+        slug: overview
+        icon: fa-regular fa-compass
+      - section: Specific Contribution Guides
+        slug: /guides
+        contents:
+          - page: Documentation
+            path: docs/contributing/documentation.mdx
+            slug: documentation
+            icon: fa-regular fa-book
+          - page: Python SDK
+            path: docs/contributing/python-sdk.mdx
+            slug: python-sdk
+            icon: fa-brands fa-python
+          - page: TypeScript SDK
+            path: docs/contributing/typescript-sdk.mdx
+            slug: typescript-sdk
+            icon: fa-brands fa-js
+          - page: Opik Optimizer
+            path: docs/contributing/agent-optimizer-sdk.mdx
+            slug: agent-optimizer-sdk
+            icon: fa-regular fa-gauge-high
+          - page: Frontend
+            path: docs/contributing/frontend.mdx
+            slug: frontend
+            icon: fa-regular fa-window-maximize
+          - page: Backend
+            path: docs/contributing/backend.mdx
+            slug: backend
+            icon: fa-regular fa-server
+      - section: Developer Programs
+        slug: /developer-programs
+        contents:
+          - page: Bounty Program
+            path: docs/contributing/bounties.mdx
+            slug: bounties
+            icon: fa-regular fa-gem
 redirects:
   - source: "/docs/opik/playground"
     destination: "/docs/opik/prompt_engineering/playground"
@@ -522,11 +619,17 @@ redirects:
     destination: "/docs/opik/prompt_engineering/prompt_management"
     permanent: true
   - source: "/docs/opik/prompt_engineering/prompt_optimization"
-    destination: "/docs/opik/agent_optimization/best-practices/prompt_engineering"
+    destination: "/docs/opik/agent_optimization/best_practices/prompt_engineering"
     permanent: true
   - source: "/docs/opik/prompt_engineering/agent_optimization"
     destination: "/docs/opik/agent_optimization/overview"
     permanent: true
-  - source: "docs/prompt_engineering/agent_optimization"
-    destination: "docs/agent_optimization/overview"
+  - source: "/docs/opik/prompt_engineering/agent_optimization"
+    destination: "/docs/opik/agent_optimization/overview"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/best-practices/prompt_engineering"
+    destination: "/docs/opik/agent_optimization/best_practices/prompt_engineering"
+    permanent: true
+  - source: "docs/agent_optimization/best-practices/prompt_engineering"
+    destination: "/docs/agent_optimization/best_practices/prompt_engineering"
     permanent: true

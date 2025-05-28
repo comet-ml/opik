@@ -7,6 +7,15 @@ from pydantic import BaseModel, Field
 from .base_optimizer import OptimizationRound  # Adjust import as necessary
 import rich
 
+class OptimizationStep(BaseModel):
+    """Represents a single step or trial in an optimization process."""
+    step: int
+    score: Optional[float] = None
+    prompt: Optional[Union[str, List[Dict[str, str]]]] = None
+    parameters: Optional[Dict[str, Any]] = None
+    timestamp: Optional[str] = None
+    # Add other relevant details per step if needed
+
 
 class OptimizationResult(pydantic.BaseModel):
     """Result of an optimization run."""
@@ -28,6 +37,8 @@ class OptimizationResult(pydantic.BaseModel):
     demonstrations: Optional[List[Dict[str, Any]]] = None
     optimizer: str = "Optimizer"
     tool_prompts: Optional[Dict[str, str]] = None
+    opik_metadata: Optional[Dict[str, Any]] = None
+    llm_calls: Optional[int] = None
 
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 

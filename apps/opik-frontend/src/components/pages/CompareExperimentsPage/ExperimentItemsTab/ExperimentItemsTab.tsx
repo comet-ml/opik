@@ -51,10 +51,12 @@ import CompareExperimentsNameHeader from "@/components/pages-shared/experiments/
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import Loader from "@/components/shared/Loader/Loader";
+import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
 import { Experiment, ExperimentsCompare } from "@/types/datasets";
 import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { formatDate } from "@/lib/date";
 import {
   convertColumnDataToColumn,
@@ -77,6 +79,7 @@ import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -94,6 +97,8 @@ const COLUMNS_ORDER_KEY = "compare-experiments-columns-order";
 const DYNAMIC_COLUMNS_KEY = "compare-experiments-dynamic-columns";
 const COLUMNS_SCORES_ORDER_KEY = "compare-experiments-scores-columns-order";
 const COLUMNS_OUTPUT_ORDER_KEY = "compare-experiments-output-columns-order";
+const PAGINATION_SIZE_KEY = "compare-experiments-pagination-size";
+const ROW_HEIGHT_KEY = "compare-experiments-row-height";
 
 export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
@@ -151,17 +156,25 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     updateType: "replaceIn",
   });
 
-  const [size = 100, setSize] = useQueryParam("size", NumberParam, {
-    updateType: "replaceIn",
+  const [size, setSize] = useQueryParamAndLocalStorageState<
+    number | null | undefined
+  >({
+    localStorageKey: PAGINATION_SIZE_KEY,
+    queryKey: "size",
+    defaultValue: 100,
+    queryParamConfig: NumberParam,
+    syncQueryWithLocalStorageOnInit: true,
   });
 
-  const [height = ROW_HEIGHT.small, setHeight] = useQueryParam(
-    "height",
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
+  const [height, setHeight] = useQueryParamAndLocalStorageState<
+    string | null | undefined
+  >({
+    localStorageKey: ROW_HEIGHT_KEY,
+    queryKey: "height",
+    defaultValue: ROW_HEIGHT.small,
+    queryParamConfig: StringParam,
+    syncQueryWithLocalStorageOnInit: true,
+  });
 
   const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
     updateType: "replaceIn",
@@ -405,7 +418,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           callback: handleRowClick,
           asId: true,
         },
-        size: 165,
+        size: 180,
+        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_dataset_item],
       }),
     ];
 
@@ -627,6 +641,15 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   return (
     <>
       <PageBodyStickyContainer
+        className="pb-4"
+        direction="horizontal"
+        limitWidth
+      >
+        <CalloutAlert
+          {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_experiment_items]}
+        />
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
         direction="bidirectional"
         limitWidth
@@ -645,7 +668,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             columnsToExport={columnsToExport}
             experiments={experiments}
           />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}

@@ -19,6 +19,7 @@ import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import useProjectWithStatisticsList from "@/hooks/useProjectWithStatisticsList";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { ProjectWithStatistic } from "@/types/projects";
 import Loader from "@/components/shared/Loader/Loader";
 import AddEditProjectDialog from "@/components/pages/ProjectsPage/AddEditProjectDialog";
@@ -55,6 +56,7 @@ const SELECTED_COLUMNS_KEY = "projects-selected-columns";
 const COLUMNS_WIDTH_KEY = "projects-columns-width";
 const COLUMNS_ORDER_KEY = "projects-columns-order";
 const COLUMNS_SORT_KEY = "projects-columns-sort";
+const PAGINATION_SIZE_KEY = "projects-pagination-size";
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
@@ -62,7 +64,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  "total_estimated_cost",
+  "total_estimated_cost_sum",
   "duration.p50",
   "last_updated_at",
   "created_at",
@@ -114,7 +116,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         cell: DurationCell as never,
       },
       {
-        id: "total_estimated_cost",
+        id: "total_estimated_cost_sum",
         label: "Total cost",
         type: COLUMN_TYPE.cost,
         cell: CostCell as never,
@@ -217,9 +219,17 @@ const ProjectsPage: React.FunctionComponent = () => {
   const [page = 1, setPage] = useQueryParam("page", NumberParam, {
     updateType: "replaceIn",
   });
-  const [size = 10, setSize] = useQueryParam("size", NumberParam, {
-    updateType: "replaceIn",
+
+  const [size, setSize] = useQueryParamAndLocalStorageState<
+    number | null | undefined
+  >({
+    localStorageKey: PAGINATION_SIZE_KEY,
+    queryKey: "size",
+    defaultValue: 10,
+    queryParamConfig: NumberParam,
+    syncQueryWithLocalStorageOnInit: true,
   });
+
   const [rowSelection = {}, setRowSelection] = useQueryParam(
     "selection",
     JsonParam,
@@ -359,7 +369,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         ></SearchInput>
         <div className="flex items-center gap-2">
           <ProjectsActionsPanel projects={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
             columns={columnsDef}
             selectedColumns={selectedColumns}

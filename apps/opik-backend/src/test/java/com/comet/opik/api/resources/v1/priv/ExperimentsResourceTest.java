@@ -7,6 +7,8 @@ import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentItemBulkRecord;
+import com.comet.opik.api.ExperimentItemBulkUpload;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
@@ -24,6 +26,7 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -38,6 +41,7 @@ import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
+import com.comet.opik.api.resources.utils.resources.ExperimentTestAssertions;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
@@ -105,12 +109,14 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -123,7 +129,6 @@ import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
-import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoresIgnoredFieldsAndSetThemToNull;
 import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
@@ -164,8 +169,6 @@ class ExperimentsResourceTest {
     private static final String[] EXPERIMENT_IGNORED_FIELDS = new String[]{
             "id", "datasetId", "name", "feedbackScores", "traceCount", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "comments"};
-    public static final String[] ITEM_IGNORED_FIELDS = {"input", "output", "feedbackScores", "createdAt",
-            "lastUpdatedAt", "createdBy", "lastUpdatedBy", "comments"};
 
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
@@ -753,7 +756,13 @@ class ExperimentsResourceTest {
                         .map(item -> item.toBuilder()
                                 .usage(null)
                                 .duration(null)
+                                .output(null)
+                                .feedbackScores(null)
+                                .input(null)
                                 .totalEstimatedCost(null)
+                                .comments(null)
+                                .lastUpdatedBy(USER)
+                                .createdBy(USER)
                                 .build())
                         .collect(toSet()))
                 .build();
@@ -2959,7 +2968,9 @@ class ExperimentsResourceTest {
         void delete() {
             var createRequest = getExperimentItemsBatch();
             createAndAssert(createRequest, API_KEY, TEST_WORKSPACE);
-            createRequest.experimentItems().forEach(item -> getAndAssert(item, TEST_WORKSPACE, API_KEY));
+            createRequest.experimentItems()
+                    .stream()
+                    .forEach(item -> getAndAssert(item, TEST_WORKSPACE, API_KEY));
 
             var ids = createRequest.experimentItems().stream().map(ExperimentItem::id).collect(toSet());
             var deleteRequest = ExperimentItemsDelete.builder().ids(ids).build();
@@ -3100,12 +3111,22 @@ class ExperimentsResourceTest {
                             traceIdToScoresMap.values().stream().flatMap(List::stream)).toList())
                     .build();
 
+            Instant scoreCreatedAt = Instant.now();
+
             createScoreAndAssert(feedbackScoreBatch, apiKey, workspaceName);
 
             // Add comments to trace
             List<Comment> expectedComments = IntStream.range(0, 5)
-                    .mapToObj(i -> traceResourceClient.generateAndCreateComment(traceWithScores2.getKey().id(), apiKey,
-                            workspaceName, HttpStatus.SC_CREATED))
+                    .mapToObj(i -> {
+                        Instant commentCreatedAt = Instant.now();
+                        return traceResourceClient.generateAndCreateComment(traceWithScores2.getKey().id(), apiKey,
+                                workspaceName, HttpStatus.SC_CREATED).toBuilder()
+                                .createdBy(USER)
+                                .lastUpdatedBy(USER)
+                                .createdAt(commentCreatedAt)
+                                .lastUpdatedAt(commentCreatedAt)
+                                .build();
+                    })
                     .toList();
 
             var experiment1 = generateExperiment();
@@ -3169,10 +3190,19 @@ class ExperimentsResourceTest {
                             .input(traceWithScores2.getLeft().input())
                             .output(traceWithScores2.getLeft().output())
                             .feedbackScores(traceWithScores2.getRight().stream()
-                                    .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
+                                    .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
+                                    .map(score -> score.toBuilder()
+                                            .createdBy(USER)
+                                            .lastUpdatedBy(USER)
+                                            .lastUpdatedAt(scoreCreatedAt)
+                                            .createdAt(scoreCreatedAt)
+                                            .build())
+                                    .toList())
                             .comments(expectedComments)
                             .totalEstimatedCost(null)
                             .usage(null)
+                            .createdBy(USER)
+                            .lastUpdatedBy(USER)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceWithScores2.getLeft().startTime(), traceWithScores2.getLeft().endTime()))
                             .build())
@@ -3182,10 +3212,19 @@ class ExperimentsResourceTest {
                             .input(traceWithScores1.getLeft().input())
                             .output(traceWithScores1.getLeft().output())
                             .feedbackScores(traceWithScores1.getRight().stream()
-                                    .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore).toList())
+                                    .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
+                                    .map(score -> score.toBuilder()
+                                            .createdBy(USER)
+                                            .lastUpdatedBy(USER)
+                                            .lastUpdatedAt(scoreCreatedAt)
+                                            .createdAt(scoreCreatedAt)
+                                            .build())
+                                    .toList())
                             .comments(null)
                             .totalEstimatedCost(null)
                             .usage(null)
+                            .createdBy(USER)
+                            .lastUpdatedBy(USER)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceWithScores1.getLeft().startTime(), traceWithScores1.getLeft().endTime()))
                             .build())
@@ -3281,6 +3320,8 @@ class ExperimentsResourceTest {
                     .input(trace1.input())
                     .comments(null)
                     .feedbackScores(null)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
                     .build();
 
             var experimentItem2 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
@@ -3294,6 +3335,8 @@ class ExperimentsResourceTest {
                     .input(trace2.input())
                     .comments(null)
                     .feedbackScores(null)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
                     .build();
 
             var createRequest1 = ExperimentItemsBatch.builder().experimentItems(Set.of(experimentItem, experimentItem2))
@@ -3372,6 +3415,12 @@ class ExperimentsResourceTest {
                                     .totalEstimatedCost(null)
                                     .usage(null)
                                     .duration(null)
+                                    .comments(null)
+                                    .createdBy(USER)
+                                    .lastUpdatedBy(USER)
+                                    .feedbackScores(null)
+                                    .input(null)
+                                    .output(null)
                                     .build())
                             .collect(toSet()))
                     .build();
@@ -3661,54 +3710,7 @@ class ExperimentsResourceTest {
 
             var actualExperimentItem = actualResponse.readEntity(ExperimentItem.class);
 
-            assertThat(actualExperimentItem)
-                    .usingRecursiveComparison()
-                    .ignoringFields(ITEM_IGNORED_FIELDS)
-                    .isEqualTo(expectedExperimentItem);
-
-            assertIgnoredFieldsWithoutFeedbacks(actualExperimentItem, expectedExperimentItem);
-        }
-    }
-
-    private void assertIgnoredFields(
-            List<ExperimentItem> actualExperimentItems, List<ExperimentItem> expectedExperimentItems) {
-        assertThat(actualExperimentItems).hasSameSizeAs(expectedExperimentItems);
-        for (int i = 0; i < actualExperimentItems.size(); i++) {
-            assertIgnoredFieldsFullContent(actualExperimentItems.get(i), expectedExperimentItems.get(i));
-        }
-    }
-
-    private void assertIgnoredFieldsFullContent(ExperimentItem actualExperimentItem,
-            ExperimentItem expectedExperimentItem) {
-        assertIgnoredFields(actualExperimentItem, expectedExperimentItem, true);
-    }
-
-    private void assertIgnoredFieldsWithoutFeedbacks(ExperimentItem actualExperimentItem,
-            ExperimentItem expectedExperimentItem) {
-        assertIgnoredFields(actualExperimentItem, expectedExperimentItem, false);
-    }
-
-    private void assertIgnoredFields(ExperimentItem actualExperimentItem, ExperimentItem expectedExperimentItem,
-            boolean isFullContent) {
-        assertThat(actualExperimentItem.createdAt()).isAfter(expectedExperimentItem.createdAt());
-        assertThat(actualExperimentItem.lastUpdatedAt()).isAfter(expectedExperimentItem.lastUpdatedAt());
-        assertThat(actualExperimentItem.createdBy()).isEqualTo(USER);
-        assertThat(actualExperimentItem.lastUpdatedBy()).isEqualTo(USER);
-        if (isFullContent) {
-            actualExperimentItem = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(actualExperimentItem, USER);
-
-            assertThat(actualExperimentItem.feedbackScores())
-                    .usingRecursiveComparison()
-                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                    .ignoringCollectionOrder()
-                    .isEqualTo(expectedExperimentItem.feedbackScores());
-            assertThat(actualExperimentItem.input()).isEqualTo(expectedExperimentItem.input());
-            assertThat(actualExperimentItem.output()).isEqualTo(expectedExperimentItem.output());
-            CommentAssertionUtils.assertComments(expectedExperimentItem.comments(), actualExperimentItem.comments());
-        } else {
-            assertThat(actualExperimentItem.input()).isNull();
-            assertThat(actualExperimentItem.output()).isNull();
-            assertThat(actualExperimentItem.feedbackScores()).isNull();
+            ExperimentTestAssertions.assertExperimentResults(actualExperimentItem, expectedExperimentItem, USER);
         }
     }
 
@@ -3749,20 +3751,8 @@ class ExperimentsResourceTest {
             var actualExperimentItems = experimentResourceClient.getStreamed(
                     actualResponse, EXPERIMENT_ITEM_TYPE_REFERENCE);
 
-            assertThat(actualExperimentItems)
-                    .usingRecursiveComparison()
-                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
-                    .ignoringFields(ITEM_IGNORED_FIELDS)
-                    .isEqualTo(expectedExperimentItems);
-
-            assertIgnoredFields(actualExperimentItems, expectedExperimentItems);
-
-            if (!unexpectedExperimentItems.isEmpty()) {
-                assertThat(actualExperimentItems)
-                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(ITEM_IGNORED_FIELDS)
-                        .doesNotContainAnyElementsOf(unexpectedExperimentItems);
-            }
+            ExperimentTestAssertions.assertExperimentResults(actualExperimentItems, expectedExperimentItems,
+                    unexpectedExperimentItems, USER);
         }
     }
 
@@ -3772,5 +3762,319 @@ class ExperimentsResourceTest {
 
     private String getExperimentItemsPath() {
         return URL_TEMPLATE.formatted(baseURI) + ITEMS_PATH;
+    }
+
+    @Nested
+    @DisplayName("Bulk Upload:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class BulkUpload {
+
+        @Test
+        void experimentItemsBulk__whenProcessingValidBatch__thenReturnNoContent() {
+            // given
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    TEST_WORKSPACE,
+                    API_KEY);
+
+            // Create a bulk upload request with a single item
+            var trace = createTrace();
+
+            var span = creatrSpan();
+
+            var feedbackScore = createScore();
+
+            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, trace, feedbackScore);
+
+            var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+            var bulkRecord = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem.id())
+                    .trace(trace)
+                    .spans(List.of(span))
+                    .feedbackScores(List.of(feedbackScore))
+                    .build();
+
+            var bulkUpload = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(dataset.name())
+                    .items(List.of(bulkRecord))
+                    .build();
+
+            // when
+            experimentResourceClient.bulkUploadExperimentItem(bulkUpload, API_KEY, TEST_WORKSPACE);
+
+            // then
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+
+            ExperimentTestAssertions.assertExperimentResultsIgnoringFields(actualExperimentItems, expectedItems,
+                    Stream.concat(Arrays.stream(ExperimentTestAssertions.EXPERIMENT_ITEMS_IGNORED_FIELDS),
+                            Stream.of("id", "experimentId"))
+                            .toArray(String[]::new));
+        }
+
+        private List<ExperimentItem> getExpectedItem(DatasetItem datasetItem, Trace trace,
+                FeedbackScore feedbackScore) {
+            return List.of(
+                    ExperimentItem.builder()
+                            .datasetItemId(datasetItem.id())
+                            .traceId(Optional.ofNullable(trace).map(Trace::id).orElse(null))
+                            .duration(Optional.ofNullable(trace)
+                                    .map(t -> DurationUtils.getDurationInMillisWithSubMilliPrecision(t.startTime(),
+                                            t.endTime()))
+                                    .orElse(0.0))
+                            .input(Optional.ofNullable(trace).map(Trace::input).orElse(null))
+                            .output(Optional.ofNullable(trace).map(Trace::output).orElse(null))
+                            .feedbackScores(List.of(feedbackScore))
+                            .createdAt(Optional.ofNullable(trace).map(Trace::createdAt).orElse(null))
+                            .lastUpdatedAt(Optional.ofNullable(trace).map(Trace::lastUpdatedAt).orElse(null))
+                            .createdBy(USER)
+                            .lastUpdatedBy(USER)
+                            .build());
+        }
+
+        private FeedbackScore createScore() {
+            return podamFactory.manufacturePojo(FeedbackScore.class).toBuilder()
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+        }
+
+        private Span creatrSpan() {
+            return podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .id(podamFactory.manufacturePojo(UUID.class))
+                    .startTime(Instant.now())
+                    .endTime(Instant.now().plusSeconds(1))
+                    .usage(null)
+                    .totalEstimatedCost(null)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+        }
+
+        private Trace createTrace() {
+            return podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .id(podamFactory.manufacturePojo(UUID.class))
+                    .startTime(Instant.now())
+                    .endTime(Instant.now().plusSeconds(1))
+                    .usage(null)
+                    .totalEstimatedCost(null)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+        }
+
+        @Test
+        void experimentItemsBulk__whenProcessingBatchWithNoTraceButWithFeedbackScores__thenReturnNoContent() {
+            // given
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    TEST_WORKSPACE,
+                    API_KEY);
+
+            // Create a bulk upload request with a single item
+
+            var feedbackScore = createScore();
+
+            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, null, feedbackScore);
+
+            var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+            var bulkItemRecord = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem.id())
+                    .feedbackScores(List.of(feedbackScore))
+                    .build();
+
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(dataset.name())
+                    .items(List.of(bulkItemRecord))
+                    .build();
+
+            // when
+            experimentResourceClient.bulkUploadExperimentItem(bulkUploadRequest, API_KEY, TEST_WORKSPACE);
+
+            // then
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+
+            String[] ignoringFields = Stream
+                    .concat(Arrays.stream(ExperimentTestAssertions.EXPERIMENT_ITEMS_IGNORED_FIELDS),
+                            Stream.of("traceId", "id", "experimentId"))
+                    .toArray(String[]::new);
+
+            ExperimentTestAssertions.assertExperimentResultsIgnoringFields(actualExperimentItems, expectedItems,
+                    ignoringFields);
+
+            Trace trace = traceResourceClient.getById(actualExperimentItems.getFirst().traceId(), TEST_WORKSPACE,
+                    API_KEY);
+
+            assertThat(trace).isNotNull();
+            assertThat(trace.visibilityMode()).isEqualTo(VisibilityMode.HIDDEN);
+        }
+
+        @Test
+        void experimentItemsBulk__whenProcessingBatchWithExceedLimit__thenReturnBadRequest() {
+            // given
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    TEST_WORKSPACE,
+                    API_KEY);
+
+            // Create a large string that will cause the request to exceed the max size
+            // Each item will have a large input and output to exceed the 4MB limit
+            String largeString = generateLargeString(1024 * 1024); // 1MB string
+
+            // Create multiple items with large inputs and outputs
+            List<ExperimentItemBulkRecord> items = PodamFactoryUtils.manufacturePojoList(podamFactory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .id(null)
+                            .startTime(Instant.now())
+                            .endTime(Instant.now().plusSeconds(1))
+                            .input(JsonUtils.readTree("{\"text\": \"" + largeString + "\"}"))
+                            .output(JsonUtils.readTree("{\"text\": \"" + largeString + "\"}"))
+                            .build())
+                    .map(trace -> ExperimentItemBulkRecord.builder()
+                            .datasetItemId(datasetItem.id())
+                            .trace(trace)
+                            .build())
+                    .toList();
+            // 5 items with large data should exceed 4MB
+
+            var bulkUpload = ExperimentItemBulkUpload.builder()
+                    .experimentName("Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(8))
+                    .datasetName(dataset.name())
+                    .items(items)
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUpload, API_KEY,
+                    TEST_WORKSPACE)) {
+
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var errorMessage = response.readEntity(com.comet.opik.api.error.ErrorMessage.class);
+
+                assertThat(errorMessage.errors())
+                        .contains("The request body Request size exceeds the maximum allowed size of 4MB");
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void experimentItemsBulk__whenProcessingBatchWithEmptyItems__thenReturnBadRequest(ExperimentItemBulkUpload bulk,
+                String expectedErrorMessage) {
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulk, API_KEY, TEST_WORKSPACE)) {
+
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var errorMessage = response.readEntity(com.comet.opik.api.error.ErrorMessage.class);
+
+                assertThat(errorMessage.errors()).contains(expectedErrorMessage);
+            }
+        }
+
+        Stream<Arguments> experimentItemsBulk__whenProcessingBatchWithEmptyItems__thenReturnBadRequest() {
+            return Stream.of(
+                    arguments(
+                            ExperimentItemBulkUpload.builder()
+                                    .experimentName("Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(8))
+                                    .datasetName("Test Dataset")
+                                    .items(null)
+                                    .build(),
+                            "items must not be null"),
+                    arguments(
+                            ExperimentItemBulkUpload.builder()
+                                    .experimentName("Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(8))
+                                    .datasetName("Test Dataset")
+                                    .items(List.of())
+                                    .build(),
+                            "items size must be between 1 and 250"));
+        }
+
+        @Test
+        void experimentItemsBulk__whenProcessingBatchSizeIsHigherThanLimit__thenReturnBadRequest() {
+            // given
+            var bulkUpload = ExperimentItemBulkUpload.builder()
+                    .experimentName("Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(8))
+                    .datasetName("Test Dataset")
+                    .items(IntStream.range(0, 251)
+                            .mapToObj(i -> ExperimentItemBulkRecord.builder()
+                                    .datasetItemId(UUID.randomUUID())
+                                    .trace(Trace.builder()
+                                            .id(UUID.randomUUID())
+                                            .startTime(Instant.now())
+                                            .endTime(Instant.now().plusSeconds(1))
+                                            .build())
+                                    .build())
+                            .toList())
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUpload, API_KEY,
+                    TEST_WORKSPACE)) {
+
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var errorMessage = response.readEntity(com.comet.opik.api.error.ErrorMessage.class);
+
+                assertThat(errorMessage.errors()).contains("items size must be between 1 and 250");
+            }
+        }
+
+        @Test
+        void experimentItemsBulk__whenProcessingBatchHasSpansAndNoTrace__thenReturnBadRequest() {
+            // given
+            var bulkUpload = ExperimentItemBulkUpload.builder()
+                    .experimentName("Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(8))
+                    .datasetName("Test Dataset")
+                    .items(List.of(ExperimentItemBulkRecord.builder()
+                            .datasetItemId(UUID.randomUUID())
+                            .trace(null)
+                            .spans(List.of(Span.builder()
+                                    .id(UUID.randomUUID())
+                                    .traceId(UUID.randomUUID())
+                                    .startTime(Instant.now())
+                                    .endTime(Instant.now().plusSeconds(1))
+                                    .name(UUID.randomUUID().toString())
+                                    .type(SpanType.llm)
+                                    .build()))
+                            .build()))
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUpload, API_KEY,
+                    TEST_WORKSPACE)) {
+
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                var errorMessage = response.readEntity(ErrorMessage.class);
+
+                assertThat(errorMessage.getMessage()).contains("Trace is required when spans are provided");
+            }
+        }
+
+        private String generateLargeString(int size) {
+            return "a".repeat(Math.max(0, size));
+        }
     }
 }

@@ -15,7 +15,7 @@ const getFeedbackScoresNames = async (
   { experimentsIds }: UseExperimentsFeedbackScoresNamesParams,
 ) => {
   const { data } = await api.get<FeedbackScoresNamesResponse>(
-    `${EXPERIMENTS_REST_ENDPOINT}/feedback-scores/names`,
+    `${EXPERIMENTS_REST_ENDPOINT}feedback-scores/names`,
     {
       signal,
       params: {

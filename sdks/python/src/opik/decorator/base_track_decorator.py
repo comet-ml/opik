@@ -377,9 +377,11 @@ class BaseTrackDecorator(abc.ABC):
         args: Tuple,
         kwargs: Dict[str, Any],
     ) -> None:
+        opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict] = None
+
         try:
-            opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict] = (
-                kwargs.pop("opik_distributed_trace_headers", None)
+            opik_distributed_trace_headers = kwargs.pop(
+                "opik_distributed_trace_headers", None
             )
 
             start_span_arguments = self._start_span_inputs_preprocessor(
@@ -388,19 +390,6 @@ class BaseTrackDecorator(abc.ABC):
                 args=args,
                 kwargs=kwargs,
             )
-
-            created_trace_data, created_span_data = (
-                span_creation_handler.create_span_for_current_context(
-                    start_span_arguments=start_span_arguments,
-                    distributed_trace_headers=opik_distributed_trace_headers,
-                )
-            )
-            if created_trace_data is not None:
-                context_storage.set_trace_data(created_trace_data)
-                TRACES_CREATED_BY_DECORATOR.add(created_trace_data.id)
-
-            context_storage.add_span_data(created_span_data)
-
         except Exception as exception:
             LOGGER.error(
                 logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION,
@@ -409,6 +398,27 @@ class BaseTrackDecorator(abc.ABC):
                 str(exception),
                 exc_info=True,
             )
+
+            start_span_arguments = arguments_helpers.StartSpanParameters(
+                name=func.__name__,
+                type=track_options.type,
+                tags=track_options.tags,
+                metadata=track_options.metadata,
+                project_name=track_options.project_name,
+            )
+
+        created_trace_data, created_span_data = (
+            span_creation_handler.create_span_for_current_context(
+                start_span_arguments=start_span_arguments,
+                distributed_trace_headers=opik_distributed_trace_headers,
+            )
+        )
+
+        if created_trace_data is not None:
+            context_storage.set_trace_data(created_trace_data)
+            TRACES_CREATED_BY_DECORATOR.add(created_trace_data.id)
+
+        context_storage.add_span_data(created_span_data)
 
     def _after_call(
         self,
@@ -432,11 +442,23 @@ class BaseTrackDecorator(abc.ABC):
                 )
 
             if output is not None:
-                end_arguments = self._end_span_inputs_preprocessor(
-                    output=output,
-                    capture_output=capture_output,
-                    current_span_data=span_data_to_end,
-                )
+                try:
+                    end_arguments = self._end_span_inputs_preprocessor(
+                        output=output,
+                        capture_output=capture_output,
+                        current_span_data=span_data_to_end,
+                    )
+                except Exception as e:
+                    LOGGER.error(
+                        logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_FINALIZATION_FOR_TRACKED_FUNCTION,
+                        output,
+                        str(e),
+                        exc_info=True,
+                    )
+
+                    end_arguments = arguments_helpers.EndSpanParameters(
+                        output={"output": output}
+                    )
             else:
                 end_arguments = arguments_helpers.EndSpanParameters(
                     error_info=error_info
@@ -524,7 +546,7 @@ def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
     from the current context, returns popped objects.
 
     Decorator can't attach any child objects to the popped ones because
-    they are no longer in context stack.
+    they are no longer in the context stack.
     """
     span_data_to_end = context_storage.pop_span_data()
     assert (

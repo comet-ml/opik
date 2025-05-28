@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect } from "react";
-import PlaygroundPrompt, {
-  PLAYGROUND_LAST_PICKED_MODEL,
-} from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompt";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import PlaygroundPrompt from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompt";
+import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { generateDefaultPrompt } from "@/lib/playground";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { Button } from "@/components/ui/button";
 import { Plus, RotateCcw } from "lucide-react";
+import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
 import {
   useAddPrompt,
   usePromptCount,
@@ -31,6 +31,9 @@ const PlaygroundPrompts = ({
   const promptCount = usePromptCount();
   const addPrompt = useAddPrompt();
   const setPromptMap = useSetPromptMap();
+  const resetKeyRef = useRef(0);
+  const scrollToPromptRef = useRef<string>("");
+  const [open, setOpen] = useState<boolean>(false);
 
   const promptIds = usePromptIds();
 
@@ -48,6 +51,7 @@ const PlaygroundPrompts = ({
       modelResolver: calculateDefaultModel,
     });
     addPrompt(newPrompt);
+    scrollToPromptRef.current = newPrompt.id;
   };
 
   const resetPlayground = useCallback(() => {
@@ -81,7 +85,14 @@ const PlaygroundPrompts = ({
         <h1 className="comet-title-l">Playground</h1>
 
         <div className="sticky right-0 flex gap-2 ">
-          <Button variant="outline" size="sm" onClick={resetPlayground}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setOpen(true);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+          >
             <RotateCcw className="mr-2 size-4" />
             Reset playground
           </Button>
@@ -104,9 +115,19 @@ const PlaygroundPrompts = ({
             isPendingProviderKeys={isPendingProviderKeys}
             providerResolver={calculateModelProvider}
             modelResolver={calculateDefaultModel}
+            scrollToPromptRef={scrollToPromptRef}
           />
         ))}
       </div>
+      <ConfirmDialog
+        key={resetKeyRef.current}
+        open={Boolean(open)}
+        setOpen={setOpen}
+        onConfirm={resetPlayground}
+        title="Reset playground"
+        description="Resetting the Playground will discard all unsaved prompts. This action is irreversible. Do you want to proceed?"
+        confirmText="Reset playground"
+      />
     </>
   );
 };

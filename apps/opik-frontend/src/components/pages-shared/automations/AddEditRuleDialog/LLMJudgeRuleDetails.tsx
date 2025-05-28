@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useCallback, useRef } from "react";
 import { UseFormReturn } from "react-hook-form";
 import { Info } from "lucide-react";
 import find from "lodash/find";
@@ -29,10 +29,12 @@ import {
   LLMPromptTemplate,
 } from "@/types/llm";
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
 import { EvaluationRuleFormType } from "@/components/pages-shared/automations/AddEditRuleDialog/schema";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -63,7 +65,37 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   form,
 }) => {
   const cache = useRef<Record<string | LLM_JUDGE, LLMPromptTemplate>>({});
-  const { calculateModelProvider } = useLLMProviderModelsData();
+  const { calculateModelProvider, calculateDefaultModel } =
+    useLLMProviderModelsData();
+
+  const handleAddProvider = useCallback(
+    (provider: PROVIDER_TYPE) => {
+      const model =
+        (form.watch("llmJudgeDetails.model") as PROVIDER_MODEL_TYPE) || "";
+
+      if (!model) {
+        form.setValue(
+          "llmJudgeDetails.model",
+          calculateDefaultModel(model, [provider], provider, {
+            structuredOutput: true,
+          }),
+        );
+      }
+    },
+    [calculateDefaultModel, form],
+  );
+
+  const handleDeleteProvider = useCallback(
+    (provider: PROVIDER_TYPE) => {
+      const model =
+        (form.watch("llmJudgeDetails.model") as PROVIDER_MODEL_TYPE) || "";
+      const currentProvider = calculateModelProvider(model);
+      if (currentProvider === provider) {
+        form.setValue("llmJudgeDetails.model", "");
+      }
+    },
+    [calculateModelProvider, form],
+  );
 
   return (
     <>
@@ -85,10 +117,16 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                 <div className="flex h-10 items-center justify-center gap-2">
                   <PromptModelSelect
                     value={model}
-                    onChange={field.onChange}
+                    onChange={(m) => {
+                      if (m) {
+                        field.onChange(m);
+                      }
+                    }}
                     provider={provider}
                     hasError={Boolean(validationErrors?.message)}
                     workspaceName={workspaceName}
+                    onAddProvider={handleAddProvider}
+                    onDeleteProvider={handleDeleteProvider}
                     onlyWithStructuredOutput
                   />
 
@@ -116,7 +154,13 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
         name="llmJudgeDetails.template"
         render={({ field }) => (
           <FormItem>
-            <Label>Prompt</Label>
+            <Label>
+              Prompt{" "}
+              <ExplainerIcon
+                className="inline"
+                {...EXPLAINERS_MAP[EXPLAINER_ID.whats_that_prompt_select]}
+              />
+            </Label>
             <FormControl>
               <SelectBox
                 value={field.value}

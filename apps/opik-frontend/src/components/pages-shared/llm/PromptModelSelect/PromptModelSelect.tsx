@@ -26,8 +26,7 @@ import {
 import { cn } from "@/lib/utils";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
-import AddEditAIProviderDialog from "@/components/shared/AddEditAIProviderDialog/AddEditAIProviderDialog";
-import { areAllProvidersConfigured } from "@/lib/provider";
+import ManageAIProviderDialog from "@/components/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 
 interface PromptModelSelectProps {
@@ -37,6 +36,7 @@ interface PromptModelSelectProps {
   hasError?: boolean;
   provider: PROVIDER_TYPE | "";
   onAddProvider?: (provider: PROVIDER_TYPE) => void;
+  onDeleteProvider?: (provider: PROVIDER_TYPE) => void;
   onlyWithStructuredOutput?: boolean;
 }
 
@@ -49,6 +49,7 @@ const PromptModelSelect = ({
   hasError,
   provider,
   onAddProvider,
+  onDeleteProvider,
   onlyWithStructuredOutput,
 }: PromptModelSelectProps) => {
   const resetDialogKeyRef = useRef(0);
@@ -69,15 +70,15 @@ const PromptModelSelect = ({
     },
   );
 
-  const configuredProviderKeys = useMemo(
-    () => data?.content?.map((p) => p.provider) ?? [],
+  const configuredProvidersList = useMemo(
+    () => data?.content ?? [],
     [data?.content],
   );
 
   const groupOptions = useMemo(() => {
     const filteredByConfiguredProviders = pick(
       getProviderModels(),
-      configuredProviderKeys,
+      configuredProvidersList.map((p) => p.provider),
     );
 
     Object.entries(filteredByConfiguredProviders).forEach(
@@ -111,7 +112,7 @@ const PromptModelSelect = ({
         };
       })
       .filter((g): g is NonNullable<typeof g> => !isNull(g));
-  }, [configuredProviderKeys, onlyWithStructuredOutput, getProviderModels]);
+  }, [configuredProvidersList, onlyWithStructuredOutput, getProviderModels]);
 
   const filteredOptions = useMemo(() => {
     if (filterValue === "") {
@@ -167,7 +168,7 @@ const PromptModelSelect = ({
   };
 
   const renderOptions = () => {
-    if (configuredProviderKeys?.length === 0) {
+    if (configuredProvidersList?.length === 0) {
       return (
         <div className="comet-body-s flex h-20 items-center justify-center text-muted-slate">
           No configured providers
@@ -278,7 +279,7 @@ const PromptModelSelect = ({
           })}
         >
           <SelectValue
-            placeholder="Select a LLM model"
+            placeholder="Select an LLM model"
             data-testid="select-a-llm-model"
           >
             <div className="flex items-center gap-2">
@@ -303,30 +304,26 @@ const PromptModelSelect = ({
           </div>
           <SelectSeparator />
           {renderOptions()}
-
-          {!areAllProvidersConfigured(configuredProviderKeys) && (
-            <>
-              <SelectSeparator />
-              <Button
-                variant="link"
-                className="size-full"
-                onClick={() => {
-                  resetDialogKeyRef.current += 1;
-                  setOpenConfigDialog(true);
-                }}
-              >
-                Add configuration
-              </Button>
-            </>
-          )}
+          <SelectSeparator />
+          <Button
+            variant="link"
+            className="size-full"
+            onClick={() => {
+              resetDialogKeyRef.current += 1;
+              setOpenConfigDialog(true);
+            }}
+          >
+            Manage AI providers
+          </Button>
         </SelectContent>
       </Select>
-      <AddEditAIProviderDialog
+      <ManageAIProviderDialog
         key={resetDialogKeyRef.current}
-        excludedProviders={configuredProviderKeys}
+        configuredProvidersList={configuredProvidersList}
         open={openConfigDialog}
         setOpen={setOpenConfigDialog}
         onAddProvider={onAddProvider}
+        onDeleteProvider={onDeleteProvider}
       />
     </>
   );
