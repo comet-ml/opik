@@ -10,7 +10,7 @@ from opik_optimizer import (
     from_dataset_field,
     from_llm_response_text,
 )
-from opik_optimizer.agent_optimizer import AgentOptimizer
+from opik_optimizer.agent_optimizer import OpikAgentOptimizer, OpikAgent
 
 from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI
@@ -47,7 +47,6 @@ class OverallState(InputState, OutputState):
 
 
 project_name = "langchain-agent"
-llm = ChatOpenAI(model="gpt-4o", temperature=0, stream_usage=True)
 dataset = get_or_create_dataset("hotpot-300")
 
 prompt_template = """Answer the following questions as best you can. You have access to the following tools:
@@ -94,11 +93,12 @@ task_config = TaskConfig(
 )
 
 
-class MyLangGraphOptimizer(AgentOptimizer):
-    def build_agent_invoke(self, agent_config):
+class LangGraphAgent(OpikAgent):
+    def init_agent(self, agent_config):
         prompt_template = agent_config["prompts"][0]
         prompt = PromptTemplate.from_template(prompt_template)
         tools = agent_config["tools"]
+        self.llm = ChatOpenAI(model="gpt-4o", temperature=0, stream_usage=True)
 
         agent_tools = []
         for tool in tools:
@@ -107,7 +107,7 @@ class MyLangGraphOptimizer(AgentOptimizer):
             )
             agent_tools.append(tool_instance)
 
-        agent = create_react_agent(llm=self.llm, tools=agent_tools, prompt=prompt)
+        agent = create_react_agent(self.llm, tools=agent_tools, prompt=prompt)
         agent_executor = AgentExecutor(
             agent=agent,
             tools=agent_tools,
@@ -129,29 +129,30 @@ class MyLangGraphOptimizer(AgentOptimizer):
         workflow.add_node("agent", run_agent_node)
         workflow.set_entry_point("agent")
         workflow.set_finish_point("agent")
-        graph = workflow.compile()
+        self.graph = workflow.compile()
 
         # Setup the Opik tracker:
         self.opik_tracer = OpikTracer(
-            project_name=self.project_name,
-            tags=self.tags,
-            graph=graph.get_graph(xray=True),
+            project_name=self.optimizer.project_name,
+            tags=self.optimizer.tags,
+            graph=self.graph.get_graph(xray=True),
         )
 
-        def agent_invoke(item: Dict[str, Any]) -> Dict[str, Any]:
-            # "input" and "output" are Agent State fields
-            # FIXME: need to map input_dataset_fields to correct state fields:
-            state = {"input": item[key] for key in task_config.input_dataset_fields}
-            result = graph.invoke(state)
-            return {"output": result["output"]}
+    def invoke(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        # "input" and "output" are Agent State fields
+        # FIXME: need to map input_dataset_fields to correct state fields:
+        state = {
+            "input": item[key]
+            for key in self.optimizer.task_config.input_dataset_fields
+        }
+        result = self.graph.invoke(state)
+        return {"output": result["output"]}
 
-        return agent_invoke
 
-
-optimizer = MyLangGraphOptimizer(
+optimizer = OpikAgentOptimizer(
+    agent_class=LangGraphAgent,
     project_name=project_name,
     tags=["langchain-agent"],
-    llm=llm,
     num_threads=16,
 )
 

@@ -12,15 +12,22 @@ from opik_optimizer import (
 logger = logging.getLogger(__name__)
 
 
-class AgentOptimizer(BaseOptimizer):
-    def __init__(self, project_name, llm, num_threads, tags=None):
+class OpikAgent:
+    def __init__(self, optimizer, agent_config):
+        self.optimizer = optimizer
+        self.init_agent(agent_config)
+
+
+class OpikAgentOptimizer(BaseOptimizer):
+    def __init__(self, project_name, agent_class, num_threads, tags=None):
         self.project_name = project_name
-        self.llm = llm
+        self.agent_class = agent_class
         self.num_threads = num_threads
         self.tags = tags
 
     def optimize_prompt(self, dataset, metric_config, task_config, n_samples):
         self._opik_client = opik.Opik()
+        self.task_config = task_config
         optimization = None
         try:
             optimization = self._opik_client.create_optimization(
@@ -37,8 +44,8 @@ class AgentOptimizer(BaseOptimizer):
         if not optimization:
             logger.warning("Continuing without Opik optimization tracking.")
 
-        self.tools = task_config.tools
-        prompt_template = task_config.instruction_prompt
+        self.tools = self.task_config.tools
+        prompt_template = self.task_config.instruction_prompt
 
         agent_config = {
             "prompts": [prompt_template],
@@ -46,7 +53,7 @@ class AgentOptimizer(BaseOptimizer):
         }
 
         # Build user's agent invoke method:
-        agent_invoke = self.build_agent_invoke(agent_config)
+        agent = self.agent_class(self, agent_config)
 
         dataset_item_ids = [
             item["id"] for item in random.sample(dataset.get_items(), n_samples)
@@ -55,7 +62,9 @@ class AgentOptimizer(BaseOptimizer):
         experiment_config = {
             "optimizer": self.__class__.__name__,
             "tools": (
-                [f["name"] for f in task_config.tools] if task_config.tools else []
+                [f["name"] for f in self.task_config.tools]
+                if self.task_config.tools
+                else []
             ),
             "metric": metric_config.metric.name,
             "dataset": dataset.name,
@@ -68,7 +77,7 @@ class AgentOptimizer(BaseOptimizer):
         print(prompt_template)
         score = task_evaluator.evaluate(
             dataset=dataset,
-            evaluated_task=agent_invoke,
+            evaluated_task=agent.invoke,
             metric_config=metric_config,
             dataset_item_ids=dataset_item_ids,
             project_name=self.project_name,
@@ -84,7 +93,7 @@ class AgentOptimizer(BaseOptimizer):
         # these out:
         count = 0
         while count < 3:
-            response = self.llm.invoke(
+            response = agent.llm.invoke(
                 """Refine this prompt template to make it better. Just give me the better prompt, nothing else. 
 
 The new prompt must contain {tools}, {agent_scratchpad}, {input}, and [{tool_names}]
@@ -117,12 +126,12 @@ Here is the prompt:
                 "tools": self.tools,
             }
 
-            agent_invoke = self.build_agent_invoke(agent_config)
+            agent = self.agent_class(self, agent_config)
 
             count += 1
             score = task_evaluator.evaluate(
                 dataset=dataset,
-                evaluated_task=agent_invoke,
+                evaluated_task=agent.invoke,
                 metric_config=metric_config,
                 dataset_item_ids=dataset_item_ids,
                 project_name=self.project_name,
