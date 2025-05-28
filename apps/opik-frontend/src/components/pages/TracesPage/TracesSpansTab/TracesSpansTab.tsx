@@ -83,6 +83,7 @@ import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import GuardrailsCell from "@/components/shared/DataTableCells/GuardrailsCell";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -181,6 +182,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     label: "Estimated cost",
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_cost_estimated],
   },
 ];
 
@@ -496,6 +498,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 callback: handleThreadIdClick,
                 asId: true,
               },
+              explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_threads],
             },
           ]
         : []),
@@ -678,14 +681,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         limitWidth
       >
         <CalloutAlert
-          description={
-            type === TRACE_DATA_TYPE.traces
-              ? "A trace is a step-by-step record of how your LLM application processes a single input, including LLM calls and other operations."
-              : "An LLM call is a single interaction with a language model—usually a prompt and its response. Use LLM calls to debug, monitor, and evaluate model behavior."
-          }
-          docLink={
-            type === TRACE_DATA_TYPE.traces ? "/tracing/log_traces" : undefined
-          }
+          {...(type === TRACE_DATA_TYPE.traces
+            ? EXPLAINERS_MAP[EXPLAINER_ID.what_are_traces]
+            : EXPLAINERS_MAP[EXPLAINER_ID.what_are_llm_calls])}
         />
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
@@ -716,7 +714,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             columnsToExport={columnsToExport}
             type={type as TRACE_DATA_TYPE}
           />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <TooltipWrapper
             content={`Refresh ${
               type === TRACE_DATA_TYPE.traces ? "traces" : "LLM calls"

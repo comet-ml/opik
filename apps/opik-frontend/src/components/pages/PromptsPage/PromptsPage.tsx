@@ -209,7 +209,7 @@ const PromptsPage: React.FunctionComponent = () => {
         ></SearchInput>
         <div className="flex items-center gap-2">
           <PromptsActionsPanel prompts={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}

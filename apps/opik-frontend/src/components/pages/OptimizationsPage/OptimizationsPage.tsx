@@ -63,6 +63,7 @@ import { useExpandingConfig } from "@/components/pages-shared/experiments/useExp
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/grouping";
 import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimizations-columns-width";
@@ -101,6 +102,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
 
       return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
     },
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_optimizer],
   },
   {
     id: "objective_name",
@@ -315,7 +317,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
         </div>
         <div className="flex items-center gap-2">
           <OptimizationsActionsPanel optimizations={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <TooltipWrapper content="Refresh optimizations list">
             <Button
               variant="outline"

@@ -23,8 +23,18 @@ import {
 import FeedbackDefinitionDetails from "./FeedbackDefinitionDetails";
 
 const TYPE_OPTIONS = [
-  { value: FEEDBACK_DEFINITION_TYPE.categorical, label: "Categorical" },
-  { value: FEEDBACK_DEFINITION_TYPE.numerical, label: "Numerical" },
+  {
+    value: FEEDBACK_DEFINITION_TYPE.categorical,
+    label: "Categorical",
+    description:
+      'Use labels (e.g. "Good", "Bad") to classify outputs qualitatively.',
+  },
+  {
+    value: FEEDBACK_DEFINITION_TYPE.numerical,
+    label: "Numerical",
+    description:
+      "Use a numerical range (e.g. 1–5) to rate outputs quantitatively.",
+  },
 ];
 
 function isValidFeedbackDefinition(
@@ -120,8 +130,9 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
           />
         </div>
         <div className="flex flex-col gap-2 pb-4">
-          <Label htmlFor="datasetDescription">Type</Label>
+          <Label htmlFor="feedbackDefinitionType">Type</Label>
           <SelectBox
+            id="feedbackDefinitionType"
             value={type}
             onChange={(type) => {
               setDetails(undefined);

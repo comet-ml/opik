@@ -47,6 +47,7 @@ import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableW
 import { formatDate } from "@/lib/date";
 import ThreadsActionsPanel from "@/components/pages/TracesPage/ThreadsTab/ThreadsActionsPanel";
 import useThreadList from "@/api/traces/useThreadsList";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -338,10 +339,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         direction="horizontal"
         limitWidth
       >
-        <CalloutAlert
-          description="A thread represents a full conversation session, grouping together multiple related traces. Use threads to review and evaluate entire interactions in chat-based applications."
-          docLink="/tracing/log_chat_conversations"
-        />
+        <CalloutAlert {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_threads]} />
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
@@ -369,7 +367,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             rows={selectedRows}
             columnsToExport={columnsToExport}
           />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <TooltipWrapper content={`Refresh threads list`}>
             <Button
               variant="outline"

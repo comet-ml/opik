@@ -46,7 +46,7 @@ const ChatPage = () => {
             isPendingProviderKeys={isPendingProviderKeys}
             providerKeys={providerKeys}
           />
-          <Separator orientation="vertical" className="h-6" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <Button
             variant="outline"
             size="sm"

@@ -21,6 +21,9 @@ import {
   COLUMN_FEEDBACK_SCORES_ID,
 } from "@/types/shared";
 import { EXPERIMENT_ITEM_OUTPUT_PREFIX } from "@/constants/experiments";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { Separator } from "@/components/ui/separator";
 
 const EVALUATION_EXPORT_COLUMNS = [
   EXPERIMENT_ITEM_OUTPUT_PREFIX,
@@ -149,19 +152,28 @@ const CompareExperimentsActionsPanel: React.FC<
         open={open}
         setOpen={setOpen}
       />
-      <TooltipWrapper content="Compare experiments">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setOpen(true);
-            resetKeyRef.current = resetKeyRef.current + 1;
-          }}
-        >
-          <Split className="mr-2 size-3.5" />
-          Compare
-        </Button>
-      </TooltipWrapper>
+      <div className="inline-flex items-center gap-2">
+        <TooltipWrapper content="Compare experiments">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setOpen(true);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+          >
+            <Split className="mr-2 size-3.5" />
+            Compare
+          </Button>
+        </TooltipWrapper>
+        <ExplainerIcon
+          className="-ml-0.5"
+          {...EXPLAINERS_MAP[
+            EXPLAINER_ID.what_does_it_mean_to_compare_my_experiments
+          ]}
+        />
+        <Separator orientation="vertical" className="mx-2 h-4" />
+      </div>
       {columnsToExport && (
         <ExportToButton
           disabled={disabled || columnsToExport.length === 0}

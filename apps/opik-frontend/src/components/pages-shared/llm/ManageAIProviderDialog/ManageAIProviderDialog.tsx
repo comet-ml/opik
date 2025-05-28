@@ -45,6 +45,7 @@ import {
 import CloudAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CloudAIProviderDetails";
 import LocalAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/LocalAIProviderDetails";
 import VertexAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/VertexAIProviderDetails";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 type ManageAIProviderDialogProps = {
   providerKey?: ProviderKey;
@@ -277,9 +278,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
             />
             {(isConfiguredProvider || providerKey) && isCloudProvider && (
               <CalloutAlert
-                title="Editing an existing key"
-                description="A key is already set for this provider. Since AI provider configurations are workspace-wide, adding a new key will overwrite the existing one for everyone."
                 Icon={MessageCircleWarning}
+                {...EXPLAINERS_MAP[
+                  EXPLAINER_ID.what_happens_if_i_edit_an_ai_provider
+                ]}
               />
             )}
             {getProviderDetails()}

@@ -33,6 +33,8 @@ import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
 import { EvaluationRuleFormType } from "@/components/pages-shared/automations/AddEditRuleDialog/schema";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -152,7 +154,13 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
         name="llmJudgeDetails.template"
         render={({ field }) => (
           <FormItem>
-            <Label>Prompt</Label>
+            <Label>
+              Prompt{" "}
+              <ExplainerIcon
+                className="inline"
+                {...EXPLAINERS_MAP[EXPLAINER_ID.whats_that_prompt_select]}
+              />
+            </Label>
             <FormControl>
               <SelectBox
                 value={field.value}

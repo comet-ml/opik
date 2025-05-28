@@ -21,6 +21,7 @@ import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import CommitsActionsPanel from "@/components/pages/PromptPage/CommitsTab/CommitsActionsPanel";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 export const getRowId = (p: PromptVersion) => p.id;
 
@@ -46,6 +47,7 @@ export const COMMITS_DEFAULT_COLUMNS = [
         activeVersionId: get(data, "id", null),
       }),
     },
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
   }),
   ...convertColumnDataToColumn<PromptVersion, PromptVersion>(
     [

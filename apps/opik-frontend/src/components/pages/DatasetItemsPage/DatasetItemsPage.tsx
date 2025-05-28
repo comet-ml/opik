@@ -266,7 +266,7 @@ const DatasetItemsPage = () => {
         <div className="flex items-center gap-2"></div>
         <div className="flex items-center gap-2">
           <DatasetItemsActionsPanel datasetItems={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
