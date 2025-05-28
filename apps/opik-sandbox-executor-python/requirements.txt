@@ -24,7 +24,7 @@ jiter==0.8.2
 jsonschema==4.23.0
 jsonschema-specifications==2024.10.1
 Levenshtein==0.26.1
-litellm==1.59.0
+litellm==1.61.15
 markdown-it-py==3.0.0
 MarkupSafe==3.0.2
 mdurl==0.1.2
