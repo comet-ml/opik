@@ -249,7 +249,7 @@ export const OnlineEvaluationPage: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <RulesActionsPanel rules={selectedRows} />
-          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}
