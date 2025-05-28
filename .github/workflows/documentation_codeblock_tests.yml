@@ -70,21 +70,6 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Get pip cache dir
-        id: pip-cache
-        run: |
-          echo "pip_cache_dir=$(pip cache dir)" >> $GITHUB_OUTPUT
-        working-directory: apps/opik-documentation/documentation
-
-      - name: Cache pip dependencies
-        uses: actions/cache@v3
-        with:
-          path: ${{ steps.pip-cache.outputs.pip_cache_dir }}
-          key: ${{ runner.os }}-python-${{ matrix.python-version }}-pip-${{ hashFiles('apps/opik-documentation/documentation/requirements.txt') }}-${{ hashFiles('sdks/opik_optimizer/**') }}
-          restore-keys: |
-            ${{ runner.os }}-python-${{ matrix.python-version }}-pip-${{ hashFiles('apps/opik-documentation/documentation/requirements.txt') }}-
-            ${{ runner.os }}-python-${{ matrix.python-version }}-pip-
-            
       - name: Install dependencies
         working-directory: apps/opik-documentation/documentation
         run: |
