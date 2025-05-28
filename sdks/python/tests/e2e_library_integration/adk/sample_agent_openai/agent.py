@@ -3,8 +3,9 @@ import os
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from google.adk.agents import Agent
+from google.adk.agents import LlmAgent
 from google.adk.agents.callback_context import CallbackContext
+from google.adk.models.lite_llm import LiteLlm
 
 from opik.integrations.adk import OpikTracer
 
@@ -71,9 +72,9 @@ def after_agent_callback(
     opik_tracer._client.flush()
 
 
-root_agent = Agent(
+root_agent = LlmAgent(
     name="weather_time_agent",
-    model="gemini-2.0-flash",
+    model=LiteLlm(model="openai/gpt-4o"),
     description="Agent to answer questions about the time and weather in a city.",
     instruction=(
         "You are a helpful agent who can answer user questions about the time and weather in a city."
