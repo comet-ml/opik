@@ -14,13 +14,14 @@ import {
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
 import Loader from "@/components/shared/Loader/Loader";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { formatDate } from "@/lib/date";
 import useAppStore from "@/store/AppStore";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const DEFAULT_SIZE = 5;
 
@@ -118,18 +119,18 @@ const CompareExperimentsDialog: React.FC<CompareExperimentsDialogProps> = ({
           <DialogTitle>Compare experiments</DialogTitle>
         </DialogHeader>
         <div className="w-full overflow-hidden">
+          <ExplainerDescription
+            className="mb-4"
+            size="sm"
+            {...EXPLAINERS_MAP[
+              EXPLAINER_ID.what_does_it_mean_to_compare_my_experiments
+            ]}
+          />
           <SearchInput
             searchText={search}
             setSearchText={setSearch}
             placeholder="Search by name"
           ></SearchInput>
-          <Alert className="mt-4">
-            <MessageCircleWarning />
-            <AlertDescription>
-              Only experiments using the same dataset as the baseline can be
-              added to compare.
-            </AlertDescription>
-          </Alert>
           <div className="my-4 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
             {renderListItems()}
           </div>

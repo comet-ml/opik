@@ -133,7 +133,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             <div className="comet-body-s-accented mb-2 flex items-center gap-1 text-foreground">
               Commit history
               <ExplainerIcon
-                {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_commits]}
+                {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_commit_history]}
               />
             </div>
 
