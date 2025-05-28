@@ -1,7 +1,7 @@
 name: TypeScript SDK Linter
 run-name: "TypeScript SDK Linter ${{ github.ref_name }} by @${{ github.actor }}"
 on:
-  pull_request:
+  pull_request_target:
     paths:
       - "sdks/typescript/**"
   push:
@@ -19,6 +19,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4.2.0
