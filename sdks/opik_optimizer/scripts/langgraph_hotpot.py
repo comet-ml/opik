@@ -138,6 +138,19 @@ class LangGraphAgent(OpikAgent):
             graph=self.graph.get_graph(xray=True),
         )
 
+    def llm_invoke(self, prompt):
+        new_prompt = self.llm.invoke(prompt).content
+        # Make sure it contains necessary fields:
+        if "{input}" not in new_prompt:
+            new_prompt += "\nQuestion: {input}"
+        if "{agent_scratchpad}" not in new_prompt:
+            new_prompt += "\nThought: {agent_scratchpad}"
+        if "[{tool_names}]" not in new_prompt:
+            new_prompt += "\nTool names: [{tool_names}]"
+        if "{tools}" not in new_prompt:
+            new_prompt += "\nTools: {tools}"
+        return new_prompt
+
     def invoke(self, item: Dict[str, Any]) -> Dict[str, Any]:
         # "input" and "output" are Agent State fields
         # FIXME: need to map input_dataset_fields to correct state fields:

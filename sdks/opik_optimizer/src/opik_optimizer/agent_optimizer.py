@@ -93,7 +93,7 @@ class OpikAgentOptimizer(BaseOptimizer):
         # these out:
         count = 0
         while count < 3:
-            response = agent.llm.invoke(
+            new_prompt = agent.llm_invoke(
                 """Refine this prompt template to make it better. Just give me the better prompt, nothing else. 
 
 The new prompt must contain {tools}, {agent_scratchpad}, {input}, and [{tool_names}]
@@ -107,16 +107,7 @@ Here is the prompt:
 """
                 % prompt_template
             )
-            new_prompt = response.content.replace("\\n", "\n")
-            if "{input}" not in new_prompt:
-                new_prompt += "\nQuestion: {input}"
-            if "{agent_scratchpad}" not in new_prompt:
-                new_prompt += "\nThought: {agent_scratchpad}"
-            if "[{tool_names}]" not in new_prompt:
-                new_prompt += "\nTool names: [{tool_names}]"
-            if "{tools}" not in new_prompt:
-                new_prompt += "\nTools: {tools}"
-
+            new_prompt = new_prompt.replace("\\n", "\n")
             experiment_config["configuration"]["prompt"] = new_prompt
 
             print(new_prompt)
