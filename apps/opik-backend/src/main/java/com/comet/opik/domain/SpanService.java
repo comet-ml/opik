@@ -107,8 +107,7 @@ public class SpanService {
     private Mono<UUID> insertSpan(Span span, Project project, UUID id, Span partialExistingSpan) {
         return Mono.defer(() -> {
             // Check if a partial span exists caused by a patch request, if so, proceed to insert.
-            if (Instant.EPOCH.equals(partialExistingSpan.startTime())
-                    && partialExistingSpan.type() == null) {
+            if (Instant.EPOCH.equals(partialExistingSpan.startTime())) {
                 return create(span, project, id);
             }
             // Otherwise, a non-partial span already exists, so we ignore the insertion and just return the id.
