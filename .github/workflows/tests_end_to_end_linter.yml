@@ -2,7 +2,7 @@
     name: E2E Tests Linter
     run-name: "E2E Tests Linter ${{ github.ref_name }} by @${{ github.actor }}"
     on:
-      pull_request:
+      pull_request_target:
         paths:
         - 'tests_end_to_end/**'
       push:

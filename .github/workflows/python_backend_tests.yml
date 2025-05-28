@@ -2,7 +2,7 @@ name: "Python Backend Tests"
 run-name: "Python Backend Tests on ${{ github.ref_name }} by @${{ github.actor }}"
 
 on:
-  pull_request:
+  pull_request_target:
     paths: 
       - "apps/opik-python-backend/**"
   push:

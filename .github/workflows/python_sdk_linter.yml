@@ -2,7 +2,7 @@
 name: SDK Linter
 run-name: "SDK Linter ${{ github.ref_name }} by @${{ github.actor }}"
 on:
-  pull_request:
+  pull_request_target:
     paths:
     - 'sdks/python/**'
   push:

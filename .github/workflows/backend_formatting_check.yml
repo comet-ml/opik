@@ -2,7 +2,7 @@ name: "Backend Formatting Check"
 run-name: "Backend Formatting Check on ${{ github.ref_name }} by @${{ github.actor }}"
 
 on:
-  pull_request:
+  pull_request_target:
     paths:
       - "apps/opik-backend/**/*.java"
   push:

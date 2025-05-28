@@ -3,7 +3,7 @@ run-name: "Lint Opik Helm Chart ${{ github.ref_name }} by @${{ github.actor }}"
 
 on:
   workflow_dispatch:
-  pull_request:
+  pull_request_target:
     paths: 
       - "deployment/helm_chart/opik/**"
   push:
