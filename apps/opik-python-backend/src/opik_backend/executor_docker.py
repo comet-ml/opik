@@ -13,8 +13,6 @@ from opik_backend.executor import CodeExecutorBase, ExecutionResult
 from opik_backend.scoring_commands import PYTHON_SCORING_COMMAND
 
 logger = logging.getLogger(__name__)
-client = docker.from_env()
-executor = concurrent.futures.ThreadPoolExecutor()
 
 class DockerExecutor(CodeExecutorBase):
     def __init__(self):
@@ -24,14 +22,30 @@ class DockerExecutor(CodeExecutorBase):
         self.docker_image = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_NAME", "opik-sandbox-executor-python")
         self.docker_tag = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_TAG", "latest")
 
+        self.client = docker.from_env()
         self.instance_id = str(uuid7())
         self.container_labels = {"managed_by": self.instance_id}
         self.container_pool = Queue()
         self.pool_lock = Lock()
-        releaser_executor = concurrent.futures.ThreadPoolExecutor()
+        self.releaser_executor = concurrent.futures.ThreadPoolExecutor()
         self.running = True
         self.ensure_pool_filled()
+
+        # Pre-warm the container pool
+        self._pre_warm_container_pool()
         atexit.register(self.cleanup)
+
+    def _pre_warm_container_pool(self):
+        """
+        Pre-warm the container pool by creating all containers in parallel.
+        This ensures containers are ready when the service starts.
+        """
+        logger.info(f"Pre-warming container pool with {self.max_parallel} containers")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel) as pool_init:
+            # Submit container creation tasks in parallel
+            futures = [pool_init.submit(self.create_container) for _ in range(self.max_parallel)]
+            # Wait for all containers to be created
+            concurrent.futures.wait(futures)
 
     def ensure_pool_filled(self):
         if not self.running:
@@ -44,16 +58,16 @@ class DockerExecutor(CodeExecutorBase):
                 self.create_container()
 
     def get_managed_containers(self):
-        return client.containers.list(filters={
+        return self.client.containers.list(filters={
             "label": f"managed_by={self.instance_id}",
             "status": "running"
         })
 
     def create_container(self):
-        new_container = client.containers.run(
+        new_container = self.client.containers.run(
             image=f"{self.docker_registry}/{self.docker_image}:{self.docker_tag}",
-        command=["tail", "-f", "/dev/null"], # a never ending process so Docker won't kill the container
-        mem_limit="256mb",
+            command=["tail", "-f", "/dev/null"], # a never ending process so Docker won't kill the container
+            mem_limit="256mb",
             cpu_shares=2,
             detach=True,
             network_disabled=True,
@@ -73,7 +87,7 @@ class DockerExecutor(CodeExecutorBase):
             except Exception as e:
                 logger.error(f"Error replacing container: {e}")
 
-        releaser_executor.submit(async_release)
+        self.releaser_executor.submit(async_release)
 
     def get_container(self):
         if not self.running:
@@ -118,21 +132,8 @@ class DockerExecutor(CodeExecutorBase):
             return {"code": 500, "error": "An unexpected error occurred"}
         finally:
             # Stop and remove the container, then create a new one asynchronously
-            try:
-                container.stop(timeout=1)
-                container.remove(force=True)
-            except Exception as e:
-                logger.error(f"Error cleaning up container {container.id}: {e}")
+            self.release_container(container)
             
-            # Create new container asynchronously
-            def async_replace():
-                try:
-                    self.create_container()
-                except Exception as e:
-                    logger.error(f"Error creating replacement container: {e}")
-
-            executor.submit(async_replace)
-
     def cleanup(self):
         self.running = False
         """Clean up all containers managed by this executor."""
