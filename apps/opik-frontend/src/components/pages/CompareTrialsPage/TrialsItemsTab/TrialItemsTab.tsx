@@ -59,6 +59,7 @@ import { calculateLineHeight } from "@/lib/experiments";
 import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -510,10 +511,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         direction="horizontal"
         limitWidth
       >
-        <CalloutAlert
-          description="Trial items are dataset samples processed during a trial. Each one generates an output and score that contribute to the trial’s results."
-          docLink="/agent_optimization/opik_optimizer/concepts"
-        />
+        <CalloutAlert {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_trial_items]} />
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
