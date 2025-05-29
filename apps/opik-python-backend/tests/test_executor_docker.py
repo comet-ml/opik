@@ -1,4 +1,5 @@
 from typing import Any
+import json
 from opik_backend.executor_docker import DockerExecutor
 
 def test_network_access_blocked():
@@ -148,6 +149,57 @@ class TimeoutTest(base_metric.BaseMetric):
         # The execution should timeout
         assert result["code"] == 504, "Should return timeout status code"
         assert "timeout" in result["error"].lower(), "Error should indicate timeout"
+        
+    finally:
+        executor.cleanup()
+
+
+def test_sequential_requests():
+    """Test that multiple sequential requests are processed correctly."""
+    executor = DockerExecutor()
+    try:
+        # Simple code that returns a value based on the input
+        code = """
+from typing import Any
+from opik.evaluation.metrics import base_metric, score_result
+import json
+
+class SequentialTest(base_metric.BaseMetric):
+    def __init__(self, name: str = "sequential_test"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str, reference: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
+        # Parse the input data
+        try:
+            data = json.loads(output)
+            request_id = data.get("request_id", 0)
+            
+            # Return the request ID as the score value
+            return score_result.ScoreResult(
+                name=self.name,
+                value=float(request_id),
+                reason=f"Successfully processed request {request_id}")
+        except Exception as e:
+            return score_result.ScoreResult(
+                name=self.name,
+                value=0.0,
+                reason=f"Error processing request: {str(e)}")
+"""
+        # Send 10 sequential requests
+        for i in range(1, 11):
+            # Create input data with a request ID
+            input_data = {"request_id": i}
+            result = executor.run_scoring(code, {"output": json.dumps(input_data), "reference": ""})
+            
+            # Verify the result
+            assert "scores" in result, f"Request {i}: Result should contain scores"
+            scores = result["scores"]
+            assert len(scores) == 1, f"Request {i}: Should have one score result"
+            assert scores[0]["value"] == float(i), f"Request {i}: Score value should match request ID"
+            assert f"Successfully processed request {i}" in scores[0]["reason"], f"Request {i}: Reason should indicate success"
+            
+        # Verify that the executor is still functional after all requests
+        assert executor.running, "Executor should still be running after all requests"
         
     finally:
         executor.cleanup()
