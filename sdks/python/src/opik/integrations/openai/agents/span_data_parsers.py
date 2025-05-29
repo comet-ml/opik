@@ -46,7 +46,7 @@ class ParsedSpanData:
     metadata: Dict[str, Any]
     usage: Optional[llm_usage.OpikUsage] = None
     model: Optional[str] = None
-    provider: str = LLMProvider.OPENAI
+    provider: Optional[LLMProvider] = None
 
 
 def parse_spandata(openai_span_data: tracing.SpanData) -> ParsedSpanData:
@@ -137,4 +137,5 @@ def _parse_response_span_content(span_data: tracing.ResponseSpanData) -> ParsedS
         type="llm",
         metadata=metadata,
         model=response.model,
+        provider=LLMProvider.OPENAI,
     )
