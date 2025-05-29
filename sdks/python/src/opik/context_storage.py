@@ -1,7 +1,7 @@
 import contextvars
 import contextlib
 
-from typing import List, Optional, Generator
+from typing import List, Optional, Generator, Tuple
 from opik.api_objects import span, trace
 
 
@@ -12,9 +12,8 @@ class OpikContextStorage:
     ## IMPORTANT: Working with ContextVars
 
     This class uses ContextVars to maintain isolated stacks across different
-    execution contexts (like threads or async tasks). The ContextVar default value can be
-    a mutable object, and changes to it will affect all contexts. So, when working with these
-    context variables, always follow these guidelines:
+    execution contexts (like threads or async tasks). To ensure proper isolation and safety,
+    this implementation uses immutable tuples for stack storage.
 
     ### DO NOT modify the context directly:
     ```python
@@ -22,19 +21,19 @@ class OpikContextStorage:
     spans_stack_context.get().append(new_span)  # Don't do this!
     ```
 
-    ### DO use copy-modify-set pattern:
+    ### DO use immutable data structures and create-new-set pattern:
 
     For adding elements:
     ```python
-    # CORRECT: Copy, modify, then set
-    stack = spans_stack_context.get().copy()
-    spans_stack_context.set(stack + [new_element])
+    # CORRECT: Get current tuple and create a new one with added element
+    stack = spans_stack_context.get()
+    spans_stack_context.set(stack + (new_element,))
     ```
 
     For removing elements:
     ```python
-    # CORRECT: Copy, modify, then set
-    stack = spans_stack_context.get().copy()
+    # CORRECT: Get current tuple and create a new one without the last element
+    stack = spans_stack_context.get()
     spans_stack_context.set(stack[:-1])
     ```
 
@@ -46,15 +45,13 @@ class OpikContextStorage:
         self._current_trace_data_context: contextvars.ContextVar[
             Optional[trace.TraceData]
         ] = contextvars.ContextVar("current_trace_data", default=None)
-        self._spans_data_stack_context: contextvars.ContextVar[List[span.SpanData]] = (
-            contextvars.ContextVar("spans_data_stack", default=[])
-        )
+        default_span_stack: Tuple[span.SpanData, ...] = tuple()
+        self._spans_data_stack_context: contextvars.ContextVar[
+            Tuple[span.SpanData, ...]
+        ] = contextvars.ContextVar("spans_data_stack", default=default_span_stack)
 
     def _has_span_id(self, span_id: str) -> bool:
-        return span_id in [span.id for span in self._get_data_stack()]
-
-    def _get_data_stack(self) -> List[span.SpanData]:
-        return self._spans_data_stack_context.get().copy()
+        return any(span.id == span_id for span in self._spans_data_stack_context.get())
 
     def trim_span_data_stack_to_certain_span(self, span_id: str) -> None:
         """
@@ -75,19 +72,19 @@ class OpikContextStorage:
         if not self._has_span_id(span_id):
             return
 
-        stack = self._get_data_stack()
-        new_stack = []
+        stack = self._spans_data_stack_context.get()
+        new_stack_list: List[span.SpanData] = []
         for span_data in stack:
-            new_stack.append(span_data)
+            new_stack_list.append(span_data)
             if span_data.id == span_id:
                 break
 
-        self._spans_data_stack_context.set(new_stack)
+        self._spans_data_stack_context.set(tuple(new_stack_list))
 
     def top_span_data(self) -> Optional[span.SpanData]:
         if self.span_data_stack_empty():
             return None
-        stack = self._get_data_stack()
+        stack = self._spans_data_stack_context.get()
         return stack[-1]
 
     def pop_span_data(
@@ -108,7 +105,7 @@ class OpikContextStorage:
             return None
 
         if ensure_id is None:
-            stack = self._get_data_stack()
+            stack = self._spans_data_stack_context.get()
             self._spans_data_stack_context.set(stack[:-1])
             return stack[-1]
 
@@ -119,11 +116,14 @@ class OpikContextStorage:
         return STACK_IS_EMPTY_OR_THE_ID_DOES_NOT_MATCH
 
     def add_span_data(self, span: span.SpanData) -> None:
-        stack = self._get_data_stack()
-        self._spans_data_stack_context.set(stack + [span])
+        stack = self._spans_data_stack_context.get()
+        self._spans_data_stack_context.set(stack + (span,))
 
     def span_data_stack_empty(self) -> bool:
         return len(self._spans_data_stack_context.get()) == 0
+
+    def span_data_stack_size(self) -> int:
+        return len(self._spans_data_stack_context.get())
 
     def get_trace_data(self) -> Optional[trace.TraceData]:
         trace_data = self._current_trace_data_context.get()
@@ -157,7 +157,7 @@ class OpikContextStorage:
         self._current_trace_data_context.set(trace)
 
     def clear_spans(self) -> None:
-        self._spans_data_stack_context.set([])
+        self._spans_data_stack_context.set(tuple())
 
     def clear_all(self) -> None:
         self._current_trace_data_context.set(None)
@@ -174,6 +174,7 @@ get_trace_data = _context_storage.get_trace_data
 pop_trace_data = _context_storage.pop_trace_data
 set_trace_data = _context_storage.set_trace_data
 clear_all = _context_storage.clear_all
+span_data_stack_size = _context_storage.span_data_stack_size
 trim_span_data_stack_to_certain_span = (
     _context_storage.trim_span_data_stack_to_certain_span
 )

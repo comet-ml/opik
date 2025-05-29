@@ -165,6 +165,7 @@ def test_opik_storage__trim_span_data_stack_to_certain_span__span_in_stack__trim
     tested.trim_span_data_stack_to_certain_span(span1.id)
 
     assert tested.top_span_data() is span1
+    assert tested.span_data_stack_size() == 1
 
 
 def test_opik_storage__trim_span_data_stack_to_certain_span__stack_is_empty__does_nothing(
