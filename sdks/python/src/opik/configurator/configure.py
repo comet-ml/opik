@@ -457,9 +457,9 @@ def _set_environment_variables_for_integrations(
     api_key: Optional[str], workspace: Optional[str]
 ) -> None:
     """
-    Environment variables are set for use by integrations (liteLLM, etc.) when both the API key and workspace name
+    Environment variables are set for use by some integrations (liteLLM, etc.) when both the API key and workspace name
     are provided by the user. According to the current implementation logic, these values will not be
-    saved to the OPIK configuration file. As a result, the third-party integrations will not be able to use them.
+    saved to the OPIK configuration file. As a result, some third-party integrations will not be able to use them.
     This is a workaround for this issue: https://github.com/comet-ml/opik/issues/2118
     """
     if api_key is not None:
