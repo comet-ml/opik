@@ -44,6 +44,16 @@ export enum DYNAMIC_COLUMN_TYPE {
   null = "null",
 }
 
+type explainerType = "info" | "help";
+
+export type Explainer = {
+  title?: string;
+  type?: explainerType;
+  description: string;
+  docLink?: string;
+  docHash?: string;
+};
+
 export type HeaderIconType = COLUMN_TYPE;
 
 export type ColumnData<T> = {
@@ -57,6 +67,7 @@ export type ColumnData<T> = {
   iconType?: HeaderIconType;
   header?: Header<T, unknown>;
   headerCheckbox?: boolean;
+  explainer?: Explainer;
   cell?: Cell<T, unknown>;
   verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
   overrideRowHeight?: ROW_HEIGHT;
