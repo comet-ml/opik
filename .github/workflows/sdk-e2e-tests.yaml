@@ -2,7 +2,7 @@ name: SDK E2E Tests
 run-name: "SDK E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
 on:
     workflow_dispatch:
-    pull_request:
+    pull_request_target:
         paths:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
@@ -33,6 +33,8 @@ jobs:
         steps:
         - name: Checkout
           uses: actions/checkout@v4.1.1
+          with:
+            ref: ${{ github.event.pull_request.base.ref }}
 
         - name: Setup Python ${{matrix.python_version}}
           uses: actions/setup-python@v5
