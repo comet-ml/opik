@@ -1,7 +1,7 @@
 name: SDK Unit Tests
 run-name: "SDK Unit Tests ${{ github.ref_name }} by @${{ github.actor }}"
 on:
-  pull_request_target:
+  pull_request:
     paths:
     - 'sdks/python/**'
   push:
@@ -35,8 +35,6 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.ref }}
 
       - name: Print environment variables
         run: env
@@ -45,9 +43,7 @@ jobs:
         run: cat $GITHUB_EVENT_PATH
 
       - name: Print the PR title
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: echo "$PR_TITLE"
+        run: echo "${{ github.event.pull_request.title }}"
 
       - name: Setup Python ${{ matrix.python_version }}
         uses: actions/setup-python@v5
