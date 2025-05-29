@@ -107,6 +107,10 @@ def display_round_progress(max_rounds: int):
     
     # Create a simple object with a method to set the score
     class Reporter:
+        def failed_to_generate(self, num_prompts, error):
+            rich.print(Text(f"│    Failed to generate {num_prompts} candidate prompt{'' if num_prompts == 1 else 's'}: {error}", style="dim red"))
+            rich.print(Text("│"))
+        
         def round_start(self, round_number):
             rich.print(Text(f"│ - Starting optimization round {round_number + 1} of {max_rounds}"))
 
@@ -119,6 +123,8 @@ def display_round_progress(max_rounds: int):
                 perc_change = (score - best_score) / best_score
                 rich.print(Text("│    No improvement in this optimization round", style="red"))
             
+            rich.print(Text("│"))
+
     # Use our log suppression context manager and yield the reporter
     with suppress_opik_logs():
         with convert_tqdm_to_rich():
@@ -144,7 +150,7 @@ def display_evaluation(message: str = "First we will establish the baseline perf
     
     # Use our log suppression context manager and yield the reporter
     with suppress_opik_logs():
-        with convert_tqdm_to_rich():
+        with convert_tqdm_to_rich("  Evaluation"):
             try:
                 yield Reporter()
             finally:
@@ -180,13 +186,10 @@ def display_candidate_generation_report(num_prompts: int):
 @contextmanager
 def display_prompt_candidate_scoring_report(candidate_count, prompt):
     """Context manager to display messages during an evaluation phase."""
-    # Entry point
-    rich.print(Text("│    Evaluating candidate prompts:"))
-    
     # Create a simple object with a method to set the score
     class Reporter:
         def set_generated_prompts(self, candidate_count, prompt):
-            rich.print(Text(f"│      Candidate prompt {candidate_count+1}:"))
+            rich.print(Text(f"│    Evaluating candidate prompt {candidate_count+1}:"))
             for msg in prompt:
                 panel = Panel(
                     Text(msg.get('content', ''), overflow="fold"),
@@ -228,3 +231,38 @@ def display_prompt_candidate_scoring_report(candidate_count, prompt):
     finally:
         pass
 
+def display_optimization_end_message(initial_score, best_score, best_prompt):
+    rich.print(Text("\n> Optimization complete\n"))
+    
+    if best_score > initial_score:
+        if initial_score == 0:
+            content = [Text(f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f}", style="bold green")]
+        else:
+            perc_change = (best_score - initial_score) / initial_score
+            content = [Text(f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})", style="bold green")]
+    else:
+        content = [Text("Optimization trial did not find a better prompt than the initial one.", style="bold red")]
+    
+    content.append(Text(f"\nBest prompt with a score of {best_score:.4f}:"))
+    for i, msg in enumerate(best_prompt):
+        content.append(
+            Panel(
+                Text(msg.get('content', ''), overflow="fold"),
+                title=f"{msg.get('role', 'message')}",
+                title_align="left",
+                border_style="dim",
+                width=PANEL_WIDTH,
+                padding=(1, 2),
+            )
+        )
+
+    rich.print(
+        Panel(
+            Group(*content),
+            title="Optimization results",
+            title_align="left",
+            border_style="green",
+            width=PANEL_WIDTH,
+            padding=(1, 2)
+        )
+    )

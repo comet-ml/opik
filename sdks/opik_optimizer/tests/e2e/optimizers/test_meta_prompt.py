@@ -11,17 +11,6 @@ from opik_optimizer.optimization_config import chat_prompt
 
 
 def test_metaprompt_optimizer():
-    # Initialize optimizer
-    optimizer = MetaPromptOptimizer(
-        model="openai/gpt-4",  # or "azure/gpt-4"
-        temperature=0.1,
-        max_tokens=5000,
-        num_threads=8,
-        max_rounds=2,
-        num_prompts_per_round=1,
-        seed=42
-    )
-
     # Prepare dataset
     dataset = datasets.hotpot_300()
 
@@ -38,6 +27,17 @@ def test_metaprompt_optimizer():
         prompt="{question}"
     )
     
+    # Initialize optimizer
+    optimizer = MetaPromptOptimizer(
+        model="openai/gpt-4",  # or "azure/gpt-4"
+        temperature=0.1,
+        max_tokens=10000,
+        num_threads=8,
+        rounds=10,
+        num_prompts_per_round=4,
+        seed=42
+    )
+
     # Run optimization
     results = optimizer.optimize_prompt(
         dataset=dataset,

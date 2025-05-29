@@ -1,30 +1,27 @@
-from typing import Any, Dict, List, Tuple, Union, Optional, Literal
 import os
 import random
 from datetime import datetime
-
-import opik
-
-from opik.integrations.dspy.callback import OpikCallback
-from opik.opik_context import get_current_span_data
-from opik.evaluation import evaluate
-from opik import Dataset
+from typing import Dict, List, Literal, Optional, Union
 
 import dspy
-
 import litellm
+import opik
 from litellm.caching import Cache
+from opik import Dataset
+from opik.evaluation import evaluate
+from opik.integrations.dspy.callback import OpikCallback
+from opik.opik_context import get_current_span_data
 
-from ..optimization_result import OptimizationResult
 from ..base_optimizer import BaseOptimizer
-from ._mipro_optimizer_v2 import MIPROv2
-from ._lm import LM
 from ..optimization_config.configs import MetricConfig, TaskConfig
+from ..optimization_result import OptimizationResult
+from ._lm import LM
+from ._mipro_optimizer_v2 import MIPROv2
 from .utils import (
     create_dspy_signature,
-    opik_metric_to_dspy,
     create_dspy_training_set,
     get_tool_prompts,
+    opik_metric_to_dspy,
 )
 
 # Using disk cache for LLM calls

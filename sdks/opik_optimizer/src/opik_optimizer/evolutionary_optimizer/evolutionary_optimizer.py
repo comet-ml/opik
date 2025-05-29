@@ -1,28 +1,27 @@
-from typing import Optional, Union, List, Dict, Any, Tuple
-import opik
-import logging
-import random
 import json
-from string import Template
+import logging
 import os
-import time
-import Levenshtein
-import numpy as np
+import random
+from string import Template
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
-from opik_optimizer.optimization_config.configs import TaskConfig, MetricConfig
-from opik_optimizer.optimization_result import OptimizationResult
-from opik_optimizer import task_evaluator
-from opik_optimizer.optimization_config import mappers
-from opik.api_objects import opik_client
-from opik.environment import get_tqdm_for_current_environment
-from opik_optimizer import _throttle
+import Levenshtein
 import litellm
-from litellm.caching import Cache
-from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
+import numpy as np
+import opik
 
 # DEAP imports
-from deap import base, creator, tools, algorithms
+from deap import base, creator, tools
+from litellm.caching import Cache
+from opik.api_objects import opik_client
+from opik.environment import get_tqdm_for_current_environment
+from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
+
+from opik_optimizer import _throttle, task_evaluator
+from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
+from opik_optimizer.optimization_config import mappers
+from opik_optimizer.optimization_config.configs import MetricConfig, TaskConfig
+from opik_optimizer.optimization_result import OptimizationResult
 
 logger = logging.getLogger(__name__)
 tqdm = get_tqdm_for_current_environment()

@@ -37,7 +37,7 @@ _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 class MetaPromptOptimizer(BaseOptimizer):
     """Optimizer that uses meta-prompting to improve prompts based on examples and performance."""
     # --- Constants for Default Configuration ---
-    DEFAULT_MAX_ROUNDS = 3
+    DEFAULT_ROUNDS = 3
     DEFAULT_PROMPTS_PER_ROUND = 4
 
     # --- Reasoning System Prompt ---
@@ -65,7 +65,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self,
         model: str,
         reasoning_model: str = None,
-        max_rounds: int = DEFAULT_MAX_ROUNDS,
+        rounds: int = DEFAULT_ROUNDS,
         num_prompts_per_round: int = DEFAULT_PROMPTS_PER_ROUND,
         num_threads: int = 12,
         project_name: Optional[str] = None,
@@ -79,7 +79,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         Args:
             model: The model to use for evaluation
             reasoning_model: The model to use for reasoning and prompt generation
-            max_rounds: Maximum number of optimization rounds
+            rounds: Number of optimization rounds
             num_prompts_per_round: Number of prompts to generate per round
             num_threads: Number of threads for parallel evaluation
             project_name: Optional project name for tracking
@@ -89,7 +89,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         """
         super().__init__(model=model, project_name=project_name, **model_kwargs)
         self.reasoning_model = reasoning_model if reasoning_model is not None else model
-        self.max_rounds = max_rounds
+        self.rounds = rounds
         self.num_prompts_per_round = num_prompts_per_round
         self.num_threads = num_threads
         self.verbose = verbose
@@ -102,7 +102,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             f"Initialized MetaPromptOptimizer with model={model}, reasoning_model={self.reasoning_model}"
         )
         logger.debug(
-            f"Optimization rounds: {max_rounds}, Prompts/round: {num_prompts_per_round}"
+            f"Optimization rounds: {rounds}, Prompts/round: {num_prompts_per_round}"
         )
 
     @_throttle.rate_limited(_rate_limiter)
@@ -428,7 +428,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "dataset": self.dataset.name,
                 "configuration": {
                     "prompt": current_prompt,
-                    "max_rounds": self.max_rounds,
+                    "rounds": self.rounds,
                     "num_prompts_per_round": self.num_prompts_per_round,
                 },
             },
@@ -452,21 +452,25 @@ class MetaPromptOptimizer(BaseOptimizer):
             baseline_reporter.set_score(initial_score)
 
         reporting.display_optimization_start_message()
-        with reporting.display_round_progress(self.max_rounds) as round_reporter:
-            for round_num in range(self.max_rounds):
+        with reporting.display_round_progress(self.rounds) as round_reporter:
+            for round_num in range(self.rounds):
                 
                 round_reporter.round_start(round_num)
                 previous_best_score = best_score
                 
                 # Step 1. Create a set of candidate prompts
-                candidate_prompts = self._generate_candidate_prompts(
-                    current_prompt=best_prompt,
-                    best_score=best_score,
-                    round_num=round_num,
-                    previous_rounds=rounds,
-                    metric_config=metric_config,
-                    optimization_id=optimization_id,
-                )
+                try:
+                    candidate_prompts = self._generate_candidate_prompts(
+                        current_prompt=best_prompt,
+                        best_score=best_score,
+                        round_num=round_num,
+                        previous_rounds=rounds,
+                        metric_config=metric_config,
+                        optimization_id=optimization_id,
+                    )
+                except Exception as e:
+                    round_reporter.failed_to_generate(self.num_prompts_per_round, e)
+                    continue
 
                 # Step 2. Score each candidate prompt
                 prompt_scores = []
@@ -503,6 +507,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 )
                 improvement = self._calculate_improvement(best_cand_score_avg, best_score)
                 round_reporter.round_end(round_num, best_cand_score_avg, best_score, best_prompt)
+                
                 round_data = self._create_round_data(
                     round_num,
                     best_prompt,
@@ -519,20 +524,11 @@ class MetaPromptOptimizer(BaseOptimizer):
                     best_score = best_cand_score_avg
                     best_prompt = best_candidate_this_round
 
-        if initial_score != 0:  # Avoid division by zero if initial score was 0
-            total_improvement_pct = (best_score - initial_score) / abs(
-                initial_score
-            )  # Use abs for safety
-            logger.info(f"Total improvement: {total_improvement_pct:.2%}")
-        elif best_score > 0:
-            logger.info("Total improvement: infinite (initial score was 0)")
-        else:
-            logger.info("Total improvement: 0.00% (scores did not improve from 0)")
-        logger.info("\nFINAL OPTIMIZED PROMPT:")
-        logger.info("-" * 80)
-        logger.info(best_prompt)
-        logger.info("-" * 80)
-        logger.info("=" * 80)
+        reporting.display_optimization_end_message(
+            initial_score,
+            best_score,
+            best_prompt,
+        )
 
         return self._create_result(
             metric_config,
@@ -754,33 +750,17 @@ class MetaPromptOptimizer(BaseOptimizer):
                         try:
                             json_result = json.loads(json_match.group())
                         except json.JSONDecodeError as e:
-                            candidate_generation_report.set_failed_to_generate(
-                                self.num_prompts_per_round,
-                                f"Could not parse JSON extracted via regex: {e}"
-                            )
                             raise ValueError(f"Could not parse JSON extracted via regex: {e}")
                     else:
-                        candidate_generation_report.set_failed_to_generate(
-                            self.num_prompts_per_round,
-                            "No JSON object found in response via regex."
-                        )
                         raise ValueError("No JSON object found in response via regex.")
 
                 # Validate the parsed JSON structure
                 if not isinstance(json_result, dict) or "prompts" not in json_result:
                     logger.debug(f"Parsed JSON content: {json_result}")
-                    candidate_generation_report.set_failed_to_generate(
-                        self.num_prompts_per_round,
-                        "Parsed JSON is not a dictionary or missing 'prompts' key."
-                    )
                     raise ValueError("Parsed JSON is not a dictionary or missing 'prompts' key.")
 
                 if not isinstance(json_result["prompts"], list):
                     logger.debug(f"Content of 'prompts': {json_result.get('prompts')}")
-                    candidate_generation_report.set_failed_to_generate(
-                        self.num_prompts_per_round,
-                        "'prompts' key does not contain a list."
-                    )
                     raise ValueError("'prompts' key does not contain a list.")
 
                 # Extract and log valid prompts

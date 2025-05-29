@@ -1,15 +1,12 @@
-import logging
 import random
 import textwrap
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
+import dspy
 import numpy as np
 import opik
 import optuna
-from optuna.distributions import CategoricalDistribution
-
-import dspy
 from dspy.evaluate.evaluate import Evaluate
 from dspy.propose import GroundedProposer
 from dspy.teleprompt.teleprompt import Teleprompter
@@ -23,6 +20,7 @@ from dspy.teleprompt.utils import (
     save_candidate_program,
     set_signature,
 )
+from optuna.distributions import CategoricalDistribution
 
 
 class Logger():
