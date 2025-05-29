@@ -15,24 +15,18 @@ class OpikContextStorage:
     execution contexts (like threads or async tasks). To ensure proper isolation and safety,
     this implementation uses immutable tuples for stack storage.
 
-    ### DO NOT modify the context directly:
-    ```python
-    # WRONG: Direct modification affects all contexts
-    spans_stack_context.get().append(new_span)  # Don't do this!
-    ```
-
     ### DO use immutable data structures and create-new-set pattern:
 
     For adding elements:
     ```python
-    # CORRECT: Get current tuple and create a new one with added element
+    # Get current tuple and create a new one with added element
     stack = spans_stack_context.get()
     spans_stack_context.set(stack + (new_element,))
     ```
 
     For removing elements:
     ```python
-    # CORRECT: Get current tuple and create a new one without the last element
+    # Get current tuple and create a new one without the last element
     stack = spans_stack_context.get()
     spans_stack_context.set(stack[:-1])
     ```
