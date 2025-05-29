@@ -79,6 +79,7 @@ import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -417,7 +418,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           callback: handleRowClick,
           asId: true,
         },
-        size: 165,
+        size: 180,
+        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_dataset_item],
       }),
     ];
 
@@ -644,9 +646,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         limitWidth
       >
         <CalloutAlert
-          description="Experiment items are individual evaluations that connect a dataset sample with its LLM output, feedback scores, and trace."
-          docLink="/evaluation/overview"
-          docHash="#analyzing-evaluation-results"
+          {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_experiment_items]}
         />
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
@@ -668,7 +668,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             columnsToExport={columnsToExport}
             experiments={experiments}
           />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}

@@ -35,6 +35,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import FeedbackDefinitionsActionsPanel from "@/components/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsActionsPanel";
 import FeedbackScoreNameCell from "@/components/shared/DataTableCells/FeedbackScoreNameCell";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 export const getRowId = (f: FeedbackDefinition) => f.id;
 
@@ -188,8 +189,8 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
   return (
     <div>
       <CalloutAlert
-        description="Create custom fields to manually rate LLM outputs. Use them to collect structured feedback and track quality over time."
         className="mb-4"
+        {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_definitions]}
       />
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
@@ -202,7 +203,7 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
 
         <div className="flex items-center gap-2">
           <FeedbackDefinitionsActionsPanel feedbackDefinitions={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}

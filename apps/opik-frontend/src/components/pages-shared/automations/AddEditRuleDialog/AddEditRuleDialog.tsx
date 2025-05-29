@@ -54,6 +54,7 @@ import { LLM_JUDGE } from "@/types/llm";
 import { LLM_PROMPT_CUSTOM_TEMPLATE } from "@/constants/llm";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 export const DEFAULT_SAMPLING_RATE = 1;
 
@@ -184,9 +185,8 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
           {isEdit && (
             <CalloutAlert
               Icon={MessageCircleWarning}
-              title="Editing an existing rule"
-              description="Changes will only apply to new traces. Existing traces won’t be affected."
               className="mb-2"
+              {...EXPLAINERS_MAP[EXPLAINER_ID.what_happens_if_i_edit_a_rule]}
             />
           )}
           <Form {...form}>

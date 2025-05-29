@@ -4,15 +4,12 @@ import { Info, SquareArrowOutUpRight } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
+import { Explainer } from "@/types/shared";
 
 type CalloutAlertProps = {
-  title?: string;
-  description?: string;
-  docLink?: string;
-  docHash?: string;
   className?: string;
   Icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-};
+} & Explainer;
 
 const CalloutAlert: React.FC<CalloutAlertProps> = ({
   title,

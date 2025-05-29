@@ -42,6 +42,7 @@ import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const getRowId = (d: EvaluatorsRule) => d.id;
 
@@ -239,8 +240,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
         limitWidth
       >
         <CalloutAlert
-          description="Automatically score your production traces by defining LLM-as-a-Judge or code metrics."
-          docLink="/production/rules"
+          {...EXPLAINERS_MAP[EXPLAINER_ID.whats_online_evaluation]}
         />
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
@@ -259,7 +259,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
         </div>
         <div className="flex items-center gap-2">
           <RulesActionsPanel rules={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}

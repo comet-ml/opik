@@ -19,6 +19,7 @@ import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 export const DEFAULT_COLUMNS: ColumnData<ProviderKey>[] = [
   {
@@ -110,8 +111,8 @@ const AIProvidersTab = () => {
   return (
     <div>
       <CalloutAlert
-        description="Connect AI providers to send prompts and receive responses from different LLMs . Set up a provider to test prompts live and preview model behavior in the Playground, and to automatically score traces using online evaluation rules."
         className="mb-4"
+        {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_an_ai_provider]}
       />
       <div className="mb-4 flex w-full items-center justify-between">
         <SearchInput

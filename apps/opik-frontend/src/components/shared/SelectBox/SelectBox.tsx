@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { DropdownOption } from "@/types/shared";
 
 export type SelectBoxProps<DataType> = {
+  id?: string;
   value: string;
   onChange: (value: DataType) => void;
   options: DropdownOption<DataType>[];
@@ -25,6 +26,7 @@ export type SelectBoxProps<DataType> = {
 };
 
 export const SelectBox = <ValueType extends string>({
+  id,
   value = "",
   onChange,
   options,
@@ -42,6 +44,7 @@ export const SelectBox = <ValueType extends string>({
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger
+        id={id}
         className={cn(
           variantClass,
           "data-[placeholder]:text-light-slate",
