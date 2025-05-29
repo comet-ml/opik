@@ -2,7 +2,7 @@
     name: E2E Tests Linter
     run-name: "E2E Tests Linter ${{ github.ref_name }} by @${{ github.actor }}"
     on:
-      pull_request_target:
+      pull_request:
         paths:
         - 'tests_end_to_end/**'
       push:
@@ -18,8 +18,6 @@
             working-directory: tests_end_to_end
         steps:
           - uses: actions/checkout@v4
-            with:
-              ref: ${{ github.event.pull_request.base.ref }}
           - name: install pre-commit
             run: pip install pre-commit
           - name: linting
