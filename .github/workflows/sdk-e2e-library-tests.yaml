@@ -15,7 +15,7 @@ on:
             - litellm
     schedule:
       - cron: "0 0 */2 * *"
-    pull_request:
+    pull_request_target:
         paths:
           - 'sdks/python/**'
     push:
@@ -47,7 +47,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4.1.1
-
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          
       - name: Install uv and set the Python version ${{ matrix.python_version }}
         uses: astral-sh/setup-uv@v5
         with:
