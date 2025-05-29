@@ -43,5 +43,7 @@ opentelemetry-instrument gunicorn --access-logfile '-' \
          --workers 1 \
          --threads "$NUM_THREADS" \
          --worker-class gthread \
+         --timeout 60 \
+         --keep-alive 5 \
          --bind=0.0.0.0:8000 \
          --chdir ./src 'opik_backend:create_app()'
