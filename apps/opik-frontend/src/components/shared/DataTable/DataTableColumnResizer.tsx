@@ -37,7 +37,7 @@ const DataTableColumnResizer = <TData,>({
       className={cn(
         "group absolute top-0 h-[var(--data-table-height,56px)] z-[5] flex cursor-ew-resize items-stretch transition-all",
         header.column.getIsLastColumn()
-          ? "right-0 w-1 justify-end"
+          ? "right-0 w-[9px] justify-end"
           : "-right-1 w-[9px] justify-center",
       )}
     >
