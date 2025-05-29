@@ -21,7 +21,7 @@ export interface ProjectStatistic {
   project_id?: string;
   usage?: UsageData;
   feedback_scores?: AggregatedFeedbackScore[];
-  total_estimated_cost?: number;
+  total_estimated_cost_sum?: number;
   duration?: ProjectDuration;
   guardrails_failed_count?: number;
 }

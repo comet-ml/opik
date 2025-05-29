@@ -12,6 +12,7 @@ import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.TraceSortingFactory;
@@ -143,7 +144,8 @@ class TraceDAOImpl implements TraceDAO {
                 error_info,
                 created_by,
                 last_updated_by,
-                thread_id
+                thread_id,
+                visibility_mode
             ) VALUES
                 <items:{item |
                     (
@@ -161,7 +163,8 @@ class TraceDAOImpl implements TraceDAO {
                         :error_info<item.index>,
                         :user_name,
                         :user_name,
-                        :thread_id<item.index>
+                        :thread_id<item.index>,
+                        if(:visibility_mode<item.index> IS NULL, 'default', :visibility_mode<item.index>)
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -190,7 +193,8 @@ class TraceDAOImpl implements TraceDAO {
                 created_at,
                 created_by,
                 last_updated_by,
-                thread_id
+                thread_id,
+                visibility_mode
             )
             SELECT
                 new_trace.id as id,
@@ -244,7 +248,11 @@ class TraceDAOImpl implements TraceDAO {
                 multiIf(
                     LENGTH(old_trace.thread_id) > 0, old_trace.thread_id,
                     new_trace.thread_id
-                ) as thread_id
+                ) as thread_id,
+                multiIf(
+                    notEquals(old_trace.visibility_mode, 'unknown'), old_trace.visibility_mode,
+                    new_trace.visibility_mode
+                ) as visibility_mode
             FROM (
                 SELECT
                     :id as id,
@@ -261,7 +269,8 @@ class TraceDAOImpl implements TraceDAO {
                     now64(9) as created_at,
                     :user_name as created_by,
                     :user_name as last_updated_by,
-                    :thread_id as thread_id
+                    :thread_id as thread_id,
+                    if(:visibility_mode IS NULL, 'default', :visibility_mode) as visibility_mode
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -281,7 +290,7 @@ class TraceDAOImpl implements TraceDAO {
      ***/
     private static final String UPDATE = """
             INSERT INTO traces (
-            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id
+            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode
             ) SELECT
             	id,
             	project_id,
@@ -297,7 +306,8 @@ class TraceDAOImpl implements TraceDAO {
             	created_at,
             	created_by,
                 :user_name as last_updated_by,
-                <if(thread_id)> :thread_id <else> thread_id <endif> as thread_id
+                <if(thread_id)> :thread_id <else> thread_id <endif> as thread_id,
+                visibility_mode
             FROM traces
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -749,7 +759,7 @@ class TraceDAOImpl implements TraceDAO {
     //TODO: refactor to implement proper conflict resolution
     private static final String INSERT_UPDATE = """
             INSERT INTO traces (
-                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id
+                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode
             )
             SELECT
                 new_trace.id as id,
@@ -810,7 +820,11 @@ class TraceDAOImpl implements TraceDAO {
                 multiIf(
                     LENGTH(old_trace.thread_id) > 0, old_trace.thread_id,
                     new_trace.thread_id
-                ) as thread_id
+                ) as thread_id,
+                multiIf(
+                    notEquals(old_trace.visibility_mode, 'unknown'), old_trace.visibility_mode,
+                    new_trace.visibility_mode
+                ) as visibility_mode
             FROM (
                 SELECT
                     :id as id,
@@ -827,7 +841,8 @@ class TraceDAOImpl implements TraceDAO {
                     now64(9) as created_at,
                     :user_name as created_by,
                     :user_name as last_updated_by,
-                    <if(thread_id)> :thread_id <else> '' <endif> as thread_id
+                    <if(thread_id)> :thread_id <else> '' <endif> as thread_id,
+                    <if(visibility_mode)> :visibility_mode <else> 'unknown' <endif> as visibility_mode
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -992,6 +1007,8 @@ class TraceDAOImpl implements TraceDAO {
                 avgMap(f.feedback_scores) AS feedback_scores,
                 avgIf(s.total_estimated_cost, s.total_estimated_cost > 0) AS total_estimated_cost_,
                 toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
+                sumIf(s.total_estimated_cost, s.total_estimated_cost > 0) AS total_estimated_cost_sum_,
+                toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum,
                 sum(g.failed_count) AS guardrails_failed_count
             FROM trace_final t
             LEFT JOIN spans_agg AS s ON t.id = s.trace_id
@@ -1192,6 +1209,12 @@ class TraceDAOImpl implements TraceDAO {
             statement.bind("error_info", JsonUtils.readTree(trace.errorInfo()).toString());
         } else {
             statement.bind("error_info", "");
+        }
+
+        if (trace.visibilityMode() != null) {
+            statement.bind("visibility_mode", trace.visibilityMode().getValue());
+        } else {
+            statement.bindNull("visibility_mode", String.class);
         }
 
         return statement;
@@ -1420,6 +1443,10 @@ class TraceDAOImpl implements TraceDAO {
                 .duration(getValue(exclude, Trace.TraceField.DURATION, row, "duration", Double.class))
                 .threadId(StringUtils.defaultIfBlank(
                         getValue(exclude, Trace.TraceField.THREAD_ID, row, "thread_id", String.class), null))
+                .visibilityMode(Optional.ofNullable(
+                        getValue(exclude, Trace.TraceField.VISIBILITY_MODE, row, "visibility_mode", String.class))
+                        .flatMap(VisibilityMode::fromString)
+                        .orElse(null))
                 .build());
     }
 
@@ -1713,6 +1740,12 @@ class TraceDAOImpl implements TraceDAO {
                     statement.bind("last_updated_at" + i, trace.lastUpdatedAt().toString());
                 } else {
                     statement.bindNull("last_updated_at" + i, String.class);
+                }
+
+                if (trace.visibilityMode() != null) {
+                    statement.bind("visibility_mode" + i, trace.visibilityMode().getValue());
+                } else {
+                    statement.bindNull("visibility_mode" + i, String.class);
                 }
 
                 i++;

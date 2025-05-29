@@ -41,6 +41,8 @@ import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowAct
 import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const getRowId = (d: EvaluatorsRule) => d.id;
 
@@ -233,6 +235,15 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   return (
     <>
       <PageBodyStickyContainer
+        className="pb-4"
+        direction="horizontal"
+        limitWidth
+      >
+        <CalloutAlert
+          {...EXPLAINERS_MAP[EXPLAINER_ID.whats_online_evaluation]}
+        />
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
         limitWidth
@@ -248,7 +259,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
         </div>
         <div className="flex items-center gap-2">
           <RulesActionsPanel rules={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}

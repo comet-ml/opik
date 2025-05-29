@@ -3,13 +3,14 @@ import uuid
 from typing import Any, Dict, List, Optional, Union
 
 from google.adk.agents.callback_context import CallbackContext
-from google.adk.models import LlmRequest, LlmResponse
+from google.adk.models import LlmRequest, LlmResponse, lite_llm
 from google.adk.tools.base_tool import BaseTool
 from google.adk.tools.tool_context import ToolContext
 from opik import context_storage
 from opik.api_objects import helpers, opik_client, trace, span
-from opik.types import DistributedTraceHeadersDict, SpanType
+from opik.types import DistributedTraceHeadersDict, SpanType, LLMProvider
 
+from . import litellm_wrappers
 from . import llm_response_wrapper
 from . import helpers as adk_helpers
 
@@ -47,6 +48,21 @@ class OpikTracer:
         create_wrapper = llm_response_wrapper.LlmResponseCreateWrapper(old_function)
         LlmResponse.create = create_wrapper
 
+        if hasattr(lite_llm, "LiteLLMClient") and hasattr(
+            lite_llm.LiteLLMClient, "acompletion"
+        ):
+            lite_llm.LiteLLMClient.acompletion = (
+                litellm_wrappers.litellm_client_acompletion_decorator(
+                    lite_llm.LiteLLMClient.acompletion
+                )
+            )
+        if hasattr(lite_llm, "_model_response_to_generate_content_response"):
+            lite_llm._model_response_to_generate_content_response = (
+                litellm_wrappers.generate_content_response_decorator(
+                    lite_llm._model_response_to_generate_content_response
+                )
+            )
+
     def _attach_span_to_existing_span(
         self,
         current_span_data: span.SpanData,
@@ -54,6 +70,8 @@ class OpikTracer:
         input: Dict[str, Any],
         type: SpanType,
         metadata: Optional[Dict[str, Any]] = None,
+        provider: Optional[Union[str, LLMProvider]] = None,
+        model: Optional[str] = None,
     ) -> None:
         project_name = helpers.resolve_child_span_project_name(
             parent_project_name=current_span_data.project_name,
@@ -64,6 +82,8 @@ class OpikTracer:
             trace_id=current_span_data.trace_id,
             parent_span_id=current_span_data.id,
             name=name,
+            provider=provider,
+            model=model,
             input=input,
             type=type,
             project_name=project_name,
@@ -80,6 +100,8 @@ class OpikTracer:
         input: Dict[str, Any],
         type: SpanType,
         metadata: Optional[Dict[str, Any]] = None,
+        provider: Optional[Union[str, LLMProvider]] = None,
+        model: Optional[str] = None,
     ) -> None:
         project_name = helpers.resolve_child_span_project_name(
             parent_project_name=current_trace_data.project_name,
@@ -89,6 +111,8 @@ class OpikTracer:
             trace_id=current_trace_data.id,
             parent_span_id=None,
             name=name,
+            provider=provider,
+            model=model,
             input=input,
             type=type,
             project_name=project_name,
@@ -194,10 +218,15 @@ class OpikTracer:
         **kwargs: Any,
     ) -> None:
         input = adk_helpers.convert_adk_base_model_to_dict(llm_request)
+
+        provider, model = litellm_wrappers.parse_provider_and_model(llm_request.model)
+
         if (current_span_data := self._context_storage.top_span_data()) is not None:
             self._attach_span_to_existing_span(
                 current_span_data=current_span_data,
                 name=llm_request.model,
+                provider=provider,
+                model=model,
                 input=input,
                 type="llm",
                 metadata=self.metadata,
@@ -208,6 +237,8 @@ class OpikTracer:
             self._attach_span_to_existing_trace(
                 current_trace_data=current_trace_data,
                 name=llm_request.model,
+                provider=provider,
+                model=model,
                 input=input,
                 type="llm",
                 metadata=self.metadata,

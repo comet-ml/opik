@@ -12,13 +12,15 @@ import lombok.Builder;
 import java.util.List;
 import java.util.UUID;
 
+import static com.comet.opik.api.ExperimentItemBulkUpload.View;
+
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record ExperimentItemBulkRecord(
         @JsonView( {
-                ExperimentItemBulkUpload.View.Write.class}) @NotNull UUID datasetItemId,
-        @JsonView({ExperimentItemBulkUpload.View.Write.class}) @Valid Trace trace,
-        @Size(max = 100) @JsonView({ExperimentItemBulkUpload.View.Write.class}) List<@Valid Span> spans,
+                View.ExperimentItemBulkWriteView.class}) @NotNull UUID datasetItemId,
+        @JsonView({View.ExperimentItemBulkWriteView.class}) @Valid Trace trace,
+        @JsonView({View.ExperimentItemBulkWriteView.class}) @Size(max = 100) List<@Valid Span> spans,
         @Size(max = 100) List<@Valid FeedbackScore> feedbackScores){
 }

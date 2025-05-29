@@ -38,6 +38,7 @@ import DataTableBody, {
 import {
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_TYPE,
+  Explainer,
   ColumnsStatistic,
   HeaderIconType,
   OnChangeFn,
@@ -76,6 +77,7 @@ declare module "@tanstack/react-table" {
     overrideRowHeight?: ROW_HEIGHT;
     statisticKey?: string;
     statisticDataFormater?: (value: number) => string;
+    explainer?: Explainer;
     custom?: object;
   }
 }

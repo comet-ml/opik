@@ -14,6 +14,8 @@ import ExperimentDatasetItems from "@/components/pages/CompareExperimentsPage/Co
 import useLocalStorageState from "use-local-storage-state";
 import difference from "lodash/difference";
 import union from "lodash/union";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 
 interface ExperimentDatasetProps {
   data: DatasetItem["data"] | undefined;
@@ -70,7 +72,12 @@ const ExperimentDataset = ({ data }: ExperimentDatasetProps) => {
   return (
     <div className="min-w-72 max-w-full flex-1 pr-6 pt-4">
       <div className="flex items-center justify-between pb-4">
-        <p className="comet-body-accented">Dataset item</p>
+        <div className="flex items-center gap-1">
+          <h4 className="comet-body-accented">Dataset item</h4>
+          <ExplainerIcon
+            {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_dataset_item]}
+          />
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" variant="outline">

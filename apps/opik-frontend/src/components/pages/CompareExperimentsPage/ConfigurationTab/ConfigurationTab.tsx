@@ -20,12 +20,14 @@ import CompareExperimentsConfigCell, {
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import Loader from "@/components/shared/Loader/Loader";
+import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
 import { convertColumnDataToColumn } from "@/lib/table";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Experiment } from "@/types/datasets";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-config-columns-width";
 
@@ -165,6 +167,15 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   return (
     <>
       <PageBodyStickyContainer
+        className="pb-4"
+        direction="horizontal"
+        limitWidth
+      >
+        <CalloutAlert
+          {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_experiment_configuration]}
+        />
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
         direction="bidirectional"
         limitWidth
@@ -182,7 +193,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
           <CompareExperimentsActionsPanel />
           {isCompare && (
             <>
-              <Separator orientation="vertical" className="mx-1 h-4" />
+              <Separator orientation="vertical" className="mx-2 h-4" />
               <div className="flex items-center space-x-2">
                 <Label htmlFor="show-doff-only">Show differences only</Label>
                 <Switch

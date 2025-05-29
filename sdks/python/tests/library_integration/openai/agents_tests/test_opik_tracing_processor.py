@@ -1,5 +1,6 @@
+import uuid
 import pytest
-from agents import Agent, Runner, set_trace_processors, function_tool
+from agents import Agent, Runner, set_trace_processors, function_tool, trace
 
 import opik
 from opik.integrations.openai.agents import OpikTracingProcessor
@@ -39,6 +40,86 @@ def test_opik_tracing_processor__happy_flow(fake_backend):
         name="Agent workflow",
         project_name=project_name,
         end_time=ANY_BUT_NONE,
+        metadata={
+            "created_from": "openai-agents",
+            "agents-trace-id": ANY_STRING(startswith="trace"),
+        },
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name="Assistant",
+                metadata=ANY_DICT,
+                output={"output": "str"},
+                type="general",
+                end_time=ANY_BUT_NONE,
+                project_name=project_name,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        start_time=ANY_BUT_NONE,
+                        name="Response",
+                        input={
+                            "input": [
+                                {
+                                    "content": "Write a haiku about recursion in programming.",
+                                    "role": "user",
+                                }
+                            ]
+                        },
+                        output={"output": ANY_LIST},
+                        metadata=ANY_DICT,
+                        type="llm",
+                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                        end_time=ANY_BUT_NONE,
+                        project_name=project_name,
+                        model=ANY_STRING(startswith=MODEL_FOR_TESTS),
+                        provider=ANY_BUT_NONE,
+                    )
+                ],
+                provider=ANY_BUT_NONE,
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_tree)
+
+
+def test_opik_tracing_processor__happy_flow_conversation(fake_backend):
+    input_message = "Write a haiku about recursion in programming."
+    project_name = "opik-test-openai-agents"
+
+    set_trace_processors(processors=[OpikTracingProcessor(project_name)])
+
+    agent = Agent(
+        name="Assistant",
+        instructions="You are a helpful assistant",
+        model=MODEL_FOR_TESTS,
+    )
+
+    thread_id = str(uuid.uuid4())
+    workflow_name = "Conversation"
+    with trace(workflow_name=workflow_name, group_id=thread_id):
+        Runner.run_sync(agent, input_message)
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        start_time=ANY_BUT_NONE,
+        input=ANY_DICT,
+        output=ANY_DICT,
+        name=workflow_name,
+        project_name=project_name,
+        end_time=ANY_BUT_NONE,
+        metadata={
+            "created_from": "openai-agents",
+            "agents-trace-id": ANY_STRING(startswith="trace"),
+        },
+        thread_id=thread_id,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -121,6 +202,10 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
         input=ANY_DICT,
         output=ANY_DICT,
         end_time=ANY_BUT_NONE,
+        metadata={
+            "created_from": "openai-agents",
+            "agents-trace-id": ANY_STRING(startswith="trace"),
+        },
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -235,6 +320,10 @@ async def test_opik_tracing_processor__functions(fake_backend):
         name="Agent workflow",
         project_name=project_name,
         end_time=ANY_BUT_NONE,
+        metadata={
+            "created_from": "openai-agents",
+            "agents-trace-id": ANY_STRING(startswith="trace"),
+        },
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,

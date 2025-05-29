@@ -170,7 +170,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     if (noValidRows || partialValid) {
       return (
         <Alert className="mt-4">
-          <MessageCircleWarning className="size-4" />
+          <MessageCircleWarning />
           <AlertDescription>{text}</AlertDescription>
         </Alert>
       );

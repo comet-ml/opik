@@ -2,13 +2,16 @@ import React from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { Column } from "@tanstack/react-table";
 import { cn } from "@/lib/utils";
+import { Separator } from "@/components/ui/separator";
 
 type UseSortableHeaderProps<TData> = {
   column: Column<TData>;
+  withSeparator?: boolean;
 };
 
 export const useSortableHeader = <TData,>({
   column,
+  withSeparator = false,
 }: UseSortableHeaderProps<TData>) => {
   const isSortable = column.getCanSort();
   const direction = column.getIsSorted();
@@ -23,6 +26,15 @@ export const useSortableHeader = <TData,>({
     const Icon = (direction || nextDirection) === "asc" ? ArrowUp : ArrowDown;
     return (
       <>
+        {withSeparator && (
+          <Separator
+            orientation="vertical"
+            className={cn(
+              "ml-0.5 hidden h-2.5 group-hover:inline",
+              direction && "inline",
+            )}
+          />
+        )}
         <Icon
           className={cn(
             "shrink-0 hidden size-3.5 group-hover:inline",
@@ -34,6 +46,7 @@ export const useSortableHeader = <TData,>({
   };
 
   return {
+    isSortable,
     renderSort,
     className: isSortable ? "cursor-pointer group" : undefined,
     onClickHandler: isSortable

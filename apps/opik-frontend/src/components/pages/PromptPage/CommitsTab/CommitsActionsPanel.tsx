@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { PromptVersion } from "@/types/prompts";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ComparePromptVersionDialog from "@/components/pages/PromptPage/CommitsTab/ComparePromptVersionDialog";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 type CommitsActionsPanelsProps = {
   versions: PromptVersion[];
@@ -36,6 +38,10 @@ const CommitsActionsPanel: React.FunctionComponent<
           Compare
         </Button>
       </TooltipWrapper>
+      <ExplainerIcon
+        className="-ml-0.5"
+        {...EXPLAINERS_MAP[EXPLAINER_ID.why_would_i_compare_commits]}
+      />
     </div>
   );
 };

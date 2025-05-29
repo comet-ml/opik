@@ -42,8 +42,12 @@ import os
 
 opik_config = opik.config.get_from_user_inputs()
 
-os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "https://www.comet.com/opik/api/v1/private/otel"
-os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = f"Authorization={opik_config.api_key},projectName={opik_config.project_name},Comet-Workspace={opik_config.workspace}"
+os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = (
+    "https://www.comet.com/opik/api/v1/private/otel"
+)
+os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = (
+    f"Authorization={opik_config.api_key},projectName={opik_config.project_name},Comet-Workspace={opik_config.workspace}"
+)
 ```
 
 *Note 1:* The `projectName` and `Comet-Workspace` headers are optional and can be set to `Default` and `default` respectively.
@@ -74,7 +78,7 @@ Now that everything is set up, we can use the Smolagents library and track the c
 
 
 ```python
-from smolagents import CodeAgent, WebSearchTool, InferenceClientModel, OpenAIServerModel
+from smolagents import CodeAgent, WebSearchTool, OpenAIServerModel
 
 model = OpenAIServerModel(
     model_id="gpt-4o",
@@ -82,7 +86,9 @@ model = OpenAIServerModel(
 
 agent = CodeAgent(tools=[WebSearchTool()], model=model, stream_outputs=True)
 
-agent.run("How many seconds would it take for a leopard at full speed to run through Pont des Arts?")
+agent.run(
+    "How many seconds would it take for a leopard at full speed to run through Pont des Arts?"
+)
 ```
 
 As we have configured the OpenTelemetry logging, the agent execution and all it's intermediate steps will be logged in Opik:

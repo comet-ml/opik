@@ -51,6 +51,7 @@ import CompareExperimentsNameHeader from "@/components/pages-shared/experiments/
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import Loader from "@/components/shared/Loader/Loader";
+import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
 import { Experiment, ExperimentsCompare } from "@/types/datasets";
@@ -78,6 +79,7 @@ import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -416,7 +418,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           callback: handleRowClick,
           asId: true,
         },
-        size: 165,
+        size: 180,
+        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_dataset_item],
       }),
     ];
 
@@ -638,6 +641,15 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   return (
     <>
       <PageBodyStickyContainer
+        className="pb-4"
+        direction="horizontal"
+        limitWidth
+      >
+        <CalloutAlert
+          {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_experiment_items]}
+        />
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
         direction="bidirectional"
         limitWidth
@@ -656,7 +668,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             columnsToExport={columnsToExport}
             experiments={experiments}
           />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}

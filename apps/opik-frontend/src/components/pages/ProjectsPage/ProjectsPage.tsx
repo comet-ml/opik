@@ -64,7 +64,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  "total_estimated_cost",
+  "total_estimated_cost_sum",
   "duration.p50",
   "last_updated_at",
   "created_at",
@@ -116,7 +116,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         cell: DurationCell as never,
       },
       {
-        id: "total_estimated_cost",
+        id: "total_estimated_cost_sum",
         label: "Total cost",
         type: COLUMN_TYPE.cost,
         cell: CostCell as never,
@@ -369,7 +369,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         ></SearchInput>
         <div className="flex items-center gap-2">
           <ProjectsActionsPanel projects={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
             columns={columnsDef}
             selectedColumns={selectedColumns}

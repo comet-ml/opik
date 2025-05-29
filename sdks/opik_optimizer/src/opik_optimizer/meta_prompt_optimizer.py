@@ -779,7 +779,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 improvement,
             )
             rounds.append(round_data)
-            self._add_to_history(round_data.dict())
+            self._add_to_history(round_data.model_dump())
 
             if (
                 improvement < self.improvement_threshold and round_num > 0
@@ -897,8 +897,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             "rounds": rounds,
             "total_rounds": len(rounds),
             "stopped_early": stopped_early,
-            "metric_config": metric_config.dict(),
-            "task_config": task_config.dict(),
+            "metric_config": metric_config.model_dump(),
+            "task_config": task_config.model_dump(),
             "model": self.model,
             "temperature": self.model_kwargs.get("temperature"),
         }
