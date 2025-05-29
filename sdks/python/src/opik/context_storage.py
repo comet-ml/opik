@@ -103,7 +103,7 @@ class OpikContextStorage:
             self._spans_data_stack_context.set(stack[:-1])
             return stack[-1]
 
-        if not self.span_data_stack_empty() and self.top_span_data().id == ensure_id:  # type: ignore
+        if self.top_span_data().id == ensure_id:  # type: ignore
             return self.pop_span_data()
 
         STACK_IS_EMPTY_OR_THE_ID_DOES_NOT_MATCH = None
