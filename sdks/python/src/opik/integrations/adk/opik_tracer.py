@@ -189,7 +189,7 @@ class OpikTracer:
             new_trace_data = trace.TraceData(
                 name=name,
                 input=user_input,
-                metadata=self.metadata,
+                metadata=trace_metadata,
                 project_name=self.project_name,
                 thread_id=thread_id,
             )
