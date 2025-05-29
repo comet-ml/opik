@@ -71,6 +71,7 @@ import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { formatNumericData } from "@/lib/utils";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -111,6 +112,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
         activeVersionId: get(data, "id", null),
       }),
     },
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
   },
   {
     id: "trace_count",
@@ -489,7 +491,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
         </div>
         <div className="flex items-center gap-2">
           <ExperimentsActionsPanel experiments={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <TooltipWrapper content="Refresh experiments list">
             <Button
               variant="outline"

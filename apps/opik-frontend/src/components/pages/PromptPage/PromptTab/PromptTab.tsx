@@ -14,6 +14,8 @@ import CommitHistory from "@/components/pages/PromptPage/PromptTab/CommitHistory
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import usePromptVersionById from "@/api/prompts/usePromptVersionById";
 import TryInPlaygroundButton from "@/components/pages/PromptPage/TryInPlaygroundButton";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -128,9 +130,12 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             )}
           </div>
           <div className="min-w-[320px]">
-            <p className="comet-body-s-accented mb-2 text-foreground">
+            <div className="comet-body-s-accented mb-2 flex items-center gap-1 text-foreground">
               Commit history
-            </p>
+              <ExplainerIcon
+                {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_commits]}
+              />
+            </div>
 
             <CommitHistory
               versions={versions || []}
