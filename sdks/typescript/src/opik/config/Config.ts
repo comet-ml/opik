@@ -11,7 +11,7 @@ export interface OpikConfig {
 
 const CONFIG_FILE_PATH_DEFAULT = "~/.opik.config";
 
-const DEFAULT_CONFIG: OpikConfig = {
+export const DEFAULT_CONFIG: Required<OpikConfig> = {
   apiKey: "",
   apiUrl: "http://localhost:5173/api",
   projectName: "Default Project",

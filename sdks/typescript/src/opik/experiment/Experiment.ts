@@ -9,6 +9,8 @@ import { parseNdjsonStreamToArray, splitIntoBatches } from "@/utils/stream";
 import { ExperimentItemCompare } from "@/rest_api/api/types/ExperimentItemCompare";
 import { logger } from "@/utils/logger";
 import { serialization } from "@/rest_api";
+import { getExperimentUrlById } from "@/utils/url";
+import { DEFAULT_CONFIG } from "@/config/Config";
 
 export interface ExperimentData {
   id?: string;
@@ -161,5 +163,14 @@ export class Experiment {
     );
 
     return result;
+  }
+
+  async getUrl(): Promise<string> {
+    const dataset = await this.opik.getDataset(this.datasetName);
+    return getExperimentUrlById({
+      datasetId: dataset.id,
+      experimentId: this.id,
+      baseUrl: this.opik.config.apiUrl || DEFAULT_CONFIG.apiUrl,
+    });
   }
 }
