@@ -161,7 +161,7 @@ class ExperimentDAO {
                     trace_count,
                     usage,
                     total_estimated_cost,
-                    total_estimated_cost / trace_count AS total_estimated_cost_avg
+                    total_estimated_cost / NULLIF(trace_count, 0) AS total_estimated_cost_avg
                 FROM (
                     -- inner aggregation: must GROUP BY here
                     SELECT
