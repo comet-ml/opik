@@ -12,6 +12,8 @@ jobs:
         steps:
             - name: Checkout repository
               uses: actions/checkout@v4
+              with:
+                ref: ${{ github.event.pull_request.base.ref }}
 
             - name: Install Fern
               run: npm install -g fern-api
