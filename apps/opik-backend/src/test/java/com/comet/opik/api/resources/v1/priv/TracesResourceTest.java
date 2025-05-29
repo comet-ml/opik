@@ -199,7 +199,7 @@ class TracesResourceTest {
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.GUARDRAILS_VALIDATIONS,
                 it -> it.toBuilder().guardrailsValidations(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.SPAN_COUNT, it -> it.toBuilder().spanCount(0).build());
-        EXCLUDE_FUNCTIONS.put(Trace.TraceField.LLM_CALL_COUNT, it -> it.toBuilder().llmCallCount(0).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.LLM_SPAN_COUNT, it -> it.toBuilder().llmSpanCount(0).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.TOTAL_ESTIMATED_COST,
                 it -> it.toBuilder().totalEstimatedCost(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.THREAD_ID, it -> it.toBuilder().threadId(null).build());
@@ -4965,8 +4965,8 @@ class TracesResourceTest {
                             assertThat(returned.spanCount())
                                     .as("Trace with id %s should have spanCount %d", created.id(), created.spanCount())
                                     .isEqualTo(created.spanCount());
-                            assertThat(returned.llmCallCount())
-                                    .as("Trace with id %s should have llmCallCount %d", created.id(),
+                            assertThat(returned.llmSpanCount())
+                                    .as("Trace with id %s should have llmSpanCount %d", created.id(),
                                             created.spanCount())
                                     .isEqualTo(created.spanCount());
                         },
@@ -4984,13 +4984,13 @@ class TracesResourceTest {
                     .as("Total spanCount across all traces should match the expected total")
                     .isEqualTo(expectedTotalSpanCount);
 
-            int actualTotalLlmCallCount = returnedTraces.stream()
+            int actualTotalLlmSpanCount = returnedTraces.stream()
                     .filter(rt -> traces.stream().anyMatch(t -> t.id().equals(rt.id())))
-                    .mapToInt(Trace::llmCallCount)
+                    .mapToInt(Trace::llmSpanCount)
                     .sum();
 
-            assertThat(actualTotalLlmCallCount)
-                    .as("Total llmCallCount across all traces should match the expected total")
+            assertThat(actualTotalLlmSpanCount)
+                    .as("Total llmSpanCount across all traces should match the expected total")
                     .isEqualTo(expectedTotalSpanCount);
         }
         private Stream<Arguments> getTracesByProject__whenSortingByValidFields__thenReturnTracesSorted() {

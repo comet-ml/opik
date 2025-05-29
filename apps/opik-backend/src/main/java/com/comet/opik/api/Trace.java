@@ -65,7 +65,7 @@ public record Trace(
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) VisibilityMode visibilityMode,
         @JsonView({
-                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) int llmCallCount){
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) int llmSpanCount){
 
     @Builder(toBuilder = true)
     public record TracePage(
@@ -101,7 +101,7 @@ public record Trace(
         GUARDRAILS_VALIDATIONS("guardrails_validations"),
         TOTAL_ESTIMATED_COST("total_estimated_cost"),
         SPAN_COUNT("span_count"),
-        LLM_CALL_COUNT("llm_call_count"),
+        LLM_SPAN_COUNT("llm_span_count"),
         DURATION("duration"),
         THREAD_ID("thread_id"),
         VISIBILITY_MODE("visibility_mode"),
