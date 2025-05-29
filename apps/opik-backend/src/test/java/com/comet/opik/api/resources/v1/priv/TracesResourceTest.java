@@ -199,6 +199,7 @@ class TracesResourceTest {
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.GUARDRAILS_VALIDATIONS,
                 it -> it.toBuilder().guardrailsValidations(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.SPAN_COUNT, it -> it.toBuilder().spanCount(0).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.LLM_SPAN_COUNT, it -> it.toBuilder().llmSpanCount(0).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.TOTAL_ESTIMATED_COST,
                 it -> it.toBuilder().totalEstimatedCost(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.THREAD_ID, it -> it.toBuilder().threadId(null).build());
@@ -4941,6 +4942,7 @@ class TracesResourceTest {
                 List<Span> spansForTrace = IntStream.range(0, trace.spanCount())
                         .mapToObj(j -> factory.manufacturePojo(Span.class).toBuilder()
                                 .projectName(projectName)
+                                .type(SpanType.llm)
                                 .traceId(trace.id())
                                 .build())
                         .toList();
@@ -4959,9 +4961,15 @@ class TracesResourceTest {
                 returnedTraces.stream()
                         .filter(returned -> returned.id().equals(created.id()))
                         .findFirst()
-                        .ifPresentOrElse(returned -> assertThat(returned.spanCount())
-                                .as("Trace with id %s should have spanCount %d", created.id(), created.spanCount())
-                                .isEqualTo(created.spanCount()),
+                        .ifPresentOrElse(returned -> {
+                            assertThat(returned.spanCount())
+                                    .as("Trace with id %s should have spanCount %d", created.id(), created.spanCount())
+                                    .isEqualTo(created.spanCount());
+                            assertThat(returned.llmSpanCount())
+                                    .as("Trace with id %s should have llmSpanCount %d", created.id(),
+                                            created.spanCount())
+                                    .isEqualTo(created.spanCount());
+                        },
                                 () -> assertThat(false)
                                         .as("Trace with id %s should be present", created.id())
                                         .isTrue());
@@ -4974,6 +4982,15 @@ class TracesResourceTest {
 
             assertThat(actualTotalSpanCount)
                     .as("Total spanCount across all traces should match the expected total")
+                    .isEqualTo(expectedTotalSpanCount);
+
+            int actualTotalLlmSpanCount = returnedTraces.stream()
+                    .filter(rt -> traces.stream().anyMatch(t -> t.id().equals(rt.id())))
+                    .mapToInt(Trace::llmSpanCount)
+                    .sum();
+
+            assertThat(actualTotalLlmSpanCount)
+                    .as("Total llmSpanCount across all traces should match the expected total")
                     .isEqualTo(expectedTotalSpanCount);
         }
         private Stream<Arguments> getTracesByProject__whenSortingByValidFields__thenReturnTracesSorted() {
