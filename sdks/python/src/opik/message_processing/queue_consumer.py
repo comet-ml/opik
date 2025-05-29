@@ -24,7 +24,7 @@ class QueueConsumer(threading.Thread):
         self._message_queue = queue
         self._message_processor = message_processor
         self._processing_stopped = False
-        self.waiting = True
+        self.idling = True
         self.next_message_time = time.monotonic()
 
     def run(self) -> None:
@@ -36,15 +36,16 @@ class QueueConsumer(threading.Thread):
     def _loop(self) -> None:
         now = time.monotonic()
         if now < self.next_message_time:
-            self.waiting = True
+            # mark as not idling because we still have work to do
+            self.idling = False
             time.sleep(SLEEP_BETWEEN_LOOP_ITERATIONS)
             return
 
         message = None
         try:
-            self.waiting = True
+            self.idling = True
             message = self._message_queue.get(timeout=SLEEP_BETWEEN_LOOP_ITERATIONS)
-            self.waiting = False
+            self.idling = False
 
             if message is None:
                 return
@@ -60,7 +61,8 @@ class QueueConsumer(threading.Thread):
             LOGGER.info(
                 "Ingestion rate limited, retrying in %s seconds, remaining queue size: %d, details: %s",
                 limit_exception.retry_after,
-                len(self._message_queue),
+                len(self._message_queue)
+                + 1,  # add 1 to account for the current message
                 limit_exception.headers,
             )
             # set the next iteration time to avoid rate limiting

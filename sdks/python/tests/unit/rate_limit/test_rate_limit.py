@@ -7,43 +7,26 @@ from opik.rate_limit import rate_limit
     [
         (
             {
-                "opik-customlimit-limit": "bucket",
-                "opik-customlimit-remaining-limit": "0",
-                "opik-customlimit-remaining-limit-ttl-millis": "997",
+                "RateLimit-Reset": "10",
             },
             rate_limit.CloudRateLimit(
-                bucket_name="bucket",
-                rate_limit_name="customlimit",
                 remaining_limit=0,
-                remaining_limit_reset_time_ms=997,
+                remaining_limit_reset_time=10,
             ),
         ),
         (
             {
-                "opik-available-limit": "bucket",
-                "opik-available-remaining-limit": "10",
-                "opik-available-remaining-limit-ttl-millis": "997",
+                "ratelimit-reset": "10",
             },
-            None,
+            rate_limit.CloudRateLimit(
+                remaining_limit=0,
+                remaining_limit_reset_time=10,
+            ),
         ),
         ({"foo": "bar"}, None),
-        (
-            {
-                "opik-user-limit": "general_events",
-                "opik-user-remaining-limit": "5000",
-                "opik-user-remaining-limit-ttl-millis": "56709",
-                "opik-workspace-limit": "workspace_events",
-                "opik-workspace-remaining-limit": "0",
-                "opik-workspace-remaining-limit-ttl-millis": "56700",
-            },
-            rate_limit.CloudRateLimit(
-                bucket_name="workspace_events",
-                rate_limit_name="workspace",
-                remaining_limit=0,
-                remaining_limit_reset_time_ms=56700,
-            ),
-        ),
+        ({"RateLimit-Reset": "-10"}, None),
     ],
+    ids=["standard_name", "lower_case_name", "no_rate_limit", "negative_rate_limit"],
 )
 def test_parse_rate_limit(rate_limit_dict, expected):
     parsed = rate_limit.parse_rate_limit(rate_limit_dict)

@@ -25,7 +25,7 @@ def steamer_with_mock_message_processor():
     streamer.close(None)
 
 
-def test_dynamic_rate_limiting__check_queue_messages_are_put_back(
+def test_dynamic_rate_limiting__rate_limited__check_queue_messages_are_put_back(
     steamer_with_mock_message_processor,
 ):
     streamer, mock_message_processor = steamer_with_mock_message_processor
@@ -56,7 +56,7 @@ def test_dynamic_rate_limiting__check_queue_messages_are_put_back(
     assert streamer.queue_size() == 0
 
 
-def test_dynamic_rate_limiting__check_queue_size_is_bounded_by_max_queue_size(
+def test_dynamic_rate_limiting__rate_limited__check_queue_size_is_bounded_by_max_queue_size(
     steamer_with_mock_message_processor,
 ):
     streamer, mock_message_processor = steamer_with_mock_message_processor
@@ -84,3 +84,31 @@ def test_dynamic_rate_limiting__check_queue_size_is_bounded_by_max_queue_size(
     mock_message_processor.process = lambda message: None
     time.sleep(retry_after * 2)
     assert streamer.queue_size() == 0
+
+
+def test_dynamic_rate_limiting__rate_limited__check_streamer_flush_is_blocking_until_all_messages_are_processed(
+    steamer_with_mock_message_processor,
+):
+    streamer, mock_message_processor = steamer_with_mock_message_processor
+    retry_after = queue_consumer.SLEEP_BETWEEN_LOOP_ITERATIONS * 3
+    max_limit = 5
+
+    counter = {"count": 0}
+
+    def process(message: messages.BaseMessage):
+        counter["count"] += 1
+        if counter["count"] == max_limit:
+            raise exceptions.OpikCloudRequestsRateLimited(
+                headers={},
+                retry_after=retry_after,
+            )
+
+    mock_message_processor.process = process
+
+    for i in range(max_limit):
+        streamer.put(messages.BaseMessage())
+
+    streamer.flush(timeout=None)
+
+    # we expect max_limit calls before retry plus one call after waiting for the retry
+    assert counter["count"] == max_limit + 1
