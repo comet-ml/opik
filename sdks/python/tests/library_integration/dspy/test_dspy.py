@@ -59,6 +59,7 @@ def test_dspy__happyflow(
         metadata={"created_from": "dspy"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=expected_project_name,
         spans=[
             SpanModel(
@@ -131,6 +132,7 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
         metadata={"created_from": "dspy"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=project_name,
         spans=[
             SpanModel(
@@ -236,6 +238,7 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
         output={"output": "the-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=project_name,
         spans=[
             SpanModel(
@@ -352,6 +355,7 @@ def test_dspy_callback__used_when_there_was_already_existing_trace_without_span_
         metadata=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_STRING(),

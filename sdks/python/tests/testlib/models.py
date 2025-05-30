@@ -52,6 +52,7 @@ class TraceModel:
     )
     error_info: Optional[ErrorInfoDict] = None
     thread_id: Optional[str] = None
+    last_updated_at: Optional[datetime.datetime] = None
 
 
 @dataclasses.dataclass

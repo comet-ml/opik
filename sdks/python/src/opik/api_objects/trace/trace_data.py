@@ -101,3 +101,31 @@ class TraceData:
             self.attachments = attachments
         else:
             self.attachments.extend(attachments)
+
+    @property
+    def trace_start_parameters(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "start_time": self.start_time,
+            "project_name": self.project_name,
+            "_trace_start": True,
+        }
+
+    @property
+    def trace_end_parameters(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "start_time": self.start_time,
+            "end_time": self.end_time,
+            "metadata": self.metadata,
+            "input": self.input,
+            "output": self.output,
+            "tags": self.tags,
+            "feedback_scores": self.feedback_scores,
+            "project_name": self.project_name,
+            "error_info": self.error_info,
+            "thread_id": self.thread_id,
+            "attachments": self.attachments,
+            "_trace_start": False,
+        }

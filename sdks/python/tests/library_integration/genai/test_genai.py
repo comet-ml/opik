@@ -93,6 +93,7 @@ def test_genai_client__generate_content__happyflow(
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=expected_project_name,
         spans=[
             SpanModel(
@@ -151,6 +152,7 @@ def test_genai_client__async_generate_content__happyflow(fake_backend):
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -212,6 +214,7 @@ def test_genai_client__generate_content_called_inside_another_tracked_function__
         input={},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=expected_project_name,
         spans=[
             SpanModel(
@@ -278,6 +281,7 @@ def test_genai_client__async_generate_content_called_inside_another_tracked_func
         input={},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -341,6 +345,7 @@ def test_genai_client__generate_content_stream__happyflow(fake_backend):
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name="genai-integration-test",
         spans=[
             SpanModel(
@@ -399,6 +404,7 @@ def test_genai_client__async_generate_content_stream__happyflow(fake_backend):
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -458,6 +464,7 @@ def test_genai_client__generate_content_stream_called_inside_another_tracked_fun
         output=ANY_BUT_NONE,  # tracked generator
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -530,6 +537,7 @@ def test_genai_client__async_generate_content_stream_called_inside_another_track
         output=ANY_BUT_NONE,  # tracked generator
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,

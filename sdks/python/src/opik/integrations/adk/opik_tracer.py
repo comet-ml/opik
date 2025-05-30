@@ -128,10 +128,12 @@ class OpikTracer:
     ) -> None:
         self._set_current_context_data(new_trace_data)
 
+        self._opik_client.trace(**new_trace_data.trace_start_parameters)
+
     def _end_current_trace(self) -> None:
         if (trace_data := self._context_storage.get_trace_data()) is not None:
             trace_data.init_end_time()
-            self._opik_client.trace(**trace_data.__dict__)
+            self._opik_client.trace(**trace_data.trace_end_parameters)
 
             self._context_storage.set_trace_data(None)
 
