@@ -6,12 +6,12 @@ import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
 import { Explainer } from "@/types/shared";
 
-type CalloutAlertProps = {
+type ExplainerCalloutProps = {
   className?: string;
   Icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
 } & Explainer;
 
-const CalloutAlert: React.FC<CalloutAlertProps> = ({
+const ExplainerCallout: React.FC<ExplainerCalloutProps> = ({
   title,
   description,
   docLink,
@@ -42,4 +42,4 @@ const CalloutAlert: React.FC<CalloutAlertProps> = ({
   );
 };
 
-export default CalloutAlert;
+export default ExplainerCallout;

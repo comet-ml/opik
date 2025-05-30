@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
@@ -976,6 +977,33 @@ class TestConfigureCloud:
         assert configurator.api_key == "valid_api_key"
         assert configurator.base_url == OPIK_BASE_URL_CLOUD
         assert configurator.workspace == "new_workspace"
+
+    @patch("opik.configurator.configure.opik_rest_helpers")
+    @patch("opik.configurator.configure.OpikConfigurator._update_config")
+    def test_configure__both_api_key_and_workspace_set__configuration_updated(
+        self, mock_update_config, mock_opik_rest_helpers, configure_opik_not_configured
+    ):
+        """
+        Test to check that the configuration file is not updated when both API key and workspace are already set,
+        but instead the corresponding environment variables are set. This is important for third-party integrations.
+        """
+        # to be sure that the environment will be restored after the test
+        mock_opik_rest_helpers.is_api_key_correct.return_value = True
+        mock_opik_rest_helpers.is_workspace_name_correct.return_value = True
+
+        configurator = OpikConfigurator(
+            api_key="valid_api_key", workspace="valid_workspace", force=False
+        )
+        configurator.configure()
+
+        mock_update_config.assert_called_once_with(save_to_file=False)
+        assert configurator.api_key == "valid_api_key"
+        assert configurator.base_url == OPIK_BASE_URL_CLOUD
+        assert configurator.workspace == "valid_workspace"
+
+        # check that environment variables were set
+        assert os.environ["OPIK_API_KEY"] == "valid_api_key"
+        assert os.environ["OPIK_WORKSPACE"] == "valid_workspace"
 
 
 class TestConfigureLocal:
