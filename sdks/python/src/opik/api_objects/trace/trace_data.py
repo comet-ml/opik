@@ -4,7 +4,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from opik import dict_utils, Attachment
-
+from .. import span
 from ... import datetime_helpers, id_helpers
 from ...types import (
     CreatedByType,
@@ -44,6 +44,14 @@ class TraceData:
     error_info: Optional[ErrorInfoDict] = None
     thread_id: Optional[str] = None
     attachments: Optional[List[Attachment]] = None
+
+    def create_child_span_data(self, **data: Any) -> span.SpanData:
+        return span.SpanData(
+            trace_id=self.id,
+            parent_span_id=None,
+            project_name=self.project_name,
+            **data,
+        )
 
     def update(self, **new_data: Any) -> "TraceData":
         for key, value in new_data.items():

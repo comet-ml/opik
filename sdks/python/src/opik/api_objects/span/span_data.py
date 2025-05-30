@@ -51,6 +51,14 @@ class SpanData:
     total_cost: Optional[float] = None
     attachments: Optional[List[Attachment]] = None
 
+    def create_child_span_data(self, **data: Any) -> "SpanData":
+        return SpanData(
+            trace_id=self.trace_id,
+            parent_span_id=self.id,
+            project_name=self.project_name,
+            **data,
+        )
+
     def update(self, **new_data: Any) -> "SpanData":
         for key, value in new_data.items():
             if value is None:

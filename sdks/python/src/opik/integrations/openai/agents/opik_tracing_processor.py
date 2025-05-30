@@ -33,12 +33,8 @@ class OpikTracingProcessor(tracing.TracingProcessor):
 
         self._opik_client = opik_client.get_client_cached()
 
-        self._openai_trace_id_to_first_meaningful_input: Dict[
-            str, Optional[Dict[str, Any]]
-        ] = {}
-        self._openai_trace_id_to_last_meaningful_output: Dict[
-            str, Optional[Dict[str, Any]]
-        ] = {}
+        self._openai_trace_id_to_first_meaningful_input: Dict[str, Dict[str, Any]] = {}
+        self._openai_trace_id_to_last_meaningful_output: Dict[str, Dict[str, Any]] = {}
         """
         Used to populate opik span/trace corresponding to the openai trace with meaningful inputs and outputs.
         By default inputs and outputs in the openai trace are always empty and it is harder to review in Opik UI.
@@ -120,20 +116,19 @@ class OpikTracingProcessor(tracing.TracingProcessor):
         try:
             parsed_span_data = span_data_parsers.parse_spandata(span.span_data)
 
-            _, opik_span_data = span_creation_handler.create_span_respecting_context(
-                start_span_arguments=arguments_helpers.StartSpanParameters(
-                    project_name=self._project_name,
-                    name=parsed_span_data.name,
-                    type=parsed_span_data.type,
-                    input=parsed_span_data.input,
-                    metadata=parsed_span_data.metadata,
-                ),
-                distributed_trace_headers=None,
-                opik_context_storage=self._opik_context_storage,
+            opik_span_or_trace_data = (
+                self._try_get_span_or_trace(span.parent_id)
+                if span.parent_id is not None
+                else self._try_get_span_or_trace(span.trace_id)
+            )
+            assert opik_span_or_trace_data is not None
+            opik_span_data = opik_span_or_trace_data.create_child_span_data(
+                **parsed_span_data.__dict__
             )
 
             self._opik_context_storage.add_span_data(opik_span_data)
             self._opik_spans_data_map[span.span_id] = opik_span_data
+
         except Exception:
             LOGGER.debug("on_span_start failed", exc_info=True)
 
@@ -152,14 +147,18 @@ class OpikTracingProcessor(tracing.TracingProcessor):
             ):
                 return
 
-            if span.trace_id not in self._openai_trace_id_to_first_meaningful_input:
+            if (
+                opik_span_data.input is not None
+                and span.trace_id not in self._openai_trace_id_to_first_meaningful_input
+            ):
                 self._openai_trace_id_to_first_meaningful_input[span.trace_id] = (
                     opik_span_data.input
                 )
 
-            self._openai_trace_id_to_last_meaningful_output[span.trace_id] = (
-                opik_span_data.output
-            )
+            if opik_span_data.output is not None:
+                self._openai_trace_id_to_last_meaningful_output[span.trace_id] = (
+                    opik_span_data.output
+                )
 
         except Exception:
             LOGGER.debug("on_span_end failed", exc_info=True)
