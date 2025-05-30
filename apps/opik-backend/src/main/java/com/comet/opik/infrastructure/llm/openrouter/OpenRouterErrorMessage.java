@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotNull;
 
 import static com.comet.opik.infrastructure.llm.openrouter.OpenRouterErrorMessage.OpenRouterError;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record OpenRouterErrorMessage(
         OpenRouterError error) implements LlmProviderError<OpenRouterError> {
 
