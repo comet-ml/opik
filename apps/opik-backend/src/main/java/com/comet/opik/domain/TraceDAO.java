@@ -1084,7 +1084,7 @@ class TraceDAOImpl implements TraceDAO {
             ), spans_agg AS (
                 SELECT
                     trace_id,
-                    sum(coalesce(usage['total_tokens'], 0)) as total_tokens,
+                    sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost
                 FROM spans final
                 WHERE workspace_id = :workspace_id
@@ -1106,7 +1106,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
                 count(DISTINCT t.id) * 2 as number_of_messages,
                 sum(s.total_estimated_cost) as total_estimated_cost,
-                sum(s.total_tokens) as total_tokens,
+                sumMap(s.usage) as usage,
                 max(t.last_updated_at) as last_updated_at,
                 argMin(t.created_by, t.created_at) as created_by,
                 min(t.created_at) as created_at
@@ -1150,7 +1150,7 @@ class TraceDAOImpl implements TraceDAO {
             ), spans_agg AS (
                 SELECT
                     trace_id,
-                    sum(coalesce(usage['total_tokens'], 0)) as total_tokens,
+                    sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost
                 FROM spans final
                 WHERE workspace_id = :workspace_id
@@ -1172,7 +1172,7 @@ class TraceDAOImpl implements TraceDAO {
                 argMax(t.output, t.end_time) as last_message,
                 count(DISTINCT t.id) * 2 as number_of_messages,
                 sum(s.total_estimated_cost) as total_estimated_cost,
-                sum(s.total_tokens) as total_tokens,
+                sumMap(s.usage) as usage,
                 max(t.last_updated_at) as last_updated_at,
                 argMin(t.created_by, t.created_at) as created_by,
                 min(t.created_at) as created_at
@@ -1954,7 +1954,7 @@ class TraceDAOImpl implements TraceDAO {
                         .map(JsonUtils::getJsonNodeFromString)
                         .orElse(null))
                 .numberOfMessages(row.get("number_of_messages", Long.class))
-                .totalTokens(row.get("total_tokens", Long.class))
+                .usage(row.get("usage", Map.class))
                 .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))

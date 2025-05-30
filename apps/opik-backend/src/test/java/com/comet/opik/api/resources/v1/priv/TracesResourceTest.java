@@ -4575,7 +4575,7 @@ class TracesResourceTest {
                     .numberOfMessages(traces.size() * 2L)
                     .id(threadId)
                     .totalEstimatedCost(calculateEstimatedCost(spans))
-                    .totalTokens(aggregateSpansTotalTokens(spans))
+                    .usage(aggregateSpansUsage(spans))
                     .createdAt(trace.createdAt())
                     .lastUpdatedAt(trace.lastUpdatedAt())
                     .build());
@@ -4723,7 +4723,7 @@ class TracesResourceTest {
                         .numberOfMessages(expectedTraces.size() * 2L)
                         .id(threadId)
                         .totalEstimatedCost(calculateEstimatedCost(spans))
-                        .totalTokens(aggregateSpansTotalTokens(spans))
+                        .usage(aggregateSpansUsage(spans))
                         .createdAt(expectedTraces.stream().min(Comparator.comparing(Trace::createdAt)).orElseThrow()
                                 .createdAt())
                         .lastUpdatedAt(
@@ -7884,16 +7884,13 @@ class TracesResourceTest {
     }
 
     private Map<String, Long> aggregateSpansUsage(List<Span> spans) {
+        if (CollectionUtils.isEmpty(spans)) {
+            return null;
+        }
         return spans.stream()
                 .flatMap(span -> span.usage().entrySet().stream())
                 .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), Long.valueOf(entry.getValue())))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
-    }
-
-    private Long aggregateSpansTotalTokens(List<Span> spans) {
-        return spans.stream()
-                .mapToLong(span -> span.usage().get("total_tokens"))
-                .sum();
     }
 
     private void mockGetWorkspaceIdByName(String workspaceName, String workspaceId) {

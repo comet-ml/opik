@@ -10,6 +10,7 @@ import lombok.Builder;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
@@ -26,7 +27,7 @@ public record TraceThread(
         JsonNode lastMessage,
         long numberOfMessages,
         BigDecimal totalEstimatedCost,
-        Long totalTokens,
+        Map<String, Long> usage,
         Instant lastUpdatedAt,
         String createdBy,
         Instant createdAt) {
