@@ -124,6 +124,7 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -163,6 +164,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.UUID.randomUUID;
+import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -4703,6 +4705,12 @@ class TracesResourceTest {
 
     private List<TraceThread> getExpectedThreads(List<Trace> expectedTraces, UUID projectId, String threadId,
             List<Span> spans) {
+
+        Map<String, Long> usage = Optional.ofNullable(spans)
+                .map(this::aggregateSpansUsage)
+                .filter(not(Map::isEmpty))
+                .orElse(null);
+
         return expectedTraces.isEmpty()
                 ? List.of()
                 : List.of(TraceThread.builder()
@@ -4729,7 +4737,7 @@ class TracesResourceTest {
                                                 .map(Span::totalEstimatedCost)
                                                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                                         : calculateEstimatedCost(spans))
-                        .usage(aggregateSpansUsage(spans))
+                        .usage(usage)
                         .createdAt(expectedTraces.stream().min(Comparator.comparing(Trace::createdAt)).orElseThrow()
                                 .createdAt())
                         .lastUpdatedAt(
@@ -7858,16 +7866,7 @@ class TracesResourceTest {
                         .toList();
 
                 threadTraces.forEach(trace -> {
-                    List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
-                            .stream()
-                            .map(span -> span.toBuilder()
-                                    .projectName(projectName)
-                                    .traceId(trace.id())
-                                    .totalEstimatedCost(null)
-                                    .model(spanResourceClient.randomModel().toString())
-                                    .provider(spanResourceClient.provider())
-                                    .build())
-                            .toList();
+                    List<Span> spans = createSpans(trace, projectName, null, null);
 
                     spansByThread.computeIfAbsent(threadId, k -> new ArrayList<>()).addAll(spans);
                 });
@@ -7896,15 +7895,7 @@ class TracesResourceTest {
                     apiKey, workspaceName, List.of(sorting));
 
             // Verify that the sortableBy field contains the expected values
-            assertThat(traceThreadPage.sortableBy()).contains(
-                    SortableFields.ID,
-                    SortableFields.START_TIME,
-                    SortableFields.END_TIME,
-                    SortableFields.DURATION,
-                    SortableFields.NUMBER_OF_MESSAGES,
-                    SortableFields.LAST_UPDATED_AT,
-                    SortableFields.CREATED_BY,
-                    SortableFields.CREATED_AT);
+            assertSortableFields(traceThreadPage);
 
             // Verify that the threads are sorted correctly
             TraceAssertions.assertThreads(expectedThreads, traceThreadPage.content());
@@ -8018,19 +8009,7 @@ class TracesResourceTest {
                             .build();
 
                     // Create spans for each trace to ensure usage data is properly stored
-                    List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
-                            .stream()
-                            .map(span -> span.toBuilder()
-                                    .projectName(projectName)
-                                    .traceId(trace.id())
-                                    .usage(usageKey
-                                            .stream()
-                                            .map(key -> Map.entry(key, PodamUtils.getIntegerInRange(0, 10)))
-                                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)))
-                                    .model(spanResourceClient.randomModel().toString())
-                                    .provider(spanResourceClient.provider())
-                                    .build())
-                            .toList();
+                    List<Span> spans = createSpans(trace, projectName, usageKey, null);
 
                     spansByThread.computeIfAbsent(threadId, k -> new ArrayList<>()).addAll(spans);
                     threadTraces.add(trace);
@@ -8079,6 +8058,42 @@ class TracesResourceTest {
                     projectId, apiKey, workspaceName, List.of(sortingField));
 
             // Verify that the sortableBy field contains the expected values
+            assertSortableFields(traceThreadPage);
+
+            // Get the actual threads
+            List<TraceThread> actualThreads = traceThreadPage.content();
+
+            // Verify that the threads are sorted correctly
+            TraceAssertions.assertThreads(expectedThreads, actualThreads);
+        }
+
+        private List<Span> createSpans(Trace trace, String projectName, List<String> usageKey,
+                BigDecimal totalEstimatedCost) {
+            Map<String, Integer> usage;
+
+            if (CollectionUtils.isNotEmpty(usageKey)) {
+                usage = usageKey
+                        .stream()
+                        .map(key -> Map.entry(key, PodamUtils.getIntegerInRange(0, 10)))
+                        .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+            } else {
+                usage = null;
+            }
+
+            return PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
+                            .usage(usage)
+                            .totalEstimatedCost(totalEstimatedCost)
+                            .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
+                            .build())
+                    .toList();
+        }
+
+        private static void assertSortableFields(TraceThreadPage traceThreadPage) {
             assertThat(traceThreadPage.sortableBy()).contains(
                     SortableFields.ID,
                     SortableFields.START_TIME,
@@ -8087,13 +8102,9 @@ class TracesResourceTest {
                     SortableFields.NUMBER_OF_MESSAGES,
                     SortableFields.LAST_UPDATED_AT,
                     SortableFields.CREATED_BY,
-                    SortableFields.CREATED_AT);
-
-            // Get the actual threads
-            List<TraceThread> actualThreads = traceThreadPage.content();
-
-            // Verify that the threads are sorted correctly
-            TraceAssertions.assertThreads(expectedThreads, actualThreads);
+                    SortableFields.CREATED_AT,
+                    SortableFields.TOTAL_ESTIMATED_COST,
+                    SortableFields.DYNAMIC_USAGE);
         }
 
         @Test
@@ -8188,8 +8199,9 @@ class TracesResourceTest {
             return null;
         }
         return spans.stream()
+                .filter(span -> span.usage() != null)
                 .flatMap(span -> span.usage().entrySet().stream())
-                .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), Long.valueOf(entry.getValue())))
+                .map(entry -> Map.entry(entry.getKey(), Long.valueOf(entry.getValue())))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
     }
 
