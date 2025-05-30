@@ -160,7 +160,10 @@ const PromptModelSelect = ({
   }, []);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
-    if ((event.target as HTMLElement).getAttribute('data-testid') === 'custom-model-input') {
+    if (
+      (event.target as HTMLElement).getAttribute("data-testid") ===
+      "custom-model-input"
+    ) {
       return;
     }
 
@@ -269,9 +272,11 @@ const PromptModelSelect = ({
                         }}
                         onKeyDown={(e) => {
                           e.stopPropagation();
-                          if (e.key === 'Enter' && customModelInput) {
+                          if (e.key === "Enter" && customModelInput) {
                             e.preventDefault();
-                            handleOnChange(customModelInput as PROVIDER_MODEL_TYPE);
+                            handleOnChange(
+                              customModelInput as PROVIDER_MODEL_TYPE,
+                            );
                             setCustomModelInput("");
                           }
                         }}
@@ -291,10 +296,10 @@ const PromptModelSelect = ({
     );
   };
 
-const renderProviderValueIcon = () => {
-  if (!provider) {
-    return null;
-  }
+  const renderProviderValueIcon = () => {
+    if (!provider) {
+      return null;
+    }
 
     const Icon = PROVIDERS[provider].icon;
 
