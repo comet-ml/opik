@@ -121,6 +121,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -7788,6 +7789,227 @@ class TracesResourceTest {
 
                 TraceAssertions.assertErrorResponse(actualResponse, message, HttpStatus.SC_NOT_FOUND);
             }
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when sorting trace threads by valid fields, then return sorted trace threads")
+        void getTraceThreads__whenSortingByValidFields__thenReturnTraceThreadsSorted(
+                Comparator<TraceThread> comparator, SortingField sorting) {
+
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            // Create multiple threads with different values
+            List<String> threadIds = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            // Create traces for each thread with varying number of messages
+            List<Trace> allTraces = new ArrayList<>();
+            Map<String, List<Trace>> tracesByThread = new HashMap<>();
+
+            for (String threadId : threadIds) {
+                // Create multiple traces for each thread
+                int numMessages = PodamUtils.getIntegerInRange(3, 5);
+                List<Trace> threadTraces = IntStream.range(0, numMessages)
+                        .mapToObj(i -> createTrace().toBuilder()
+                                .threadId(threadId)
+                                .projectName(projectName)
+                                .build())
+                        //.peek(trace -> traceResourceClient.createTrace(trace, apiKey, workspaceName))
+                        .toList();
+
+                traceResourceClient.batchCreateTraces(threadTraces, apiKey, workspaceName);
+
+                allTraces.addAll(threadTraces);
+                tracesByThread.put(threadId, threadTraces);
+            }
+
+            // Get project ID
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            // Build expected threads from our created traces
+            List<TraceThread> expectedThreads = threadIds.stream()
+                    .map(threadId -> {
+                        List<Trace> traces = tracesByThread.get(threadId);
+
+                        // Calculate thread properties from traces
+                        Instant startTime = traces.stream()
+                                .map(Trace::startTime)
+                                .min(Instant::compareTo)
+                                .orElse(null);
+
+                        Instant endTime = traces.stream()
+                                .map(Trace::endTime)
+                                .max(Instant::compareTo)
+                                .orElse(null);
+
+                        Double duration = null;
+                        if (startTime != null && endTime != null) {
+                            duration = DurationUtils.getDurationInMillisWithSubMilliPrecision(startTime, endTime);
+                        }
+
+                        // Find first and last message
+                        Trace firstTrace = traces.stream()
+                                .min(Comparator.comparing(Trace::startTime))
+                                .orElse(null);
+
+                        Trace lastTrace = traces.stream()
+                                .max(Comparator.comparing(Trace::endTime))
+                                .orElse(null);
+
+                        JsonNode firstMessage = firstTrace.input();
+
+                        JsonNode lastMessage = lastTrace.output();
+
+                        // Build the expected thread
+                        return TraceThread.builder()
+                                .id(threadId)
+                                .projectId(projectId)
+                                .startTime(startTime)
+                                .endTime(endTime)
+                                .duration(duration)
+                                .numberOfMessages(traces.size() * 2)
+                                .firstMessage(firstMessage)
+                                .lastMessage(lastMessage)
+                                .createdBy(USER)
+                                .lastUpdatedAt(lastTrace.lastUpdatedAt())
+                                .createdAt(firstTrace.createdAt())
+                                .build();
+                    })
+                    .sorted(comparator)
+                    .toList();
+
+            // Get trace threads with sorting
+            try (var response = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("threads")
+                    .queryParam("project_id", projectId)
+                    .queryParam("sorting",
+                            URLEncoder.encode(JsonUtils.writeValueAsString(List.of(sorting)), StandardCharsets.UTF_8))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                TraceThreadPage traceThreadPage = response.readEntity(TraceThreadPage.class);
+
+                // Verify that the sortableBy field contains the expected values
+                assertThat(traceThreadPage.sortableBy()).contains(
+                        SortableFields.ID,
+                        SortableFields.START_TIME,
+                        SortableFields.END_TIME,
+                        SortableFields.DURATION,
+                        SortableFields.NUMBER_OF_MESSAGES,
+                        SortableFields.LAST_UPDATED_AT,
+                        SortableFields.CREATED_BY,
+                        SortableFields.CREATED_AT);
+
+                // Get the actual threads
+                List<TraceThread> actualThreads = traceThreadPage.content();
+
+                // Verify that the threads are sorted correctly
+                assertThat(actualThreads)
+                        .usingRecursiveComparison()
+                        .ignoringFields(IGNORED_FIELDS_TRACES)
+                        .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                        .isEqualTo(expectedThreads);
+            }
+        }
+
+        private Stream<Arguments> getTraceThreads__whenSortingByValidFields__thenReturnTraceThreadsSorted() {
+            return Stream.of(
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::numberOfMessages)
+                                    .thenComparing(Comparator.comparing(TraceThread::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.NUMBER_OF_MESSAGES).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::numberOfMessages).reversed()
+                                    .thenComparing(Comparator.comparing(TraceThread::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.NUMBER_OF_MESSAGES).direction(Direction.DESC)
+                                    .build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::id),
+                            SortingField.builder().field(SortableFields.ID).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::id).reversed(),
+                            SortingField.builder().field(SortableFields.ID).direction(Direction.DESC).build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::startTime),
+                            SortingField.builder().field(SortableFields.START_TIME).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::startTime).reversed(),
+                            SortingField.builder().field(SortableFields.START_TIME).direction(Direction.DESC).build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::endTime),
+                            SortingField.builder().field(SortableFields.END_TIME).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::endTime).reversed(),
+                            SortingField.builder().field(SortableFields.END_TIME).direction(Direction.DESC).build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::duration),
+                            SortingField.builder().field(SortableFields.DURATION).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::duration).reversed(),
+                            SortingField.builder().field(SortableFields.DURATION).direction(Direction.DESC).build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::lastUpdatedAt),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::lastUpdatedAt).reversed(),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.DESC)
+                                    .build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::createdBy)
+                                    .thenComparing(TraceThread::lastUpdatedAt).reversed(),
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::createdBy).reversed()
+                                    .thenComparing(TraceThread::lastUpdatedAt).reversed(),
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.DESC).build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::createdAt)
+                                    .thenComparing(Comparator.comparing(TraceThread::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::createdAt).reversed()
+                                    .thenComparing(Comparator.comparing(TraceThread::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC).build()));
+        }
+
+        @Test
+        @DisplayName("when sorting by invalid field, then return 400")
+        void getTraceThreads__whenSortingByInvalidField__thenReturn400() {
+            var field = RandomStringUtils.secure().nextAlphanumeric(10);
+            var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
+                    400,
+                    "Invalid sorting fields '%s'".formatted(field));
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var sortingFields = List.of(SortingField.builder().field(field).direction(Direction.ASC).build());
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("threads")
+                    .queryParam("project_id", projectId)
+                    .queryParam("sorting",
+                            URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+
+            var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+            assertThat(actualError).isEqualTo(expectedError);
         }
 
     }
