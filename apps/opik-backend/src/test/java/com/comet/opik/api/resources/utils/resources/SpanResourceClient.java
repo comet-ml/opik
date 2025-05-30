@@ -198,7 +198,11 @@ public class SpanResourceClient extends BaseCommentResourceClient {
     }
 
     public Map<String, Integer> getTokenUsage() {
-        return Map.of("completion_tokens", randomNumber(1, 500), "prompt_tokens", randomNumber(1, 500));
+        int completionTokens = randomNumber(1, 500);
+        int promptTokens = randomNumber(1, 500);
+        return Map.of("completion_tokens", completionTokens,
+                "prompt_tokens", promptTokens,
+                "total_tokens", completionTokens + promptTokens);
     }
 
     public List<Span> getStreamAndAssertContent(String apiKey, String workspaceName,

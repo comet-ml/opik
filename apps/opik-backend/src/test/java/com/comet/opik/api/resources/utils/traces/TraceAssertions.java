@@ -21,6 +21,8 @@ public class TraceAssertions {
             "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "spanCount",
             "llmSpanCount", "duration", "comments", "threadId", "guardrailsValidations"};
 
+    public static final String[] IGNORED_FIELDS_THREADS = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
+
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     public static void assertErrorResponse(Response actualResponse, String message, int expectedStatus) {
