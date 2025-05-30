@@ -111,6 +111,7 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                 project_name=message.project_name,
                 error_info=message.error_info,
                 thread_id=message.thread_id,
+                last_updated_at=message.last_updated_at,
             )
 
             self._trace_trees.append(trace)
@@ -128,6 +129,7 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                 end_time=message.end_time,
                 project_name=message.project_name,
                 thread_id=message.thread_id,
+                last_updated_at=message.last_updated_at,
             )
 
             self._trace_trees.append(trace)

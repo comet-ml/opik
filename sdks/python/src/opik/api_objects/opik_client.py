@@ -237,6 +237,7 @@ class Opik:
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
+        last_updated_at = datetime_helpers.local_timestamp()
 
         if project_name is None:
             project_name = self._project_name
@@ -253,6 +254,7 @@ class Opik:
             tags=tags,
             error_info=error_info,
             thread_id=thread_id,
+            last_updated_at=last_updated_at,
         )
         self._streamer.put(create_trace_message)
         self._display_trace_url(trace_id=id, project_name=project_name)
@@ -408,6 +410,7 @@ class Opik:
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
+        last_updated_at = datetime_helpers.local_timestamp()
 
         backend_compatible_usage = validation_helpers.validate_and_parse_usage(
             usage=usage,
@@ -437,6 +440,7 @@ class Opik:
                 tags=tags,
                 error_info=error_info,
                 thread_id=None,
+                last_updated_at=last_updated_at,
             )
             self._streamer.put(create_trace_message)
 

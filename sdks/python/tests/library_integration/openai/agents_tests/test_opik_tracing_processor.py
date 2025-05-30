@@ -40,6 +40,7 @@ def test_opik_tracing_processor__happy_flow(fake_backend):
         name="Agent workflow",
         project_name=project_name,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "openai-agents",
             "agents-trace-id": ANY_STRING(startswith="trace"),
@@ -115,6 +116,7 @@ def test_opik_tracing_processor__happy_flow_conversation(fake_backend):
         name=workflow_name,
         project_name=project_name,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "openai-agents",
             "agents-trace-id": ANY_STRING(startswith="trace"),
@@ -202,6 +204,7 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
         input=ANY_DICT,
         output=ANY_DICT,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "openai-agents",
             "agents-trace-id": ANY_STRING(startswith="trace"),
@@ -320,6 +323,7 @@ async def test_opik_tracing_processor__functions(fake_backend):
         name="Agent workflow",
         project_name=project_name,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "openai-agents",
             "agents-trace-id": ANY_STRING(startswith="trace"),

@@ -93,6 +93,7 @@ def test_evaluate__happyflow(
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -163,6 +164,7 @@ def test_evaluate__happyflow(
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -307,6 +309,7 @@ def test_evaluate_with_scoring_key_mapping(
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -381,6 +384,7 @@ def test_evaluate_with_scoring_key_mapping(
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -564,6 +568,7 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         error_info={
             "exception_type": "Exception",
             "message": "some-error-message",
@@ -688,6 +693,7 @@ def test_evaluate_prompt_happyflow(
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -741,6 +747,7 @@ def test_evaluate_prompt_happyflow(
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -878,6 +885,7 @@ def test_evaluate__aggregated_metric__happy_flow(
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -992,6 +1000,7 @@ def test_evaluate__aggregated_metric__happy_flow(
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
