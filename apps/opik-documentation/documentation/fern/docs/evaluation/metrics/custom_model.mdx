@@ -47,12 +47,8 @@ Opik's LLM-as-a-Judge metrics, such as `Hallucination`, are designed to work wit
     Initializes your custom model. Call `super().__init__(model_name)` and add any custom initialization, such as setting API keys or endpoints.
 2.  `generate_string(self, input: str, **kwargs: Any) -> str`:
     Generates a simple string output from the model given a string input.
-3.  `async agenerate_string(self, input: str, **kwargs: Any) -> str`:
-    Asynchronous version of `generate_string`.
-4.  `generate_provider_response(self, **kwargs: Any) -> Any`:
+3.  `generate_provider_response(self, **kwargs: Any) -> Any`:
     The primary method used by LLM-as-a-Judge metrics. It receives the judge's prompt (typically as `kwargs['prompt']`) and should return the model's raw response. For judge metrics, this response is expected to be a JSON string containing the evaluation (e.g., `{"score": 0.0, "reason": ["..."]}`).
-5.  `async agenerate_provider_response(self, **kwargs: Any) -> Any`:
-    Asynchronous version of `generate_provider_response`.
 
 ### Implementing a Custom Model for an OpenAI-like API
 
