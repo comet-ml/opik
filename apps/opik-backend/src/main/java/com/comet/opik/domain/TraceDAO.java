@@ -16,6 +16,7 @@ import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.TraceSortingFactory;
+import com.comet.opik.api.sorting.TraceThreadSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
@@ -1114,10 +1115,10 @@ class TraceDAOImpl implements TraceDAO {
                 LEFT JOIN spans_agg AS s ON t.id = s.trace_id
             GROUP BY
                 t.workspace_id, t.project_id, t.thread_id
-            <if(trace_thread_filters)> HAVING <trace_thread_filters> <endif>
-            ORDER BY last_updated_at DESC, start_time ASC, end_time DESC
-            LIMIT :limit OFFSET :offset
-            SETTINGS join_algorithm = 'full_sorting_merge';
+             <if(trace_thread_filters)> HAVING <trace_thread_filters> <endif>
+             <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC <else> ORDER BY last_updated_at DESC, start_time ASC, end_time DESC <endif>
+             LIMIT :limit OFFSET :offset
+            ;
             """;
 
     private static final String DELETE_THREADS_BY_PROJECT_ID = """
@@ -1195,6 +1196,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull TraceSortingFactory sortingFactory;
+    private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
 
     @Override
     @WithSpan
@@ -1920,10 +1922,20 @@ class TraceDAOImpl implements TraceDAO {
 
                     template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
+                    var finalTemplate = template;
+                    Optional.ofNullable(sortingQueryBuilder.toOrderBySql(criteria.sortingFields()))
+                            .ifPresent(sortFields -> finalTemplate.add("sort_fields", sortFields));
+
+                    var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(criteria.sortingFields());
+
                     var statement = connection.createStatement(template.render())
                             .bind("project_id", criteria.projectId())
                             .bind("limit", size)
                             .bind("offset", (page - 1) * size);
+
+                    if (hasDynamicKeys) {
+                        statement = sortingQueryBuilder.bindDynamicKeys(statement, criteria.sortingFields());
+                    }
 
                     bindSearchCriteria(criteria, statement);
 
@@ -1933,7 +1945,9 @@ class TraceDAOImpl implements TraceDAO {
                             .flatMap(this::mapThreadToDto)
                             .collectList()
                             .doFinally(signalType -> endSegment(segment))
-                            .map(threads -> new TraceThreadPage(page, threads.size(), count, threads));
+                            .map(threads -> new TraceThreadPage(page, threads.size(), count, threads,
+                                    traceThreadSortingFactory.getSortableFields()))
+                            .defaultIfEmpty(TraceThreadPage.empty(page, traceThreadSortingFactory.getSortableFields()));
                 }));
     }
 
