@@ -210,7 +210,7 @@ class Opik:
         attachments: Optional[List[Attachment]] = None,
         _trace_start: bool = False,
         **ignored_kwargs: Any,
-    ) -> trace.Trace:
+    ) -> Optional[trace.Trace]:
         """
         Create and log a new trace.
 
