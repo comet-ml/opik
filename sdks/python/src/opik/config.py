@@ -210,6 +210,12 @@ class OpikConfig(pydantic_settings.BaseSettings):
     Defines the factor applied to the `maximal_queue_size` to reduce the maximal message queue size when batching is enabled.
     """
 
+    log_start_trace: bool = False
+    """
+    If set to True, both the start and end of the trace will be logged. This is useful for traces that span long durations.
+    For shorter traces, it is recommended to keep this setting disabled to minimize data logging overhead.
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)

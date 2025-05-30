@@ -208,6 +208,7 @@ class Opik:
         error_info: Optional[ErrorInfoDict] = None,
         thread_id: Optional[str] = None,
         attachments: Optional[List[Attachment]] = None,
+        _trace_start: bool = False,
         **ignored_kwargs: Any,
     ) -> trace.Trace:
         """
@@ -229,10 +230,15 @@ class Opik:
             thread_id: Used to group multiple traces into a thread.
                 The identifier is user-defined and has to be unique per project.
             attachments: The list of attachments to be uploaded to the trace.
+            _trace_start: Internal use only.
 
         Returns:
             trace.Trace: The created trace object.
         """
+        if _trace_start is True and self._config.log_start_trace is False:
+            # Do not log start traces if not configured
+            return None
+
         id = id if id is not None else id_helpers.generate_id()
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
