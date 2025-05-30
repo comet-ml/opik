@@ -16,6 +16,7 @@ from ....testlib import (
 )
 from opik.types import LLMProvider
 
+
 def test_opik_tracing_processor__happy_flow(fake_backend):
     input_message = "Write a haiku about recursion in programming."
     project_name = "opik-test-openai-agents"
@@ -35,8 +36,15 @@ def test_opik_tracing_processor__happy_flow(fake_backend):
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
-        input=ANY_DICT,
-        output=ANY_DICT,
+        input={
+            "input": [
+                {
+                    "content": "Write a haiku about recursion in programming.",
+                    "role": "user",
+                }
+            ]
+        },
+        output={"output": ANY_BUT_NONE},
         name="Agent workflow",
         project_name=project_name,
         end_time=ANY_BUT_NONE,
@@ -109,8 +117,15 @@ def test_opik_tracing_processor__happy_flow_conversation(fake_backend):
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
-        input=ANY_DICT,
-        output=ANY_DICT,
+        input={
+            "input": [
+                {
+                    "content": input_message,
+                    "role": "user",
+                }
+            ]
+        },
+        output={"output": ANY_BUT_NONE},
         name=workflow_name,
         project_name=project_name,
         end_time=ANY_BUT_NONE,
@@ -197,8 +212,8 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
         start_time=ANY_BUT_NONE,
         name="Agent workflow",
         project_name=project_name,
-        input=ANY_DICT,
-        output=ANY_DICT,
+        input={"input": [{"content": input_message, "role": "user"}]},
+        output={"output": ANY_BUT_NONE},
         end_time=ANY_BUT_NONE,
         metadata={
             "created_from": "openai-agents",
@@ -310,8 +325,8 @@ async def test_opik_tracing_processor__functions(fake_backend):
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
-        input=ANY_DICT,
-        output=ANY_DICT,
+        input={"input": [{"content": input_message, "role": "user"}]},
+        output={"output": ANY_BUT_NONE},
         name="Agent workflow",
         project_name=project_name,
         end_time=ANY_BUT_NONE,
@@ -390,9 +405,10 @@ async def test_opik_tracing_processor__functions(fake_backend):
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_tree)
 
 
-
 @pytest.mark.asyncio
-async def test_opik_tracing_processor__function_calls_tracked_function__tracked_function_span_included(fake_backend):
+async def test_opik_tracing_processor__function_calls_tracked_function__tracked_function_span_included(
+    fake_backend,
+):
     @opik.track
     def is_known_city(city: str) -> bool:
         return city in ["Tokyo", "New York", "London"]
@@ -423,8 +439,8 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
-        input=ANY_DICT,
-        output=ANY_DICT,
+        input={"input": [{"content": input_message, "role": "user"}]},
+        output={"output": ANY_BUT_NONE},
         name="Agent workflow",
         project_name=project_name,
         end_time=ANY_BUT_NONE,
@@ -514,7 +530,9 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_tree)
 
 
-def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent_span_attached_to_existing_span(fake_backend):
+def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent_span_attached_to_existing_span(
+    fake_backend,
+):
     input_message = "Write a haiku about recursion in programming."
     project_name = "opik-test-openai-agents"
 
@@ -525,7 +543,7 @@ def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent
         instructions="You are a helpful assistant",
         model=MODEL_FOR_TESTS,
     )
-    
+
     @opik.track(project_name=project_name)
     def outer_f():
         Runner.run_sync(agent, input_message)
@@ -554,6 +572,15 @@ def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent
                         id=ANY_BUT_NONE,
                         start_time=ANY_BUT_NONE,
                         name="Agent workflow",
+                        input={
+                            "input": [
+                                {
+                                    "content": "Write a haiku about recursion in programming.",
+                                    "role": "user",
+                                }
+                            ]
+                        },
+                        output={"output": ANY_LIST},
                         metadata={
                             "created_from": "openai-agents",
                             "agents-trace-id": ANY_STRING(startswith="trace"),
@@ -591,15 +618,14 @@ def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent
                                         model=ANY_STRING(startswith=MODEL_FOR_TESTS),
                                         provider=LLMProvider.OPENAI,
                                     )
-                                ]
+                                ],
                             )
-                        ]
+                        ],
                     )
-                ]
+                ],
             )
-        ]
+        ],
     )
-
 
     assert len(fake_backend.trace_trees) == 1
     trace_tree = fake_backend.trace_trees[0]

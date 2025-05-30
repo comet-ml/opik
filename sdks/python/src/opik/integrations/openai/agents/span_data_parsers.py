@@ -41,9 +41,9 @@ def _span_name(openai_span_data: tracing.SpanData) -> str:
 class ParsedSpanData:
     name: str
     type: SpanType
-    input: Dict[str, Any]
-    output: Dict[str, Any]
-    metadata: Dict[str, Any]
+    input: Optional[Dict[str, Any]] = None
+    output: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None
     usage: Optional[llm_usage.OpikUsage] = None
     model: Optional[str] = None
     provider: Optional[LLMProvider] = None
@@ -110,6 +110,13 @@ def parse_spandata(openai_span_data: tracing.SpanData) -> ParsedSpanData:
 
 def _parse_response_span_content(span_data: tracing.ResponseSpanData) -> ParsedSpanData:
     response = span_data.response
+
+    if response is None:
+        return ParsedSpanData(
+            name="Response",
+            type="llm",
+        )
+
     response_dict = span_data.response.model_dump()
     input = {"input": span_data.input}
     output = {"output": response.output}

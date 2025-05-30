@@ -2,7 +2,6 @@ from typing import Any, Optional, Dict, Union
 from agents import tracing
 
 import logging
-import contextvars
 
 from opik.api_objects.span import span_data
 from opik.api_objects.trace import trace_data
@@ -14,6 +13,8 @@ from . import span_data_parsers
 
 LOGGER = logging.Logger(__name__)
 
+OPENAI_SPAN_TYPES_WITH_MEANINGFUL_INPUT_OUTPUT = ["response", "generation", "custom"]
+
 
 class OpikTracingProcessor(tracing.TracingProcessor):
     def __init__(
@@ -22,23 +23,32 @@ class OpikTracingProcessor(tracing.TracingProcessor):
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
-        self._span_data_map: Dict[str, span_data.SpanData] = {}
-        """Map from openai span id to opik span data."""
+        self._opik_spans_data_map: Dict[str, span_data.SpanData] = {}
+        """Map from openai span id to the opik span data created for it."""
 
-        self._created_traces_data_map: Dict[str, trace_data.TraceData] = {}
-        """Map from openai trace id to opik trace data."""
+        self._created_opik_traces_data_map: Dict[str, trace_data.TraceData] = {}
+        """Map from openai trace id to the opik trace data created for it."""
 
         self._project_name = project_name
 
         self._opik_client = opik_client.get_client_cached()
-        self._opik_trace_id_to_first_span: Dict[str, span_data.SpanData] = {}
-        self._opik_trace_id_to_last_llm_span: Dict[str, span_data.SpanData] = {}
+
+        self._openai_trace_id_to_first_meaningful_input: Dict[
+            str, Optional[Dict[str, Any]]
+        ] = {}
+        self._openai_trace_id_to_last_meaningful_output: Dict[
+            str, Optional[Dict[str, Any]]
+        ] = {}
+        """
+        Used to populate opik span/trace corresponding to the openai trace with meaningful inputs and outputs.
+        By default inputs and outputs in the openai trace are always empty and it is harder to review in Opik UI.
+        """
+
+        self._openai_trace_id_to_external_opik_parent_span_id: Dict[
+            str, Optional[str]
+        ] = {}
 
         self._opik_context_storage = context_storage.get_current_context_instance()
-        self._root_external_parent_span_id: contextvars.ContextVar[
-            Optional[str]
-        ] = contextvars.ContextVar("root_external_parent_span_id", default=None)
-
 
     def force_flush(self) -> bool:
         return self._opik_client.flush()
@@ -62,7 +72,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
                     thread_id=trace.group_id,
                 )
                 self._opik_context_storage.set_trace_data(current_trace)
-                self._created_traces_data_map[trace.trace_id] = current_trace
+                self._created_opik_traces_data_map[trace.trace_id] = current_trace
             else:
                 start_span_arguments = arguments_helpers.StartSpanParameters(
                     name=trace.name,
@@ -70,14 +80,18 @@ class OpikTracingProcessor(tracing.TracingProcessor):
                     metadata=trace_metadata,
                     type="general",
                 )
-                _, opik_span_data = span_creation_handler.create_span_respecting_context(
-                    start_span_arguments=start_span_arguments,
-                    distributed_trace_headers=None,
-                    opik_context_storage=self._opik_context_storage,
+                _, opik_span_data = (
+                    span_creation_handler.create_span_respecting_context(
+                        start_span_arguments=start_span_arguments,
+                        distributed_trace_headers=None,
+                        opik_context_storage=self._opik_context_storage,
+                    )
                 )
-                self._span_data_map[trace.trace_id] = opik_span_data
+                self._opik_spans_data_map[trace.trace_id] = opik_span_data
                 self._opik_context_storage.add_span_data(opik_span_data)
-                self._root_external_parent_span_id.set(opik_span_data.parent_span_id)
+                self._openai_trace_id_to_external_opik_parent_span_id[
+                    trace.trace_id
+                ] = opik_span_data.parent_span_id
 
         except Exception:
             LOGGER.debug("on_trace_start failed", exc_info=True)
@@ -90,7 +104,9 @@ class OpikTracingProcessor(tracing.TracingProcessor):
 
             opik_trace_or_span_data.init_end_time()
 
-            self._copy_input_and_output_from_child_spans(opik_trace_or_span_data)
+            self._populate_root_span_or_trace_with_meaningful_input_and_output(
+                trace.trace_id, opik_trace_or_span_data
+            )
             if isinstance(opik_trace_or_span_data, trace_data.TraceData):
                 self._opik_client.trace(**opik_trace_or_span_data.__dict__)
             else:
@@ -103,25 +119,21 @@ class OpikTracingProcessor(tracing.TracingProcessor):
     def on_span_start(self, span: tracing.Span[Any]) -> None:
         try:
             parsed_span_data = span_data_parsers.parse_spandata(span.span_data)
-            assert False, "USE parsed span data!"
+
             _, opik_span_data = span_creation_handler.create_span_respecting_context(
                 start_span_arguments=arguments_helpers.StartSpanParameters(
                     project_name=self._project_name,
-                    name="placeholder-name",
-                    type="general",
+                    name=parsed_span_data.name,
+                    type=parsed_span_data.type,
+                    input=parsed_span_data.input,
+                    metadata=parsed_span_data.metadata,
                 ),
                 distributed_trace_headers=None,
                 opik_context_storage=self._opik_context_storage,
             )
 
             self._opik_context_storage.add_span_data(opik_span_data)
-            self._span_data_map[span.span_id] = opik_span_data
-
-            if (
-                opik_span_data.trace_id not in self._opik_trace_id_to_first_span
-            ) and span.span_data.type in ["response", "generation", "custom"]:
-                self._opik_trace_id_to_first_span[opik_span_data.trace_id] = opik_span_data
-
+            self._opik_spans_data_map[span.span_id] = opik_span_data
         except Exception:
             LOGGER.debug("on_span_start failed", exc_info=True)
 
@@ -129,51 +141,82 @@ class OpikTracingProcessor(tracing.TracingProcessor):
         try:
             parsed_span_data = span_data_parsers.parse_spandata(span.span_data)
 
-            opik_span_data = self._span_data_map[span.span_id]
+            opik_span_data = self._opik_spans_data_map[span.span_id]
             opik_span_data.init_end_time().update(**parsed_span_data.__dict__)
 
-            if span.span_data.type in ["response", "generation", "custom"]:
-                self._opik_trace_id_to_last_llm_span[opik_span_data.trace_id] = (
-                    opik_span_data
+            self._opik_client.span(**opik_span_data.__dict__)
+
+            if (
+                span.span_data.type
+                not in OPENAI_SPAN_TYPES_WITH_MEANINGFUL_INPUT_OUTPUT
+            ):
+                return
+
+            if span.trace_id not in self._openai_trace_id_to_first_meaningful_input:
+                self._openai_trace_id_to_first_meaningful_input[span.trace_id] = (
+                    opik_span_data.input
                 )
 
-            self._opik_client.span(**opik_span_data.__dict__)
+            self._openai_trace_id_to_last_meaningful_output[span.trace_id] = (
+                opik_span_data.output
+            )
+
         except Exception:
             LOGGER.debug("on_span_end failed", exc_info=True)
         finally:
             self._try_finalize_openai_span(span.span_id)
-    
-    def _try_get_span_or_trace(self, id: str) -> Union[span_data.SpanData, trace_data.TraceData, None]:
-        return self._span_data_map.get(id) or self._created_traces_data_map.get(id)
 
-    def _copy_input_and_output_from_child_spans(
-        self, opik_trace_or_span_data: Union[trace_data.TraceData, span_data.SpanData]
+    def _try_get_span_or_trace(
+        self, id: str
+    ) -> Union[span_data.SpanData, trace_data.TraceData, None]:
+        return self._opik_spans_data_map.get(
+            id
+        ) or self._created_opik_traces_data_map.get(id)
+
+    def _populate_root_span_or_trace_with_meaningful_input_and_output(
+        self,
+        openai_trace_id: str,
+        opik_trace_or_span_data: Union[trace_data.TraceData, span_data.SpanData],
     ) -> None:
-        if opik_trace_or_span_data.id in self._opik_trace_id_to_first_span:
-            opik_trace_or_span_data.update(
-                input=self._opik_trace_id_to_first_span[opik_trace_or_span_data.id].input
+        first_meaningful_input = self._openai_trace_id_to_first_meaningful_input.get(
+            openai_trace_id
+        )
+        last_meaningful_output = self._openai_trace_id_to_last_meaningful_output.get(
+            openai_trace_id
+        )
+
+        if first_meaningful_input is not None:
+            opik_trace_or_span_data.update(input=first_meaningful_input)
+
+        if last_meaningful_output is not None:
+            opik_trace_or_span_data.update(output=last_meaningful_output)
+
+    def _try_finalize_openai_trace(self, openai_trace_id: str) -> None:
+        if openai_trace_id in self._opik_spans_data_map:
+            opik_span_data = self._opik_spans_data_map[openai_trace_id]
+            self._opik_context_storage.pop_span_data(ensure_id=opik_span_data.id)
+            self._opik_spans_data_map.pop(openai_trace_id)
+        elif openai_trace_id in self._created_opik_traces_data_map:
+            opik_trace_data = self._created_opik_traces_data_map[openai_trace_id]
+            self._opik_context_storage.pop_trace_data(ensure_id=opik_trace_data.id)
+            self._created_opik_traces_data_map.pop(openai_trace_id)
+
+        root_external_parent_span_id = (
+            self._openai_trace_id_to_external_opik_parent_span_id.pop(
+                openai_trace_id, None
+            )
+        )
+        if root_external_parent_span_id is not None:
+            # ensure no hanging spans left from the OpikTracingProcessor
+            self._opik_context_storage.trim_span_data_stack_to_certain_span(
+                root_external_parent_span_id
             )
 
-        if opik_trace_or_span_data.id in self._opik_trace_id_to_last_llm_span:
-            opik_trace_or_span_data.update(
-                output=self._opik_trace_id_to_last_llm_span[opik_trace_or_span_data.id].output
-            )
-    
-    def _try_finalize_openai_trace(self, openai_trace_id: str) -> None:
-        if openai_trace_id in self._span_data_map:
-            opik_span_data = self._span_data_map[openai_trace_id]
-            self._opik_context_storage.pop_span_data(ensure_id=opik_span_data.id)
-        elif openai_trace_id in self._created_traces_data_map:
-            opik_trace_data = self._created_traces_data_map[openai_trace_id]
-            self._opik_context_storage.pop_trace_data(ensure_id=opik_trace_data.id)
-        
-        root_external_parent_span_id = self._root_external_parent_span_id.get()
-        if root_external_parent_span_id is not None:
-            self._opik_context_storage.trim_span_data_stack_to_certain_span(root_external_parent_span_id)
-            self._root_external_parent_span_id.set(None)
+        self._openai_trace_id_to_first_meaningful_input.pop(openai_trace_id, None)
+        self._openai_trace_id_to_last_meaningful_output.pop(openai_trace_id, None)
 
     def _try_finalize_openai_span(self, openai_span_id: str) -> None:
-        if openai_span_id in self._span_data_map:
-            opik_span_data = self._span_data_map[openai_span_id]
+        if openai_span_id in self._opik_spans_data_map:
+            opik_span_data = self._opik_spans_data_map[openai_span_id]
             self._opik_context_storage.pop_span_data(ensure_id=opik_span_data.id)
-        
+            self._opik_spans_data_map.pop(openai_span_id)
