@@ -147,6 +147,7 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NAM
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_THREADS;
 import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
 import static com.comet.opik.api.validate.InRangeValidator.MAX_ANALYTICS_DB;
 import static com.comet.opik.api.validate.InRangeValidator.MAX_ANALYTICS_DB_PRECISION_9;
@@ -4362,8 +4363,9 @@ class TracesResourceTest {
 
         assertThat(actualTraces)
                 .usingRecursiveComparison()
-                .ignoringFields(IGNORED_FIELDS_TRACES)
+                .ignoringFields(IGNORED_FIELDS_THREADS)
                 .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                 .isEqualTo(expectedThreads);
 
         for (int i = 0; i < expectedThreads.size(); i++) {
@@ -4544,6 +4546,19 @@ class TracesResourceTest {
                             .build())
                     .toList();
 
+            List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .usage(spanResourceClient.getTokenUsage())
+                            .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
+                            .traceId(traces.getFirst().id())
+                            .projectName(projectName)
+                            .totalEstimatedCost(null)
+                            .build())
+                    .toList();
+
+            batchCreateSpansAndAssert(spans, API_KEY, TEST_WORKSPACE);
+
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
             var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
@@ -4559,6 +4574,8 @@ class TracesResourceTest {
                     .endTime(trace.endTime())
                     .numberOfMessages(traces.size() * 2L)
                     .id(threadId)
+                    .totalEstimatedCost(calculateEstimatedCost(spans))
+                    .totalTokens(aggregateSpansTotalTokens(spans))
                     .createdAt(trace.createdAt())
                     .lastUpdatedAt(trace.lastUpdatedAt())
                     .build());
@@ -4674,7 +4691,7 @@ class TracesResourceTest {
 
             var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
 
-            List<TraceThread> expectedThreads = getExpectedThreads(expectedTraces, projectId, threadId);
+            List<TraceThread> expectedThreads = getExpectedThreads(expectedTraces, projectId, threadId, List.of());
 
             var filter = getFilter.apply(expectedTraces);
 
@@ -4683,7 +4700,8 @@ class TracesResourceTest {
 
     }
 
-    private List<TraceThread> getExpectedThreads(List<Trace> expectedTraces, UUID projectId, String threadId) {
+    private List<TraceThread> getExpectedThreads(List<Trace> expectedTraces, UUID projectId, String threadId,
+            List<Span> spans) {
         return expectedTraces.isEmpty()
                 ? List.of()
                 : List.of(TraceThread.builder()
@@ -4704,6 +4722,8 @@ class TracesResourceTest {
                                 .endTime())
                         .numberOfMessages(expectedTraces.size() * 2L)
                         .id(threadId)
+                        .totalEstimatedCost(calculateEstimatedCost(spans))
+                        .totalTokens(aggregateSpansTotalTokens(spans))
                         .createdAt(expectedTraces.stream().min(Comparator.comparing(Trace::createdAt)).orElseThrow()
                                 .createdAt())
                         .lastUpdatedAt(
@@ -7747,6 +7767,19 @@ class TracesResourceTest {
                             .build())
                     .toList();
 
+            List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .usage(spanResourceClient.getTokenUsage())
+                            .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
+                            .traceId(traces.getFirst().id())
+                            .projectName(projectName)
+                            .totalEstimatedCost(null)
+                            .build())
+                    .toList();
+
+            batchCreateSpansAndAssert(spans, API_KEY, TEST_WORKSPACE);
+
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
             var expectedTraces = traceResourceClient.getByProjectName(projectName, API_KEY, TEST_WORKSPACE);
@@ -7755,12 +7788,13 @@ class TracesResourceTest {
 
             var actualThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
 
-            var expectedThread = getExpectedThreads(expectedTraces, projectId, threadId);
+            var expectedThread = getExpectedThreads(expectedTraces, projectId, threadId, spans);
 
             assertThat(List.of(actualThread))
                     .usingRecursiveComparison()
-                    .ignoringFields(IGNORED_FIELDS_TRACES)
+                    .ignoringFields(IGNORED_FIELDS_THREADS)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .isEqualTo(expectedThread);
         }
 
@@ -7854,6 +7888,12 @@ class TracesResourceTest {
                 .flatMap(span -> span.usage().entrySet().stream())
                 .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), Long.valueOf(entry.getValue())))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
+    }
+
+    private Long aggregateSpansTotalTokens(List<Span> spans) {
+        return spans.stream()
+                .mapToLong(span -> span.usage().get("total_tokens"))
+                .sum();
     }
 
     private void mockGetWorkspaceIdByName(String workspaceName, String workspaceId) {

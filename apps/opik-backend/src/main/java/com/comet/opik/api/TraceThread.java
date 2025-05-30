@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -24,6 +25,8 @@ public record TraceThread(
         JsonNode firstMessage,
         JsonNode lastMessage,
         long numberOfMessages,
+        BigDecimal totalEstimatedCost,
+        Long totalTokens,
         Instant lastUpdatedAt,
         String createdBy,
         Instant createdAt) {
