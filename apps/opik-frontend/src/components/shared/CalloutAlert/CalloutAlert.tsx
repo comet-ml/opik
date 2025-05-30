@@ -32,7 +32,7 @@ const CalloutAlert: React.FC<CalloutAlertProps> = ({
               target="_blank"
               rel="noreferrer"
             >
-              Raad more
+              Read more
               <SquareArrowOutUpRight className="ml-0.5 size-3 shrink-0" />
             </a>
           </Button>
