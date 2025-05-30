@@ -28,7 +28,7 @@ on:
             ALLURE_USERNAME:
                 description: ALLURE_USERNAME service parameter. Leave blank.
                 
-    pull_request:
+    pull_request_target:
       paths:
         - 'sdks/code_generation/fern/openapi/openapi.yaml'
         - 'tests_end_to_end/**'
@@ -44,7 +44,7 @@ jobs:
             - name: Checkout repo
               uses: actions/checkout@v4
               with:
-                ref: ${{ github.ref }}
+                ref: ${{ github.event.pull_request.base.ref }}
             
             - name: Setup Python
               uses: actions/setup-python@v5
