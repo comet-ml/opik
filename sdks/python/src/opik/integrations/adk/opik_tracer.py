@@ -157,6 +157,20 @@ class OpikTracer:
         else:
             raise ValueError(f"Invalid context type: {type(value)}")
 
+    def _ensure_no_hanging_opik_tracer_spans(self) -> None:
+        root_parent_span_id = self._root_parent_span_id.get()
+        there_were_no_external_spans_before_chain_invocation = (
+            root_parent_span_id is None
+        )
+
+        if there_were_no_external_spans_before_chain_invocation:
+            self._context_storage.clear_spans()
+        else:
+            assert root_parent_span_id is not None
+            self._context_storage.trim_span_data_stack_to_certain_span(
+                root_parent_span_id
+            )
+
     def before_agent_callback(
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
     ) -> None:
@@ -218,6 +232,8 @@ class OpikTracer:
         else:
             span_data.update(output=output).init_end_time()
             self._end_current_span()
+
+        self._ensure_no_hanging_opik_tracer_spans()
 
     def before_model_callback(
         self,
