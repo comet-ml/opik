@@ -129,23 +129,24 @@ def fake_backend_without_batching(patch_streamer_without_batching):
 
 
 @pytest.fixture
-def fake_backend_long_running_jobs(patch_streamer):
-    streamer, fake_message_processor_ = patch_streamer
+def fake_backend_with_long_running_jobs(patch_streamer):
+    with testlib.patch_environ(add_keys={"OPIK_LOG_START_TRACE": "True"}):
+        streamer, fake_message_processor_ = patch_streamer
 
-    fake_message_processor_ = cast(
-        backend_emulator_message_processor.BackendEmulatorMessageProcessor,
-        fake_message_processor_,
-    )
+        fake_message_processor_ = cast(
+            backend_emulator_message_processor.BackendEmulatorMessageProcessor,
+            fake_message_processor_,
+        )
 
-    mock_construct_online_streamer = mock.Mock()
-    mock_construct_online_streamer.return_value = streamer
+        mock_construct_online_streamer = mock.Mock()
+        mock_construct_online_streamer.return_value = streamer
 
-    with mock.patch.object(
-        streamer_constructors,
-        "construct_online_streamer",
-        mock_construct_online_streamer,
-    ):
-        yield fake_message_processor_
+        with mock.patch.object(
+            streamer_constructors,
+            "construct_online_streamer",
+            mock_construct_online_streamer,
+        ):
+            yield fake_message_processor_
 
 
 def random_chars(n: int = 6) -> str:
