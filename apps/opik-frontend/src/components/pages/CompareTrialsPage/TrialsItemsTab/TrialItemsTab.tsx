@@ -38,7 +38,7 @@ import CompareExperimentsNameHeader from "@/components/pages-shared/experiments/
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import Loader from "@/components/shared/Loader/Loader";
-import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
 import { Experiment, ExperimentsCompare } from "@/types/datasets";
@@ -511,7 +511,9 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         direction="horizontal"
         limitWidth
       >
-        <CalloutAlert {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_trial_items]} />
+        <ExplainerCallout
+          {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_trial_items]}
+        />
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
