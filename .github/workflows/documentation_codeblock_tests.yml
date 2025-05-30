@@ -1,7 +1,7 @@
 name: Docs - Test codeblocks
 on:
   workflow_dispatch:
-  pull_request:
+  pull_request_target:
     paths:
       - 'apps/opik-documentation/documentation/fern/docs/*.md'
       - 'apps/opik-documentation/documentation/fern/docs/*.mdx'
@@ -17,7 +17,9 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0  # Fetch all history for git diff
-          
+          ref: ${{ github.event.pull_request.base.ref }}
+
+
       - id: paths
         working-directory: apps/opik-documentation/documentation
         run: |
@@ -70,21 +72,6 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Get pip cache dir
-        id: pip-cache
-        run: |
-          echo "pip_cache_dir=$(pip cache dir)" >> $GITHUB_OUTPUT
-        working-directory: apps/opik-documentation/documentation
-
-      - name: Cache pip dependencies
-        uses: actions/cache@v3
-        with:
-          path: ${{ steps.pip-cache.outputs.pip_cache_dir }}
-          key: ${{ runner.os }}-python-${{ matrix.python-version }}-pip-${{ hashFiles('apps/opik-documentation/documentation/requirements.txt') }}-${{ hashFiles('sdks/opik_optimizer/**') }}
-          restore-keys: |
-            ${{ runner.os }}-python-${{ matrix.python-version }}-pip-${{ hashFiles('apps/opik-documentation/documentation/requirements.txt') }}-
-            ${{ runner.os }}-python-${{ matrix.python-version }}-pip-
-            
       - name: Install dependencies
         working-directory: apps/opik-documentation/documentation
         run: |
