@@ -15,7 +15,7 @@ import java.lang.annotation.Target;
 @Documented
 public @interface ExperimentItemBulkRecordValidation {
 
-    String message() default "must provide either evaluate_task_result or trace but not both";
+    String message() default "cannot provide both evaluate_task_result and trace together";
 
     Class<?>[] groups() default {};
 

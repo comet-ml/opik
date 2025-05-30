@@ -4116,7 +4116,7 @@ class ExperimentsResourceTest {
                 var errorMessage = response.readEntity(com.comet.opik.api.error.ErrorMessage.class);
 
                 assertThat(errorMessage.errors()).contains(
-                        "items[0].<list element> must provide either evaluate_task_result or trace but not both");
+                        "items[0].<list element> cannot provide both evaluate_task_result and trace together");
             }
         }
 
