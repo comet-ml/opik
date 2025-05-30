@@ -178,6 +178,7 @@ export const renderCustomRow = <TData extends { dataset_id: string }>(
   row: Row<TData>,
   setGroupLimit: OnChangeFn<Record<string, number>>,
   applyStickyWorkaround?: boolean,
+  withAutoColumn?: boolean,
 ) => {
   if (row.getIsGrouped()) {
     const cells = row.getVisibleCells();
@@ -211,13 +212,13 @@ export const renderCustomRow = <TData extends { dataset_id: string }>(
           }}
         />
 
-        <TableCell colSpan={cells.length - 2} />
+        <TableCell colSpan={cells.length - 2 + (withAutoColumn ? 1 : 0)} />
       </TableRow>
     );
   } else {
     return (
       <tr key={row.id} className="border-b">
-        <td colSpan={row.getAllCells().length}>
+        <td colSpan={row.getAllCells().length + (withAutoColumn ? 1 : 0)}>
           <Button
             variant="link"
             className="w-full"

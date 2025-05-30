@@ -120,6 +120,7 @@ interface DataTableProps<TData, TValue> {
   renderCustomRow?: (
     row: Row<TData>,
     stickyWorkaround?: boolean,
+    withAutoColumn?: boolean,
   ) => ReactNode | null;
   getIsCustomRow?: (row: Row<TData>) => boolean;
   activeRowId?: string;
@@ -225,6 +226,11 @@ const DataTable = <TData, TValue>({
   const columnSizing = table.getState().columnSizing;
   const headers = table.getFlatHeaders();
 
+  const [tableWidth, setTableWidth] = useState(0);
+  const autoColumnWidth = Math.max(0, tableWidth - table.getTotalSize());
+  const showAutoColumn = autoColumnWidth > 0;
+  const totalColumnsCount = columns.length + (showAutoColumn ? 1 : 0);
+
   const cols = useMemo(() => {
     const retVal: { id: string; size: number }[] = [];
     headers.forEach((header) => {
@@ -236,10 +242,15 @@ const DataTable = <TData, TValue>({
         };
       }
     });
+    const total = retVal.reduce((acc, c) => acc + c.size, 0);
+    const filler = Math.max(0, tableWidth - total);
+    if (filler > 0) {
+      retVal.push({ id: "__auto__", size: filler });
+    }
     return retVal;
     // we need columnSizing here to rebuild the cols array
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [headers, columnSizing]);
+  }, [headers, columnSizing, tableWidth]);
 
   const [tableHeight, setTableHeight] = useState(0);
   const [hasHorizontalScroll, setHasHorizontalScroll] = useState(false);
@@ -248,6 +259,7 @@ const DataTable = <TData, TValue>({
     setHasHorizontalScroll(
       node.parentElement!.scrollWidth > node?.parentElement!.clientWidth,
     );
+    setTableWidth(node.parentElement!.clientWidth);
   });
 
   // TODO move this workaround to context that wil be added to handle columns width
@@ -258,7 +270,7 @@ const DataTable = <TData, TValue>({
 
   const renderRow = (row: Row<TData>) => {
     if (isFunction(renderCustomRow) && getIsCustomRow(row)) {
-      return renderCustomRow(row, stickyBorderWorkaround);
+      return renderCustomRow(row, stickyBorderWorkaround, showAutoColumn);
     }
 
     return (
@@ -277,6 +289,7 @@ const DataTable = <TData, TValue>({
           : {})}
       >
         {row.getVisibleCells().map((cell) => renderCell(row, cell))}
+        {showAutoColumn && <TableCell data-auto-width="true" />}
       </TableRow>
     );
   };
@@ -287,7 +300,7 @@ const DataTable = <TData, TValue>({
         <TableCell
           key={cell.id}
           data-cell-id={cell.id}
-          colSpan={columns.length}
+          colSpan={totalColumnsCount}
         >
           {flexRender(cell.column.columnDef.cell, cell.getContext())}
         </TableCell>
@@ -332,7 +345,7 @@ const DataTable = <TData, TValue>({
   const renderNoData = () => {
     return (
       <TableRow data-testid="no-data-row">
-        <TableCell colSpan={columns.length}>
+        <TableCell colSpan={totalColumnsCount}>
           {noData ? (
             noData
           ) : (
@@ -351,10 +364,7 @@ const DataTable = <TData, TValue>({
         <Table
           ref={tableRef}
           style={{
-            ...(!autoWidth && {
-              width: `${table.getTotalSize()}px`,
-              minWidth: `${table.getTotalSize()}px`,
-            }),
+            ...(!autoWidth && { minWidth: table.getTotalSize() }),
             ...(tableHeight && { "--data-table-height": `${tableHeight}px` }),
           }}
         >
@@ -404,6 +414,7 @@ const DataTable = <TData, TValue>({
                       </TableHead>
                     );
                   })}
+                  {showAutoColumn && <TableHead aria-hidden="true" />}
                 </TableRow>
               );
             })}

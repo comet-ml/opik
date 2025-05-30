@@ -11,6 +11,10 @@ export const USER_FEEDBACK_NAME = "User feedback";
 export const TABLE_HEADER_Z_INDEX = 2;
 export const TABLE_ROW_Z_INDEX = 0;
 
+export const DEFAULT_COLUMN_WIDTH = 160;
+export const DEFAULT_NUMERIC_COLUMN_WIDTH = 100;
+export const NAME_COLUMN_WIDTH = 220;
+
 export const ROW_HEIGHT_MAP: Record<ROW_HEIGHT, React.CSSProperties> = {
   [ROW_HEIGHT.small]: { height: "44px" },
   [ROW_HEIGHT.medium]: { height: "96px" },

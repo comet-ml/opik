@@ -284,8 +284,17 @@ const OptimizationsPage: React.FunctionComponent = () => {
   }, []);
 
   const renderCustomRowCallback = useCallback(
-    (row: Row<GroupedOptimization>, applyStickyWorkaround?: boolean) => {
-      return renderCustomRow(row, setGroupLimit, applyStickyWorkaround);
+    (
+      row: Row<GroupedOptimization>,
+      applyStickyWorkaround?: boolean,
+      withAutoColumn?: boolean,
+    ) => {
+      return renderCustomRow(
+        row,
+        setGroupLimit,
+        applyStickyWorkaround,
+        withAutoColumn,
+      );
     },
     [setGroupLimit],
   );
