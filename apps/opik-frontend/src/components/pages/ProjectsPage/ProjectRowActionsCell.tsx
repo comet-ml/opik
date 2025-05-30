@@ -47,9 +47,10 @@ export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
         open={open === 1}
         setOpen={setOpen}
         onConfirm={deleteProjectHandler}
-        title={`Delete ${project.name}`}
-        description="Are you sure you want to delete this project?"
+        title="Delete project"
+        description="Deleting a project will also remove all the traces and their data. This action can’t be undone. Are you sure you want to continue?"
         confirmText="Delete project"
+        confirmButtonVariant="destructive"
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

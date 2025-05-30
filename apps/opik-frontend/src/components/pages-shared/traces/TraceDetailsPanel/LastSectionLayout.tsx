@@ -3,6 +3,8 @@ import { useHotkeys } from "react-hotkeys-hook";
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { LastSectionValue } from "./TraceDetailsPanel";
+import { Explainer } from "@/types/shared";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 
 type LastSectionLayoutProps = {
   title: string;
@@ -11,6 +13,7 @@ type LastSectionLayoutProps = {
   lastSection?: LastSectionValue | null;
   setLastSection: (v: LastSectionValue | null) => void;
   children: React.ReactNode;
+  explainer?: Explainer;
 };
 
 const HOTKEYS = ["Esc"];
@@ -22,6 +25,7 @@ const LastSectionLayout: React.FC<LastSectionLayoutProps> = ({
   lastSection,
   setLastSection,
   children,
+  explainer,
 }) => {
   useHotkeys(
     "Escape",
@@ -40,7 +44,10 @@ const LastSectionLayout: React.FC<LastSectionLayoutProps> = ({
     <div className="flex size-full min-w-60 flex-col overflow-x-hidden pt-6">
       <div className="flex shrink-0 items-center justify-between gap-2 overflow-x-hidden px-6">
         <div className="flex items-center gap-2 overflow-x-hidden">
-          <div className="comet-title-s truncate">{title}</div>
+          <div className="comet-title-s flex w-full items-center gap-1">
+            <span className="truncate">{title}</span>
+            {explainer && <ExplainerIcon {...explainer} />}
+          </div>
         </div>
         <TooltipWrapper content={closeTooltipContent} hotkeys={HOTKEYS}>
           <Button

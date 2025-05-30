@@ -92,8 +92,9 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         setOpen={setOpen}
         onConfirm={deleteTracesHandler}
         title="Delete traces"
-        description="Are you sure you want to delete all selected traces?"
+        description="Deleting these traces will also remove their data from related experiment samples. This action cannot be undone. Are you sure you want to continue?"
         confirmText="Delete traces"
+        confirmButtonVariant="destructive"
       />
       <TooltipWrapper content="Add to dataset">
         <Button

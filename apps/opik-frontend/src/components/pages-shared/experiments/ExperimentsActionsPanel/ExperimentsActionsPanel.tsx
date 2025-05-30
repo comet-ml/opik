@@ -73,8 +73,9 @@ const ExperimentsActionsPanel: React.FunctionComponent<
         setOpen={setOpen}
         onConfirm={deleteExperimentsHandler}
         title="Delete experiments"
-        description="Are you sure you want to delete all selected experiments?"
+        description="Deleting experiments will remove all samples in these experiments. Related traces won’t be affected. This action cannot be undone. Are you sure you want to continue?"
         confirmText="Delete experiments"
+        confirmButtonVariant="destructive"
       />
       <div className="inline-flex items-center gap-2">
         <TooltipWrapper content="Compare experiments">

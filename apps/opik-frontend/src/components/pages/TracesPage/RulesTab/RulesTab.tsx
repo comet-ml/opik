@@ -41,7 +41,7 @@ import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowAct
 import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const getRowId = (d: EvaluatorsRule) => d.id;
@@ -239,7 +239,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
         direction="horizontal"
         limitWidth
       >
-        <CalloutAlert
+        <ExplainerCallout
           {...EXPLAINERS_MAP[EXPLAINER_ID.whats_online_evaluation]}
         />
       </PageBodyStickyContainer>

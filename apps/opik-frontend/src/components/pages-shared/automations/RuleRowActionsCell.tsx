@@ -48,9 +48,12 @@ const RuleRowActionsCell: React.FC<CellContext<EvaluatorsRule, unknown>> = (
         open={open === 1}
         setOpen={setOpen}
         onConfirm={deleteRuleHandler}
-        title={`Delete ${rule.name}`}
-        description="Are you sure you want to delete this rule?"
-        confirmText="Delete rule"
+        title="Delete evaluation rule"
+        description={`Deleting an online evaluation rule will stop scoring for all new traces. Existing traces that have already been scored won’t be affected. This action can’t be undone. Are you sure you want to continue?
+
+Tip: To pause scoring without deleting, set the sampling rate to 0%.`}
+        confirmText="Delete evaluation rule"
+        confirmButtonVariant="destructive"
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

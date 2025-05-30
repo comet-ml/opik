@@ -1,10 +1,10 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import asyncLib from "async";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { PROJECTS_KEY } from "@/api/api";
 import { DatasetItem } from "@/types/datasets";
-import { PlaygroundPromptType } from "@/types/playground";
+import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
 import { usePromptIds, useResetOutputMap } from "@/store/PlaygroundStore";
 
 import { useToast } from "@/components/ui/use-toast";
@@ -12,6 +12,8 @@ import createLogPlaygroundProcessor, {
   LogProcessorArgs,
 } from "@/api/playground/createLogPlaygroundProcessor";
 import usePromptDatasetItemCombination from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/usePromptDatasetItemCombination";
+import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
+import { ToastAction } from "@/components/ui/toast";
 
 const LIMIT_STREAMING_CALLS = 5;
 
@@ -24,14 +26,17 @@ interface UseActionButtonActionsArguments {
   datasetItems: DatasetItem[];
   workspaceName: string;
   datasetName: string | null;
+  datasetId?: string;
 }
 
 const useActionButtonActions = ({
   datasetItems,
   workspaceName,
   datasetName,
+  datasetId,
 }: UseActionButtonActionsArguments) => {
   const queryClient = useQueryClient();
+  const { navigate } = useNavigateToExperiment();
 
   const { toast } = useToast();
 
@@ -61,21 +66,36 @@ const useActionButtonActions = ({
   }, []);
 
   const showMessageExperimentsLogged = useCallback(
-    (experimentCount: number) => {
+    (experiments: LogExperiment[]) => {
       const title =
-        experimentCount === 1 ? "Experiment started" : "Experiments started";
-
-      const description =
-        experimentCount === 1
-          ? "The experiment started successfully"
-          : `${experimentCount} experiments started successfully`;
+        experiments.length === 1 ? "Experiment started" : "Experiments started";
 
       toast({
         title,
-        description,
+        description:
+          "Analyze the results to identify strengths and weaknesses, then iterate by refining prompts, datasets, or evaluation rules to optimize your LLM application's performance.",
+        actions: [
+          <ToastAction
+            variant="link"
+            size="sm"
+            className="px-0"
+            altText="Go to experiment"
+            key="Go to experiment"
+            onClick={() => {
+              navigate({
+                experimentIds: experiments.map((e) => e.id),
+                datasetId: datasetId,
+              });
+            }}
+          >
+            {experiments.length === 1
+              ? "Go to experiment"
+              : "Compare experiments"}
+          </ToastAction>,
+        ],
       });
     },
-    [toast],
+    [datasetId, navigate, toast],
   );
 
   const logProcessorHandlers: LogProcessorArgs = useMemo(() => {
@@ -83,7 +103,7 @@ const useActionButtonActions = ({
       onAddExperimentRegistry: (experiments) => {
         // to check if all experiments have been created
         if (experiments.length === promptIds.length) {
-          showMessageExperimentsLogged(experiments.length);
+          showMessageExperimentsLogged(experiments);
           queryClient.invalidateQueries({
             queryKey: ["experiments"],
           });

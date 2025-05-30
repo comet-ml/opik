@@ -129,7 +129,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
       },
       title: isReset ? "Reset prompt" : "Load prompt",
       description: isReset
-        ? "Resetting the prompt will discard all unsaved changes. This action is irreversible. Do you want to proceed?"
+        ? "Resetting the prompt will discard all unsaved changes. This action can’t be undone. Are you sure you want to continue?"
         : "You have unsaved changes in your message field. Loading a new prompt will overwrite them with the prompt’s content. This action cannot be undone.",
       confirmText: isReset ? "Reset prompt" : "Load prompt",
     };

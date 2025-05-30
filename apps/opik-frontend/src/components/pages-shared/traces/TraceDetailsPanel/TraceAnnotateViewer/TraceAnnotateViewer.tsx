@@ -4,6 +4,7 @@ import { LastSectionValue } from "../TraceDetailsPanel";
 import LastSectionLayout from "../LastSectionLayout";
 import FeedbackScoresEditor from "../../FeedbackScoresEditor/FeedbackScoresEditor";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 type TraceAnnotateViewerProps = {
   data: Trace | Span;
@@ -23,6 +24,7 @@ const TraceAnnotateViewer: React.FunctionComponent<
       closeTooltipContent="Close annotate"
       setLastSection={setLastSection}
       lastSection={lastSection}
+      explainer={EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
     >
       {hasFeedbackScores && (
         <div className="flex flex-wrap gap-2 px-6 pb-2 pt-4">

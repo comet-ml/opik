@@ -40,9 +40,21 @@ const LocalAIProviderDetails: React.FC<LocalAIProviderDetailsProps> = ({
             return (
               <FormItem>
                 <Label htmlFor="url">{urlLabel}</Label>
+                <FormControl>
+                  <Input
+                    id="url"
+                    placeholder={urlLabel}
+                    value={field.value}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    className={cn({
+                      "border-destructive": Boolean(validationErrors?.message),
+                    })}
+                  />
+                </FormControl>
+                <FormMessage />
                 <Description>
-                  To use {providerName}you will need to configure the Opik proxy
-                  to avoid network issues, learn more in the{" "}
+                  To use {providerName} you will need to configure the Opik
+                  proxy to avoid network issues, learn more in the{" "}
                   <Button
                     variant="link"
                     size="sm"
@@ -59,18 +71,6 @@ const LocalAIProviderDetails: React.FC<LocalAIProviderDetailsProps> = ({
                   </Button>
                   .
                 </Description>
-                <FormControl>
-                  <Input
-                    id="url"
-                    placeholder={urlLabel}
-                    value={field.value}
-                    onChange={(e) => field.onChange(e.target.value)}
-                    className={cn({
-                      "border-destructive": Boolean(validationErrors?.message),
-                    })}
-                  />
-                </FormControl>
-                <FormMessage />
               </FormItem>
             );
           }}
@@ -86,9 +86,6 @@ const LocalAIProviderDetails: React.FC<LocalAIProviderDetailsProps> = ({
             return (
               <FormItem>
                 <Label htmlFor="models">Models list</Label>
-                <Description>
-                  Comma separated list of available models
-                </Description>
                 <FormControl>
                   <Input
                     id="models"
@@ -101,6 +98,9 @@ const LocalAIProviderDetails: React.FC<LocalAIProviderDetailsProps> = ({
                   />
                 </FormControl>
                 <FormMessage />
+                <Description>
+                  Comma separated list of available models
+                </Description>
               </FormItem>
             );
           }}

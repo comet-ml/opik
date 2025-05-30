@@ -28,6 +28,9 @@ import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersion
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { Description } from "@/components/ui/description";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 
 enum PROMPT_PREVIEW_MODE {
   write = "write",
@@ -102,10 +105,11 @@ const EditPromptVersionDialog: React.FunctionComponent<
           <DialogTitle>Edit prompt</DialogTitle>
         </DialogHeader>
         <DialogAutoScrollBody>
-          <p className="comet-body-s text-muted-slate ">
-            By editing a prompt, a new commit will be created automatically. You
-            can access older versions of the prompt from the <b>Commits</b> tab.
-          </p>
+          <ExplainerDescription
+            className="mb-4"
+            size="sm"
+            {...EXPLAINERS_MAP[EXPLAINER_ID.what_happens_if_i_edit_my_prompt]}
+          />
           <div className="flex flex-col gap-2 pb-4">
             <div className="mt-3 flex items-center justify-between">
               <Label htmlFor="promptTemplate">Prompt</Label>
@@ -145,10 +149,12 @@ const EditPromptVersionDialog: React.FunctionComponent<
                 <TextDiff content1={promptTemplate} content2={template} />
               </div>
             )}
-            <p className="comet-body-xs text-light-slate">
-              You can specify variables using the &quot;mustache&quot; syntax:{" "}
-              {"{{variable}}"}.
-            </p>
+            <Description>
+              {
+                EXPLAINERS_MAP[EXPLAINER_ID.what_format_should_the_prompt_be]
+                  .description
+              }
+            </Description>
           </div>
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="promptMetadata">Commit message</Label>
@@ -172,9 +178,13 @@ const EditPromptVersionDialog: React.FunctionComponent<
                       extensions={[jsonLanguage, EditorView.lineWrapping]}
                     />
                   </div>
-                  <p className="comet-body-xs mt-2 text-light-slate">
-                    {`Enter a valid JSON object using key-value pairs inside curly braces (e.g. {"key": "value"}).`}
-                  </p>
+                  <Description className="mt-2 block">
+                    {
+                      EXPLAINERS_MAP[
+                        EXPLAINER_ID.what_format_should_the_metadata_be
+                      ].description
+                    }
+                  </Description>
                 </AccordionContent>
               </AccordionItem>
               {showInvalidJSON && (

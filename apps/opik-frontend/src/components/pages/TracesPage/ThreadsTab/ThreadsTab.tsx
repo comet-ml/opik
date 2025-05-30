@@ -25,7 +25,7 @@ import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
-import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import NoThreadsPage from "@/components/pages/TracesPage/ThreadsTab/NoThreadsPage";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
@@ -339,7 +339,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         direction="horizontal"
         limitWidth
       >
-        <CalloutAlert {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_threads]} />
+        <ExplainerCallout {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_threads]} />
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"

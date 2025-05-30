@@ -12,18 +12,12 @@ export enum EXPLAINER_ID {
   why_would_i_want_to_add_traces_to_a_dataset = "why_would_i_want_to_add_traces_to_a_dataset",
   hows_the_cost_estimated = "hows_the_cost_estimated",
   whats_the_error_column = "whats_the_error_column",
-  what_happens_if_i_delete_a_trace = "what_happens_if_i_delete_a_trace",
-  what_happens_if_i_delete_a_thread = "what_happens_if_i_delete_a_thread",
   whats_that_prompt_select = "whats_that_prompt_select",
-  i_want_to_use_a_metric_i_dont_see_in_the_list = "i_want_to_use_a_metric_i_dont_see_in_the_list",
-  what_happens_if_i_delete_a_rule = "what_happens_if_i_delete_a_rule",
   i_added_edited_a_new_online_evaluation_rule_now_what = "i_added_edited_a_new_online_evaluation_rule_now_what",
   what_are_these_elements_in_the_tree = "what_are_these_elements_in_the_tree",
   what_is_human_review = "what_is_human_review",
   whats_an_experiment = "whats_an_experiment",
   whats_a_prompt_commit = "whats_a_prompt_commit",
-  i_run_an_experiment_now_what = "i_run_an_experiment_now_what",
-  what_happens_if_i_delete_an_experiment = "what_happens_if_i_delete_an_experiment",
   what_are_experiment_items = "what_are_experiment_items",
   whats_the_experiment_configuration = "whats_the_experiment_configuration",
   what_does_it_mean_to_compare_my_experiments = "what_does_it_mean_to_compare_my_experiments",
@@ -31,8 +25,6 @@ export enum EXPLAINER_ID {
   whats_a_dataset = "whats_a_dataset",
   why_do_i_need_multiple_datasets = "why_do_i_need_multiple_datasets",
   what_format_is_this_to_add_my_dataset_item = "what_format_is_this_to_add_my_dataset_item",
-  what_happens_if_i_delete_a_dataset = "what_happens_if_i_delete_a_dataset",
-  what_happens_if_i_delete_a_dataset_item = "what_happens_if_i_delete_a_dataset_item",
   i_created_edited_my_dataset_now_what = "i_created_edited_my_dataset_now_what",
   i_added_my_dataset_items_now_what = "i_added_my_dataset_items_now_what",
   whats_the_prompt_library = "whats_the_prompt_library",
@@ -41,10 +33,8 @@ export enum EXPLAINER_ID {
   what_are_commits = "what_are_commits",
   how_do_i_write_my_prompt = "how_do_i_write_my_prompt",
   what_happens_if_i_edit_my_prompt = "what_happens_if_i_edit_my_prompt",
-  what_happens_if_i_delete_a_prompt = "what_happens_if_i_delete_a_prompt",
   i_created_edited_a_prompt_now_what = "i_created_edited_a_prompt_now_what",
   whats_the_playground = "whats_the_playground",
-  what_does_reseat_playground_mean = "what_does_reseat_playground_mean",
   no_system_message = "no_system_message",
   whats_these_configuration_things = "whats_these_configuration_things",
   why_do_i_need_an_ai_provider = "why_do_i_need_an_ai_provider",
@@ -52,25 +42,20 @@ export enum EXPLAINER_ID {
   how_do_i_use_the_dataset_in_the_playground = "how_do_i_use_the_dataset_in_the_playground",
   whats_llm_as_a_judge = "whats_llm_as_a_judge",
   whats_a_code_metric = "whats_a_code_metric",
-  whats_is_the_variable_mapping_for = "whats_is_the_variable_mapping_for",
   what_are_feedback_definitions = "what_are_feedback_definitions",
   should_i_use_numerical_or_categorical_score_definitions = "should_i_use_numerical_or_categorical_score_definitions",
   what_format_should_the_metadata_be = "what_format_should_the_metadata_be",
+  what_format_should_the_prompt_be = "what_format_should_the_prompt_be",
   whats_an_optimization_run = "whats_an_optimization_run",
   whats_the_best_score = "whats_the_best_score",
-  what_happens_if_i_delete_an_ai_provider_config = "what_happens_if_i_delete_an_ai_provider_config",
   what_happens_if_i_edit_an_ai_provider = "what_happens_if_i_edit_an_ai_provider",
-  what_happens_if_i_delete_a_project = "what_happens_if_i_delete_a_project",
-  what_happens_if_i_delete_an_optimization_run = "what_happens_if_i_delete_an_optimization_run",
   what_happens_if_i_edit_a_rule = "what_happens_if_i_edit_a_rule",
-  what_happens_if_i_delete_a_feedback_definition = "what_happens_if_i_delete_a_feedback_definition",
   why_would_i_want_to_create_a_new_project = "why_would_i_want_to_create_a_new_project",
   whats_the_commit_history = "whats_the_commit_history",
   why_would_i_compare_commits = "why_would_i_compare_commits",
   whats_the_optimizer = "whats_the_optimizer",
   what_are_trial_items = "what_are_trial_items",
   whats_the_evaluation_run_configuration = "whats_the_evaluation_run_configuration",
-  i_run_an_optimization_run_now_what = "i_run_an_optimization_run_now_what",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
@@ -112,6 +97,8 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     title: "Traces added to dataset",
     description:
       "Run experiments using your dataset to evaluate your LLM's performance and get insights into how your model behaves in live scenarios.",
+    docLink: "/evaluation/overview",
+    docHash: "#running-an-evaluation",
   },
   [EXPLAINER_ID.why_would_i_want_to_add_traces_to_a_dataset]: {
     description:
@@ -127,34 +114,12 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description: "*?",
     type: "help",
   },
-  [EXPLAINER_ID.what_happens_if_i_delete_a_trace]: {
-    title: "Delete traces",
-    description:
-      "Deleting a trace will also remove the trace data from related experiment samples. This action can't be undone. Are you sure you want to continue?",
-  },
-  [EXPLAINER_ID.what_happens_if_i_delete_a_thread]: {
-    title: "Delete thread",
-    description:
-      "Deleting a thread will also remove all traces linked to it and their data. This action can't be undone. Are you sure you want to continue?",
-  },
   [EXPLAINER_ID.whats_that_prompt_select]: {
     description:
-      "Select the LLM-as-a-Judge prompt to use. You can use one of the prompts provided by Opik, or you can define your own.",
-    docLink: "/production/rules",
-    docHash: "#opiks-built-in-llm-as-a-judge-metrics",
-    type: "help",
-  },
-  [EXPLAINER_ID.i_want_to_use_a_metric_i_dont_see_in_the_list]: {
-    description:
-      "Want more LLM-as-a-Judge metrics? Learn how to create your own metrics",
+      "Select the LLM-as-a-Judge prompt to use. You can use one of the prompts provided by Opik, or you can [create your own metrics].",
     docLink: "/production/rules",
     docHash: "#writing-your-own-llm-as-a-judge-metric",
     type: "help",
-  },
-  [EXPLAINER_ID.what_happens_if_i_delete_a_rule]: {
-    title: "Delete evaluation rule",
-    description:
-      "Deleting an online evaluation rule will stop scoring for all new traces. Existing traces that have already been scores won't be affected. This action can't be undone. Are you sure you want to continue?\n\nTip: To pause scoring without deleting, set the sampling rate to 0%.",
   },
   [EXPLAINER_ID.i_added_edited_a_new_online_evaluation_rule_now_what]: {
     title: "Evaluation rule set",
@@ -179,16 +144,6 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
       "Prompt commits capture the exact prompt version used in an experiment, ensuring reproducibility and traceability of results. Manage your prompts in the Prompt library.",
     docLink: "/prompt_engineering/prompt_management",
     type: "help",
-  },
-  [EXPLAINER_ID.i_run_an_experiment_now_what]: {
-    title: "Experiment started",
-    description:
-      "Analyze the results to identify strengths and weaknesses, then iterate by refining prompts, datasets, or evaluation rules to optimize your LLM application's performance.",
-  },
-  [EXPLAINER_ID.what_happens_if_i_delete_an_experiment]: {
-    title: "Delete experiment",
-    description:
-      "Deleting an experiment will remove all samples in the experiment. Related traces won't be affected. This action can't be undone. Are you sure you want to continue?",
   },
   [EXPLAINER_ID.what_are_experiment_items]: {
     description:
@@ -230,16 +185,6 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       'Define input-output examples for evaluating your LLM. Use a valid JSON object with key-value pairs. Example: {"key": "value"}',
   },
-  [EXPLAINER_ID.what_happens_if_i_delete_a_dataset]: {
-    title: "Delete dataset",
-    description:
-      'Deleting this dataset will also remove all its items. Any experiments linked to it will be moved to a "Deleted dataset" group. This action can\'t be undone. Are you sure you want to continue?',
-  },
-  [EXPLAINER_ID.what_happens_if_i_delete_a_dataset_item]: {
-    title: "Delete dataset items",
-    description:
-      "Deleting dataset items will also remove the related sample data from any linked experiments. This action can't be undone. Are you sure you want to continue?",
-  },
   [EXPLAINER_ID.i_created_edited_my_dataset_now_what]: {
     title: "Dataset created",
     description:
@@ -279,13 +224,8 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.what_happens_if_i_edit_my_prompt]: {
     description:
-      "Write prompts as your LLM would receive them, including any dynamic placeholders or formatting.\n\nEditing creates a new version automatically. View history in the Commits tab.",
+      "Write prompts as your LLM would receive them, including any dynamic placeholders or formatting. Editing creates a new version automatically. View history in the Commits tab.",
     docLink: "/agent_optimization/best-practices/prompt_engineering",
-  },
-  [EXPLAINER_ID.what_happens_if_i_delete_a_prompt]: {
-    title: "Delete prompt",
-    description:
-      "Deleting a prompt will also remove all associated commits. This action can't be undone. Are you sure you want to continue?",
   },
   [EXPLAINER_ID.i_created_edited_a_prompt_now_what]: {
     title: "Prompt saved",
@@ -296,11 +236,6 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       "Test before saving a prompt to the library or running a full experiment. Or use it to explore different prompt variations and see how your LLM responds in real time.",
     docLink: "/prompt_engineering/playground",
-  },
-  [EXPLAINER_ID.what_does_reseat_playground_mean]: {
-    title: "Reset playground",
-    description:
-      "Resetting the Playground will discard all unsaved prompts. This action can't be undone. Are you sure you want to continue?",
   },
   [EXPLAINER_ID.no_system_message]: {
     description:
@@ -321,7 +256,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.how_do_i_use_the_dataset_in_the_playground]: {
     description:
-      "Use mustache syntax to reference dataset variables in your prompt. Example: {{question}}",
+      "Use mustache syntax to reference dataset variables in your prompt. Example: ",
   },
   [EXPLAINER_ID.whats_llm_as_a_judge]: {
     description:
@@ -330,10 +265,6 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.whats_a_code_metric]: {
     description:
       "A code metric is a Python function that scores LLM outputs using logic-based rules - like exact matches or keyword checks. Ideal for fast, deterministic evaluations without relying on another LLM.",
-  },
-  [EXPLAINER_ID.whats_is_the_variable_mapping_for]: {
-    description:
-      "Detected variables in your prompt (e.g., {{variable1}}) will appear below. For each one, select a field from a recent trace to map it. This will auto-fill the variable during rule execution.",
   },
   [EXPLAINER_ID.what_are_feedback_definitions]: {
     description:
@@ -348,6 +279,10 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       'Use a valid JSON object with key-value pairs. Example: {"key": "value"}',
   },
+  [EXPLAINER_ID.what_format_should_the_prompt_be]: {
+    description:
+      "Use mustache syntax to reference dataset variables in your prompt. Example: {{question}}.",
+  },
   [EXPLAINER_ID.whats_an_optimization_run]: {
     description:
       "Optimization runs test multiple prompt variations to find the best one based on your metrics.",
@@ -357,35 +292,15 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       "Highest evaluation result achieved during the optimization run, based on your selected metric.",
   },
-  [EXPLAINER_ID.what_happens_if_i_delete_an_ai_provider_config]: {
-    title: "Delete configuration",
-    description:
-      "This configuration is shared across the workspace. Deleting it will remove access for everyone. This action can't be undone. Are you sure you want to proceed?",
-  },
   [EXPLAINER_ID.what_happens_if_i_edit_an_ai_provider]: {
     title: "Editing an existing key",
     description:
       "A key is already set for this provider. Since AI provider configurations are workspace-wide, adding a new key will overwrite the existing one for all users.",
   },
-  [EXPLAINER_ID.what_happens_if_i_delete_a_project]: {
-    title: "Delete project",
-    description:
-      "Deleting a project will also remove all the traces and their data. This action can't be undone. Are you sure you want to continue?",
-  },
-  [EXPLAINER_ID.what_happens_if_i_delete_an_optimization_run]: {
-    title: "Delete optimization run",
-    description:
-      "Deleting an optimization run will remove all its trials and their data. Related traces won't be affected. This action can't be undone. Are you sure you want to continue?",
-  },
   [EXPLAINER_ID.what_happens_if_i_edit_a_rule]: {
     title: "Editing an existing rule",
     description:
       "Changes will only apply to new traces. Existing traces won't be affected.",
-  },
-  [EXPLAINER_ID.what_happens_if_i_delete_a_feedback_definition]: {
-    title: "Delete feedback definition",
-    description:
-      "This action can't be undone. Existing scored traces won't be affected. Are you sure you want to continue?",
   },
   [EXPLAINER_ID.why_would_i_want_to_create_a_new_project]: {
     description:
@@ -415,10 +330,5 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.whats_the_evaluation_run_configuration]: {
     description:
       "The evaluation run configuration captures key settings - like the metric, and optimizer - to keep evaluation runs reproducible and easy to analyze.",
-  },
-  [EXPLAINER_ID.i_run_an_optimization_run_now_what]: {
-    title: "Optimization run started",
-    description:
-      "Opik will test different prompt and model settings to find the best-performing combination. Results may take a while depending on the algorithm and data volume. Once complete, review them to improve your LLM application.",
   },
 };

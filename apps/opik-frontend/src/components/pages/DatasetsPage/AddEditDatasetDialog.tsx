@@ -14,6 +14,8 @@ import { Textarea } from "@/components/ui/textarea";
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
 import { Dataset } from "@/types/datasets";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 type AddEditDatasetDialogProps = {
   dataset?: Dataset;
@@ -74,6 +76,13 @@ const AddEditDatasetDialog: React.FunctionComponent<
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
+        {!isEdit && (
+          <ExplainerDescription
+            className="mb-4"
+            size="sm"
+            {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_multiple_datasets]}
+          />
+        )}
         <div className="flex flex-col gap-2 pb-4">
           <Label htmlFor="datasetName">Name</Label>
           <Input

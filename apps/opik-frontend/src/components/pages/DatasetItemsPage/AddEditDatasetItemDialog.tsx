@@ -5,6 +5,7 @@ import { jsonLanguage } from "@codemirror/lang-json";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Description } from "@/components/ui/description";
 import {
   Dialog,
   DialogClose,
@@ -20,6 +21,7 @@ import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const DATA_PREFILLED_CONTENT = `{
   "input": "<user question>",
@@ -93,6 +95,13 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
                 extensions={[jsonLanguage, EditorView.lineWrapping]}
               />
             </div>
+            <Description>
+              {
+                EXPLAINERS_MAP[
+                  EXPLAINER_ID.what_format_is_this_to_add_my_dataset_item
+                ].description
+              }
+            </Description>
           </div>
           {showInvalidJSON && (
             <Alert variant="destructive">

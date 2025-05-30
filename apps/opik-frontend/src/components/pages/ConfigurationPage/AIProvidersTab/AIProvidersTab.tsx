@@ -15,7 +15,7 @@ import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import AIProvidersRowActionsCell from "@/components/pages/ConfigurationPage/AIProvidersTab/AIProvidersRowActionsCell";
 import { areAllProvidersConfigured } from "@/lib/provider";
 import Loader from "@/components/shared/Loader/Loader";
-import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
@@ -110,7 +110,7 @@ const AIProvidersTab = () => {
 
   return (
     <div>
-      <CalloutAlert
+      <ExplainerCallout
         className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_an_ai_provider]}
       />

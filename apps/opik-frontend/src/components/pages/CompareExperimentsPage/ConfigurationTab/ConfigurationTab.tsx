@@ -20,7 +20,7 @@ import CompareExperimentsConfigCell, {
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import Loader from "@/components/shared/Loader/Loader";
-import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import { convertColumnDataToColumn } from "@/lib/table";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Experiment } from "@/types/datasets";
@@ -171,7 +171,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         direction="horizontal"
         limitWidth
       >
-        <CalloutAlert
+        <ExplainerCallout
           {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_experiment_configuration]}
         />
       </PageBodyStickyContainer>

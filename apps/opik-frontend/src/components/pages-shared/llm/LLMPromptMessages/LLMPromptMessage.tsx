@@ -210,9 +210,7 @@ const LLMPromptMessage = ({
           )}
         </CardContent>
       </Card>
-      {errorText && (
-        <FormErrorSkeleton className="-mt-2">{errorText}</FormErrorSkeleton>
-      )}
+      {errorText && <FormErrorSkeleton>{errorText}</FormErrorSkeleton>}
     </>
   );
 };

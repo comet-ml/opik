@@ -21,6 +21,8 @@ import { Button } from "@/components/ui/button";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import NoData from "@/components/shared/NoData/NoData";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 type SpanWithMetadata = Omit<Span, "type"> & {
   type: BASE_TRACE_DATA_TYPE;
@@ -280,6 +282,12 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
       <div className="mt-4 min-w-[400px] max-w-full">
         <div className="mt-2 flex flex-row items-end gap-2 px-6">
           <div className="comet-title-s">Trace spans</div>
+          <ExplainerIcon
+            className="-ml-1 self-center"
+            {...EXPLAINERS_MAP[
+              EXPLAINER_ID.what_are_these_elements_in_the_tree
+            ]}
+          />
           <div className="comet-body-s pb-[3px] text-muted-slate">
             <div>{traceSpans.length} spans</div>
           </div>

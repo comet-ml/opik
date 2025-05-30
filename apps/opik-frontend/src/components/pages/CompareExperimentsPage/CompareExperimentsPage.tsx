@@ -12,6 +12,8 @@ import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment } from "@/types/datasets";
 import CompareExperimentsDetails from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/CompareExperimentsDetails";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const CompareExperimentsPage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam, {
@@ -64,6 +66,10 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
             </TabsTrigger>
             <TabsTrigger variant="underline" value="scores">
               Feedback scores
+              <ExplainerIcon
+                className="ml-1"
+                {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
+              />
             </TabsTrigger>
           </TabsList>
         </PageBodyStickyContainer>

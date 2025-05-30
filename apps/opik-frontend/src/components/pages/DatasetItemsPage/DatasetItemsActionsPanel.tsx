@@ -34,8 +34,9 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         setOpen={setOpen}
         onConfirm={deleteDatasetItemsHandler}
         title="Delete dataset items"
-        description="Are you sure you want to delete all selected dataset items?"
+        description="Deleting dataset items will also remove the related sample data from any linked experiments. This action can’t be undone. Are you sure you want to continue?"
         confirmText="Delete dataset items"
+        confirmButtonVariant="destructive"
       />
       <TooltipWrapper content="Delete">
         <Button

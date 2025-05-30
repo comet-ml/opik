@@ -43,7 +43,7 @@ import {
 } from "@/lib/table";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
-import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
@@ -687,7 +687,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         direction="horizontal"
         limitWidth
       >
-        <CalloutAlert
+        <ExplainerCallout
           {...(type === TRACE_DATA_TYPE.traces
             ? EXPLAINERS_MAP[EXPLAINER_ID.what_are_traces]
             : EXPLAINERS_MAP[EXPLAINER_ID.what_are_llm_calls])}

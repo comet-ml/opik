@@ -41,9 +41,10 @@ const ExperimentRowActionsCell: React.FunctionComponent<
         open={open}
         setOpen={setOpen}
         onConfirm={deleteExperimentsHandler}
-        title={`Delete ${experiment.name}`}
-        description="Are you sure you want to delete this experiment?"
+        title="Delete experiment"
+        description="Deleting an experiment will remove all samples in the experiment. Related traces won’t be affected. This action can’t be undone. Are you sure you want to continue?"
         confirmText="Delete experiment"
+        confirmButtonVariant="destructive"
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

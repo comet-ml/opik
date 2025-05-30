@@ -34,8 +34,9 @@ const PromptsActionsPanel: React.FunctionComponent<
         setOpen={setOpen}
         onConfirm={deletePromptsHandler}
         title="Delete prompts"
-        description="Are you sure you want to delete all selected prompts?"
+        description="Deleting these prompts will also remove all associated commits. This action cannot be undone. Are you sure you want to continue?"
         confirmText="Delete prompts"
+        confirmButtonVariant="destructive"
       />
       <TooltipWrapper content="Delete">
         <Button
