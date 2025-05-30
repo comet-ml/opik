@@ -160,7 +160,6 @@ const PromptModelSelect = ({
   }, []);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
-    // Don't capture keystrokes if we're typing in the custom model input
     if ((event.target as HTMLElement).getAttribute('data-testid') === 'custom-model-input') {
       return;
     }
@@ -257,7 +256,6 @@ const PromptModelSelect = ({
                   <div className="p-2">
                     <div
                       onKeyDown={(e) => {
-                        // Prevent event from bubbling up to the select
                         e.stopPropagation();
                       }}
                     >
