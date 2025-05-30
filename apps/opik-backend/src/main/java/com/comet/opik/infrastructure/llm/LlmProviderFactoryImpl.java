@@ -82,16 +82,8 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         if (isModelBelongToProvider(model, GeminiModelName.class, GeminiModelName::toString)) {
             return LlmProvider.GEMINI;
         }
-        if (isModelBelongToProvider(model, OpenRouterModelName.class, OpenRouterModelName::toString)) {
+        if (isSlugModelFromOpenRouter(model)) {
             return LlmProvider.OPEN_ROUTER;
-        }
-
-        int colonIndex = model.indexOf(":");
-        if (colonIndex > 0) {
-            String openRouterModel = model.substring(0, colonIndex);
-            if (isModelBelongToProvider(openRouterModel, OpenRouterModelName.class, OpenRouterModelName::toString)) {
-                return LlmProvider.OPEN_ROUTER;
-            }
         }
 
         if (isModelBelongToProvider(model, VertexAIModelName.class, VertexAIModelName::qualifiedName)) {
@@ -111,6 +103,19 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                 .findFirst()
                 .orElseThrow(() -> new BadRequestException("API key not configured for LLM provider '%s'".formatted(
                         llmProvider.getValue())));
+    }
+
+    private boolean isSlugModelFromOpenRouter(String model) {
+        if (isModelBelongToProvider(model, OpenRouterModelName.class, OpenRouterModelName::toString)) {
+            return true;
+        }
+
+        int colonIndex = model.indexOf(":");
+        if (colonIndex > 0) {
+            String openRouterModel = model.substring(0, colonIndex);
+            return isModelBelongToProvider(openRouterModel, OpenRouterModelName.class, OpenRouterModelName::toString);
+        }
+        return false;
     }
 
     private static <E extends Enum<E>> boolean isModelBelongToProvider(
