@@ -96,13 +96,13 @@ class Streamer:
 
     def _all_done(self) -> bool:
         return (
-            self.workers_waiting()
+            self.workers_idling()
             and self._message_queue.empty()
             and (self._batch_manager is None or self._batch_manager.is_empty())
         )
 
-    def workers_waiting(self) -> bool:
-        return all([consumer.waiting for consumer in self._queue_consumers])
+    def workers_idling(self) -> bool:
+        return all([consumer.idling for consumer in self._queue_consumers])
 
     def queue_size(self) -> int:
         return self._message_queue.size()

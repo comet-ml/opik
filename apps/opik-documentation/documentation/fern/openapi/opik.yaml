@@ -5813,6 +5813,10 @@ components:
           enum:
           - default
           - hidden
+        llm_span_count:
+          type: integer
+          format: int32
+          readOnly: true
     ErrorInfo_ExperimentItemBulkWriteView:
       required:
       - exception_type
@@ -8428,6 +8432,10 @@ components:
           enum:
           - default
           - hidden
+        llm_span_count:
+          type: integer
+          format: int32
+          readOnly: true
     TraceThread:
       type: object
       properties:
