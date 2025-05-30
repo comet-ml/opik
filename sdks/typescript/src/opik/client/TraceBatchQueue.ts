@@ -1,11 +1,11 @@
-import { OpikApiClient } from "@/rest_api/Client";
 import { SavedTrace } from "@/tracer/Trace";
 import { BatchQueue } from "./BatchQueue";
+import { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
 
 export class TraceBatchQueue extends BatchQueue<SavedTrace> {
   constructor(
-    private readonly api: OpikApiClient,
-    delay?: number
+    private readonly api: OpikApiClientTemp,
+    delay?: number,
   ) {
     super({ delay, name: "TraceBatchQueue" });
   }
@@ -15,18 +15,21 @@ export class TraceBatchQueue extends BatchQueue<SavedTrace> {
   }
 
   protected async createEntities(traces: SavedTrace[]) {
-    await this.api.traces.createTraces({ traces });
+    await this.api.traces.createTraces({ traces }, this.api.requestOptions);
   }
 
   protected async getEntity(id: string) {
-    return (await this.api.traces.getTraceById(id)) as SavedTrace;
+    return (await this.api.traces.getTraceById(
+      id,
+      this.api.requestOptions,
+    )) as SavedTrace;
   }
 
   protected async updateEntity(id: string, updates: Partial<SavedTrace>) {
-    await this.api.traces.updateTrace(id, updates);
+    await this.api.traces.updateTrace(id, updates, this.api.requestOptions);
   }
 
   protected async deleteEntities(ids: string[]) {
-    await this.api.traces.deleteTraces({ ids });
+    await this.api.traces.deleteTraces({ ids }, this.api.requestOptions);
   }
 }
