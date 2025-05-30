@@ -324,6 +324,7 @@ class TraceDAOImpl implements TraceDAO {
                 sumMap(s.usage) as usage,
                 sum(s.total_estimated_cost) as total_estimated_cost,
                 COUNT(s.id) AS span_count,
+                countIf(s.type = 'llm') AS llm_span_count,
                 groupUniqArrayArray(c.comments_array) as comments,
                 any(fs.feedback_scores) as feedback_scores_list,
                 any(gr.guardrails) as guardrails_validations
@@ -345,7 +346,8 @@ class TraceDAOImpl implements TraceDAO {
                     trace_id,
                     usage,
                     total_estimated_cost,
-                    id
+                    id,
+                    type
                 FROM spans
                 WHERE workspace_id = :workspace_id
                   AND trace_id = :id
@@ -490,7 +492,8 @@ class TraceDAOImpl implements TraceDAO {
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
-                    COUNT(DISTINCT id) as span_count
+                    COUNT(DISTINCT id) as span_count,
+                    countIf(type = 'llm') as llm_span_count
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -602,6 +605,7 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_comments)>, c.comments_array as comments <endif>
                   <if(!exclude_guardrails_validations)>, gagg.guardrails_list as guardrails_validations<endif>
                   <if(!exclude_span_count)>, s.span_count AS span_count<endif>
+                  <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN spans_agg s ON t.id = s.trace_id
@@ -1424,6 +1428,10 @@ class TraceDAOImpl implements TraceDAO {
                 .spanCount(Optional
                         .ofNullable(getValue(exclude, Trace.TraceField.SPAN_COUNT, row, "span_count", Integer.class))
                         .orElse(0))
+                .llmSpanCount(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.LLM_SPAN_COUNT, row, "llm_span_count",
+                                Integer.class))
+                        .orElse(0))
                 .usage(getValue(exclude, Trace.TraceField.USAGE, row, "usage", Map.class))
                 .totalEstimatedCost(Optional
                         .ofNullable(getValue(exclude, Trace.TraceField.TOTAL_ESTIMATED_COST, row,
@@ -1613,6 +1621,8 @@ class TraceDAOImpl implements TraceDAO {
                         template.add("exclude_guardrails_validations",
                                 fields.contains(Trace.TraceField.GUARDRAILS_VALIDATIONS.getValue()));
                         template.add("exclude_span_count", fields.contains(Trace.TraceField.SPAN_COUNT.getValue()));
+                        template.add("exclude_llm_span_count",
+                                fields.contains(Trace.TraceField.LLM_SPAN_COUNT.getValue()));
                     }
                 });
     }
