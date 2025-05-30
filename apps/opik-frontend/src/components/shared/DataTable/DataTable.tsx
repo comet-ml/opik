@@ -351,7 +351,10 @@ const DataTable = <TData, TValue>({
         <Table
           ref={tableRef}
           style={{
-            ...(!autoWidth && { minWidth: table.getTotalSize() }),
+            ...(!autoWidth && {
+              width: `${table.getTotalSize()}px`,
+              minWidth: `${table.getTotalSize()}px`,
+            }),
             ...(tableHeight && { "--data-table-height": `${tableHeight}px` }),
           }}
         >
