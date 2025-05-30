@@ -1,3 +1,4 @@
+import contextvars
 import logging
 import uuid
 from typing import Any, Dict, List, Optional, Union
@@ -40,6 +41,10 @@ class OpikTracer:
         # Use OpikContextStorage instance instead of global context storage module
         # in case we need to use different context storage for ADK in the future
         self._context_storage = context_storage.get_current_context_instance()
+
+        self._root_parent_span_id: contextvars.ContextVar[
+            Optional[str]
+        ] = contextvars.ContextVar("root_parent_span_id", default=None)
 
         self._opik_client = opik_client.get_client_cached()
 
@@ -194,6 +199,10 @@ class OpikTracer:
                 thread_id=thread_id,
             )
             self._start_trace(new_trace_data)
+
+        self._root_parent_span_id.set(
+            current_span_data.id if current_span_data is not None else None
+        )
 
     def after_agent_callback(
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
