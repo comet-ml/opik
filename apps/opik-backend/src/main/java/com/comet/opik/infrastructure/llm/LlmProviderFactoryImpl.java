@@ -86,6 +86,14 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
             return LlmProvider.OPEN_ROUTER;
         }
 
+        int colonIndex = model.indexOf(":");
+        if (colonIndex > 0) {
+            String openRouterModel = model.substring(0, colonIndex);
+            if (isModelBelongToProvider(openRouterModel, OpenRouterModelName.class, OpenRouterModelName::toString)) {
+                return LlmProvider.OPEN_ROUTER;
+            }
+        }
+
         if (isModelBelongToProvider(model, VertexAIModelName.class, VertexAIModelName::qualifiedName)) {
             return LlmProvider.VERTEX_AI;
         }

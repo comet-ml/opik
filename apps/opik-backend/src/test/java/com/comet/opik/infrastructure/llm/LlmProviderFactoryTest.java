@@ -32,6 +32,7 @@ import lombok.SneakyThrows;
 import org.apache.commons.lang3.EnumUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -111,6 +112,37 @@ class LlmProviderFactoryTest {
 
         // assertions
         assertThat(actual.getClass().getSimpleName()).isEqualTo(providerClass);
+    }
+
+    @SneakyThrows
+    @Test
+    void testGetServiceOpenRouterModelWithSlug() {
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        String workspaceId = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+
+        when(llmProviderApiKeyService.find(workspaceId))
+                .thenReturn(ProviderApiKey.ProviderApiKeyPage.builder()
+                        .content(List.of(ProviderApiKey.builder()
+                                .provider(LlmProvider.OPEN_ROUTER)
+                                .apiKey(EncryptionUtils.encrypt(apiKey))
+                                .build()))
+                        .total(1)
+                        .page(1)
+                        .size(1)
+                        .build());
+
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService);
+
+        OpenRouterModule openRouterModule = new OpenRouterModule();
+        OpenAIClientGenerator openRouterClientGenerator = openRouterModule.clientGenerator(llmProviderClientConfig);
+        openRouterModule.llmServiceProvider(llmProviderFactory, openRouterClientGenerator);
+
+        String model = OpenRouterModelName.OPENAI_GPT_4O + ":online";
+
+        LlmProviderService actual = llmProviderFactory.getService(workspaceId, model);
+
+        assertThat(actual.getClass().getSimpleName()).isEqualTo("LlmProviderOpenAi");
     }
 
     private static Stream<Arguments> testGetService() {

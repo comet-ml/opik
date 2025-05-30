@@ -59,6 +59,7 @@ const PromptModelSelect = ({
   const [openConfigDialog, setOpenConfigDialog] = React.useState(false);
   const [filterValue, setFilterValue] = useState("");
   const [openProviderMenu, setOpenProviderMenu] = useState<string | null>(null);
+  const [customModelInput, setCustomModelInput] = useState("");
   const { getProviderModels } = useLLMProviderModelsData();
 
   const { data } = useProviderKeys(
@@ -159,6 +160,11 @@ const PromptModelSelect = ({
   }, []);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
+    // Don't capture keystrokes if we're typing in the custom model input
+    if ((event.target as HTMLElement).getAttribute('data-testid') === 'custom-model-input') {
+      return;
+    }
+
     if (event.key.length === 1) {
       event.preventDefault();
       setFilterValue((filterValue) => `${filterValue}${event.key}`);
@@ -245,6 +251,41 @@ const PromptModelSelect = ({
                   </SelectItem>
                 );
               })}
+              {group.provider === PROVIDER_TYPE.OPEN_ROUTER && (
+                <>
+                  <SelectSeparator className="my-2" />
+                  <div className="p-2">
+                    <div
+                      onKeyDown={(e) => {
+                        // Prevent event from bubbling up to the select
+                        e.stopPropagation();
+                      }}
+                    >
+                      <Input
+                        data-testid="custom-model-input"
+                        placeholder="Enter model name"
+                        value={customModelInput}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          setCustomModelInput(e.target.value);
+                        }}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === 'Enter' && customModelInput) {
+                            e.preventDefault();
+                            handleOnChange(customModelInput as PROVIDER_MODEL_TYPE);
+                            setCustomModelInput("");
+                          }
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
             </PopoverContent>
           </Popover>
         ))}
@@ -252,10 +293,10 @@ const PromptModelSelect = ({
     );
   };
 
-  const renderProviderValueIcon = () => {
-    if (!provider) {
-      return null;
-    }
+const renderProviderValueIcon = () => {
+  if (!provider) {
+    return null;
+  }
 
     const Icon = PROVIDERS[provider].icon;
 
