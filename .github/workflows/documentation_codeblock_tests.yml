@@ -18,7 +18,8 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git diff
           ref: ${{ github.event.pull_request.base.ref }}
-          
+
+
       - id: paths
         working-directory: apps/opik-documentation/documentation
         run: |
