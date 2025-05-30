@@ -44,6 +44,7 @@ export const TracePublic: core.serialization.ObjectSchema<serializers.TracePubli
         duration: core.serialization.number().optional(),
         threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
         visibilityMode: core.serialization.property("visibility_mode", TracePublicVisibilityMode.optional()),
+        llmSpanCount: core.serialization.property("llm_span_count", core.serialization.number().optional()),
     });
 
 export declare namespace TracePublic {
@@ -71,5 +72,6 @@ export declare namespace TracePublic {
         duration?: number | null;
         thread_id?: string | null;
         visibility_mode?: TracePublicVisibilityMode.Raw | null;
+        llm_span_count?: number | null;
     }
 }

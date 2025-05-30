@@ -31,4 +31,5 @@ export interface Trace {
     duration?: number;
     threadId?: string;
     visibilityMode?: OpikApi.TraceVisibilityMode;
+    llmSpanCount?: number;
 }
