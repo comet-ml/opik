@@ -10,7 +10,7 @@ export const processSorting = (sorting?: ColumnSort[]) => {
 
   if (sorting && sorting.length > 0) {
     sorting.forEach((column) => {
-      const { id, desc } = mapFeedbackScoresColumn(column);
+      const { id, desc } = mapUsageColumn(mapFeedbackScoresColumn(column));
 
       sortingFields.push({
         field: id,
@@ -34,6 +34,16 @@ export const mapFeedbackScoresColumn = (column: ColumnSort): ColumnSort => {
         `${COLUMN_FEEDBACK_SCORES_ID}_`,
         `${COLUMN_FEEDBACK_SCORES_ID}.`,
       ),
+    };
+  }
+  return column;
+};
+
+export const mapUsageColumn = (column: ColumnSort): ColumnSort => {
+  if (column.id.startsWith("usage_")) {
+    return {
+      ...column,
+      id: column.id.replace("usage_", "usage."),
     };
   }
   return column;
