@@ -144,6 +144,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                 trace = Trace.builder()
                         .id(idGenerator.generateId())
                         .projectName(ProjectService.DEFAULT_PROJECT)
+                        .output(item.evaluateTaskResult())
                         .startTime(now)
                         .endTime(now)
                         .visibilityMode(VisibilityMode.HIDDEN)
