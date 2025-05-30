@@ -1,5 +1,6 @@
 import getpass
 import logging
+import os
 from typing import Final, Optional
 
 import httpx
@@ -78,7 +79,7 @@ class OpikConfigurator:
     def _configure_cloud(self) -> None:
         """
         Configure the non-local Opik instance by handling API key and workspace settings.
-        non-local means both cloud and onprem.
+        Non-local means both cloud and onprem.
         """
         # Handle API key: get or prompt for one if needed
         update_config_with_api_key = self._set_api_key()
@@ -91,6 +92,9 @@ class OpikConfigurator:
             self._update_config()
         else:
             self._update_config(save_to_file=False)
+            _set_environment_variables_for_integrations(
+                api_key=self.api_key, workspace=self.workspace
+            )
             LOGGER.info(
                 "Opik is already configured. You can check the settings by viewing the config file at %s",
                 self.current_config.config_file_fullpath,
@@ -268,7 +272,7 @@ class OpikConfigurator:
                 )
             return True if self.force else False
 
-        # Case 2: Use workspace from current configuration if not forced to change
+        # Case 2: Use workspace from the current configuration if not forced to change
         if (
             "workspace" in self.current_config.model_fields_set
             and self.current_config.workspace != OPIK_WORKSPACE_DEFAULT_NAME
@@ -447,6 +451,21 @@ class OpikConfigurator:
             )
 
         self.base_url = extracted_base_url
+
+
+def _set_environment_variables_for_integrations(
+    api_key: Optional[str], workspace: Optional[str]
+) -> None:
+    """
+    Environment variables are set for use by some integrations (liteLLM, etc.) when both the API key and workspace name
+    are provided by the user. According to the current implementation logic, these values will not be
+    saved to the OPIK configuration file. As a result, some third-party integrations will not be able to use them.
+    This is a workaround for this issue: https://github.com/comet-ml/opik/issues/2118
+    """
+    if api_key is not None:
+        os.environ["OPIK_API_KEY"] = api_key
+    if workspace is not None:
+        os.environ["OPIK_WORKSPACE"] = workspace
 
 
 def _extract_base_url_from_api_key(api_key: str) -> Optional[str]:
