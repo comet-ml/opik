@@ -1,15 +1,17 @@
 import dataclasses
 import datetime
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from opik import dict_utils, Attachment
 from .. import span
-from ... import datetime_helpers, id_helpers
-from ...types import (
+from opik import datetime_helpers, id_helpers, llm_usage
+from opik.types import (
     CreatedByType,
     ErrorInfoDict,
     FeedbackScoreDict,
+    LLMProvider,
+    SpanType,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -45,12 +47,46 @@ class TraceData:
     thread_id: Optional[str] = None
     attachments: Optional[List[Attachment]] = None
 
-    def create_child_span_data(self, **data: Any) -> span.SpanData:
+    def create_child_span_data(
+        self,
+        name: Optional[str] = None,
+        type: SpanType = "general",
+        start_time: Optional[datetime.datetime] = None,
+        end_time: Optional[datetime.datetime] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        input: Optional[Dict[str, Any]] = None,
+        output: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
+        feedback_scores: Optional[List[FeedbackScoreDict]] = None,
+        model: Optional[str] = None,
+        provider: Optional[Union[str, LLMProvider]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
+        total_cost: Optional[float] = None,
+        attachments: Optional[List[Attachment]] = None,
+    ) -> span.SpanData:
+        start_time = (
+            start_time if start_time is not None else datetime_helpers.local_timestamp()
+        )
         return span.SpanData(
             trace_id=self.id,
             parent_span_id=None,
             project_name=self.project_name,
-            **data,
+            name=name,
+            type=type,
+            start_time=start_time,
+            end_time=end_time,
+            metadata=metadata,
+            input=input,
+            output=output,
+            tags=tags,
+            usage=usage,
+            feedback_scores=feedback_scores,
+            model=model,
+            provider=provider,
+            error_info=error_info,
+            total_cost=total_cost,
+            attachments=attachments,
         )
 
     def update(self, **new_data: Any) -> "TraceData":

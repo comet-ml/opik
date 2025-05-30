@@ -123,7 +123,14 @@ class OpikTracingProcessor(tracing.TracingProcessor):
             )
             assert opik_span_or_trace_data is not None
             opik_span_data = opik_span_or_trace_data.create_child_span_data(
-                **parsed_span_data.__dict__
+                name=parsed_span_data.name,
+                type=parsed_span_data.type,
+                input=parsed_span_data.input,
+                output=parsed_span_data.output,
+                metadata=parsed_span_data.metadata,
+                usage=parsed_span_data.usage,
+                model=parsed_span_data.model,
+                provider=parsed_span_data.provider,
             )
 
             self._opik_context_storage.add_span_data(opik_span_data)
