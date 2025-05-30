@@ -1,5 +1,5 @@
-import { loadConfig, OpikConfig } from "@/config/Config";
-import { OpikApiClient, OpikApiError } from "@/rest_api";
+import { ConstructorOpikConfig, loadConfig, OpikConfig } from "@/config/Config";
+import { OpikApiError } from "@/rest_api";
 import type { Trace as ITrace } from "@/rest_api/api";
 import { Trace } from "@/tracer/Trace";
 import { generateId } from "@/utils/generateId";
@@ -9,6 +9,10 @@ import { SpanBatchQueue } from "./SpanBatchQueue";
 import { SpanFeedbackScoresBatchQueue } from "./SpanFeedbackScoresBatchQueue";
 import { TraceBatchQueue } from "./TraceBatchQueue";
 import { TraceFeedbackScoresBatchQueue } from "./TraceFeedbackScoresBatchQueue";
+import {
+  OpikApiClientTemp,
+  OpikApiClientTempOptions,
+} from "@/client/OpikApiClientTemp";
 import { DatasetBatchQueue } from "./DatasetBatchQueue";
 import { Dataset, DatasetItemData, DatasetNotFoundError } from "@/dataset";
 
@@ -19,7 +23,7 @@ interface TraceData extends Omit<ITrace, "startTime"> {
 export const clients: OpikClient[] = [];
 
 export class OpikClient {
-  public api: OpikApiClient;
+  public api: OpikApiClientTemp;
   public config: OpikConfig;
   public spanBatchQueue: SpanBatchQueue;
   public traceBatchQueue: TraceBatchQueue;
@@ -29,22 +33,36 @@ export class OpikClient {
 
   private lastProjectNameLogged: string | undefined;
 
-  constructor(explicitConfig?: Partial<OpikConfig>) {
+  constructor(explicitConfig?: Partial<ConstructorOpikConfig>) {
     logger.debug("Initializing OpikClient with config:", explicitConfig);
+
     this.config = loadConfig(explicitConfig);
-    this.api = new OpikApiClient({
+    const apiConfig: OpikApiClientTempOptions = {
       apiKey: this.config.apiKey,
       environment: this.config.apiUrl,
       workspaceName: this.config.workspaceName,
-    });
+    };
+
+    if (explicitConfig?.headers) {
+      logger.debug(
+        "Initializing OpikClient with additional headers:",
+        explicitConfig?.headers,
+      );
+
+      apiConfig.requestOptions = {
+        headers: explicitConfig?.headers,
+      };
+    }
+
+    this.api = new OpikApiClientTemp(apiConfig);
 
     this.spanBatchQueue = new SpanBatchQueue(this.api);
     this.traceBatchQueue = new TraceBatchQueue(this.api);
     this.spanFeedbackScoresBatchQueue = new SpanFeedbackScoresBatchQueue(
-      this.api
+      this.api,
     );
     this.traceFeedbackScoresBatchQueue = new TraceFeedbackScoresBatchQueue(
-      this.api
+      this.api,
     );
     this.datasetBatchQueue = new DatasetBatchQueue(this.api);
 
@@ -63,7 +81,7 @@ export class OpikClient {
     });
 
     logger.info(
-      `Started logging traces to the "${projectName}" project at ${createLink(projectUrl)}`
+      `Started logging traces to the "${projectName}" project at ${createLink(projectUrl)}`,
     );
 
     this.lastProjectNameLogged = projectName;
@@ -79,7 +97,7 @@ export class OpikClient {
         ...traceData,
         projectName,
       },
-      this
+      this,
     );
 
     this.traceBatchQueue.create(trace.data);
@@ -97,7 +115,7 @@ export class OpikClient {
    * @throws Error if the dataset doesn't exist
    */
   public getDataset = async <T extends DatasetItemData = DatasetItemData>(
-    name: string
+    name: string,
   ): Promise<Dataset<T>> => {
     logger.debug(`Getting dataset with name "${name}"`);
     try {
@@ -126,7 +144,7 @@ export class OpikClient {
    */
   public createDataset = async <T extends DatasetItemData = DatasetItemData>(
     name: string,
-    description?: string
+    description?: string,
   ): Promise<Dataset<T>> => {
     logger.debug(`Creating dataset with name "${name}"`);
 
@@ -159,10 +177,10 @@ export class OpikClient {
     T extends DatasetItemData = DatasetItemData,
   >(
     name: string,
-    description?: string
+    description?: string,
   ): Promise<Dataset<T>> => {
     logger.debug(
-      `Attempting to retrieve or create dataset with name: "${name}"`
+      `Attempting to retrieve or create dataset with name: "${name}"`,
     );
 
     try {
@@ -170,7 +188,7 @@ export class OpikClient {
     } catch (error) {
       if (error instanceof DatasetNotFoundError) {
         logger.info(
-          `Dataset "${name}" not found. Proceeding to create a new one.`
+          `Dataset "${name}" not found. Proceeding to create a new one.`,
         );
         return this.createDataset(name, description);
       }
@@ -186,7 +204,7 @@ export class OpikClient {
    * @returns List of Dataset objects
    */
   public getDatasets = async <T extends DatasetItemData = DatasetItemData>(
-    maxResults: number = 100
+    maxResults: number = 100,
   ): Promise<Dataset<T>[]> => {
     logger.debug(`Getting all datasets (limit: ${maxResults})`);
 

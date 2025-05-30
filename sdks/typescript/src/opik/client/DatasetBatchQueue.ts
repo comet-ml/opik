@@ -1,6 +1,6 @@
-import { OpikApiClient } from "@/rest_api/Client";
 import { DatasetWrite } from "@/rest_api/api/resources/datasets/client/requests/DatasetWrite";
 import { BatchQueue } from "./BatchQueue";
+import { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
 
 /**
  * Batch queue for dataset operations that allows efficient batching of dataset CRUD operations.
@@ -14,8 +14,8 @@ export class DatasetBatchQueue extends BatchQueue<DatasetWrite> {
    * @param delay Optional delay in milliseconds before flushing the queue (defaults to 300ms)
    */
   constructor(
-    private readonly api: OpikApiClient,
-    delay?: number
+    private readonly api: OpikApiClientTemp,
+    delay?: number,
   ) {
     super({ delay, name: "DatasetBatchQueue" });
   }
@@ -38,7 +38,7 @@ export class DatasetBatchQueue extends BatchQueue<DatasetWrite> {
   protected async createEntities(datasets: DatasetWrite[]): Promise<void> {
     // Create datasets one by one since the API doesn't support batch creation
     for (const dataset of datasets) {
-      await this.api.datasets.createDataset(dataset);
+      await this.api.datasets.createDataset(dataset, this.api.requestOptions);
     }
   }
 
@@ -50,7 +50,10 @@ export class DatasetBatchQueue extends BatchQueue<DatasetWrite> {
    */
   protected async getEntity(id: string) {
     try {
-      const response = await this.api.datasets.getDatasetById(id);
+      const response = await this.api.datasets.getDatasetById(
+        id,
+        this.api.requestOptions,
+      );
       return response;
     } catch {
       // Return undefined if dataset not found or another error occurs
@@ -66,13 +69,17 @@ export class DatasetBatchQueue extends BatchQueue<DatasetWrite> {
    */
   protected async updateEntity(
     id: string,
-    updates: Partial<DatasetWrite>
+    updates: Partial<DatasetWrite>,
   ): Promise<void> {
-    await this.api.datasets.updateDataset(id, {
-      name: updates.name || "",
-      visibility: updates.visibility,
-      description: updates.description,
-    });
+    await this.api.datasets.updateDataset(
+      id,
+      {
+        name: updates.name || "",
+        visibility: updates.visibility,
+        description: updates.description,
+      },
+      this.api.requestOptions,
+    );
   }
 
   /**
@@ -81,8 +88,11 @@ export class DatasetBatchQueue extends BatchQueue<DatasetWrite> {
    * @param ids Array of dataset IDs to delete
    */
   protected async deleteEntities(ids: string[]): Promise<void> {
-    await this.api.datasets.deleteDatasetsBatch({
-      ids,
-    });
+    await this.api.datasets.deleteDatasetsBatch(
+      {
+        ids,
+      },
+      this.api.requestOptions,
+    );
   }
 }
