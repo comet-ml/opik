@@ -114,6 +114,23 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     label: "Trace count",
     type: COLUMN_TYPE.number,
   },
+  // Add new cost columns here
+  {
+    id: "total_estimated_cost",
+    label: "Total Est. Cost",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) =>
+      row.total_estimated_cost ? row.total_estimated_cost : "-",
+  },
+  {
+    id: "total_estimated_cost_avg",
+    label: "Avg. Cost per Trace",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) =>
+      row.total_estimated_cost_avg
+        ? formatNumericData(row.total_estimated_cost_avg)
+        : "-",
+  },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Feedback scores",

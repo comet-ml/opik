@@ -54,7 +54,7 @@
     "@sentry/react": "^9.1.0",
     "@tanstack/react-query": "^5.45.0",
     "@tanstack/react-router": "^1.36.3",
-    "@tanstack/react-table": "^8.17.3",
+    "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.4",
     "@types/diff": "^5.2.2",
     "@types/md5": "^2.3.5",
