@@ -126,7 +126,7 @@ class ExperimentDAO {
             ;
             """;
 
- private static final String FIND = """
+    private static final String FIND = """
             WITH experiments_final AS (
                 SELECT
                     *
