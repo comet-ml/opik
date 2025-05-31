@@ -30,4 +30,6 @@ export interface Trace {
     /** Duration in milliseconds as a decimal number to support sub-millisecond precision */
     duration?: number;
     threadId?: string;
+    visibilityMode?: OpikApi.TraceVisibilityMode;
+    llmSpanCount?: number;
 }

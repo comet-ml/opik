@@ -13,6 +13,7 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import TagCell from "@/components/shared/DataTableCells/TagCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import Loader from "@/components/shared/Loader/Loader";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
@@ -34,6 +35,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import FeedbackDefinitionsActionsPanel from "@/components/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsActionsPanel";
 import FeedbackScoreNameCell from "@/components/shared/DataTableCells/FeedbackScoreNameCell";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 export const getRowId = (f: FeedbackDefinition) => f.id;
 
@@ -186,6 +188,10 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
 
   return (
     <div>
+      <ExplainerCallout
+        className="mb-4"
+        {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_definitions]}
+      />
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
           searchText={search}
@@ -197,7 +203,7 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
 
         <div className="flex items-center gap-2">
           <FeedbackDefinitionsActionsPanel feedbackDefinitions={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}

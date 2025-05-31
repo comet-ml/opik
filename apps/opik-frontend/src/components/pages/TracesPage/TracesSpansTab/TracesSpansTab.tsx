@@ -43,6 +43,7 @@ import {
 } from "@/lib/table";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
@@ -82,6 +83,7 @@ import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import GuardrailsCell from "@/components/shared/DataTableCells/GuardrailsCell";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -180,6 +182,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     label: "Estimated cost",
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_cost_estimated],
   },
 ];
 
@@ -487,6 +490,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               accessorFn: (row: BaseTraceData) => get(row, "span_count", "-"),
             },
             {
+              id: "llm_span_count",
+              label: "LLM calls count",
+              type: COLUMN_TYPE.number,
+              accessorFn: (row: BaseTraceData) =>
+                get(row, "llm_span_count", "-"),
+            },
+            {
               id: "thread_id",
               label: "Thread ID",
               type: COLUMN_TYPE.string,
@@ -495,6 +505,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 callback: handleThreadIdClick,
                 asId: true,
               },
+              explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_threads],
             },
           ]
         : []),
@@ -672,6 +683,17 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   return (
     <>
       <PageBodyStickyContainer
+        className="pb-4"
+        direction="horizontal"
+        limitWidth
+      >
+        <ExplainerCallout
+          {...(type === TRACE_DATA_TYPE.traces
+            ? EXPLAINERS_MAP[EXPLAINER_ID.what_are_traces]
+            : EXPLAINERS_MAP[EXPLAINER_ID.what_are_llm_calls])}
+        />
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
         limitWidth
@@ -699,7 +721,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             columnsToExport={columnsToExport}
             type={type as TRACE_DATA_TYPE}
           />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <TooltipWrapper
             content={`Refresh ${
               type === TRACE_DATA_TYPE.traces ? "traces" : "LLM calls"

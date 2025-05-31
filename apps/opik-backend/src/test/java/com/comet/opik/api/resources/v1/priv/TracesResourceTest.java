@@ -20,6 +20,7 @@ import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.Filter;
@@ -62,6 +63,7 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.usagelimit.Quota;
+import com.comet.opik.podam.InRangeStrategy;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -145,7 +147,11 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NAM
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_THREADS;
 import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
+import static com.comet.opik.api.validate.InRangeValidator.MAX_ANALYTICS_DB;
+import static com.comet.opik.api.validate.InRangeValidator.MAX_ANALYTICS_DB_PRECISION_9;
+import static com.comet.opik.api.validate.InRangeValidator.MIN_ANALYTICS_DB;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -194,10 +200,12 @@ class TracesResourceTest {
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.GUARDRAILS_VALIDATIONS,
                 it -> it.toBuilder().guardrailsValidations(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.SPAN_COUNT, it -> it.toBuilder().spanCount(0).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.LLM_SPAN_COUNT, it -> it.toBuilder().llmSpanCount(0).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.TOTAL_ESTIMATED_COST,
                 it -> it.toBuilder().totalEstimatedCost(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.THREAD_ID, it -> it.toBuilder().threadId(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.DURATION, it -> it.toBuilder().duration(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.VISIBILITY_MODE, it -> it.toBuilder().visibilityMode(null).build());
     }
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -4355,8 +4363,9 @@ class TracesResourceTest {
 
         assertThat(actualTraces)
                 .usingRecursiveComparison()
-                .ignoringFields(IGNORED_FIELDS_TRACES)
+                .ignoringFields(IGNORED_FIELDS_THREADS)
                 .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                 .isEqualTo(expectedThreads);
 
         for (int i = 0; i < expectedThreads.size(); i++) {
@@ -4537,6 +4546,19 @@ class TracesResourceTest {
                             .build())
                     .toList();
 
+            List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .usage(spanResourceClient.getTokenUsage())
+                            .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
+                            .traceId(traces.getFirst().id())
+                            .projectName(projectName)
+                            .totalEstimatedCost(null)
+                            .build())
+                    .toList();
+
+            batchCreateSpansAndAssert(spans, API_KEY, TEST_WORKSPACE);
+
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
             var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
@@ -4552,6 +4574,8 @@ class TracesResourceTest {
                     .endTime(trace.endTime())
                     .numberOfMessages(traces.size() * 2L)
                     .id(threadId)
+                    .totalEstimatedCost(calculateEstimatedCost(spans))
+                    .usage(aggregateSpansUsage(spans))
                     .createdAt(trace.createdAt())
                     .lastUpdatedAt(trace.lastUpdatedAt())
                     .build());
@@ -4667,7 +4691,7 @@ class TracesResourceTest {
 
             var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
 
-            List<TraceThread> expectedThreads = getExpectedThreads(expectedTraces, projectId, threadId);
+            List<TraceThread> expectedThreads = getExpectedThreads(expectedTraces, projectId, threadId, List.of());
 
             var filter = getFilter.apply(expectedTraces);
 
@@ -4676,7 +4700,8 @@ class TracesResourceTest {
 
     }
 
-    private List<TraceThread> getExpectedThreads(List<Trace> expectedTraces, UUID projectId, String threadId) {
+    private List<TraceThread> getExpectedThreads(List<Trace> expectedTraces, UUID projectId, String threadId,
+            List<Span> spans) {
         return expectedTraces.isEmpty()
                 ? List.of()
                 : List.of(TraceThread.builder()
@@ -4697,6 +4722,8 @@ class TracesResourceTest {
                                 .endTime())
                         .numberOfMessages(expectedTraces.size() * 2L)
                         .id(threadId)
+                        .totalEstimatedCost(calculateEstimatedCost(spans))
+                        .usage(aggregateSpansUsage(spans))
                         .createdAt(expectedTraces.stream().min(Comparator.comparing(Trace::createdAt)).orElseThrow()
                                 .createdAt())
                         .lastUpdatedAt(
@@ -4935,6 +4962,7 @@ class TracesResourceTest {
                 List<Span> spansForTrace = IntStream.range(0, trace.spanCount())
                         .mapToObj(j -> factory.manufacturePojo(Span.class).toBuilder()
                                 .projectName(projectName)
+                                .type(SpanType.llm)
                                 .traceId(trace.id())
                                 .build())
                         .toList();
@@ -4953,9 +4981,15 @@ class TracesResourceTest {
                 returnedTraces.stream()
                         .filter(returned -> returned.id().equals(created.id()))
                         .findFirst()
-                        .ifPresentOrElse(returned -> assertThat(returned.spanCount())
-                                .as("Trace with id %s should have spanCount %d", created.id(), created.spanCount())
-                                .isEqualTo(created.spanCount()),
+                        .ifPresentOrElse(returned -> {
+                            assertThat(returned.spanCount())
+                                    .as("Trace with id %s should have spanCount %d", created.id(), created.spanCount())
+                                    .isEqualTo(created.spanCount());
+                            assertThat(returned.llmSpanCount())
+                                    .as("Trace with id %s should have llmSpanCount %d", created.id(),
+                                            created.spanCount())
+                                    .isEqualTo(created.spanCount());
+                        },
                                 () -> assertThat(false)
                                         .as("Trace with id %s should be present", created.id())
                                         .isTrue());
@@ -4968,6 +5002,15 @@ class TracesResourceTest {
 
             assertThat(actualTotalSpanCount)
                     .as("Total spanCount across all traces should match the expected total")
+                    .isEqualTo(expectedTotalSpanCount);
+
+            int actualTotalLlmSpanCount = returnedTraces.stream()
+                    .filter(rt -> traces.stream().anyMatch(t -> t.id().equals(rt.id())))
+                    .mapToInt(Trace::llmSpanCount)
+                    .sum();
+
+            assertThat(actualTotalLlmSpanCount)
+                    .as("Total llmSpanCount across all traces should match the expected total")
                     .isEqualTo(expectedTotalSpanCount);
         }
         private Stream<Arguments> getTracesByProject__whenSortingByValidFields__thenReturnTracesSorted() {
@@ -5657,6 +5700,7 @@ class TracesResourceTest {
                     .projectName("project-" + RandomStringUtils.secure().nextAlphanumeric(32))
                     .startTime(Instant.now())
                     .createdAt(Instant.now())
+                    .visibilityMode(VisibilityMode.DEFAULT)
                     .build();
             var id = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
@@ -5776,6 +5820,7 @@ class TracesResourceTest {
                     .mapToObj(i -> Trace.builder()
                             .projectName(projectName)
                             .startTime(Instant.now())
+                            .visibilityMode(VisibilityMode.DEFAULT)
                             .build())
                     .toList();
             traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
@@ -5791,6 +5836,7 @@ class TracesResourceTest {
                             .id(generator.generate())
                             .startTime(Instant.now())
                             .createdAt(Instant.now())
+                            .visibilityMode(VisibilityMode.DEFAULT)
                             .build())
                     .toList();
             traceResourceClient.batchCreateTraces(expectedTraces0, API_KEY, TEST_WORKSPACE);
@@ -5872,6 +5918,100 @@ class TracesResourceTest {
                     expectedTraces2.reversed(), // finds the previous
                     unexpectedTraces, // Does not find the update attempt
                     API_KEY);
+        }
+
+        Stream<Arguments> testInRange() {
+            return Stream.of(
+                    arguments(
+                            Instant.parse(MIN_ANALYTICS_DB),
+                            Instant.parse(MIN_ANALYTICS_DB),
+                            Instant.parse(MIN_ANALYTICS_DB)),
+                    arguments(
+                            Instant.parse(MAX_ANALYTICS_DB_PRECISION_9).minusNanos(1),
+                            Instant.parse(MAX_ANALYTICS_DB_PRECISION_9).minusNanos(1),
+                            Instant.parse(MAX_ANALYTICS_DB).minus(1, ChronoUnit.MICROS)),
+                    arguments(
+                            InRangeStrategy.INSTANCE.getRandomInstant(MIN_ANALYTICS_DB, MAX_ANALYTICS_DB_PRECISION_9),
+                            InRangeStrategy.INSTANCE.getRandomInstant(MIN_ANALYTICS_DB, MAX_ANALYTICS_DB_PRECISION_9),
+                            InRangeStrategy.INSTANCE.getRandomInstant(MIN_ANALYTICS_DB, MAX_ANALYTICS_DB)),
+                    arguments(
+                            Instant.now(),
+                            Instant.now(),
+                            Instant.now()),
+                    arguments(
+                            Instant.now(),
+                            null,
+                            null));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void testInRange(Instant startTime, Instant endTime, Instant lastUpdatedAt) {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var expectedTraces = IntStream.range(0, 1)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .startTime(startTime)
+                            .endTime(endTime)
+                            .lastUpdatedAt(lastUpdatedAt)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(startTime, endTime))
+                            .comments(null)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
+
+            getAndAssertPage(
+                    TEST_WORKSPACE,
+                    projectName,
+                    null,
+                    List.of(),
+                    List.of(),
+                    expectedTraces.reversed(),
+                    List.of(),
+                    API_KEY);
+        }
+
+        Stream<Arguments> testInRangeError() {
+            return Stream.of(
+                    arguments(
+                            Instant.parse(MIN_ANALYTICS_DB).minusNanos(1),
+                            Instant.parse(MIN_ANALYTICS_DB).minusNanos(1),
+                            Instant.parse(MIN_ANALYTICS_DB).minusNanos(1)),
+                    arguments(
+                            Instant.parse(MAX_ANALYTICS_DB_PRECISION_9),
+                            Instant.parse(MAX_ANALYTICS_DB_PRECISION_9),
+                            Instant.parse(MAX_ANALYTICS_DB)));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void testInRangeError(Instant startTime, Instant endTime, Instant lastUpdatedAt) {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var expectedTraces = IntStream.range(0, 1)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .startTime(startTime)
+                            .endTime(endTime)
+                            .lastUpdatedAt(lastUpdatedAt)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(startTime, endTime))
+                            .comments(null)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            try (var actualResponse = traceResourceClient.callBatchCreateTraces(
+                    expectedTraces, API_KEY, TEST_WORKSPACE)) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedErrors = List.of(
+                        "traces[0].startTime must be after or equal 1970-01-01T00:00:00.000000Z and before 2262-04-11T23:47:16.000000000Z",
+                        "traces[0].endTime must be after or equal 1970-01-01T00:00:00.000000Z and before 2262-04-11T23:47:16.000000000Z",
+                        "traces[0].lastUpdatedAt must be after or equal 1970-01-01T00:00:00.000000Z and before 2300-01-01T00:00:00.000000Z");
+                var actualError = actualResponse.readEntity(ErrorMessage.class);
+                assertThat(actualError.errors()).containsExactlyInAnyOrderElementsOf(expectedErrors);
+            }
         }
 
         @ParameterizedTest
@@ -6301,6 +6441,7 @@ class TracesResourceTest {
                     .id(generator.generate())
                     .startTime(Instant.now().minusSeconds(10))
                     .createdAt(Instant.now())
+                    .visibilityMode(VisibilityMode.DEFAULT)
                     .build();
             id = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
         }
@@ -7626,6 +7767,19 @@ class TracesResourceTest {
                             .build())
                     .toList();
 
+            List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .usage(spanResourceClient.getTokenUsage())
+                            .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
+                            .traceId(traces.getFirst().id())
+                            .projectName(projectName)
+                            .totalEstimatedCost(null)
+                            .build())
+                    .toList();
+
+            batchCreateSpansAndAssert(spans, API_KEY, TEST_WORKSPACE);
+
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
             var expectedTraces = traceResourceClient.getByProjectName(projectName, API_KEY, TEST_WORKSPACE);
@@ -7634,12 +7788,13 @@ class TracesResourceTest {
 
             var actualThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
 
-            var expectedThread = getExpectedThreads(expectedTraces, projectId, threadId);
+            var expectedThread = getExpectedThreads(expectedTraces, projectId, threadId, spans);
 
             assertThat(List.of(actualThread))
                     .usingRecursiveComparison()
-                    .ignoringFields(IGNORED_FIELDS_TRACES)
+                    .ignoringFields(IGNORED_FIELDS_THREADS)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .isEqualTo(expectedThread);
         }
 
@@ -7729,6 +7884,9 @@ class TracesResourceTest {
     }
 
     private Map<String, Long> aggregateSpansUsage(List<Span> spans) {
+        if (CollectionUtils.isEmpty(spans)) {
+            return null;
+        }
         return spans.stream()
                 .flatMap(span -> span.usage().entrySet().stream())
                 .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), Long.valueOf(entry.getValue())))

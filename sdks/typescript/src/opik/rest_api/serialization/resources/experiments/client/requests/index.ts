@@ -1,6 +1,6 @@
 export { ExperimentWrite } from "./ExperimentWrite";
 export { ExperimentItemsBatch } from "./ExperimentItemsBatch";
 export { ExperimentItemsDelete } from "./ExperimentItemsDelete";
-export { ExperimentItemBulkUploadWrite } from "./ExperimentItemBulkUploadWrite";
+export { ExperimentItemBulkUploadExperimentItemBulkWriteView } from "./ExperimentItemBulkUploadExperimentItemBulkWriteView";
 export { ExperimentItemStreamRequest } from "./ExperimentItemStreamRequest";
 export { ExperimentStreamRequestPublic } from "./ExperimentStreamRequestPublic";
