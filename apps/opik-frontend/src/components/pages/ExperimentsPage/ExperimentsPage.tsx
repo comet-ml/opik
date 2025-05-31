@@ -120,7 +120,9 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     label: "Total Est. Cost",
     type: COLUMN_TYPE.number,
     accessorFn: (row) =>
-      row.total_estimated_cost ? row.total_estimated_cost : "-",
+      row.total_estimated_cost
+        ? formatNumericData(row.total_estimated_cost)
+        : "-",
   },
   {
     id: "total_estimated_cost_avg",
