@@ -4,6 +4,8 @@ import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.DatasetCriteria;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.Experiment.ExperimentPage;
+import com.comet.opik.api.Experiment.PromptVersionLink;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
@@ -157,7 +159,7 @@ class ExperimentDAO {
                     arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration_values,
                     count(DISTINCT trace_id) as trace_count,
                     avgMap(usage) as usage,
-                    avg(total_estimated_cost) as total_estimated_cost
+                    sum(total_estimated_cost) as total_estimated_cost
                 FROM (
                     SELECT DISTINCT
                         ei.experiment_id,
@@ -272,6 +274,7 @@ class ExperimentDAO {
                 ed.duration_values AS duration,
                 ed.usage as usage,
                 ed.total_estimated_cost as total_estimated_cost,
+                ed.total_estimated_cost / NULLIF(ed.trace_count, 0) as total_estimated_cost_avg,
                 ca.comments_array_agg as comments_array_agg
             FROM experiments_final AS e
             LEFT JOIN experiment_durations AS ed ON e.id = ed.experiment_id
@@ -308,6 +311,7 @@ class ExperimentDAO {
                 null AS trace_count,
                 null AS duration,
                 null AS total_estimated_cost,
+                null AS total_estimated_cost_avg,
                 null AS usage,
                 null AS comments_array_agg
             FROM experiments
@@ -495,6 +499,7 @@ class ExperimentDAO {
                     .traceCount(row.get("trace_count", Long.class))
                     .duration(getDuration(row))
                     .totalEstimatedCost(getTotalEstimatedCost(row))
+                    .totalEstimatedCostAvg(getTotalEstimatedCostAvg(row))
                     .usage(row.get("usage", Map.class))
                     .promptVersion(promptVersions.stream().findFirst().orElse(null))
                     .promptVersions(promptVersions.isEmpty() ? null : promptVersions)
@@ -510,6 +515,12 @@ class ExperimentDAO {
     private static BigDecimal getTotalEstimatedCost(Row row) {
         return Optional.ofNullable(row.get("total_estimated_cost", BigDecimal.class))
                 .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
+                .orElse(null);
+    }
+
+    private static BigDecimal getTotalEstimatedCostAvg(Row row) {
+        return Optional.ofNullable(row.get("total_estimated_cost_avg", BigDecimal.class))
+                .filter(value -> value != null)
                 .orElse(null);
     }
 
