@@ -520,7 +520,7 @@ class ExperimentDAO {
 
     private static BigDecimal getTotalEstimatedCostAvg(Row row) {
         return Optional.ofNullable(row.get("total_estimated_cost_avg", BigDecimal.class))
-                .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
+                .filter(value -> value != null)
                 .orElse(null);
     }
 
