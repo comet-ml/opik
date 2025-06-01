@@ -1,104 +1,20 @@
 from contextlib import contextmanager
-from io import StringIO
-from typing import Dict, List
 
 import rich
-from rich import box
-from rich.console import Console, Group
-from rich.panel import Panel
-from rich.progress import track
+from rich.console import Console
 from rich.text import Text
+
+from ..reporting_utils import (
+    convert_tqdm_to_rich,
+    display_configuration,  # noqa: F401
+    display_header,  # noqa: F401
+    display_messages,
+    display_result,  # noqa: F401
+    suppress_opik_logs,
+)
 
 PANEL_WIDTH = 70
 console = Console()
-
-def display_header(algorithm: str):
-    content = Text.assemble(
-        ("● ", "green"),  
-        "Running Opik Evaluation - ",
-        (algorithm, "blue")
-    )
-
-    panel = Panel(
-        content,
-        box=box.ROUNDED,
-        width=PANEL_WIDTH
-    )
-
-    rich.print(panel)
-
-
-def display_configuration(messages: List[Dict[str, str]], optimizer_config: Dict[str, str]):
-    """Displays the LLM messages and optimizer configuration using Rich panels."""
-
-    rich.print("\n")
-
-    # Panel for Optimizer configuration
-    content_panels = [Text("> Let's optimize the prompt:\n")]
-    for i, msg in enumerate(messages):
-        content_panels.append(
-            Panel(
-                Text(msg.get('content', ''), overflow="fold"),
-                title=f"{msg.get('role', 'message')}",
-                title_align="left",
-                border_style="dim",
-                width=PANEL_WIDTH,
-                padding=(1, 2),
-            )
-        )
-    
-    # Panel for configuration
-    content_panels.append(Text(f"\nUsing {optimizer_config['optimizer']} with the parameters: "))
-    
-    for key, value in optimizer_config.items():
-        if key == "optimizer":  # Already displayed in the introductory text
-            continue
-        parameter_text = Text.assemble(
-            Text(f"  - {key}: ", style="dim"), 
-            Text(str(value), style="cyan")      
-        )
-        content_panels.append(parameter_text)
-    content_panels.append(Text("\n"))
-    rich.print(Group(*content_panels))
-
-
-@contextmanager
-def suppress_opik_logs():
-    """Suppress Opik startup logs by temporarily increasing the log level."""
-    import logging
-    
-    # Get the Opik logger
-    opik_logger = logging.getLogger("opik.api_objects.opik_client")
-    
-    # Store original log level
-    original_level = opik_logger.level
-    
-    # Set log level to ERROR to suppress INFO messages
-    opik_logger.setLevel(logging.ERROR)
-    
-    try:
-        yield
-    finally:
-        # Restore original log level
-        opik_logger.setLevel(original_level)
-
-
-@contextmanager
-def convert_tqdm_to_rich(description: str = None):
-    """Context manager to convert tqdm to rich."""
-    import opik.evaluation.engine.evaluation_tasks_executor
-
-    def _tqdm_to_track(iterable, desc, disable, total):
-        return track(iterable, description=description or desc, disable=disable, total=total)
-
-
-    original__tqdm = opik.evaluation.engine.evaluation_tasks_executor._tqdm
-    opik.evaluation.engine.evaluation_tasks_executor._tqdm = _tqdm_to_track
-    try:
-        yield
-    finally:
-        opik.evaluation.engine.evaluation_tasks_executor._tqdm = original__tqdm
-
 
 
 @contextmanager
@@ -108,7 +24,7 @@ def display_round_progress(max_rounds: int):
     # Create a simple object with a method to set the score
     class Reporter:
         def failed_to_generate(self, num_prompts, error):
-            rich.print(Text(f"│    Failed to generate {num_prompts} candidate prompt{'' if num_prompts == 1 else 's'}: {error}", style="dim red"))
+            rich.print(Text(f"│    Failed to generate {num_prompts} candidate prompt{'' if num_prompts == 1 else 's'}: {error}", style="red"))
             rich.print(Text("│"))
         
         def round_start(self, round_number):
@@ -169,10 +85,6 @@ def display_candidate_generation_report(num_prompts: int):
     
     # Create a simple object with a method to set the score
     class Reporter:
-        def set_failed_to_generate(self, num_prompts, error):
-            rich.print(Text("│") + Text(f"    Failed to generate {num_prompts} candidate prompt{'' if num_prompts == 1 else 's'}", style="dim red"))
-            rich.print(Text("│"))
-        
         def set_generated_prompts(self, prompts):
             rich.print(Text(f"│      Successfully generated {num_prompts} candidate prompt{'' if num_prompts == 1 else 's'}", style="dim"))
             rich.print(Text("│"))
@@ -190,27 +102,7 @@ def display_prompt_candidate_scoring_report(candidate_count, prompt):
     class Reporter:
         def set_generated_prompts(self, candidate_count, prompt):
             rich.print(Text(f"│    Evaluating candidate prompt {candidate_count+1}:"))
-            for msg in prompt:
-                panel = Panel(
-                    Text(msg.get('content', ''), overflow="fold"),
-                    title=f"{msg.get('role', 'message')}",
-                    title_align="left",
-                    border_style="dim",
-                    width=PANEL_WIDTH,
-                    padding=(1, 2),
-                )
-                # Use a temporary buffer to render the panel
-                buffer = StringIO()
-                temp_console = Console(file=buffer, width=console.width)
-                temp_console.print(panel)
-
-                # Add prefix to each line
-                panel_output = buffer.getvalue()
-                prefixed = "\n".join(f"│         {line}" for line in panel_output.splitlines())
-
-                # Print the final result
-                console.print(prefixed)
-                rich.print(Text("│"))
+            display_messages(prompt, "│         ")
         
         def set_final_score(self, best_score, score):
             if score > best_score:
@@ -231,38 +123,3 @@ def display_prompt_candidate_scoring_report(candidate_count, prompt):
     finally:
         pass
 
-def display_optimization_end_message(initial_score, best_score, best_prompt):
-    rich.print(Text("\n> Optimization complete\n"))
-    
-    if best_score > initial_score:
-        if initial_score == 0:
-            content = [Text(f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f}", style="bold green")]
-        else:
-            perc_change = (best_score - initial_score) / initial_score
-            content = [Text(f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})", style="bold green")]
-    else:
-        content = [Text("Optimization trial did not find a better prompt than the initial one.", style="bold red")]
-    
-    content.append(Text(f"\nBest prompt with a score of {best_score:.4f}:"))
-    for i, msg in enumerate(best_prompt):
-        content.append(
-            Panel(
-                Text(msg.get('content', ''), overflow="fold"),
-                title=f"{msg.get('role', 'message')}",
-                title_align="left",
-                border_style="dim",
-                width=PANEL_WIDTH,
-                padding=(1, 2),
-            )
-        )
-
-    rich.print(
-        Panel(
-            Group(*content),
-            title="Optimization results",
-            title_align="left",
-            border_style="green",
-            width=PANEL_WIDTH,
-            padding=(1, 2)
-        )
-    )

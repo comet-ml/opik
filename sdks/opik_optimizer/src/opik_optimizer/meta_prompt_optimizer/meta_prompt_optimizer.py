@@ -1,13 +1,12 @@
-import ast
 import json
 import logging
 import os
-from string import Template
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import litellm
 import opik
 from litellm.caching import Cache
+from litellm.types.caching import LiteLLMCacheType
 from opik import Dataset
 from opik.api_objects import opik_client
 from opik.environment import get_tqdm_for_current_environment
@@ -18,7 +17,7 @@ from opik_optimizer import task_evaluator
 from .. import _throttle
 from ..base_optimizer import BaseOptimizer, OptimizationRound
 from ..optimization_config import chat_prompt, mappers
-from ..optimization_config.configs import MetricConfig, TaskConfig
+from ..optimization_config.configs import MetricConfig
 from ..optimization_result import OptimizationResult
 from . import reporting
 
@@ -26,7 +25,7 @@ tqdm = get_tqdm_for_current_environment()
 
 # Using disk cache for LLM calls
 disk_cache_dir = os.path.expanduser("~/.litellm_cache")
-litellm.cache = Cache(type="disk", disk_cache_dir=disk_cache_dir)
+litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=disk_cache_dir)
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
@@ -64,11 +63,11 @@ class MetaPromptOptimizer(BaseOptimizer):
     def __init__(
         self,
         model: str,
-        reasoning_model: str = None,
+        reasoning_model: Optional[str] = None,
         rounds: int = DEFAULT_ROUNDS,
         num_prompts_per_round: int = DEFAULT_PROMPTS_PER_ROUND,
         num_threads: int = 12,
-        project_name: Optional[str] = None,
+        project_name: Optional[str] = "Optimization",
         verbose: int = 1,
         enable_context: bool = True,
         **model_kwargs,
@@ -329,7 +328,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         dataset: Dataset,
         metric_config: MetricConfig,
         experiment_config: Optional[Dict] = None,
-        n_samples: int = None,
+        n_samples: Optional[int] = None,
         auto_continue: bool = False,
         **kwargs,
     ) -> OptimizationResult:
@@ -524,7 +523,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     best_score = best_cand_score_avg
                     best_prompt = best_candidate_this_round
 
-        reporting.display_optimization_end_message(
+        reporting.display_result(
             initial_score,
             best_score,
             best_prompt,
@@ -552,9 +551,9 @@ class MetaPromptOptimizer(BaseOptimizer):
     def _create_round_data(
         self,
         round_num: int,
-        current_best_prompt: str,
+        current_best_prompt: chat_prompt.ChatPrompt,
         current_best_score: float,
-        best_prompt_overall: str,
+        best_prompt_overall: chat_prompt.ChatPrompt,
         evaluated_candidates: List[tuple[str, float, List[float]]],
         previous_best_score: float,
         improvement_this_round: float,
@@ -739,10 +738,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                     # Try direct JSON parsing
                     json_result = json.loads(content)
                 except json.JSONDecodeError:
-                    # If direct fails, try regex extraction
-                    logger.warning(
-                        "Direct JSON parsing failed, attempting regex extraction."
-                    )
                     import re
 
                     json_match = re.search(r"\{.*\}", content, re.DOTALL)
@@ -750,18 +745,21 @@ class MetaPromptOptimizer(BaseOptimizer):
                         try:
                             json_result = json.loads(json_match.group())
                         except json.JSONDecodeError as e:
-                            raise ValueError(f"Could not parse JSON extracted via regex: {e}")
+                            raise ValueError(f"Could not parse JSON extracted via regex: {e} - received: {json_match.group()}")
                     else:
-                        raise ValueError("No JSON object found in response via regex.")
+                        raise ValueError(f"No JSON object found in response via regex. - received: {content}")
 
                 # Validate the parsed JSON structure
+                if isinstance(json_result, list) and len(json_result) == 1:
+                    json_result = json_result[0]
+
                 if not isinstance(json_result, dict) or "prompts" not in json_result:
                     logger.debug(f"Parsed JSON content: {json_result}")
-                    raise ValueError("Parsed JSON is not a dictionary or missing 'prompts' key.")
+                    raise ValueError(f"Parsed JSON is not a dictionary or missing 'prompts' key. - received: {json_result}")
 
                 if not isinstance(json_result["prompts"], list):
                     logger.debug(f"Content of 'prompts': {json_result.get('prompts')}")
-                    raise ValueError("'prompts' key does not contain a list.")
+                    raise ValueError(f"'prompts' key does not contain a list. - received: {json_result.get('prompts')}")
 
                 # Extract and log valid prompts
                 valid_prompts = []
@@ -786,10 +784,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                         )
 
                 if not valid_prompts:
-                    candidate_generation_report.set_failed_to_generate(
-                        self.num_prompts_per_round,
-                        "No valid prompts found in the parsed JSON response after validation."
-                    )
                     raise ValueError("No valid prompts found in the parsed JSON response after validation.")
                 
                 candidate_generation_report.set_generated_prompts(
@@ -800,10 +794,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                 # --- End Robust Parsing ---
 
             except Exception as e:
-                candidate_generation_report.set_failed_to_generate(
-                    self.num_prompts_per_round,
-                    f"Unexpected error during candidate prompt generation: {e}"
-                )
                 raise ValueError(f"Unexpected error during candidate prompt generation: {e}")
 
     def _build_history_context(self, previous_rounds: List[OptimizationRound]) -> str:

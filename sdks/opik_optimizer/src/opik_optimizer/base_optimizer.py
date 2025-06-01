@@ -1,16 +1,16 @@
-from typing import Optional, Union, List, Dict, Any
-import opik
 import logging
 import time
+from typing import Any, Dict, List, Optional
 
 import litellm
-from . import _throttle
+import opik
 from opik.rest_api.core import ApiError
-
 from pydantic import BaseModel
+
+from . import _throttle
 from .cache_config import initialize_cache
-from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
-from .optimization_config.configs import TaskConfig, MetricConfig
+from .optimization_config import chat_prompt
+from .optimization_config.configs import MetricConfig
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -22,11 +22,13 @@ logger = logging.getLogger(__name__)
 
 
 class OptimizationRound(BaseModel):
+    model_config = {"arbitrary_types_allowed": True}
+
     round_number: int
-    current_prompt: List[Dict[str, Any]]
+    current_prompt: "chat_prompt.ChatPrompt"
     current_score: float
-    generated_prompts: List[Dict[str, Any]]
-    best_prompt: List[Dict[str, Any]]
+    generated_prompts: Any
+    best_prompt: "chat_prompt.ChatPrompt"
     best_score: float
     improvement: float
 
@@ -56,12 +58,9 @@ class BaseOptimizer:
 
     def optimize_prompt(
         self,
-        dataset: Union[str, opik.Dataset],
+        prompt: chat_prompt.ChatPrompt,
+        dataset: opik.Dataset,
         metric_config: MetricConfig,
-        task_config: TaskConfig,
-        prompt: str,
-        input_key: str,
-        output_key: str,
         experiment_config: Optional[Dict] = None,
         **kwargs,
     ):
@@ -71,7 +70,6 @@ class BaseOptimizer:
         Args:
            dataset: Opik dataset name, or Opik dataset
            metric_config: instance of a MetricConfig
-           task_config: instance of a TaskConfig
            prompt: the prompt to optimize
            input_key: input field of dataset
            output_key: output field of dataset
@@ -79,21 +77,16 @@ class BaseOptimizer:
            **kwargs: Additional arguments for optimization
         """
         self.dataset = dataset
-        self.metric = metric
+        self.metric_config = metric_config
         self.prompt = prompt
-        self.input_key = input_key
-        self.output_key = output_key
         self.experiment_config = experiment_config
 
     def evaluate_prompt(
         self,
-        dataset: Union[str, opik.Dataset],
+        prompt: chat_prompt.ChatPrompt,
+        dataset: opik.Dataset,
         metric_config: MetricConfig,
-        prompt: str,
-        input_key: str,
-        output_key: str,
         n_samples: int = 10,
-        task_config: Optional[TaskConfig] = None,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
         **kwargs,
@@ -102,12 +95,9 @@ class BaseOptimizer:
         Evaluate a prompt.
 
         Args:
+           prompt: the prompt to evaluate
            dataset: Opik dataset name, or Opik dataset
            metric_config: instance of a MetricConfig
-           task_config: instance of a TaskConfig
-           prompt: the prompt to evaluate
-           input_key: input field of dataset
-           output_key: output field of dataset
            n_samples: number of items to test in the dataset
            dataset_item_ids: Optional list of dataset item IDs to evaluate
            experiment_config: Optional configuration for the experiment
@@ -118,10 +108,7 @@ class BaseOptimizer:
         """
         self.dataset = dataset
         self.metric_config = metric_config
-        self.task_config = task_config
         self.prompt = prompt
-        self.input_key = input_key
-        self.output_key = output_key
         self.experiment_config = experiment_config
         return 0.0  # Base implementation returns 0
 

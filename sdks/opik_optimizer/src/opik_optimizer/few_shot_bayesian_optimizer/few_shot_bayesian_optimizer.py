@@ -18,7 +18,7 @@ from opik_optimizer.optimization_config.configs import MetricConfig
 
 from .. import _throttle, optimization_result, task_evaluator, utils
 from ..optimization_config import chat_prompt
-from . import prompt_parameter, reporting
+from . import reporting
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -51,10 +51,6 @@ Return your output as a JSON object with:
 Respond only with the JSON object. Do not include any explanation or extra text.
 """
 
-from opik.evaluation import report
-report.display_experiment_results = lambda *args, **kwargs: None
-report.display_experiment_link = lambda *args, **kwargs: None
-
 class FewShotPromptTemplate(BaseModel):
     message_list_with_placeholder: List[Dict[str, str]]
     example_template: str
@@ -63,13 +59,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     def __init__(
         self,
         model: str,
-        project_name: Optional[str] = None,
+        project_name: Optional[str] = "Optimization",
         min_examples: int = 2,
         max_examples: int = 8,
         seed: int = 42,
         n_threads: int = 8,
-        n_initial_prompts: int = 5,
-        n_iterations: int = 10,
         verbose: int = 1,
         **model_kwargs,
     ) -> None:
@@ -78,8 +72,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self.max_examples = max_examples
         self.seed = seed
         self.n_threads = n_threads
-        self.n_initial_prompts = n_initial_prompts
-        self.n_iterations = n_iterations
         self.verbose = verbose
         if verbose == 0:
             logger.setLevel(logging.WARNING)
@@ -105,7 +97,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         filtered_call_kwargs.pop('n_iterations', None)
         filtered_call_kwargs.pop('min_examples', None)
         filtered_call_kwargs.pop('max_examples', None)
-        filtered_call_kwargs.pop('n_initial_prompts', None)
 
         final_params_for_litellm = opik_litellm_monitor.try_add_opik_monitoring_to_params(filtered_call_kwargs)
 
@@ -154,7 +145,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             "examples": few_shot_examples
         }
         
-        messages = [
+        messages: List[Dict[str, str]] = [
             {"role": "system", "content": SYSTEM_PROMPT_TEMPLATE},
             {"role": "user", "content": json.dumps(user_message)},
         ]
@@ -169,8 +160,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         logger.debug(f"fewshot_prompt_template - LLM response: {response}")
 
         try:
-            res = json.loads(response["choices"][0]["message"]["content"])
-            return FewShotPromptTemplate(**res)
+            res = utils.json_to_dict(response["choices"][0]["message"]["content"])
+            return FewShotPromptTemplate(
+                message_list_with_placeholder=res["message_list_with_placeholder"],
+                example_template=res["example_template"]
+            )
         except Exception as e:
             logger.error(f"Failed to compute few-shot prompt template: {e} - response: {response}")
             raise
@@ -184,7 +178,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         baseline_score: Optional[float] = None,
         optimization_id: Optional[str] = None,
         experiment_config: Optional[Dict] = None,
-        n_samples: int = None,
+        n_samples: Optional[int] = None,
     ) -> optimization_result.OptimizationResult:
         reporting.start_optimization_run()
 
@@ -258,7 +252,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             )
             logger.debug(f"Evaluating trial {trial.number}...")
 
-            with reporting.start_optimization_trial(trial.number, baseline_score) as trial_reporter:
+            with reporting.start_optimization_trial(trial.number, n_trials) as trial_reporter:
+                trial_reporter.start_trial(messages)
                 score = task_evaluator.evaluate(
                     dataset=dataset,
                     dataset_item_ids=eval_dataset_item_ids,
@@ -270,7 +265,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     optimization_id=optimization_id,
                     verbose=self.verbose,
                 )
-                trial_reporter.set_score(score)
+                trial_reporter.set_score(baseline_score, score)
             logger.debug(f"Trial {trial.number} score: {score:.4f}")
 
             # Trial results
@@ -305,28 +300,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             n_trials=n_trials,
             show_progress_bar=False
         )
-        logger.info("Optuna study finished.")
-
+        
         optuna_history_processed = []
         for trial_idx, trial in enumerate(study.trials):
             if trial.state == optuna.trial.TrialState.COMPLETE:
-                param_obj: Optional[prompt_parameter.ChatPromptParameter] = trial.user_attrs.get("param")
-                prompt_cand_display = None # Default to None
-                if param_obj and hasattr(param_obj, 'as_template') and callable(param_obj.as_template):
-                    try:
-                        # .format() on ChatPromptTemplate returns the list of messages
-                        chat_messages_for_history = param_obj.as_template().format()
-                        prompt_cand_display = json.dumps(chat_messages_for_history) 
-                    except Exception as e_param_format:
-                        logger.warning(f"Trial {trial.number}: Error formatting prompt from param_obj: {e_param_format}")
-                        prompt_cand_display = "Error: Could not format prompt content."
-                elif not param_obj:
-                    logger.warning(f"Trial {trial.number}: 'param' object not found in user_attrs.")
-                    prompt_cand_display = "Error: Prompt data missing in trial."
-                else:
-                    logger.warning(f"Trial {trial.number}: 'param' object is not of expected type or lacks methods.")
-                    prompt_cand_display = "Error: Invalid prompt data structure in trial."
-
+                trial_config = trial.user_attrs.get("config")
+                prompt_cand_display = trial_config['message_list'] # Default to None
+                
                 score_val = trial.value # This can be None if trial failed to produce a score
                 duration_val = None
                 if trial.datetime_complete and trial.datetime_start:
@@ -343,10 +323,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     "scores": [{
                         "metric_name": metric_config.metric.name, 
                         "score": score_val, # Can be None
-                        "opik_evaluation_id": None # TODO
                     }],
-                    "tokens_used": None, # TODO
-                    "cost": None, # TODO
                     "duration_seconds": duration_val,
                 }
                 optuna_history_processed.append(iter_detail)
@@ -355,14 +332,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         best_trial = study.best_trial
         best_score = best_trial.value
-        #best_n_examples = best_trial.params["n_examples"]
         best_example_indices = best_trial.user_attrs.get("example_indices", [])
-        # best_param: prompt_parameter.ChatPromptParameter = best_trial.user_attrs[
-        #     "param"
-        # ]
 
-        # chat_messages_list = best_param.as_template().format()
-        # main_prompt_string = best_param.instruction
+        reporting.display_result(
+            initial_score=baseline_score,
+            best_score=best_score,
+            best_prompt=best_trial.user_attrs["config"]["message_list"]
+        )
 
         return optimization_result.OptimizationResult(
             optimizer=self.__class__.__name__,
@@ -393,7 +369,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         metric_config: MetricConfig,
         n_trials: int = 10,
         experiment_config: Optional[Dict] = None,
-        n_samples: int = None
+        n_samples: Optional[int] = None
     ) -> optimization_result.OptimizationResult:
         optimization = None
         try:
@@ -477,7 +453,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
         optimization_id: Optional[str] = None,
-        n_samples: int = None,
+        n_samples: Optional[int] = None,
     ) -> float:
         # Ensure prompt is correctly formatted
         if not all(

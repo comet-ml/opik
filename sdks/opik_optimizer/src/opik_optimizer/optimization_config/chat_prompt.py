@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -24,10 +24,10 @@ class ChatPrompt:
 
     def __init__(
         self,
-        system: str = None,
-        prompt: str = None,
-        messages: List[Dict[Literal["role", "content"], str]] = None,
-        tools: List[Tool] = None
+        system: Optional[str] = None,
+        prompt: Optional[str] = None,
+        messages: Optional[List[Dict[Literal["role", "content"], str]]] = None,
+        tools: Optional[List[Tool]] = None
     ):
         self.system = system
         self.prompt = prompt
