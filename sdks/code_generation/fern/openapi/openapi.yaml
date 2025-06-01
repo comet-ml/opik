@@ -8460,6 +8460,13 @@ components:
         number_of_messages:
           type: integer
           format: int64
+        total_estimated_cost:
+          type: number
+        usage:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
         last_updated_at:
           type: string
           format: date-time
