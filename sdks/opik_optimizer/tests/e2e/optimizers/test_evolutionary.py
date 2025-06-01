@@ -1,7 +1,7 @@
 from opik.evaluation.metrics import LevenshteinRatio
 
 from opik_optimizer import (
-    FewShotBayesianOptimizer,
+    EvolutionaryOptimizer,
     MetricConfig,
     datasets,
     from_dataset_field,
@@ -10,14 +10,7 @@ from opik_optimizer import (
 from opik_optimizer.optimization_config import chat_prompt
 
 
-def test_few_shot_optimizer():
-    # Initialize optimizer
-    optimizer = FewShotBayesianOptimizer(
-        model="openai/gpt-4",
-        temperature=0.1,
-        max_tokens=5000,
-    )
-
+def test_evolutionary_optimizer():
     # Prepare dataset
     dataset = datasets.hotpot_300()
 
@@ -35,15 +28,24 @@ def test_few_shot_optimizer():
         prompt="{question}"
     )
 
+    optimizer = EvolutionaryOptimizer(
+        model="openai/gpt-4o",
+        temperature=0.1,
+        max_tokens=500000,
+        infer_output_style=True,
+        population_size=5,
+        num_generations=10
+    )
+    
     results = optimizer.optimize_prompt(
         dataset=dataset,
         metric_config=metric_config,
         prompt=prompt,
-        n_trials=2
+        n_samples=10
     )
 
     # Access results
     assert len(results.history) > 0
 
 if __name__ == "__main__":
-    test_few_shot_optimizer()
+    test_evolutionary_optimizer()
