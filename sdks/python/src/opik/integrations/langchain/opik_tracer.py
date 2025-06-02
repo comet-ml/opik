@@ -119,7 +119,7 @@ class OpikTracer(BaseTracer):
         error_info: Optional[ErrorInfoDict]
         if run_dict["error"] is not None:
             output = None
-            error_info: ErrorInfoDict = {
+            error_info = {
                 "exception_type": "Exception",
                 "traceback": run_dict["error"],
             }
