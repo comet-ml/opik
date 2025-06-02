@@ -90,7 +90,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
                 ] = opik_span_data.parent_span_id
 
         except Exception:
-            LOGGER.debug("on_trace_start failed", exc_info=True)
+            LOGGER.error("on_trace_start failed", exc_info=True)
 
     def on_trace_end(self, trace: tracing.Trace) -> None:
         try:
@@ -108,7 +108,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
             else:
                 self._opik_client.span(**opik_trace_or_span_data.__dict__)
         except Exception:
-            LOGGER.debug("on_trace_end failed", exc_info=True)
+            LOGGER.error("on_trace_end failed", exc_info=True)
         finally:
             self._try_finalize_openai_trace(trace.trace_id)
 
@@ -137,7 +137,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
             self._opik_spans_data_map[span.span_id] = opik_span_data
 
         except Exception:
-            LOGGER.debug("on_span_start failed", exc_info=True)
+            LOGGER.error("on_span_start failed", exc_info=True)
 
     def on_span_end(self, span: tracing.Span[Any]) -> None:
         try:
@@ -168,7 +168,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
                 )
 
         except Exception:
-            LOGGER.debug("on_span_end failed", exc_info=True)
+            LOGGER.error("on_span_end failed", exc_info=True)
         finally:
             self._try_finalize_openai_span(span.span_id)
 
