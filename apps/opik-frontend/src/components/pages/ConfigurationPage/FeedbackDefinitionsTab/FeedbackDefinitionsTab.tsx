@@ -13,7 +13,7 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import TagCell from "@/components/shared/DataTableCells/TagCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import Loader from "@/components/shared/Loader/Loader";
-import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
@@ -188,7 +188,7 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
 
   return (
     <div>
-      <CalloutAlert
+      <ExplainerCallout
         className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_definitions]}
       />

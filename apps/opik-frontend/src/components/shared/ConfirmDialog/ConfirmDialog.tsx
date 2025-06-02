@@ -1,5 +1,5 @@
 import React from "react";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonProps } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -17,6 +17,7 @@ type ConfirmDialogProps = {
   title: string;
   description: string;
   confirmText: string;
+  confirmButtonVariant?: ButtonProps["variant"];
 };
 
 const ConfirmDialog: React.FunctionComponent<ConfirmDialogProps> = ({
@@ -26,6 +27,7 @@ const ConfirmDialog: React.FunctionComponent<ConfirmDialogProps> = ({
   title,
   description,
   confirmText = "Confirm",
+  confirmButtonVariant = "default",
 }) => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -39,7 +41,11 @@ const ConfirmDialog: React.FunctionComponent<ConfirmDialogProps> = ({
             <Button variant="outline">Cancel</Button>
           </DialogClose>
           <DialogClose asChild>
-            <Button type="submit" onClick={onConfirm}>
+            <Button
+              type="submit"
+              variant={confirmButtonVariant}
+              onClick={onConfirm}
+            >
               {confirmText}
             </Button>
           </DialogClose>

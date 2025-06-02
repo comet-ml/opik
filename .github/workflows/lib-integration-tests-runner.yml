@@ -23,7 +23,7 @@ on:
           - genai
   schedule:
     - cron: "0 0 */1 * *"
-  pull_request_target:
+  pull_request:
     paths:
     - 'sdks/python/**'
   push:
