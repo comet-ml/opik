@@ -43,7 +43,9 @@ const LLMPromptMessagesVariable = ({
               onChange({ ...variable, value: value })
             }
           />
-          {errorText && <FormErrorSkeleton>{errorText}</FormErrorSkeleton>}
+          {errorText && (
+            <FormErrorSkeleton className="mt-2">{errorText}</FormErrorSkeleton>
+          )}
         </div>
       </div>
     </div>

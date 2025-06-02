@@ -14,6 +14,9 @@ import {
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useActionButtonActions from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/useActionButtonActions";
 import { cn } from "@/lib/utils";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { Separator } from "@/components/ui/separator";
 
 const EMPTY_DATASETS: Dataset[] = [];
 
@@ -65,6 +68,7 @@ const PlaygroundOutputActions = ({
     workspaceName,
     datasetItems,
     datasetName,
+    datasetId: datasetId ? datasetId : undefined,
   });
 
   const loadMoreHandler = useCallback(() => setIsLoadedMore(true), []);
@@ -263,7 +267,12 @@ const PlaygroundOutputActions = ({
           </Button>
         )}
       </div>
-
+      <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
+        <ExplainerIcon
+          {...EXPLAINERS_MAP[EXPLAINER_ID.what_does_the_dataset_do_here]}
+        />
+        <Separator orientation="vertical" className="mx-2 h-4" />
+      </div>
       {renderActionButton()}
     </div>
   );

@@ -324,6 +324,7 @@ class TraceDAOImpl implements TraceDAO {
                 sumMap(s.usage) as usage,
                 sum(s.total_estimated_cost) as total_estimated_cost,
                 COUNT(s.id) AS span_count,
+                countIf(s.type = 'llm') AS llm_span_count,
                 groupUniqArrayArray(c.comments_array) as comments,
                 any(fs.feedback_scores) as feedback_scores_list,
                 any(gr.guardrails) as guardrails_validations
@@ -345,7 +346,8 @@ class TraceDAOImpl implements TraceDAO {
                     trace_id,
                     usage,
                     total_estimated_cost,
-                    id
+                    id,
+                    type
                 FROM spans
                 WHERE workspace_id = :workspace_id
                   AND trace_id = :id
@@ -490,7 +492,8 @@ class TraceDAOImpl implements TraceDAO {
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
-                    COUNT(DISTINCT id) as span_count
+                    COUNT(DISTINCT id) as span_count,
+                    countIf(type = 'llm') as llm_span_count
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -602,6 +605,7 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_comments)>, c.comments_array as comments <endif>
                   <if(!exclude_guardrails_validations)>, gagg.guardrails_list as guardrails_validations<endif>
                   <if(!exclude_span_count)>, s.span_count AS span_count<endif>
+                  <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN spans_agg s ON t.id = s.trace_id
@@ -1069,6 +1073,25 @@ class TraceDAOImpl implements TraceDAO {
      * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
      ***/
     private static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
+            WITH traces_final AS (
+                SELECT
+                    *
+                FROM traces final
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND thread_id IS NOT NULL
+                  AND thread_id \\<> ''
+            ), spans_agg AS (
+                SELECT
+                    trace_id,
+                    sumMap(usage) as usage,
+                    sum(total_estimated_cost) as total_estimated_cost
+                FROM spans final
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND trace_id IN (SELECT DISTINCT id FROM traces_final)
+                GROUP BY workspace_id, project_id, trace_id
+            )
             SELECT
                 t.thread_id as id,
                 t.workspace_id as workspace_id,
@@ -1076,33 +1099,25 @@ class TraceDAOImpl implements TraceDAO {
                 min(t.start_time) as start_time,
                 max(t.end_time) as end_time,
                 if(end_time IS NOT NULL AND start_time IS NOT NULL
-                           AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                       (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                       NULL) AS duration,
+                       AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                   (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                   NULL) AS duration,
                 <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
                 <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
                 count(DISTINCT t.id) * 2 as number_of_messages,
+                sum(s.total_estimated_cost) as total_estimated_cost,
+                sumMap(s.usage) as usage,
                 max(t.last_updated_at) as last_updated_at,
                 argMin(t.created_by, t.created_at) as created_by,
                 min(t.created_at) as created_at
-             FROM (
-                 SELECT
-                     *
-                 FROM traces t
-                 WHERE workspace_id = :workspace_id
-                 AND project_id = :project_id
-                 AND thread_id IS NOT NULL
-                 AND thread_id \\<> ''
-                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                 LIMIT 1 BY id
-             ) AS t
-             GROUP BY
+            FROM traces_final AS t
+                LEFT JOIN spans_agg AS s ON t.id = s.trace_id
+            GROUP BY
                 t.workspace_id, t.project_id, t.thread_id
-             <if(trace_thread_filters)> HAVING <trace_thread_filters> <endif>
-             ORDER BY last_updated_at DESC, start_time ASC, end_time DESC
-             LIMIT :limit OFFSET :offset
-             SETTINGS join_algorithm = 'full_sorting_merge'
-            ;
+            <if(trace_thread_filters)> HAVING <trace_thread_filters> <endif>
+            ORDER BY last_updated_at DESC, start_time ASC, end_time DESC
+            LIMIT :limit OFFSET :offset
+            SETTINGS join_algorithm = 'full_sorting_merge';
             """;
 
     private static final String DELETE_THREADS_BY_PROJECT_ID = """
@@ -1125,6 +1140,24 @@ class TraceDAOImpl implements TraceDAO {
      *  - The creation time of the thread, which is the created_at of the first trace in the list.
      ***/
     private static final String SELECT_TRACES_THREAD_BY_ID = """
+            WITH traces_final AS (
+                SELECT
+                    *
+                FROM traces final
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND thread_id = :thread_id
+            ), spans_agg AS (
+                SELECT
+                    trace_id,
+                    sumMap(usage) as usage,
+                    sum(total_estimated_cost) as total_estimated_cost
+                FROM spans final
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND trace_id IN (SELECT DISTINCT id FROM traces_final)
+                GROUP BY workspace_id, project_id, trace_id
+            )
             SELECT
                 t.thread_id as id,
                 t.workspace_id as workspace_id,
@@ -1132,29 +1165,24 @@ class TraceDAOImpl implements TraceDAO {
                 min(t.start_time) as start_time,
                 max(t.end_time) as end_time,
                 if(end_time IS NOT NULL AND start_time IS NOT NULL
-                           AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                       (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                       NULL) AS duration,
+                       AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                   (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                   NULL) AS duration,
                 argMin(t.input, t.start_time) as first_message,
                 argMax(t.output, t.end_time) as last_message,
                 count(DISTINCT t.id) * 2 as number_of_messages,
+                sum(s.total_estimated_cost) as total_estimated_cost,
+                sumMap(s.usage) as usage,
                 max(t.last_updated_at) as last_updated_at,
                 argMin(t.created_by, t.created_at) as created_by,
                 min(t.created_at) as created_at
-             FROM (
-                 SELECT
-                     *
-                 FROM traces t
-                 WHERE workspace_id = :workspace_id
-                 AND project_id = :project_id
-                 AND thread_id = :thread_id
-                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                 LIMIT 1 BY id
-             ) AS t
-             GROUP BY
+            FROM traces_final AS t
+                     LEFT JOIN spans_agg AS s ON t.id = s.trace_id
+            GROUP BY
                 t.workspace_id, t.project_id, t.thread_id
-            ;
+            SETTINGS join_algorithm = 'full_sorting_merge';
             """;
+
     public static final String SELECT_COUNT_TRACES_BY_PROJECT_IDS = """
             SELECT
                 count(distinct id) as count
@@ -1424,6 +1452,10 @@ class TraceDAOImpl implements TraceDAO {
                 .spanCount(Optional
                         .ofNullable(getValue(exclude, Trace.TraceField.SPAN_COUNT, row, "span_count", Integer.class))
                         .orElse(0))
+                .llmSpanCount(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.LLM_SPAN_COUNT, row, "llm_span_count",
+                                Integer.class))
+                        .orElse(0))
                 .usage(getValue(exclude, Trace.TraceField.USAGE, row, "usage", Map.class))
                 .totalEstimatedCost(Optional
                         .ofNullable(getValue(exclude, Trace.TraceField.TOTAL_ESTIMATED_COST, row,
@@ -1613,6 +1645,8 @@ class TraceDAOImpl implements TraceDAO {
                         template.add("exclude_guardrails_validations",
                                 fields.contains(Trace.TraceField.GUARDRAILS_VALIDATIONS.getValue()));
                         template.add("exclude_span_count", fields.contains(Trace.TraceField.SPAN_COUNT.getValue()));
+                        template.add("exclude_llm_span_count",
+                                fields.contains(Trace.TraceField.LLM_SPAN_COUNT.getValue()));
                     }
                 });
     }
@@ -1920,6 +1954,8 @@ class TraceDAOImpl implements TraceDAO {
                         .map(JsonUtils::getJsonNodeFromString)
                         .orElse(null))
                 .numberOfMessages(row.get("number_of_messages", Long.class))
+                .usage(row.get("usage", Map.class))
+                .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
                 .createdAt(row.get("created_at", Instant.class))

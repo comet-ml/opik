@@ -1,5 +1,5 @@
-import { loadConfig, OpikConfig } from "@/config/Config";
-import { OpikApiClient, OpikApiError, serialization } from "@/rest_api";
+import { ConstructorOpikConfig, loadConfig, OpikConfig } from "@/config/Config";
+import { OpikApiError, serialization } from "@/rest_api";
 import type { ExperimentPublic, Trace as ITrace } from "@/rest_api/api";
 import { Trace } from "@/tracer/Trace";
 import { generateId } from "@/utils/generateId";
@@ -9,6 +9,10 @@ import { SpanBatchQueue } from "./SpanBatchQueue";
 import { SpanFeedbackScoresBatchQueue } from "./SpanFeedbackScoresBatchQueue";
 import { TraceBatchQueue } from "./TraceBatchQueue";
 import { TraceFeedbackScoresBatchQueue } from "./TraceFeedbackScoresBatchQueue";
+import {
+  OpikApiClientTemp,
+  OpikApiClientTempOptions,
+} from "@/client/OpikApiClientTemp";
 import { DatasetBatchQueue } from "./DatasetBatchQueue";
 import { Dataset, DatasetItemData, DatasetNotFoundError } from "@/dataset";
 import { Experiment } from "@/experiment/Experiment";
@@ -23,7 +27,7 @@ interface TraceData extends Omit<ITrace, "startTime"> {
 export const clients: OpikClient[] = [];
 
 export class OpikClient {
-  public api: OpikApiClient;
+  public api: OpikApiClientTemp;
   public config: OpikConfig;
   public spanBatchQueue: SpanBatchQueue;
   public traceBatchQueue: TraceBatchQueue;
@@ -33,14 +37,28 @@ export class OpikClient {
 
   private lastProjectNameLogged: string | undefined;
 
-  constructor(explicitConfig?: Partial<OpikConfig>) {
+  constructor(explicitConfig?: Partial<ConstructorOpikConfig>) {
     logger.debug("Initializing OpikClient with config:", explicitConfig);
+
     this.config = loadConfig(explicitConfig);
-    this.api = new OpikApiClient({
+    const apiConfig: OpikApiClientTempOptions = {
       apiKey: this.config.apiKey,
       environment: this.config.apiUrl,
       workspaceName: this.config.workspaceName,
-    });
+    };
+
+    if (explicitConfig?.headers) {
+      logger.debug(
+        "Initializing OpikClient with additional headers:",
+        explicitConfig?.headers
+      );
+
+      apiConfig.requestOptions = {
+        headers: explicitConfig?.headers,
+      };
+    }
+
+    this.api = new OpikApiClientTemp(apiConfig);
 
     this.spanBatchQueue = new SpanBatchQueue(this.api);
     this.traceBatchQueue = new TraceBatchQueue(this.api);
