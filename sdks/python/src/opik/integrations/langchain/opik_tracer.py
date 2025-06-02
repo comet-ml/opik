@@ -6,7 +6,7 @@ from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
 from langchain_core.tracers.schemas import Run
 
-from opik import dict_utils, opik_context, llm_usage
+from opik import dict_utils, llm_usage
 from opik.api_objects import span, trace
 from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
 from opik.validation import parameters_validator
@@ -119,7 +119,7 @@ class OpikTracer(BaseTracer):
         error_info: Optional[ErrorInfoDict]
         if run_dict["error"] is not None:
             output = None
-            error_info = {
+            error_info: ErrorInfoDict = {
                 "exception_type": "Exception",
                 "traceback": run_dict["error"],
             }

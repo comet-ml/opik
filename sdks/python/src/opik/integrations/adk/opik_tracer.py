@@ -32,6 +32,7 @@ class OpikTracer:
         self.name = name
         self.tags = tags
         self.metadata = metadata or {}
+        self.metadata["created_from"] = "google-adk"
         self.project_name = project_name
         self.distributed_headers = distributed_headers
         self._client = opik_client.get_client_cached()
@@ -42,9 +43,9 @@ class OpikTracer:
         # in case we need to use different context storage for ADK in the future
         self._context_storage = context_storage.get_current_context_instance()
 
-        self._root_parent_span_id: contextvars.ContextVar[
-            Optional[str]
-        ] = contextvars.ContextVar("root_parent_span_id", default=None)
+        self._root_parent_span_id: contextvars.ContextVar[Optional[str]] = (
+            contextvars.ContextVar("root_parent_span_id", default=None)
+        )
 
         self._opik_client = opik_client.get_client_cached()
 
