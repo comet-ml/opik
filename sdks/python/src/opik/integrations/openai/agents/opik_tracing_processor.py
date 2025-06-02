@@ -44,6 +44,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
                 metadata=trace_metadata,
             )
             self._created_traces_data_map[trace.trace_id] = opik_trace_data
+            self._opik_client.trace(**opik_trace_data.trace_start_parameters)
         except Exception:
             LOGGER.debug("on_trace_start failed", exc_info=True)
 
@@ -53,7 +54,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
             opik_trace_data.init_end_time()
 
             self._collect_trace_input_and_output_from_spans(opik_trace_data)
-            self._opik_client.trace(**opik_trace_data.__dict__)
+            self._opik_client.trace(**opik_trace_data.trace_end_parameters)
         except Exception:
             LOGGER.debug("on_trace_end failed", exc_info=True)
 
