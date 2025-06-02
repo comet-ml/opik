@@ -106,7 +106,7 @@ export const generateGroupedNameColumDef = <
         </CellWrapper>
       );
     },
-    size: 180,
+    size: 280,
     minSize: 100,
     enableSorting: sortable,
     enableHiding: false,

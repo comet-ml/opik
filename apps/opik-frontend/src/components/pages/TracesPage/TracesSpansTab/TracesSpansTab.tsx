@@ -130,6 +130,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
   {
     id: "duration",
     label: "Duration",
+    size: 110,
     type: COLUMN_TYPE.duration,
     cell: DurationCell as never,
     statisticDataFormater: formatDuration,
@@ -486,6 +487,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             {
               id: "span_count",
               label: "Span count",
+              size: 125,
               type: COLUMN_TYPE.number,
               accessorFn: (row: BaseTraceData) => get(row, "span_count", "-"),
             },

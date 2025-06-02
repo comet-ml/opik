@@ -1,11 +1,19 @@
-import { ColumnData, COLUMN_NAME_ID, COLUMN_TYPE } from "@/types/shared";
+import {
+  ColumnData,
+  COLUMN_NAME_ID,
+  COLUMN_ID_ID,
+  COLUMN_TYPE,
+  COLUMN_FEEDBACK_SCORES_ID,
+} from "@/types/shared";
 import { ColumnDef } from "@tanstack/react-table";
 import TypeHeader from "@/components/shared/DataTableHeaders/TypeHeader";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import {
   DEFAULT_COLUMN_WIDTH,
   DEFAULT_NUMERIC_COLUMN_WIDTH,
-  NAME_COLUMN_WIDTH,
+  DEFAULT_NAME_COLUMN_WIDTH,
+  DEFAULT_ID_COLUMN_WIDTH,
+  DEFAULT_FEEDBACK_SCORES_COLUMN_WIDTH,
 } from "@/constants/shared";
 
 export const sortColumnsByOrder = <TColumnData>(
@@ -104,7 +112,11 @@ export const mapColumnDataFields = <TColumnData, TData>(
     },
     size: (() => {
       if (columnData.size) return columnData.size;
-      if (columnData.id === COLUMN_NAME_ID) return NAME_COLUMN_WIDTH;
+      if (columnData.id === COLUMN_NAME_ID) return DEFAULT_NAME_COLUMN_WIDTH;
+      if (columnData.id === COLUMN_ID_ID) return DEFAULT_ID_COLUMN_WIDTH;
+      if (columnData.id === COLUMN_FEEDBACK_SCORES_ID)
+        return DEFAULT_FEEDBACK_SCORES_COLUMN_WIDTH;
+      // Always apply DEFAULT_NUMERIC_COLUMN_WIDTH for numeric/cost/duration columns
       if (
         columnData.type &&
         [COLUMN_TYPE.number, COLUMN_TYPE.cost, COLUMN_TYPE.duration].includes(
