@@ -4706,11 +4706,6 @@ class TracesResourceTest {
     private List<TraceThread> getExpectedThreads(List<Trace> expectedTraces, UUID projectId, String threadId,
             List<Span> spans) {
 
-        Map<String, Long> usage = Optional.ofNullable(spans)
-                .map(this::aggregateSpansUsage)
-                .filter(not(Map::isEmpty))
-                .orElse(null);
-
         return expectedTraces.isEmpty()
                 ? List.of()
                 : List.of(TraceThread.builder()
@@ -4731,19 +4726,33 @@ class TracesResourceTest {
                                 .endTime())
                         .numberOfMessages(expectedTraces.size() * 2L)
                         .id(threadId)
-                        .totalEstimatedCost(
-                                spans.stream().allMatch(span -> span.totalEstimatedCost() != null)
-                                        ? spans.stream()
-                                                .map(Span::totalEstimatedCost)
-                                                .reduce(BigDecimal.ZERO, BigDecimal::add)
-                                        : calculateEstimatedCost(spans))
-                        .usage(usage)
+                        .totalEstimatedCost(getTotalEstimatedCost(spans))
+                        .usage(getUsage(spans))
                         .createdAt(expectedTraces.stream().min(Comparator.comparing(Trace::createdAt)).orElseThrow()
                                 .createdAt())
                         .lastUpdatedAt(
                                 expectedTraces.stream().max(Comparator.comparing(Trace::lastUpdatedAt)).orElseThrow()
                                         .lastUpdatedAt())
                         .build());
+    }
+
+    private Map<String, Long> getUsage(List<Span> spans) {
+        return Optional.ofNullable(spans)
+                .map(this::aggregateSpansUsage)
+                .filter(not(Map::isEmpty))
+                .orElse(null);
+    }
+
+    private BigDecimal getTotalEstimatedCost(List<Span> spans) {
+        boolean shouldUseTotalEstimatedCostField = spans.stream().allMatch(span -> span.totalEstimatedCost() != null);
+
+        if (shouldUseTotalEstimatedCostField) {
+            return spans.stream()
+                    .map(Span::totalEstimatedCost)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+
+        return calculateEstimatedCost(spans);
     }
 
     @Nested
