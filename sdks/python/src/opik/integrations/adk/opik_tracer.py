@@ -7,13 +7,11 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.models import LlmRequest, LlmResponse, lite_llm
 from google.adk.tools.base_tool import BaseTool
 from google.adk.tools.tool_context import ToolContext
-from opik import context_storage
-from opik.api_objects import helpers, opik_client, trace, span
-from opik.types import DistributedTraceHeadersDict, SpanType, LLMProvider
 
-from . import litellm_wrappers
-from . import llm_response_wrapper
-from . import helpers as adk_helpers
+from opik import context_storage
+from opik.api_objects import helpers, opik_client, span, trace
+from opik.types import DistributedTraceHeadersDict, LLMProvider, SpanType
+from . import helpers as adk_helpers, litellm_wrappers, llm_response_wrapper
 
 LOGGER = logging.getLogger(__name__)
 
@@ -226,7 +224,11 @@ class OpikTracer:
 
         if (span_data := self._context_storage.top_span_data()) is None:
             trace_data = self._context_storage.get_trace_data()
-            assert trace_data is not None
+            if trace_data is None:
+                LOGGER.debug(
+                    "Failed during after_agent_callback(): trace is not found."
+                )
+                return
             trace_data.update(output=output).init_end_time()
             self._end_current_trace()
             self._last_model_output = None
@@ -285,21 +287,30 @@ class OpikTracer:
         except Exception:
             LOGGER.debug("Error checking for partial chunks", exc_info=True)
 
-        output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
-        usage_data = llm_response_wrapper.pop_llm_usage_data(output)
-        if usage_data is not None:
-            model = usage_data.model
-            provider = usage_data.provider
-            usage = usage_data.opik_usage
-        else:
-            model = None
-            provider = None
-            usage = None
+        model = None
+        provider = None
+        usage = None
+        output = None
+
+        try:
+            output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
+            usage_data = llm_response_wrapper.pop_llm_usage_data(output)
+            if usage_data is not None:
+                model = usage_data.model
+                provider = usage_data.provider
+                usage = usage_data.opik_usage
+        except Exception:
+            LOGGER.debug(
+                "Error converting LlmResponse to dict or extracting usage data",
+                exc_info=True,
+            )
 
         self._last_model_output = output
 
         span_data = self._context_storage.top_span_data()
-        assert span_data is not None
+        if span_data is None:
+            LOGGER.debug("Failed during after_model_callback(): span is not found.")
+            return
 
         span_data.update(
             output=output,
@@ -348,7 +359,10 @@ class OpikTracer:
         **kwargs: Any,
     ) -> None:
         current_span_data = self._context_storage.top_span_data()
-        assert current_span_data is not None
+        if current_span_data is None:
+            LOGGER.debug("Failed during after_tool_callback(): span is not found.")
+            return
+
         if isinstance(tool_response, dict):
             current_span_data.update(output=tool_response)
         else:
