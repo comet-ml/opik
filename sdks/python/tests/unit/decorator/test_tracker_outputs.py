@@ -1772,6 +1772,6 @@ def test_track__using_distributed_headers__through_node__spans_are_created_corre
     )
 
     assert len(fake_backend.trace_trees) == 1
-    trace_tree = fake_backend.trace_trees[0]
 
+    trace_tree = fake_backend.trace_trees[0]
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
