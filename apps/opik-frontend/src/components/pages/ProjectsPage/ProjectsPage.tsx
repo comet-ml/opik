@@ -49,6 +49,8 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 
@@ -157,7 +159,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "feedback_scores",
-        label: "Feedback scores",
+        label: "Feedback scores (avg.)",
         type: COLUMN_TYPE.numberDictionary,
         accessorFn: (row) =>
           get(row, "feedback_scores", []).map((score) => ({
@@ -169,6 +171,7 @@ const ProjectsPage: React.FunctionComponent = () => {
           getHoverCardName: (row: ProjectWithStatistic) => row.name,
           isAverageScores: true,
         },
+        explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
       },
       ...(isGuardrailsEnabled
         ? [
@@ -359,9 +362,13 @@ const ProjectsPage: React.FunctionComponent = () => {
 
   return (
     <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-1 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">Projects</h1>
       </div>
+      <ExplainerDescription
+        {...EXPLAINERS_MAP[EXPLAINER_ID.what_do_you_use_projects_for]}
+        className="mb-4"
+      />
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
           searchText={search!}
