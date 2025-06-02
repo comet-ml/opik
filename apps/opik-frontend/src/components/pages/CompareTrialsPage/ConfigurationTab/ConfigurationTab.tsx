@@ -171,12 +171,9 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
 
   return (
     <>
-      <PageBodyStickyContainer
-        className="pb-4"
-        direction="horizontal"
-        limitWidth
-      >
+      <PageBodyStickyContainer direction="horizontal" limitWidth>
         <ExplainerCallout
+          className="mb-4"
           {...EXPLAINERS_MAP[
             EXPLAINER_ID.whats_the_evaluation_run_configuration
           ]}

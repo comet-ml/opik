@@ -640,12 +640,9 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   return (
     <>
-      <PageBodyStickyContainer
-        className="pb-4"
-        direction="horizontal"
-        limitWidth
-      >
+      <PageBodyStickyContainer direction="horizontal" limitWidth>
         <ExplainerCallout
+          className="mb-4"
           {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_experiment_items]}
         />
       </PageBodyStickyContainer>
