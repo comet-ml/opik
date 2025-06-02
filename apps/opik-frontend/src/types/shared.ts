@@ -47,6 +47,7 @@ export enum DYNAMIC_COLUMN_TYPE {
 type explainerType = "info" | "help";
 
 export type Explainer = {
+  id: string;
   title?: string;
   type?: explainerType;
   description: string;

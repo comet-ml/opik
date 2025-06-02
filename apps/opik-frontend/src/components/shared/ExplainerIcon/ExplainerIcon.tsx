@@ -8,7 +8,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type ExplainerIconProps = {
   className?: string;
-} & Explainer;
+} & Omit<Explainer, "id">;
 
 const ExplainerIcon: React.FC<ExplainerIconProps> = ({
   type = "info",

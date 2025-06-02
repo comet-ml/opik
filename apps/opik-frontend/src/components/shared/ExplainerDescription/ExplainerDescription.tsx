@@ -8,7 +8,7 @@ import { Explainer } from "@/types/shared";
 type ExplainerDescriptionProps = {
   size?: "sm" | "md";
   className?: string;
-} & Explainer;
+} & Omit<Explainer, "id">;
 
 const ExplainerDescription: React.FC<ExplainerDescriptionProps> = ({
   title,
