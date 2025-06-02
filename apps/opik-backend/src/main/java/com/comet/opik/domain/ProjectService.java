@@ -263,6 +263,7 @@ class ProjectServiceImpl implements ProjectService {
                 .feedbackScores(StatsMapper.getStatsFeedbackScores(projectStats))
                 .duration(StatsMapper.getStatsDuration(projectStats))
                 .totalEstimatedCost(StatsMapper.getStatsTotalEstimatedCost(projectStats))
+                .totalEstimatedCostSum(StatsMapper.getStatsTotalEstimatedCostSum(projectStats))
                 .usage(StatsMapper.getStatsUsage(projectStats))
                 .traceCount(StatsMapper.getStatsTraceCount(projectStats))
                 .guardrailsFailedCount(StatsMapper.getStatsGuardrailsFailedCount(projectStats))
@@ -524,6 +525,8 @@ class ProjectServiceImpl implements ProjectService {
                                 .duration(StatsMapper.getStatsDuration(projectStats.get(project.id())))
                                 .totalEstimatedCost(
                                         StatsMapper.getStatsTotalEstimatedCost(projectStats.get(project.id())))
+                                .totalEstimatedCostSum(
+                                        StatsMapper.getStatsTotalEstimatedCostSum(projectStats.get(project.id())))
                                 .traceCount(StatsMapper.getStatsTraceCount(projectStats.get(project.id())))
                                 .guardrailsFailedCount(
                                         StatsMapper.getStatsGuardrailsFailedCount(projectStats.get(project.id())))

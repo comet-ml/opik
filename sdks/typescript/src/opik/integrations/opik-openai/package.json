@@ -58,7 +58,7 @@
   ],
   "peerDependencies": {
     "openai": "^4.97.0",
-    "opik": "^1.6.12"
+    "opik": "^1.7.25"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

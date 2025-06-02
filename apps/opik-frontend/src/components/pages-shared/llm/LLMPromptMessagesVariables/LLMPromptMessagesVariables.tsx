@@ -2,9 +2,10 @@ import React, { useCallback, useMemo } from "react";
 import { DropdownOption } from "@/types/shared";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import LLMPromptMessagesVariable from "@/components/pages-shared/llm/LLMPromptMessagesVariables/LLMPromptMessagesVariable";
+import { Description } from "@/components/ui/description";
 
 const DEFAULT_DESCRIPTION =
-  "Variables are added based on the prompt, all variables as {{variable 1}} will be added to this list.";
+  "Detected variables in your prompt (e.g., {{variable1}}) will appear below. For each one, select a field from a recent trace to map it. This will auto-fill the variable during rule execution.";
 
 const DEFAULT_ERROR_TEXT =
   "Template parsing error. The variables cannot be extracted.";
@@ -52,7 +53,7 @@ const LLMPromptMessagesVariables = ({
       <div className="comet-body-s-accented mb-1 text-muted-slate">
         Variable mapping ({variablesList.length})
       </div>
-      <div className="comet-body-s mb-2 text-light-slate">{description}</div>
+      <Description className="mb-2 inline-block">{description}</Description>
       {parsingError && (
         <Alert variant="destructive">
           <AlertTitle>{errorText}</AlertTitle>

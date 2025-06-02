@@ -104,11 +104,11 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
         return projectService.retrieveByNamesOrCreate(scoresPerProject.keySet())
                 .map(ProjectService::groupByName)
                 .map(projectMap -> mergeProjectsAndScores(projectMap, scoresPerProject))
-                .flatMap(projects -> processScoreBatch(entityType, projects, scores.size())) // score all scores
+                .flatMap(projects -> saveScoreBatch(entityType, projects)) // score all scores
                 .then();
     }
 
-    private Mono<Long> processScoreBatch(EntityType entityType, List<ProjectDto> projects, int actualBatchSize) {
+    private Mono<Long> saveScoreBatch(EntityType entityType, List<ProjectDto> projects) {
         return Flux.fromIterable(projects)
                 .flatMap(projectDto -> dao.scoreBatchOf(entityType, projectDto.scores()))
                 .reduce(0L, Long::sum);

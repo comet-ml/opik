@@ -5,7 +5,9 @@ import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
+import com.comet.opik.api.validate.InRange;
 import com.comet.opik.podam.manufacturer.BigDecimalTypeManufacturer;
 import com.comet.opik.podam.manufacturer.CategoricalFeedbackDetailTypeManufacturer;
 import com.comet.opik.podam.manufacturer.DatasetItemTypeManufacturer;
@@ -29,13 +31,18 @@ import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Pattern;
+import uk.co.jemos.podam.api.AttributeMetadata;
+import uk.co.jemos.podam.api.DataProviderStrategy;
 import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamFactoryImpl;
 import uk.co.jemos.podam.api.RandomDataProviderStrategy;
+import uk.co.jemos.podam.common.ManufacturingContext;
+import uk.co.jemos.podam.typeManufacturers.AbstractTypeManufacturer;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -50,6 +57,7 @@ public class PodamFactoryUtils {
         strategy.addOrReplaceAttributeStrategy(Pattern.class, PatternStrategy.INSTANCE);
         strategy.addOrReplaceAttributeStrategy(DecimalMax.class, BigDecimalStrategy.INSTANCE);
         strategy.addOrReplaceAttributeStrategy(DecimalMin.class, BigDecimalStrategy.INSTANCE);
+        strategy.addOrReplaceAttributeStrategy(InRange.class, InRangeStrategy.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(BigDecimal.class, BigDecimalTypeManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(UUID.class, UUIDTypeManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(
@@ -71,8 +79,19 @@ public class PodamFactoryUtils {
         strategy.addOrReplaceTypeManufacturer(StartMultipartUploadRequest.class,
                 StartMultipartUploadRequestManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(Guardrail.class, GuardrailCheckTypeManufacturer.INSTANCE);
+        strategy.addOrReplaceTypeManufacturer(VisibilityMode.class, getVisibilityModeManufacturer());
 
         return podamFactory;
+    }
+
+    private static AbstractTypeManufacturer<VisibilityMode> getVisibilityModeManufacturer() {
+        return new AbstractTypeManufacturer<>() {
+            @Override
+            public VisibilityMode getType(DataProviderStrategy dataProviderStrategy,
+                    AttributeMetadata attributeMetadata, ManufacturingContext manufacturingContext) {
+                return VisibilityMode.DEFAULT;
+            }
+        };
     }
 
     public static <T> List<T> manufacturePojoList(PodamFactory podamFactory, Class<T> pojoClass) {
@@ -81,5 +100,10 @@ public class PodamFactoryUtils {
 
     public static <T> Set<T> manufacturePojoSet(PodamFactory podamFactory, Class<T> pojoClass) {
         return podamFactory.manufacturePojo(Set.class, pojoClass);
+    }
+
+    public static <K, V> Map<K, V> manufacturePojoMap(
+            PodamFactory podamFactory, Class<K> keyClass, Class<V> valueClass) {
+        return podamFactory.manufacturePojo(Map.class, keyClass, valueClass);
     }
 }

@@ -34,13 +34,14 @@ const FeedbackDefinitionsActionsPanel: React.FunctionComponent<
         setOpen={setOpen}
         onConfirm={deleteFeedbackDefinitionsHandler}
         title="Delete feedback definitions"
-        description="Are you sure you want to delete all selected feedback definitions?"
+        description="This action can’t be undone. Existing scored traces won’t be affected. Are you sure you want to continue?"
         confirmText="Delete feedback definitions"
+        confirmButtonVariant="destructive"
       />
       <TooltipWrapper content="Delete">
         <Button
           variant="outline"
-          size="icon"
+          size="icon-sm"
           onClick={() => {
             setOpen(true);
             resetKeyRef.current = resetKeyRef.current + 1;

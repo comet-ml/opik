@@ -21,10 +21,8 @@ Opik helps you build, evaluate, and optimize LLM systems that run better, faster
 [![Python SDK](https://img.shields.io/pypi/v/opik)](https://pypi.org/project/opik/)
 [![License](https://img.shields.io/github/license/comet-ml/opik)](https://github.com/comet-ml/opik/blob/main/LICENSE)
 [![Build](https://github.com/comet-ml/opik/actions/workflows/build_apps.yml/badge.svg)](https://github.com/comet-ml/opik/actions/workflows/build_apps.yml)
-<a target="_blank" href="https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/opik_quickstart.ipynb">
-
-  <!-- <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open Quickstart In Colab"/> -->
-</a>
+[![Bounties](https://img.shields.io/endpoint?url=https%3A%2F%2Falgora.io%2Fapi%2Fshields%2Fcomet-ml%2Fbounties%3Fstatus%3Dopen)](https://algora.io/comet-ml/bounties?status=open)
+<!-- [![Quick Start](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/opik_quickstart.ipynb) -->
 
 </div>
 
@@ -37,8 +35,8 @@ Opik helps you build, evaluate, and optimize LLM systems that run better, faster
 </p>
 
 <div align="center" style="margin-top: 1em; margin-bottom: 1em;">
-<a href="#🚀-what-is-opik">🚀 What is Opik?</a> • <a href="#🛠️-opik-server-installation">🛠️ Opik Server Installation</a> • <a href="#💻-opik-client-sdk">💻 Opik Client SDK</a> • <a href="#📝-logging-traces-with-integrations">📝 Logging Traces</a><br>
-<a href="#🧑‍⚖️-llm-as-a-judge-metrics">🧑‍⚖️ LLM as a Judge</a> • <a href="#🔍-evaluating-your-llm-application">🔍 Evaluating your Application</a> • <a href="#⭐-star-us-on-github">⭐ Star Us</a> • <a href="#🤝-contributing">🤝 Contributing</a>
+<a href="#-what-is-opik">🚀 What is Opik?</a> • <a href="#🛠-opik-server-installation">🛠️ Opik Server Installation</a> • <a href="#-opik-client-sdk">💻 Opik Client SDK</a> • <a href="#-logging-traces-with-integrations">📝 Logging Traces</a><br>
+<a href="#-llm-as-a-judge-metrics">🧑‍⚖️ LLM as a Judge</a> • <a href="#-evaluating-your-llm-application">🔍 Evaluating your Application</a> • <a href="#-star-us-on-github">⭐ Star Us</a> • <a href="#-contributing">🤝 Contributing</a>
 </div>
 
 <br>
@@ -189,6 +187,7 @@ The easiest way to log traces is to use one of our direct integrations. Opik sup
 | Predibase      | Log traces for Predibase LLM calls                                  | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/predibase?utm_source=opik&utm_medium=github&utm_content=predibase_link&utm_campaign=opik)       | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/predibase.ipynb)    |
 | Pydantic AI    | Log traces for PydanticAI agent calls                               | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/pydantic-ai?utm_source=opik&utm_medium=github&utm_content=predibase_link&utm_campaign=opik)     | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/pydantic-ai.ipynb)  |
 | Ragas          | Log traces for Ragas evaluations                                    | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/ragas?utm_source=opik&utm_medium=github&utm_content=pydantic_ai_link&utm_campaign=opik)         | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/ragas.ipynb)        |
+| Smolagents     | Log traces for Smolagents agents                                    | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/smolagents?utm_source=opik&utm_medium=github&utm_content=smolagents_link&utm_campaign=opik)     | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/smolagents.ipynb)  |
 | Strands Agents | Log traces for Strands agents calls                                 | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/strands-agents/?utm_source=opik&utm_medium=github&utm_content=langchain_link&utm_campaign=opik) | (*Coming Soon*)                                                                                                                                                                                                                    |
 | Vercel AI      | Log traces for Vercel AI SDK calls                                  | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/vercel-ai-sdk/?utm_source=opik&utm_medium=github&utm_content=langchain_link&utm_campaign=opik)  | (*Coming Soon*)                                                                                                                                                                                                                    |
 | watsonx        | Log traces for IBM watsonx LLM calls                                | [Documentation](https://www.comet.com/docs/opik/tracing/integrations/watsonx?utm_source=opik&utm_medium=github&utm_content=watsonx_link&utm_campaign=opik)           | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/master/apps/opik-documentation/documentation/docs/cookbook/watsonx.ipynb)      |

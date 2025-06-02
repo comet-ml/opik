@@ -25,6 +25,7 @@ import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import NoThreadsPage from "@/components/pages/TracesPage/ThreadsTab/NoThreadsPage";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
@@ -46,6 +47,7 @@ import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableW
 import { formatDate } from "@/lib/date";
 import ThreadsActionsPanel from "@/components/pages/TracesPage/ThreadsTab/ThreadsActionsPanel";
 import useThreadList from "@/api/traces/useThreadsList";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -332,6 +334,12 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
 
   return (
     <>
+      <PageBodyStickyContainer direction="horizontal" limitWidth>
+        <ExplainerCallout
+          className="mb-4"
+          {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_threads]}
+        />
+      </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
@@ -358,7 +366,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             rows={selectedRows}
             columnsToExport={columnsToExport}
           />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <TooltipWrapper content={`Refresh threads list`}>
             <Button
               variant="outline"

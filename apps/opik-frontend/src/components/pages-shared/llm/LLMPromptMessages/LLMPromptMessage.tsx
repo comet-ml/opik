@@ -108,85 +108,86 @@ const LLMPromptMessage = ({
           editorViewRef.current?.focus();
         }}
         {...attributes}
-        className={cn(
-          "group py-2 px-3 relative [&:focus-within]:border-primary",
-          {
-            "z-10": id === active?.id,
-            "border-destructive": Boolean(errorText),
-          },
-        )}
+        className={cn("group py-2 px-3 [&:focus-within]:border-primary", {
+          "z-10": id === active?.id,
+          "border-destructive": Boolean(errorText),
+        })}
       >
-        <div
-          className={cn(
-            "absolute right-2 top-2 gap-1 group-hover:flex",
-            showAlwaysActionsPanel || isHoldActionsVisible ? "flex" : "hidden",
-          )}
-        >
-          {!hidePromptActions && (
-            <LLMPromptMessageActions
-              message={message}
-              onChangeMessage={onChangeMessage}
-              setIsLoading={setIsLoading}
-              setIsHoldActionsVisible={setIsHoldActionsVisible}
-            />
-          )}
-          {!hideRemoveButton && (
-            <TooltipWrapper content="Delete a message">
-              <Button
-                variant="outline"
-                size="icon-sm"
-                onClick={onRemoveMessage}
-                type="button"
-              >
-                <Trash />
-              </Button>
-            </TooltipWrapper>
-          )}
-          <TooltipWrapper content="Duplicate a message">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={onDuplicateMessage}
-              type="button"
-            >
-              <CopyPlus />
-            </Button>
-          </TooltipWrapper>
-          {!hideDragButton && (
-            <Button
-              variant="outline"
-              className="cursor-move"
-              size="icon-sm"
-              type="button"
-              {...listeners}
-            >
-              <GripHorizontal />
-            </Button>
-          )}
-        </div>
-
         <CardContent className="p-0">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="minimal" size="sm" className="min-w-4 p-0">
-                {LLM_MESSAGE_ROLE_NAME_MAP[role] || role}
-                <ChevronDown className="ml-1 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {possibleTypes.map(({ label, value }) => {
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={value}
-                    onSelect={() => onChangeMessage({ role: value })}
-                    checked={role === value}
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-background shadow-[0_6px_6px_-1px_rgba(255,255,255,1)]">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="minimal" size="sm" className="min-w-4 p-0">
+                  {LLM_MESSAGE_ROLE_NAME_MAP[role] || role}
+                  <ChevronDown className="ml-1 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {possibleTypes.map(({ label, value }) => {
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={value}
+                      onSelect={() => onChangeMessage({ role: value })}
+                      checked={role === value}
+                    >
+                      {label}
+                    </DropdownMenuCheckboxItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <div
+              className={cn(
+                "gap-2 group-hover:flex",
+                showAlwaysActionsPanel || isHoldActionsVisible
+                  ? "flex"
+                  : "hidden",
+              )}
+            >
+              {!hidePromptActions && (
+                <LLMPromptMessageActions
+                  message={message}
+                  onChangeMessage={onChangeMessage}
+                  setIsLoading={setIsLoading}
+                  setIsHoldActionsVisible={setIsHoldActionsVisible}
+                />
+              )}
+              {!hideRemoveButton && (
+                <TooltipWrapper content="Delete a message">
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    onClick={onRemoveMessage}
+                    type="button"
                   >
-                    {label}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                    <Trash />
+                  </Button>
+                </TooltipWrapper>
+              )}
+              <TooltipWrapper content="Duplicate a message">
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={onDuplicateMessage}
+                  type="button"
+                >
+                  <CopyPlus />
+                </Button>
+              </TooltipWrapper>
+              {!hideDragButton && (
+                <Button
+                  variant="outline"
+                  className="cursor-move"
+                  size="icon-sm"
+                  type="button"
+                  {...listeners}
+                >
+                  <GripHorizontal />
+                </Button>
+              )}
+            </div>
+          </div>
+
           {isLoading ? (
             <Loader className="min-h-32" />
           ) : (
@@ -209,9 +210,7 @@ const LLMPromptMessage = ({
           )}
         </CardContent>
       </Card>
-      {errorText && (
-        <FormErrorSkeleton className="-mt-2">{errorText}</FormErrorSkeleton>
-      )}
+      {errorText && <FormErrorSkeleton>{errorText}</FormErrorSkeleton>}
     </>
   );
 };

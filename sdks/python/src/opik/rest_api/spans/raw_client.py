@@ -35,6 +35,7 @@ from .types.find_feedback_score_names_1_request_type import FindFeedbackScoreNam
 from .types.get_span_stats_request_type import GetSpanStatsRequestType
 from .types.get_spans_by_project_request_type import GetSpansByProjectRequestType
 from .types.span_search_stream_request_public_type import SpanSearchStreamRequestPublicType
+from .types.span_update_type import SpanUpdateType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -266,12 +267,12 @@ class RawSpansClient:
         self,
         *,
         trace_id: str,
-        name: str,
-        type: SpanWriteType,
         start_time: dt.datetime,
         id: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
         parent_span_id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
+        type: typing.Optional[SpanWriteType] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListStringWrite] = OMIT,
         output: typing.Optional[JsonListStringWrite] = OMIT,
@@ -293,10 +294,6 @@ class RawSpansClient:
         ----------
         trace_id : str
 
-        name : str
-
-        type : SpanWriteType
-
         start_time : dt.datetime
 
         id : typing.Optional[str]
@@ -305,6 +302,10 @@ class RawSpansClient:
             If null, the default project is used
 
         parent_span_id : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        type : typing.Optional[SpanWriteType]
 
         end_time : typing.Optional[dt.datetime]
 
@@ -529,6 +530,8 @@ class RawSpansClient:
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         parent_span_id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
+        type: typing.Optional[SpanUpdateType] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListString] = OMIT,
         output: typing.Optional[JsonListString] = OMIT,
@@ -557,6 +560,10 @@ class RawSpansClient:
             If null and project_name not specified, Default Project is assumed
 
         parent_span_id : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        type : typing.Optional[SpanUpdateType]
 
         end_time : typing.Optional[dt.datetime]
 
@@ -593,6 +600,8 @@ class RawSpansClient:
                 "project_id": project_id,
                 "trace_id": trace_id,
                 "parent_span_id": parent_span_id,
+                "name": name,
+                "type": type,
                 "end_time": end_time,
                 "input": convert_and_respect_annotation_metadata(
                     object_=input, annotation=JsonListString, direction="write"
@@ -1308,12 +1317,12 @@ class AsyncRawSpansClient:
         self,
         *,
         trace_id: str,
-        name: str,
-        type: SpanWriteType,
         start_time: dt.datetime,
         id: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
         parent_span_id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
+        type: typing.Optional[SpanWriteType] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListStringWrite] = OMIT,
         output: typing.Optional[JsonListStringWrite] = OMIT,
@@ -1335,10 +1344,6 @@ class AsyncRawSpansClient:
         ----------
         trace_id : str
 
-        name : str
-
-        type : SpanWriteType
-
         start_time : dt.datetime
 
         id : typing.Optional[str]
@@ -1347,6 +1352,10 @@ class AsyncRawSpansClient:
             If null, the default project is used
 
         parent_span_id : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        type : typing.Optional[SpanWriteType]
 
         end_time : typing.Optional[dt.datetime]
 
@@ -1571,6 +1580,8 @@ class AsyncRawSpansClient:
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         parent_span_id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
+        type: typing.Optional[SpanUpdateType] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
         input: typing.Optional[JsonListString] = OMIT,
         output: typing.Optional[JsonListString] = OMIT,
@@ -1599,6 +1610,10 @@ class AsyncRawSpansClient:
             If null and project_name not specified, Default Project is assumed
 
         parent_span_id : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        type : typing.Optional[SpanUpdateType]
 
         end_time : typing.Optional[dt.datetime]
 
@@ -1635,6 +1650,8 @@ class AsyncRawSpansClient:
                 "project_id": project_id,
                 "trace_id": trace_id,
                 "parent_span_id": parent_span_id,
+                "name": name,
+                "type": type,
                 "end_time": end_time,
                 "input": convert_and_respect_annotation_metadata(
                     object_=input, annotation=JsonListString, direction="write"

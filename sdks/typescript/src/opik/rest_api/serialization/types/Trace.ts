@@ -11,6 +11,7 @@ import { ErrorInfo } from "./ErrorInfo";
 import { FeedbackScore } from "./FeedbackScore";
 import { Comment } from "./Comment";
 import { GuardrailsValidation } from "./GuardrailsValidation";
+import { TraceVisibilityMode } from "./TraceVisibilityMode";
 
 export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikApi.Trace> = core.serialization.object({
     id: core.serialization.string().optional(),
@@ -39,6 +40,8 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     spanCount: core.serialization.property("span_count", core.serialization.number().optional()),
     duration: core.serialization.number().optional(),
     threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
+    visibilityMode: core.serialization.property("visibility_mode", TraceVisibilityMode.optional()),
+    llmSpanCount: core.serialization.property("llm_span_count", core.serialization.number().optional()),
 });
 
 export declare namespace Trace {
@@ -66,5 +69,7 @@ export declare namespace Trace {
         span_count?: number | null;
         duration?: number | null;
         thread_id?: string | null;
+        visibility_mode?: TraceVisibilityMode.Raw | null;
+        llm_span_count?: number | null;
     }
 }

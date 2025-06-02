@@ -740,6 +740,87 @@ def test_experiment__get_experiment_by_name__two_experiments_with_the_same_name(
     assert retrieved_experiment.id in [e.id for e in retrieved_experiments]
 
 
+def test_experiment__get_experiments_by_name(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    dataset = opik_client.create_dataset(dataset_name)
+
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the of capital of France?"},
+                "expected_model_output": {"output": "Paris"},
+            },
+            {
+                "input": {"question": "What is the of capital of Germany?"},
+                "expected_model_output": {"output": "Berlin"},
+            },
+            {
+                "input": {"question": "What is the of capital of Poland?"},
+                "expected_model_output": {"output": "Warsaw"},
+            },
+        ]
+    )
+
+    def task(item: Dict[str, Any]):
+        if item["input"] == {"question": "What is the of capital of France?"}:
+            return {"output": "Paris"}
+        if item["input"] == {"question": "What is the of capital of Germany?"}:
+            return {"output": "Berlin"}
+        if item["input"] == {"question": "What is the of capital of Poland?"}:
+            return {"output": "Krakow"}
+
+        raise AssertionError(
+            f"Task received dataset item with an unexpected input: {item['input']}"
+        )
+
+    prompt = Prompt(
+        name=f"test-experiment-prompt-{random_chars()}",
+        prompt=f"test-experiment-prompt-template-{random_chars()}",
+    )
+
+    experiments_names = [experiment_name, experiment_name, random_chars(10)]
+
+    evaluation_results = []
+    equals_metric = metrics.Equals()
+    for name in experiments_names:
+        evaluation_result = opik.evaluate(
+            dataset=dataset,
+            task=task,
+            scoring_metrics=[equals_metric],
+            experiment_name=name,
+            experiment_config={
+                "model_name": "gpt-3.5",
+            },
+            scoring_key_mapping={
+                "reference": lambda x: x["expected_model_output"]["output"],
+            },
+            prompt=prompt,
+        )
+        evaluation_results.append(evaluation_result)
+
+    opik.flush_tracker()
+
+    # make sure experiments saved and available
+    for result in evaluation_results:
+        verifiers.verify_experiment(
+            opik_client=opik_client,
+            id=result.experiment_id,
+            experiment_name=result.experiment_name,
+            experiment_metadata={"model_name": "gpt-3.5"},
+            traces_amount=3,  # one trace per dataset item
+            feedback_scores_amount=1,
+            prompts=[prompt],
+        )
+
+    # check getting experiment by name
+    experiments = opik_client.get_experiments_by_name(experiment_name)
+    assert len(experiments) == 2
+
+    experiments = opik_client.get_experiments_by_name(experiments_names[2])
+    assert len(experiments) == 1
+
+
 def test_experiment__get_experiment_by_id__experiment_not_found__ExperimentNotFound_error_is_raised(
     opik_client: opik.Opik,
 ):

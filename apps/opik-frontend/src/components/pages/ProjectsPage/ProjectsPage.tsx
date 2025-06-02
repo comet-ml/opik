@@ -49,6 +49,8 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 
@@ -64,7 +66,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  "total_estimated_cost",
+  "total_estimated_cost_sum",
   "duration.p50",
   "last_updated_at",
   "created_at",
@@ -116,7 +118,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         cell: DurationCell as never,
       },
       {
-        id: "total_estimated_cost",
+        id: "total_estimated_cost_sum",
         label: "Total cost",
         type: COLUMN_TYPE.cost,
         cell: CostCell as never,
@@ -155,7 +157,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "feedback_scores",
-        label: "Feedback scores",
+        label: "Feedback scores (avg.)",
         type: COLUMN_TYPE.numberDictionary,
         accessorFn: (row) =>
           get(row, "feedback_scores", []).map((score) => ({
@@ -167,6 +169,7 @@ const ProjectsPage: React.FunctionComponent = () => {
           getHoverCardName: (row: ProjectWithStatistic) => row.name,
           isAverageScores: true,
         },
+        explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
       },
       ...(isGuardrailsEnabled
         ? [
@@ -356,9 +359,13 @@ const ProjectsPage: React.FunctionComponent = () => {
 
   return (
     <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-1 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">Projects</h1>
       </div>
+      <ExplainerDescription
+        {...EXPLAINERS_MAP[EXPLAINER_ID.what_do_you_use_projects_for]}
+        className="mb-4"
+      />
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
           searchText={search!}
@@ -369,7 +376,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         ></SearchInput>
         <div className="flex items-center gap-2">
           <ProjectsActionsPanel projects={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
             columns={columnsDef}
             selectedColumns={selectedColumns}
