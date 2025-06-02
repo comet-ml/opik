@@ -36,6 +36,7 @@ public enum OpenaiModelName {
     GPT_O1_MINI_2024_09_12("o1-mini-2024-09-12"),
     GPT_O1_PREVIEW("o1-preview"),
     GPT_O1_PREVIEW_2024_09_12("o1-preview-2024-09-12"),
+    GPT_O3_MINI("o3-mini"),
     ;
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenaiModelName with value '{}'";
