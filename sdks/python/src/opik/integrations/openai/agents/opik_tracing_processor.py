@@ -53,12 +53,12 @@ class OpikTracingProcessor(tracing.TracingProcessor):
         self.force_flush()
 
     def on_trace_start(self, trace: tracing.Trace) -> None:
-        trace_metadata = trace.metadata or {}
-        trace_metadata["created_from"] = "openai-agents"
-        if trace.trace_id:
-            trace_metadata["agents-trace-id"] = trace.trace_id
-
         try:
+            trace_metadata = trace.metadata or {}
+            trace_metadata["created_from"] = "openai-agents"
+            if trace.trace_id:
+                trace_metadata["agents-trace-id"] = trace.trace_id
+
             current_trace = self._opik_context_storage.get_trace_data()
             if current_trace is None:
                 current_trace = trace_data.TraceData(
