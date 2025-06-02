@@ -74,6 +74,8 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         else:
             self._opik_trace_data = self._create_trace_data(trace_name=trace_id)
 
+        self._opik_client.trace(**self._opik_trace_data.trace_start_parameters)
+
     def _get_last_event(self, trace_map: Dict[str, List[str]]) -> str:
         def dfs(key: str) -> str:
             if key not in trace_map or not trace_map[key]:
@@ -101,7 +103,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             or self._opik_trace_data.name != "index_construction"
         ):
             self._opik_trace_data.init_end_time().update(output=last_event_output)
-            self._opik_client.trace(**self._opik_trace_data.__dict__)
+            self._opik_client.trace(**self._opik_trace_data.trace_end_parameters)
             self._opik_trace_data = None
 
         # Do not clean _map_event_id_to_span_data as streaming LLM events can
