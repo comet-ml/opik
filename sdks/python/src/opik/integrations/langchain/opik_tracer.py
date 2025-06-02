@@ -140,6 +140,8 @@ class OpikTracer(BaseTracer):
 
             trace_data.init_end_time().update(output=output, error_info=error_info)
             trace_ = self._opik_client.trace(**trace_data.trace_end_parameters)
+
+            assert trace_ is not None
             self._created_traces.append(trace_)
             self._opik_context_storage.pop_trace_data(ensure_id=trace_data.id)
 
