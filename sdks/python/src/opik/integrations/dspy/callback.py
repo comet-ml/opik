@@ -151,6 +151,8 @@ class OpikCallback(dspy_callback.BaseCallback):
         self._map_call_id_to_trace_data[call_id] = trace_data
         self._set_current_context_data(trace_data)
 
+        self._opik_client.trace(**trace_data.trace_start_parameters)
+
     def on_module_end(
         self,
         call_id: str,
@@ -167,7 +169,7 @@ class OpikCallback(dspy_callback.BaseCallback):
     def _end_trace(self, call_id: str) -> None:
         if trace_data := self._map_call_id_to_trace_data.pop(call_id, None):
             trace_data.init_end_time()
-            self._opik_client.trace(**trace_data.__dict__)
+            self._opik_client.trace(**trace_data.trace_end_parameters)
 
             if self._context_storage.get_trace_data() == trace_data:
                 self._context_storage.set_trace_data(None)
