@@ -36,8 +36,8 @@ Opik 帮助您构建、评估和优化 LLM 系统，使其运行得更好、更�
 </p>
 
 <div align="center" style="margin-top: 1em; margin-bottom: 1em;">
-<a href="#🚀-什么是-opik">🚀 什么是 Opik？</a> • <a href="#🛠️-opik-服务端安装">🛠️ Opik 服务端安装</a> • <a href="#💻-opik-客户端-sdk">💻 Opik 客户端 SDK</a> • <a href="#📝-日志跟踪与集成">📝 日志跟踪与集成</a><br>
-<a href="#🧑‍⚖️-作为裁判的-llm">🧑‍⚖️ 作为裁判的 LLM</a> • <a href="#🔍-评估您的应用">🔍 评估您的应用</a> • <a href="#⭐-在-github-上给我们加星">⭐ 在 GitHub 上给我们加星</a> • <a href="#🤝-贡献指南">🤝 贡献指南</a>
+<a href="#-什么是-opik">🚀 什么是 Opik？</a> • <a href="#-opik-服务端安装">🛠️ Opik 服务端安装</a> • <a href="#-opik-客户端-sdk">💻 Opik 客户端 SDK</a> • <a href="#-日志跟踪与集成">📝 日志跟踪与集成</a><br>
+<a href="#🧑‍⚖-作为裁判的-llm">🧑‍⚖️ 作为裁判的 LLM</a> • <a href="#-评估您的应用">🔍 评估您的应用</a> • <a href="#-在-github-上给我们加星">⭐ 在 GitHub 上给我们加星</a> • <a href="#🤝-贡献指南">🤝 贡献指南</a>
 </div>
 
 <br>
