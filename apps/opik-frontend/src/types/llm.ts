@@ -24,6 +24,8 @@ export interface LLMMessage {
   id: string;
   content: string;
   role: LLM_MESSAGE_ROLE;
+  promptId?: string;
+  promptVersionId?: string;
 }
 
 export type ProviderMessageType = Omit<LLMMessage, "id">;

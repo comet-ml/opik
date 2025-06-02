@@ -5,6 +5,9 @@ import {
   LLM_SCHEMA_TYPE,
 } from "@/types/llm";
 
+export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
+export const PLAYGROUND_SELECTED_DATASET_KEY = "playground-selected-dataset";
+
 export const LLM_MESSAGE_ROLE_NAME_MAP = {
   [LLM_MESSAGE_ROLE.system]: "System",
   [LLM_MESSAGE_ROLE.assistant]: "Assistant",

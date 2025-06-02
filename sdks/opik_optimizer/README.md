@@ -1,57 +1,75 @@
-# Opik Optimizer
+# Opik Agent Optimizer
 
-The Opik Opitmizer can refine your prompts to get better performance
-from your LLMs. You can use a variety of algorithms, including:
+[![PyPI version](https://img.shields.io/pypi/v/opik-optimizer.svg)](https://pypi.org/project/opik-optimizer/)
+[![Python versions](https://img.shields.io/pypi/pyversions/opik-optimizer.svg)](https://pypi.org/project/opik-optimizer/)
+[![Downloads](https://static.pepy.tech/badge/opik-optimizer)](https://pepy.tech/project/opik-optimizer)
+[![License](https://img.shields.io/github/license/comet-ml/opik)](https://github.com/comet-ml/opik/blob/main/LICENSE)
 
+The Opik Agent Optimizer refines your prompts to achieve better performance from your Large Language Models (LLMs). It supports a variety of optimization algorithms, including:
+
+* EvolutionaryOptimizer
 * FewShotBayesianOptimizer
-* MiproOptimizer
 * MetaPromptOptimizer
+* MiproOptimizer
+
+Opik Optimizer is a component of the [Opik platform](https://github.com/comet-ml/opik), an open-source LLM evaluation platform by Comet.
+For more information about the broader Opik ecosystem, visit our [Website](https://www.comet.com/site/products/opik/) or [Documentation](https://www.comet.com/docs/opik/).
 
 ## Quickstart
 
+Explore Opik Optimizer's capabilities with our interactive notebook:
 
-[Open Quickstart Notebook in Colab](https://colab.research.google.com/github/comet-ml/opik/blob/main/sdks/opik_optimizer/notebooks/OpikOptimizerIntro.ipynb)
-
+<a href="https://colab.research.google.com/github/comet-ml/opik/blob/main/sdks/opik_optimizer/notebooks/OpikOptimizerIntro.ipynb">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in Colab"/>
+</a>
 
 ## Setup
 
-1. Configure Opik:
-   ```bash
-   # Install Comet ML CLI
-   pip install opik
+To get started with Opik Optimizer, follow these steps:
 
-   # Configure your API key
-   opik configure
-   # When prompted, enter your Opik API key
-   ```
+1.  **Install the package:**
+    ```bash
+    # using pip
+    pip install opik-optimizer
 
-2. Set up your environment variables:
-   ```bash
-   # OpenAI API key for LLM access
-   export OPENAI_API_KEY=your_openai_api_key
-   ```
+    # using uv (faster)
+    uv pip install opik-optimizer
+    ```
 
-3. Install the package:
-   ```bash
-   pip install opik-optimizer
-   ```
+2.  **Configure Opik (Optional, for advanced features):**
+    If you plan to log optimization experiments to Comet or use Opik Datasets, you'll need to configure the Opik client:
+    ```bash
+    # Install the main Opik CLI (if not already installed)
+    pip install opik
 
-You'll need:
+    # Configure your Comet API key and workspace
+    opik configure
+    # When prompted, enter your Opik API key and workspace details.
+    ```
+    Using Opik with Comet allows you to track your optimization runs, compare results, and manage datasets seamlessly.
 
-1. An LLM model name
-2. An Opik Dataset (or Opik Dataset name)
-3. An Opik Metric (possibly a custom one)
-4. A starting prompt (string)
+3.  **Set up LLM Provider API Keys:**
+    Ensure your environment variables are set for the LLM(s) you intend to use. For example, for OpenAI models:
+    ```bash
+    export OPENAI_API_KEY="your_openai_api_key"
+    ```
+    The optimizer utilizes LiteLLM, so you can configure keys for various providers as per LiteLLM's documentation.
+
+You'll typically need:
+
+*   An LLM model name (e.g., "gpt-4o-mini", "claude-3-haiku-20240307").
+*   An [Opik Dataset](https://www.comet.com/docs/opik/evaluation/manage_datasets/) (or a compatible local dataset/data generator).
+*   An [Opik Metric](https://www.comet.com/docs/opik/evaluation/metrics/overview/) (or a custom evaluation function).
+*   A starting prompt (template string).
 
 ## Example
 
-We have prepared some sample datasets for testing:
+Here's a brief example of how to use the `FewShotBayesianOptimizer`. We'll use a sample dataset provided by Opik.
 
-* "tiny-test"
-* "halu-eval-300"
-* "hotpot-300"
-
-You can see how to use those below:
+Available sample datasets for testing:
+*   `"tiny-test"`
+*   `"halu-eval-300"`
+*   `"hotpot-300"`
 
 ```python
 from opik.evaluation.metrics import LevenshteinRatio
@@ -65,69 +83,74 @@ from opik_optimizer import (
     from_llm_response_text,
 )
 
+# Load a sample dataset
 hot_pot_dataset = get_or_create_dataset("hotpot-300")
 
-# For chat prompts instruction doesn't need to contain input parameters from dataset examples.
+# Define the instruction for your chat prompt.
+# Input parameters from dataset examples will be interpolated into the full prompt.
 prompt_instruction = """
-Answer the question.
+Answer the question based on the provided context.
 """
-project_name = "optimize-few-shot-bayesian-hotpot"
+project_name = "optimize-few-shot-bayesian-hotpot" # For Comet logging
 
 optimizer = FewShotBayesianOptimizer(
-    model="gpt-4o-mini",
-    project_name=project_name,
-    min_examples=3,
-    max_examples=8,
-    n_threads=16,
+    model="gpt-4o-mini", # LiteLLM name to use for generation and optimization
+    project_name=project_name, # Associates the run with a Comet project
+    min_examples=3,      # Min few-shot examples
+    max_examples=8,      # Max few-shot examples
+    n_threads=16,        # Parallel threads for evaluation
     seed=42,
 )
 
 metric_config = MetricConfig(
-    metric=LevenshteinRatio(project_name=project_name),
+    metric=LevenshteinRatio(project_name=project_name), # Metric for evaluation
     inputs={
-        "output": from_llm_response_text(),
-        "reference": from_dataset_field(name="answer"),
+        "output": from_llm_response_text(), # Get output from LLM
+        "reference": from_dataset_field(name="answer"), # Get reference from dataset
     },
 )
 
 task_config = TaskConfig(
     instruction_prompt=prompt_instruction,
-    input_dataset_fields=["question"],
-    output_dataset_field="answer",
-    use_chat_prompt=True,
+    input_dataset_fields=["question"], # Fields from dataset to use as input
+    output_dataset_field="answer",     # Field in dataset for reference answer
+    use_chat_prompt=True,              # Use chat-style prompting
 )
 
+# Run the optimization
 result = optimizer.optimize_prompt(
     dataset=hot_pot_dataset,
     metric_config=metric_config,
     task_config=task_config,
-    n_trials=10,
-    n_samples=150,
+    n_trials=10,   # Number of optimization trials
+    n_samples=150, # Number of dataset samples for evaluation per trial
 )
 
+# Display the best prompt and its score
 result.display()
 ```
-
-More examples can be found in the `scripts` folder.
-
-## Installation
-
-```bash
-pip install opik-optimizer
-```
+The `result` object contains the optimized prompt, evaluation scores, and other details from the optimization process. If `project_name` is provided and Opik is configured, results will also be logged to your Comet workspace.
 
 ## Development
 
-To use the Opik Optimizer from source:
+To contribute or use the Opik Optimizer from source:
 
-```bash
-git clone git clone git@github.com:comet-ml/opik
-cd sdks/opik_optimizer
-pip install -e .
-```
+1.  **Clone the Opik repository:**
+    ```bash
+    git clone git@github.com:comet-ml/opik.git
+    ```
+2.  **Navigate to the optimizer's directory:**
+    ```bash
+    cd opik/sdks/opik_optimizer  # Adjust 'opik' if you cloned into a different folder name
+    ```
+3.  **Install in editable mode (with development dependencies):**
+    ```bash
+    pip install -e .[dev]
+    ```
+    The `[dev]` extra installs dependencies useful for development, such as `pytest`.
 
 ## Requirements
 
-- Python 3.10+ < 3.13
-- Opik API key
-- OpenAI API key (or other LLM provider)
+- Python `>=3.9,<3.13`
+- Opik API key (recommended for full functionality, configure via `opik configure`)
+- API key for your chosen LLM provider (e.g., OpenAI, Anthropic, Gemini), configured as per LiteLLM guidelines.

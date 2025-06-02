@@ -5,6 +5,8 @@
 import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
+import { SpanUpdateType } from "../../types/SpanUpdateType";
+import { JsonListString } from "../../../../types/JsonListString";
 import { JsonNode } from "../../../../types/JsonNode";
 import { ErrorInfo } from "../../../../types/ErrorInfo";
 
@@ -14,9 +16,11 @@ export const SpanUpdate: core.serialization.Schema<serializers.SpanUpdate.Raw, O
         projectId: core.serialization.property("project_id", core.serialization.string().optional()),
         traceId: core.serialization.property("trace_id", core.serialization.string()),
         parentSpanId: core.serialization.property("parent_span_id", core.serialization.string().optional()),
+        name: core.serialization.string().optional(),
+        type: SpanUpdateType.optional(),
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
-        input: JsonNode.optional(),
-        output: JsonNode.optional(),
+        input: JsonListString.optional(),
+        output: JsonListString.optional(),
         metadata: JsonNode.optional(),
         model: core.serialization.string().optional(),
         provider: core.serialization.string().optional(),
@@ -32,9 +36,11 @@ export declare namespace SpanUpdate {
         project_id?: string | null;
         trace_id: string;
         parent_span_id?: string | null;
+        name?: string | null;
+        type?: SpanUpdateType.Raw | null;
         end_time?: string | null;
-        input?: JsonNode.Raw | null;
-        output?: JsonNode.Raw | null;
+        input?: JsonListString.Raw | null;
+        output?: JsonListString.Raw | null;
         metadata?: JsonNode.Raw | null;
         model?: string | null;
         provider?: string | null;

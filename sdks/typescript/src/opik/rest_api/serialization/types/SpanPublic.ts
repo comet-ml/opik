@@ -6,6 +6,7 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { SpanPublicType } from "./SpanPublicType";
+import { JsonListStringPublic } from "./JsonListStringPublic";
 import { JsonNodePublic } from "./JsonNodePublic";
 import { ErrorInfoPublic } from "./ErrorInfoPublic";
 import { FeedbackScorePublic } from "./FeedbackScorePublic";
@@ -18,12 +19,12 @@ export const SpanPublic: core.serialization.ObjectSchema<serializers.SpanPublic.
         projectId: core.serialization.property("project_id", core.serialization.string().optional()),
         traceId: core.serialization.property("trace_id", core.serialization.string()),
         parentSpanId: core.serialization.property("parent_span_id", core.serialization.string().optional()),
-        name: core.serialization.string(),
-        type: SpanPublicType,
+        name: core.serialization.string().optional(),
+        type: SpanPublicType.optional(),
         startTime: core.serialization.property("start_time", core.serialization.date()),
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
-        input: JsonNodePublic.optional(),
-        output: JsonNodePublic.optional(),
+        input: JsonListStringPublic.optional(),
+        output: JsonListStringPublic.optional(),
         metadata: JsonNodePublic.optional(),
         model: core.serialization.string().optional(),
         provider: core.serialization.string().optional(),
@@ -54,12 +55,12 @@ export declare namespace SpanPublic {
         project_id?: string | null;
         trace_id: string;
         parent_span_id?: string | null;
-        name: string;
-        type: SpanPublicType.Raw;
+        name?: string | null;
+        type?: SpanPublicType.Raw | null;
         start_time: string;
         end_time?: string | null;
-        input?: JsonNodePublic.Raw | null;
-        output?: JsonNodePublic.Raw | null;
+        input?: JsonListStringPublic.Raw | null;
+        output?: JsonListStringPublic.Raw | null;
         metadata?: JsonNodePublic.Raw | null;
         model?: string | null;
         provider?: string | null;

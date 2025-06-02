@@ -9,7 +9,9 @@ from .comment import Comment
 from .error_info import ErrorInfo
 from .feedback_score import FeedbackScore
 from .guardrails_validation import GuardrailsValidation
+from .json_list_string import JsonListString
 from .json_node import JsonNode
+from .trace_visibility_mode import TraceVisibilityMode
 
 
 class Trace(UniversalBaseModel):
@@ -23,8 +25,8 @@ class Trace(UniversalBaseModel):
     name: typing.Optional[str] = None
     start_time: dt.datetime
     end_time: typing.Optional[dt.datetime] = None
-    input: typing.Optional[JsonNode] = None
-    output: typing.Optional[JsonNode] = None
+    input: typing.Optional[JsonListString] = None
+    output: typing.Optional[JsonListString] = None
     metadata: typing.Optional[JsonNode] = None
     tags: typing.Optional[typing.List[str]] = None
     error_info: typing.Optional[ErrorInfo] = None
@@ -44,6 +46,8 @@ class Trace(UniversalBaseModel):
     """
 
     thread_id: typing.Optional[str] = None
+    visibility_mode: typing.Optional[TraceVisibilityMode] = None
+    llm_span_count: typing.Optional[int] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

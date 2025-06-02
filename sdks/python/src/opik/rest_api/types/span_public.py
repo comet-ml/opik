@@ -8,6 +8,7 @@ from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .comment_public import CommentPublic
 from .error_info_public import ErrorInfoPublic
 from .feedback_score_public import FeedbackScorePublic
+from .json_list_string_public import JsonListStringPublic
 from .json_node_public import JsonNodePublic
 from .span_public_type import SpanPublicType
 
@@ -22,12 +23,12 @@ class SpanPublic(UniversalBaseModel):
     project_id: typing.Optional[str] = None
     trace_id: str
     parent_span_id: typing.Optional[str] = None
-    name: str
-    type: SpanPublicType
+    name: typing.Optional[str] = None
+    type: typing.Optional[SpanPublicType] = None
     start_time: dt.datetime
     end_time: typing.Optional[dt.datetime] = None
-    input: typing.Optional[JsonNodePublic] = None
-    output: typing.Optional[JsonNodePublic] = None
+    input: typing.Optional[JsonListStringPublic] = None
+    output: typing.Optional[JsonListStringPublic] = None
     metadata: typing.Optional[JsonNodePublic] = None
     model: typing.Optional[str] = None
     provider: typing.Optional[str] = None

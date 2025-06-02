@@ -5,11 +5,13 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { JsonListString } from "./JsonListString";
 import { JsonNode } from "./JsonNode";
 import { ErrorInfo } from "./ErrorInfo";
 import { FeedbackScore } from "./FeedbackScore";
 import { Comment } from "./Comment";
 import { GuardrailsValidation } from "./GuardrailsValidation";
+import { TraceVisibilityMode } from "./TraceVisibilityMode";
 
 export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikApi.Trace> = core.serialization.object({
     id: core.serialization.string().optional(),
@@ -18,8 +20,8 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     name: core.serialization.string().optional(),
     startTime: core.serialization.property("start_time", core.serialization.date()),
     endTime: core.serialization.property("end_time", core.serialization.date().optional()),
-    input: JsonNode.optional(),
-    output: JsonNode.optional(),
+    input: JsonListString.optional(),
+    output: JsonListString.optional(),
     metadata: JsonNode.optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
     errorInfo: core.serialization.property("error_info", ErrorInfo.optional()),
@@ -38,6 +40,8 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     spanCount: core.serialization.property("span_count", core.serialization.number().optional()),
     duration: core.serialization.number().optional(),
     threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
+    visibilityMode: core.serialization.property("visibility_mode", TraceVisibilityMode.optional()),
+    llmSpanCount: core.serialization.property("llm_span_count", core.serialization.number().optional()),
 });
 
 export declare namespace Trace {
@@ -48,8 +52,8 @@ export declare namespace Trace {
         name?: string | null;
         start_time: string;
         end_time?: string | null;
-        input?: JsonNode.Raw | null;
-        output?: JsonNode.Raw | null;
+        input?: JsonListString.Raw | null;
+        output?: JsonListString.Raw | null;
         metadata?: JsonNode.Raw | null;
         tags?: string[] | null;
         error_info?: ErrorInfo.Raw | null;
@@ -65,5 +69,7 @@ export declare namespace Trace {
         span_count?: number | null;
         duration?: number | null;
         thread_id?: string | null;
+        visibility_mode?: TraceVisibilityMode.Raw | null;
+        llm_span_count?: number | null;
     }
 }

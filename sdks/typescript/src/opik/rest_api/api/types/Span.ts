@@ -11,12 +11,12 @@ export interface Span {
     projectId?: string;
     traceId: string;
     parentSpanId?: string;
-    name: string;
-    type: OpikApi.SpanType;
+    name?: string;
+    type?: OpikApi.SpanType;
     startTime: Date;
     endTime?: Date;
-    input?: OpikApi.JsonNode;
-    output?: OpikApi.JsonNode;
+    input?: OpikApi.JsonListString;
+    output?: OpikApi.JsonListString;
     metadata?: OpikApi.JsonNode;
     model?: string;
     provider?: string;

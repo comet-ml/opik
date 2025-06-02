@@ -9,7 +9,9 @@ from .comment_public import CommentPublic
 from .error_info_public import ErrorInfoPublic
 from .feedback_score_public import FeedbackScorePublic
 from .guardrails_validation_public import GuardrailsValidationPublic
+from .json_list_string_public import JsonListStringPublic
 from .json_node_public import JsonNodePublic
+from .trace_public_visibility_mode import TracePublicVisibilityMode
 
 
 class TracePublic(UniversalBaseModel):
@@ -18,8 +20,8 @@ class TracePublic(UniversalBaseModel):
     name: typing.Optional[str] = None
     start_time: dt.datetime
     end_time: typing.Optional[dt.datetime] = None
-    input: typing.Optional[JsonNodePublic] = None
-    output: typing.Optional[JsonNodePublic] = None
+    input: typing.Optional[JsonListStringPublic] = None
+    output: typing.Optional[JsonListStringPublic] = None
     metadata: typing.Optional[JsonNodePublic] = None
     tags: typing.Optional[typing.List[str]] = None
     error_info: typing.Optional[ErrorInfoPublic] = None
@@ -39,6 +41,8 @@ class TracePublic(UniversalBaseModel):
     """
 
     thread_id: typing.Optional[str] = None
+    visibility_mode: typing.Optional[TracePublicVisibilityMode] = None
+    llm_span_count: typing.Optional[int] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

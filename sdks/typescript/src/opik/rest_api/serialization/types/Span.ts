@@ -6,6 +6,7 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { SpanType } from "./SpanType";
+import { JsonListString } from "./JsonListString";
 import { JsonNode } from "./JsonNode";
 import { ErrorInfo } from "./ErrorInfo";
 import { FeedbackScore } from "./FeedbackScore";
@@ -17,12 +18,12 @@ export const Span: core.serialization.ObjectSchema<serializers.Span.Raw, OpikApi
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     traceId: core.serialization.property("trace_id", core.serialization.string()),
     parentSpanId: core.serialization.property("parent_span_id", core.serialization.string().optional()),
-    name: core.serialization.string(),
-    type: SpanType,
+    name: core.serialization.string().optional(),
+    type: SpanType.optional(),
     startTime: core.serialization.property("start_time", core.serialization.date()),
     endTime: core.serialization.property("end_time", core.serialization.date().optional()),
-    input: JsonNode.optional(),
-    output: JsonNode.optional(),
+    input: JsonListString.optional(),
+    output: JsonListString.optional(),
     metadata: JsonNode.optional(),
     model: core.serialization.string().optional(),
     provider: core.serialization.string().optional(),
@@ -50,12 +51,12 @@ export declare namespace Span {
         project_id?: string | null;
         trace_id: string;
         parent_span_id?: string | null;
-        name: string;
-        type: SpanType.Raw;
+        name?: string | null;
+        type?: SpanType.Raw | null;
         start_time: string;
         end_time?: string | null;
-        input?: JsonNode.Raw | null;
-        output?: JsonNode.Raw | null;
+        input?: JsonListString.Raw | null;
+        output?: JsonListString.Raw | null;
         metadata?: JsonNode.Raw | null;
         model?: string | null;
         provider?: string | null;

@@ -5,6 +5,7 @@ import pick from "lodash/pick";
 import {
   LogExperiment,
   LogExperimentItem,
+  LogExperimentPromptVersion,
   LogSpan,
   LogTrace,
 } from "@/types/playground";
@@ -32,6 +33,7 @@ export interface LogQueueParams extends RunStreamingReturn {
   model: PROVIDER_MODEL_TYPE | "";
   provider: PROVIDER_TYPE | "";
   providerMessages: ProviderMessageType[];
+  promptLibraryVersions?: LogExperimentPromptVersion[];
   configs: LLMPromptConfigsType;
 }
 
@@ -117,7 +119,11 @@ const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
     metadata: {
       model: run.model,
       messages: JSON.stringify(run.providerMessages),
+      model_config: run.configs,
     },
+    ...(run.promptLibraryVersions?.length && {
+      prompt_versions: run.promptLibraryVersions,
+    }),
   };
 };
 

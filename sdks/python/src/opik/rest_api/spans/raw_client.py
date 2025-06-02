@@ -21,6 +21,8 @@ from ..types.error_info import ErrorInfo
 from ..types.error_info_write import ErrorInfoWrite
 from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
 from ..types.feedback_score_source import FeedbackScoreSource
+from ..types.json_list_string import JsonListString
+from ..types.json_list_string_write import JsonListStringWrite
 from ..types.json_node import JsonNode
 from ..types.json_node_write import JsonNodeWrite
 from ..types.project_stats_public import ProjectStatsPublic
@@ -33,6 +35,7 @@ from .types.find_feedback_score_names_1_request_type import FindFeedbackScoreNam
 from .types.get_span_stats_request_type import GetSpanStatsRequestType
 from .types.get_spans_by_project_request_type import GetSpansByProjectRequestType
 from .types.span_search_stream_request_public_type import SpanSearchStreamRequestPublicType
+from .types.span_update_type import SpanUpdateType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -264,21 +267,22 @@ class RawSpansClient:
         self,
         *,
         trace_id: str,
-        name: str,
-        type: SpanWriteType,
         start_time: dt.datetime,
         id: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
         parent_span_id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
+        type: typing.Optional[SpanWriteType] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
-        input: typing.Optional[JsonNodeWrite] = OMIT,
-        output: typing.Optional[JsonNodeWrite] = OMIT,
+        input: typing.Optional[JsonListStringWrite] = OMIT,
+        output: typing.Optional[JsonListStringWrite] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
         total_estimated_cost: typing.Optional[float] = OMIT,
         total_estimated_cost_version: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -290,10 +294,6 @@ class RawSpansClient:
         ----------
         trace_id : str
 
-        name : str
-
-        type : SpanWriteType
-
         start_time : dt.datetime
 
         id : typing.Optional[str]
@@ -303,11 +303,15 @@ class RawSpansClient:
 
         parent_span_id : typing.Optional[str]
 
+        name : typing.Optional[str]
+
+        type : typing.Optional[SpanWriteType]
+
         end_time : typing.Optional[dt.datetime]
 
-        input : typing.Optional[JsonNodeWrite]
+        input : typing.Optional[JsonListStringWrite]
 
-        output : typing.Optional[JsonNodeWrite]
+        output : typing.Optional[JsonListStringWrite]
 
         metadata : typing.Optional[JsonNodeWrite]
 
@@ -320,6 +324,8 @@ class RawSpansClient:
         usage : typing.Optional[typing.Dict[str, int]]
 
         error_info : typing.Optional[ErrorInfoWrite]
+
+        last_updated_at : typing.Optional[dt.datetime]
 
         total_estimated_cost : typing.Optional[float]
 
@@ -344,8 +350,12 @@ class RawSpansClient:
                 "type": type,
                 "start_time": start_time,
                 "end_time": end_time,
-                "input": input,
-                "output": output,
+                "input": convert_and_respect_annotation_metadata(
+                    object_=input, annotation=JsonListStringWrite, direction="write"
+                ),
+                "output": convert_and_respect_annotation_metadata(
+                    object_=output, annotation=JsonListStringWrite, direction="write"
+                ),
                 "metadata": metadata,
                 "model": model,
                 "provider": provider,
@@ -354,6 +364,7 @@ class RawSpansClient:
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfoWrite, direction="write"
                 ),
+                "last_updated_at": last_updated_at,
                 "total_estimated_cost": total_estimated_cost,
                 "total_estimated_cost_version": total_estimated_cost_version,
             },
@@ -519,9 +530,11 @@ class RawSpansClient:
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         parent_span_id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
+        type: typing.Optional[SpanUpdateType] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
-        input: typing.Optional[JsonNode] = OMIT,
-        output: typing.Optional[JsonNode] = OMIT,
+        input: typing.Optional[JsonListString] = OMIT,
+        output: typing.Optional[JsonListString] = OMIT,
         metadata: typing.Optional[JsonNode] = OMIT,
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
@@ -548,11 +561,15 @@ class RawSpansClient:
 
         parent_span_id : typing.Optional[str]
 
+        name : typing.Optional[str]
+
+        type : typing.Optional[SpanUpdateType]
+
         end_time : typing.Optional[dt.datetime]
 
-        input : typing.Optional[JsonNode]
+        input : typing.Optional[JsonListString]
 
-        output : typing.Optional[JsonNode]
+        output : typing.Optional[JsonListString]
 
         metadata : typing.Optional[JsonNode]
 
@@ -583,9 +600,15 @@ class RawSpansClient:
                 "project_id": project_id,
                 "trace_id": trace_id,
                 "parent_span_id": parent_span_id,
+                "name": name,
+                "type": type,
                 "end_time": end_time,
-                "input": input,
-                "output": output,
+                "input": convert_and_respect_annotation_metadata(
+                    object_=input, annotation=JsonListString, direction="write"
+                ),
+                "output": convert_and_respect_annotation_metadata(
+                    object_=output, annotation=JsonListString, direction="write"
+                ),
                 "metadata": metadata,
                 "model": model,
                 "provider": provider,
@@ -1294,21 +1317,22 @@ class AsyncRawSpansClient:
         self,
         *,
         trace_id: str,
-        name: str,
-        type: SpanWriteType,
         start_time: dt.datetime,
         id: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
         parent_span_id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
+        type: typing.Optional[SpanWriteType] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
-        input: typing.Optional[JsonNodeWrite] = OMIT,
-        output: typing.Optional[JsonNodeWrite] = OMIT,
+        input: typing.Optional[JsonListStringWrite] = OMIT,
+        output: typing.Optional[JsonListStringWrite] = OMIT,
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
         total_estimated_cost: typing.Optional[float] = OMIT,
         total_estimated_cost_version: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1320,10 +1344,6 @@ class AsyncRawSpansClient:
         ----------
         trace_id : str
 
-        name : str
-
-        type : SpanWriteType
-
         start_time : dt.datetime
 
         id : typing.Optional[str]
@@ -1333,11 +1353,15 @@ class AsyncRawSpansClient:
 
         parent_span_id : typing.Optional[str]
 
+        name : typing.Optional[str]
+
+        type : typing.Optional[SpanWriteType]
+
         end_time : typing.Optional[dt.datetime]
 
-        input : typing.Optional[JsonNodeWrite]
+        input : typing.Optional[JsonListStringWrite]
 
-        output : typing.Optional[JsonNodeWrite]
+        output : typing.Optional[JsonListStringWrite]
 
         metadata : typing.Optional[JsonNodeWrite]
 
@@ -1350,6 +1374,8 @@ class AsyncRawSpansClient:
         usage : typing.Optional[typing.Dict[str, int]]
 
         error_info : typing.Optional[ErrorInfoWrite]
+
+        last_updated_at : typing.Optional[dt.datetime]
 
         total_estimated_cost : typing.Optional[float]
 
@@ -1374,8 +1400,12 @@ class AsyncRawSpansClient:
                 "type": type,
                 "start_time": start_time,
                 "end_time": end_time,
-                "input": input,
-                "output": output,
+                "input": convert_and_respect_annotation_metadata(
+                    object_=input, annotation=JsonListStringWrite, direction="write"
+                ),
+                "output": convert_and_respect_annotation_metadata(
+                    object_=output, annotation=JsonListStringWrite, direction="write"
+                ),
                 "metadata": metadata,
                 "model": model,
                 "provider": provider,
@@ -1384,6 +1414,7 @@ class AsyncRawSpansClient:
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfoWrite, direction="write"
                 ),
+                "last_updated_at": last_updated_at,
                 "total_estimated_cost": total_estimated_cost,
                 "total_estimated_cost_version": total_estimated_cost_version,
             },
@@ -1549,9 +1580,11 @@ class AsyncRawSpansClient:
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         parent_span_id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
+        type: typing.Optional[SpanUpdateType] = OMIT,
         end_time: typing.Optional[dt.datetime] = OMIT,
-        input: typing.Optional[JsonNode] = OMIT,
-        output: typing.Optional[JsonNode] = OMIT,
+        input: typing.Optional[JsonListString] = OMIT,
+        output: typing.Optional[JsonListString] = OMIT,
         metadata: typing.Optional[JsonNode] = OMIT,
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
@@ -1578,11 +1611,15 @@ class AsyncRawSpansClient:
 
         parent_span_id : typing.Optional[str]
 
+        name : typing.Optional[str]
+
+        type : typing.Optional[SpanUpdateType]
+
         end_time : typing.Optional[dt.datetime]
 
-        input : typing.Optional[JsonNode]
+        input : typing.Optional[JsonListString]
 
-        output : typing.Optional[JsonNode]
+        output : typing.Optional[JsonListString]
 
         metadata : typing.Optional[JsonNode]
 
@@ -1613,9 +1650,15 @@ class AsyncRawSpansClient:
                 "project_id": project_id,
                 "trace_id": trace_id,
                 "parent_span_id": parent_span_id,
+                "name": name,
+                "type": type,
                 "end_time": end_time,
-                "input": input,
-                "output": output,
+                "input": convert_and_respect_annotation_metadata(
+                    object_=input, annotation=JsonListString, direction="write"
+                ),
+                "output": convert_and_respect_annotation_metadata(
+                    object_=output, annotation=JsonListString, direction="write"
+                ),
                 "metadata": metadata,
                 "model": model,
                 "provider": provider,

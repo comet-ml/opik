@@ -89,7 +89,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
         <Separator orientation="vertical" className="mx-1 h-3" />
         <Button
           variant="ghost"
-          size="3xs"
+          size="2xs"
           onClick={() => handleOpenTrace(trace.id)}
         >
           View trace

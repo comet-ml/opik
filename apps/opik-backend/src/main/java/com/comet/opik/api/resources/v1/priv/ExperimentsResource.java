@@ -4,6 +4,8 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentItemBulkRecord;
+import com.comet.opik.api.ExperimentItemBulkUpload;
 import com.comet.opik.api.ExperimentItemSearchCriteria;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
@@ -13,10 +15,12 @@ import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.resources.v1.priv.validate.ExperimentItemBulkValidator;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.EntityType;
+import com.comet.opik.domain.ExperimentItemBulkIngestionService;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -48,6 +52,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -87,6 +92,7 @@ public class ExperimentsResource {
     private final @NonNull Streamer streamer;
     private final @NonNull ExperimentSortingFactory sortingFactory;
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
+    private final @NonNull ExperimentItemBulkIngestionService experimentItemBulkIngestionService;
 
     @GET
     @Operation(operationId = "findExperiments", summary = "Find experiments", description = "Find experiments", responses = {
@@ -312,6 +318,50 @@ public class ExperimentsResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Deleted experiment items, count '{}'", request.ids().size());
+        return Response.noContent().build();
+    }
+
+    @PUT
+    @Path("/items/bulk")
+    @Operation(operationId = "experimentItemsBulk", summary = "Record experiment items in bulk", description = "Record experiment items in bulk with traces, spans, and feedback scores. "
+            +
+            "Maximum request size is 4MB.", responses = {
+                    @ApiResponse(responseCode = "204", description = "No content"),
+                    @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+                    @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = com.comet.opik.api.error.ErrorMessage.class))),
+            })
+    @RateLimited
+    @UsageLimited
+    public Response experimentItemsBulk(
+            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentItemBulkUpload.class))) @NotNull @Valid @JsonView(ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class) ExperimentItemBulkUpload request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        log.info("Recording experiment items in bulk, count '{}'", request.items().size());
+
+        List<ExperimentItemBulkRecord> items = request.items()
+                .stream()
+                .map(item -> ExperimentItemBulkMapper.addIdsIfRequired(idGenerator, item))
+                .map(item -> {
+                    ExperimentItemBulkValidator.validate(item);
+                    return item;
+                })
+                .toList();
+
+        Experiment experiment = Experiment.builder()
+                .datasetName(request.datasetName())
+                .name(request.experimentName())
+                .build();
+
+        experimentItemBulkIngestionService.ingest(experiment, items)
+                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .retryWhen(AsyncUtils.handleConnectionError())
+                .block();
+
+        log.info("Recorded experiment items in bulk, count '{}'", request.items().size());
+
         return Response.noContent().build();
     }
 

@@ -1,6 +1,7 @@
-from typing import Any, Dict, List, Tuple, Union, Optional
+from typing import Any, Dict, List, Tuple, Union, Optional, Literal
 import os
 import random
+from datetime import datetime
 
 import opik
 
@@ -37,11 +38,13 @@ logger = logging.getLogger(__name__)  # Inherits config from setup_logging
 
 
 class MiproOptimizer(BaseOptimizer):
-    def __init__(self, model, project_name: Optional[str] = None, **model_kwargs):
-        super().__init__(model, project_name, **model_kwargs)
+    def __init__(self, model, project_name: Optional[str] = None, verbose: int = 1, **model_kwargs):
+        super().__init__(model, project_name, verbose=verbose, **model_kwargs)
         self.tools = []
         self.num_threads = self.model_kwargs.pop("num_threads", 6)
         self.model_kwargs["model"] = self.model
+        self.llm_call_counter = 0
+        # FIXME: add mipro_optimizer=True - It does not count the LLM calls made internally by DSPy during MiproOptimizer.optimizer.compile().
         lm = LM(**self.model_kwargs)
         opik_callback = OpikCallback(project_name=self.project_name, log_graph=True)
         dspy.configure(lm=lm, callbacks=[opik_callback])
@@ -56,6 +59,7 @@ class MiproOptimizer(BaseOptimizer):
         n_samples: int = 10,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
+        verbose: int = 1,
         **kwargs,
     ) -> float:
         """
@@ -69,6 +73,7 @@ class MiproOptimizer(BaseOptimizer):
             n_samples: number of items to test in the dataset
             dataset_item_ids: Optional list of dataset item IDs to evaluate
             experiment_config: Optional configuration for the experiment
+            verbose: Verbosity level
             **kwargs: Additional arguments for evaluation
 
         Returns:
@@ -76,9 +81,13 @@ class MiproOptimizer(BaseOptimizer):
         """
         # FIMXE: call super when it is ready
         # FIXME: Intermediate values:
+        self.llm_call_counter += 1
         metric = metric_config.metric
         input_key = task_config.input_dataset_fields[0]  # FIXME: allow all inputs
         output_key = task_config.output_dataset_field
+
+        # Kwargs might contain n_samples, passed from run_benchmark.py
+        n_samples = kwargs.pop("n_samples", None) # Get n_samples from kwargs if present
 
         if isinstance(dataset, str):
             opik_client = opik.Opik(project_name=self.project_name)
@@ -144,12 +153,32 @@ class MiproOptimizer(BaseOptimizer):
 
             return result
 
-        if n_samples is not None:
-            if dataset_item_ids is not None:
-                raise Exception("Can't use n_samples and dataset_item_ids")
+        # Robust n_samples handling for selecting dataset_item_ids
+        dataset_items_for_eval = dataset.get_items()
+        num_total_items = len(dataset_items_for_eval)
+        dataset_item_ids_to_use = dataset_item_ids # Use provided IDs if any
 
-            all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
-            dataset_item_ids = random.sample(all_ids, n_samples)
+        if n_samples is not None: # If n_samples is specified by the caller (run_benchmark.py)
+            if dataset_item_ids is not None:
+                # This case should ideally be an error or a clear precedence rule.
+                # For now, let's assume if dataset_item_ids is provided, it takes precedence over n_samples.
+                logger.warning("MiproOptimizer.evaluate_prompt: Both n_samples and dataset_item_ids provided. Using provided dataset_item_ids.")
+                # dataset_item_ids_to_use is already dataset_item_ids
+            elif n_samples > num_total_items:
+                logger.warning(f"MiproOptimizer.evaluate_prompt: n_samples ({n_samples}) > total items ({num_total_items}). Using all {num_total_items} items.")
+                dataset_item_ids_to_use = None # opik.evaluation.evaluate handles None as all items
+            elif n_samples <= 0:
+                logger.warning(f"MiproOptimizer.evaluate_prompt: n_samples ({n_samples}) is <= 0. Using all {num_total_items} items.")
+                dataset_item_ids_to_use = None
+            else:
+                # n_samples is valid and dataset_item_ids was not provided, so sample now.
+                all_ids = [item["id"] for item in dataset_items_for_eval]
+                dataset_item_ids_to_use = random.sample(all_ids, n_samples)
+                logger.info(f"MiproOptimizer.evaluate_prompt: Sampled {n_samples} items for evaluation.")
+        else: # n_samples is None
+            if dataset_item_ids is None:
+                logger.info(f"MiproOptimizer.evaluate_prompt: n_samples is None and dataset_item_ids is None. Using all {num_total_items} items.")
+            # dataset_item_ids_to_use is already dataset_item_ids (which could be None)
 
         experiment_config = experiment_config or {}
         experiment_config = {
@@ -171,9 +200,10 @@ class MiproOptimizer(BaseOptimizer):
             # "reference" needs to match metric
             scoring_key_mapping={"reference": output_key},
             task_threads=self.num_threads,
-            dataset_item_ids=dataset_item_ids,
+            dataset_item_ids=dataset_item_ids_to_use,
             project_name=self.project_name,
             experiment_config=experiment_config,
+            verbose=verbose,
         )
 
         # Calculate average score across all metrics
@@ -196,6 +226,9 @@ class MiproOptimizer(BaseOptimizer):
         task_config: TaskConfig,
         num_candidates: int = 10,
         experiment_config: Optional[Dict] = None,
+        num_trials: Optional[int] = 3,
+        n_samples: Optional[int] = 10,
+        auto: Optional[Literal["light", "medium", "heavy"]] = "light",
         **kwargs,
     ) -> OptimizationResult:
         self._opik_client = opik.Opik()
@@ -204,6 +237,7 @@ class MiproOptimizer(BaseOptimizer):
             optimization = self._opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric_config.metric.name,
+                metadata={"optimizer": self.__class__.__name__},
             )
         except Exception:
             logger.warning(
@@ -222,6 +256,9 @@ class MiproOptimizer(BaseOptimizer):
                 num_candidates=num_candidates,
                 experiment_config=experiment_config,
                 optimization_id=optimization.id if optimization is not None else None,
+                num_trials=num_trials,
+                n_samples=n_samples,
+                auto=auto,
                 **kwargs,
             )
             if optimization:
@@ -241,6 +278,9 @@ class MiproOptimizer(BaseOptimizer):
         num_candidates: int = 10,
         experiment_config: Optional[Dict] = None,
         optimization_id: Optional[str] = None,
+        num_trials: Optional[int] = 3,
+        n_samples: Optional[int] = 10,
+        auto: Optional[Literal["light", "medium", "heavy"]] = "light",
         **kwargs,
     ) -> OptimizationResult:
         logger.info("Preparing MIPRO optimization...")
@@ -251,6 +291,9 @@ class MiproOptimizer(BaseOptimizer):
             num_candidates=num_candidates,
             experiment_config=experiment_config,
             optimization_id=optimization_id,
+            num_trials=num_trials,
+            n_samples=n_samples,
+            auto=auto,
             **kwargs,
         )
         logger.info("Starting MIPRO compilation...")
@@ -266,19 +309,26 @@ class MiproOptimizer(BaseOptimizer):
         num_candidates: int = 10,
         experiment_config: Optional[Dict] = None,
         optimization_id: Optional[str] = None,
+        num_trials: Optional[int] = 3,
+        n_samples: Optional[int] = 10,
+        auto: Optional[Literal["light", "medium", "heavy"]] = "light",
         **kwargs,
     ) -> None:
         # FIXME: Intermediate values:
+        self.llm_call_counter = 0
         metric = metric_config.metric
         prompt = task_config.instruction_prompt
         input_key = task_config.input_dataset_fields[0]  # FIXME: allow all
         output_key = task_config.output_dataset_field
         self.tools = task_config.tools
         self.num_candidates = num_candidates
-        self.seed = 9
+        self.seed = 42
         self.input_key = input_key
         self.output_key = output_key
         self.prompt = prompt
+        self.num_trials = num_trials
+        self.n_samples = n_samples
+        self.auto = auto
 
         # Convert to values for MIPRO:
         if isinstance(dataset, str):
@@ -294,7 +344,7 @@ class MiproOptimizer(BaseOptimizer):
             if self.output_key not in row:
                 raise Exception("row does not contain output_key: %r" % self.output_key)
 
-        self.trainset = create_dspy_training_set(self.dataset, self.input_key)
+        self.trainset = create_dspy_training_set(self.dataset, self.input_key, self.n_samples)
         self.data_signature = create_dspy_signature(
             self.input_key, self.output_key, self.prompt
         )
@@ -319,6 +369,7 @@ class MiproOptimizer(BaseOptimizer):
                 "metric": metric.name,
                 "num_threads": self.num_threads,
                 "num_candidates": self.num_candidates,
+                "num_trials": self.num_trials,
                 "dataset": dataset.name,
             },
         }
@@ -326,9 +377,9 @@ class MiproOptimizer(BaseOptimizer):
         # Initialize the optimizer:
         self.optimizer = MIPROv2(
             metric=self.metric_function,
-            auto="light",
+            auto=self.auto,
             num_threads=self.num_threads,
-            verbose=False,
+            verbose=(self.verbose == 1),
             num_candidates=self.num_candidates,
             seed=self.seed,
             opik_prompt_task_config=task_config,
@@ -354,24 +405,129 @@ class MiproOptimizer(BaseOptimizer):
         """
         Continue to look for optimizations
         """
+        if not hasattr(self, 'optimizer') or not self.optimizer:
+            raise RuntimeError("MiproOptimizer not prepared. Call prepare_optimize_prompt first.")
+
         self.results = self.optimizer.compile(
             student=self.module,
             trainset=self.trainset,
             provide_traceback=True,
             requires_permission_to_run=False,
-            num_trials=3,
+            num_trials=self.num_trials,
         )
         self.best_programs = sorted(
             self.results.candidate_programs,
             key=lambda item: item["score"],
             reverse=True,
         )
+
+        mipro_history_processed = []
+        # self.num_candidates is set in prepare_optimize_prompt, defaults to 10
+        # If self.num_candidates is 0 or None, this logic might break or be odd.
+        # Add a safeguard for num_candidates_per_round if self.num_candidates is not usable.
+        num_candidates_per_round = self.num_candidates if hasattr(self, 'num_candidates') and self.num_candidates and self.num_candidates > 0 else 1
+
+        for i, candidate_data in enumerate(self.results.candidate_programs):
+            program_module = candidate_data.get("program")
+            instruction = "N/A"
+            if hasattr(program_module, 'signature') and hasattr(program_module.signature, 'instructions'):
+                instruction = program_module.signature.instructions
+            elif hasattr(program_module, 'extended_signature') and hasattr(program_module.extended_signature, 'instructions'):
+                instruction = program_module.extended_signature.instructions
+            elif hasattr(program_module, 'predictor') and hasattr(program_module.predictor, 'signature') and hasattr(program_module.predictor.signature, 'instructions'):
+                instruction = program_module.predictor.signature.instructions
+
+            # Remove R and C calculation for Mipro as its history is flat
+            # current_round_number = (i // num_candidates_per_round) + 1
+            # current_candidate_in_round = (i % num_candidates_per_round) + 1
+
+            iter_detail = {
+                "iteration": i + 1,
+                # "round_number": current_round_number, # Remove round_number
+                # "candidate_in_round": current_candidate_in_round, # Remove candidate_in_round
+                "timestamp": datetime.now().isoformat(),
+                "prompt_candidate": instruction,
+                "parameters_used": {
+                    "program_summary": str(program_module)[:500]
+                },
+                "scores": [], # Initialize scores list
+                "tokens_used": None, # TODO: add tokens_used
+                "cost": None, # TODO: add cost
+                "duration_seconds": None, # TODO: add duration_seconds
+            }
+
+            current_score = candidate_data.get("score")
+            metric_name_for_history = self.opik_metric.name if hasattr(self, 'opik_metric') and self.opik_metric else "unknown_metric"
+
+            # Unscale if it's a known 0-1 metric that MIPRO might scale to 0-100
+            # For now, specifically targeting Levenshtein-like metrics
+            if isinstance(current_score, (float, int)) and \
+               ("levenshtein" in metric_name_for_history.lower() or "similarity" in metric_name_for_history.lower()):
+                # Assuming scores like 32.4 are 0-1 scores scaled by 100
+                if abs(current_score) > 1.0: # A simple check to see if it looks scaled
+                    logger.debug(f"Mipro history: Unscaling score {current_score} for metric {metric_name_for_history} by dividing by 100.")
+                    current_score /= 100.0
+            
+            iter_detail["scores"].append({
+                "metric_name": metric_name_for_history,
+                "score": current_score,
+                "opik_evaluation_id": None # TODO: add opik_evaluation_id
+            })
+            mipro_history_processed.append(iter_detail)
+
+        if not self.best_programs:
+            logger.warning("MIPRO compile returned no candidate programs.")
+            return OptimizationResult(
+                optimizer="MiproOptimizer",
+                prompt=self.prompt,
+                score=0.0,
+                metric_name=self.opik_metric.name if hasattr(self, 'opik_metric') else "unknown_metric",
+                details={"error": "No candidate programs generated by MIPRO"},
+                history=mipro_history_processed,
+                llm_calls=self.llm_call_counter
+            )
+
         self.module = self.get_best().details["program"]
-        return self.get_best()
+        best_program_details = self.get_best()
+        
+        # Unscale the main score if necessary, similar to history scores
+        final_best_score = best_program_details.score
+        final_metric_name = best_program_details.metric_name
+        if isinstance(final_best_score, (float, int)) and \
+           final_metric_name and \
+           ("levenshtein" in final_metric_name.lower() or "similarity" in final_metric_name.lower()):
+            if abs(final_best_score) > 1.0: # A simple check to see if it looks scaled
+                logger.debug(f"Mipro main result: Unscaling score {final_best_score} for metric {final_metric_name} by dividing by 100.")
+                final_best_score /= 100.0
+
+        return OptimizationResult(
+            optimizer="MiproOptimizer",
+            prompt=best_program_details.prompt,
+            tool_prompts=best_program_details.tool_prompts,
+            score=final_best_score, # Use the potentially unscaled score
+            metric_name=final_metric_name,
+            demonstrations=best_program_details.demonstrations,
+            details=best_program_details.details,
+            history=mipro_history_processed,
+            llm_calls=self.llm_call_counter
+        )
 
     def get_best(self, position: int = 0) -> OptimizationResult:
+        if not hasattr(self, 'best_programs') or not self.best_programs:
+            logger.error("get_best() called but no best_programs found. MIPRO compile might have failed or yielded no results.")
+            return OptimizationResult(
+                optimizer="MiproOptimizer",
+                prompt=getattr(self, 'prompt', "Error: Initial prompt not found"), 
+                score=0.0, 
+                metric_name=getattr(self, 'opik_metric', None).name if hasattr(self, 'opik_metric') and self.opik_metric else "unknown_metric",
+                details={"error": "No programs generated or compile failed"},
+                history=[],
+                llm_calls=self.llm_call_counter
+            )
+            
         score = self.best_programs[position]["score"]
-        state = self.best_programs[position]["program"].dump_state()
+        program_module = self.best_programs[position]["program"]
+        state = program_module.dump_state()
         if self.tools:
             tool_names = [tool.__name__ for tool in self.tools]
             tool_prompts = get_tool_prompts(
@@ -391,5 +547,6 @@ class MiproOptimizer(BaseOptimizer):
             score=score,
             metric_name=self.opik_metric.name,
             demonstrations=demos,
-            details={"program": self.best_programs[position]["program"]},
+            details={"program": program_module},
+            llm_calls=self.llm_call_counter
         )

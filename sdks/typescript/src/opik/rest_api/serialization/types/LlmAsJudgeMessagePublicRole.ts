@@ -9,8 +9,8 @@ import * as core from "../../core";
 export const LlmAsJudgeMessagePublicRole: core.serialization.Schema<
     serializers.LlmAsJudgeMessagePublicRole.Raw,
     OpikApi.LlmAsJudgeMessagePublicRole
-> = core.serialization.enum_(["SYSTEM", "USER", "AI", "TOOL_EXECUTION_RESULT"]);
+> = core.serialization.enum_(["SYSTEM", "USER", "AI", "TOOL_EXECUTION_RESULT", "CUSTOM"]);
 
 export declare namespace LlmAsJudgeMessagePublicRole {
-    export type Raw = "SYSTEM" | "USER" | "AI" | "TOOL_EXECUTION_RESULT";
+    export type Raw = "SYSTEM" | "USER" | "AI" | "TOOL_EXECUTION_RESULT" | "CUSTOM";
 }

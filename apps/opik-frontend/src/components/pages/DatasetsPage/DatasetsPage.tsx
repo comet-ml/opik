@@ -33,12 +33,15 @@ import {
 } from "@/components/shared/DataTable/utils";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 
 export const getRowId = (d: Dataset) => d.id;
 
 const SELECTED_COLUMNS_KEY = "datasets-selected-columns";
 const COLUMNS_WIDTH_KEY = "datasets-columns-width";
 const COLUMNS_ORDER_KEY = "datasets-columns-order";
+const PAGINATION_SIZE_KEY = "datasets-pagination-size";
 
 export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
   {
@@ -103,7 +106,9 @@ const DatasetsPage: React.FunctionComponent = () => {
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [size, setSize] = useState(10);
+  const [size, setSize] = useLocalStorageState<number>(PAGINATION_SIZE_KEY, {
+    defaultValue: 10,
+  });
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
@@ -207,9 +212,13 @@ const DatasetsPage: React.FunctionComponent = () => {
 
   return (
     <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-1 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">Datasets</h1>
       </div>
+      <ExplainerDescription
+        className="mb-4"
+        {...EXPLAINERS_MAP[EXPLAINER_ID.whats_a_dataset]}
+      />
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
           searchText={search}
@@ -220,7 +229,7 @@ const DatasetsPage: React.FunctionComponent = () => {
         ></SearchInput>
         <div className="flex items-center gap-2">
           <DatasetsActionsPanel datasets={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}

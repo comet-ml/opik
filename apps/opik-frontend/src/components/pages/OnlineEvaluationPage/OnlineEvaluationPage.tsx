@@ -21,6 +21,7 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import Loader from "@/components/shared/Loader/Loader";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,8 @@ import RulesActionsPanel from "@/components/pages-shared/automations/RulesAction
 import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const getRowId = (d: EvaluatorsRule) => d.id;
 
@@ -102,6 +105,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 const SELECTED_COLUMNS_KEY = "workspace-rules-selected-columns";
 const COLUMNS_WIDTH_KEY = "workspace-rules-columns-width";
 const COLUMNS_ORDER_KEY = "workspace-rules-columns-order";
+const PAGINATION_SIZE_KEY = "workspace-rules-pagination-size";
 
 export const OnlineEvaluationPage: React.FC = () => {
   const resetDialogKeyRef = useRef(0);
@@ -115,8 +119,14 @@ export const OnlineEvaluationPage: React.FC = () => {
     updateType: "replaceIn",
   });
 
-  const [size = 10, setSize] = useQueryParam("size", NumberParam, {
-    updateType: "replaceIn",
+  const [size, setSize] = useQueryParamAndLocalStorageState<
+    number | null | undefined
+  >({
+    localStorageKey: PAGINATION_SIZE_KEY,
+    queryKey: "size",
+    defaultValue: 10,
+    queryParamConfig: NumberParam,
+    syncQueryWithLocalStorageOnInit: true,
   });
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -224,11 +234,15 @@ export const OnlineEvaluationPage: React.FC = () => {
 
   return (
     <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-1 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">
           Online evaluation
         </h1>
       </div>
+      <ExplainerDescription
+        className="mb-4"
+        {...EXPLAINERS_MAP[EXPLAINER_ID.whats_online_evaluation]}
+      />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
@@ -241,7 +255,7 @@ export const OnlineEvaluationPage: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <RulesActionsPanel rules={selectedRows} />
-          <Separator orientation="vertical" className="ml-2 mr-2.5 h-6" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}

@@ -6,6 +6,7 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { SpanWriteType } from "./SpanWriteType";
+import { JsonListStringWrite } from "./JsonListStringWrite";
 import { JsonNodeWrite } from "./JsonNodeWrite";
 import { ErrorInfoWrite } from "./ErrorInfoWrite";
 
@@ -15,18 +16,19 @@ export const SpanWrite: core.serialization.ObjectSchema<serializers.SpanWrite.Ra
         projectName: core.serialization.property("project_name", core.serialization.string().optional()),
         traceId: core.serialization.property("trace_id", core.serialization.string()),
         parentSpanId: core.serialization.property("parent_span_id", core.serialization.string().optional()),
-        name: core.serialization.string(),
-        type: SpanWriteType,
+        name: core.serialization.string().optional(),
+        type: SpanWriteType.optional(),
         startTime: core.serialization.property("start_time", core.serialization.date()),
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
-        input: JsonNodeWrite.optional(),
-        output: JsonNodeWrite.optional(),
+        input: JsonListStringWrite.optional(),
+        output: JsonListStringWrite.optional(),
         metadata: JsonNodeWrite.optional(),
         model: core.serialization.string().optional(),
         provider: core.serialization.string().optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
         usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
         errorInfo: core.serialization.property("error_info", ErrorInfoWrite.optional()),
+        lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
         totalEstimatedCostVersion: core.serialization.property(
             "total_estimated_cost_version",
@@ -40,18 +42,19 @@ export declare namespace SpanWrite {
         project_name?: string | null;
         trace_id: string;
         parent_span_id?: string | null;
-        name: string;
-        type: SpanWriteType.Raw;
+        name?: string | null;
+        type?: SpanWriteType.Raw | null;
         start_time: string;
         end_time?: string | null;
-        input?: JsonNodeWrite.Raw | null;
-        output?: JsonNodeWrite.Raw | null;
+        input?: JsonListStringWrite.Raw | null;
+        output?: JsonListStringWrite.Raw | null;
         metadata?: JsonNodeWrite.Raw | null;
         model?: string | null;
         provider?: string | null;
         tags?: string[] | null;
         usage?: Record<string, number> | null;
         error_info?: ErrorInfoWrite.Raw | null;
+        last_updated_at?: string | null;
         total_estimated_cost?: number | null;
         total_estimated_cost_version?: string | null;
     }

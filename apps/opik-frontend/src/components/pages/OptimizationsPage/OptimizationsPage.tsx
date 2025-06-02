@@ -13,6 +13,8 @@ import {
   StringParam,
   useQueryParam,
 } from "use-query-params";
+import get from "lodash/get";
+import isObject from "lodash/isObject";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -24,6 +26,7 @@ import OptimizationStatusCell from "@/components/pages/OptimizationsPage/Optimiz
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
+import { toString } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
 import { getFeedbackScore } from "@/lib/feedback-scores";
 import {
@@ -59,6 +62,9 @@ import {
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/grouping";
+import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 
 const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimizations-columns-width";
@@ -88,12 +94,25 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
     type: COLUMN_TYPE.number,
   },
   {
+    id: "optimizer",
+    label: "Optimizer",
+    type: COLUMN_TYPE.string,
+    size: 200,
+    accessorFn: (row) => {
+      const val = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY, "-");
+
+      return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
+    },
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_optimizer],
+  },
+  {
     id: "objective_name",
     label: "Best score",
     type: COLUMN_TYPE.numberDictionary,
     accessorFn: (row) =>
       getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
     cell: FeedbackScoreTagCell as never,
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_best_score],
   },
   {
     id: "status",
@@ -111,6 +130,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
   "num_trials",
+  "optimizer",
   "objective_name",
   "status",
 ];
@@ -278,11 +298,15 @@ const OptimizationsPage: React.FunctionComponent = () => {
 
   return (
     <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-1 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">
           Optimization runs
         </h1>
       </div>
+      <ExplainerDescription
+        className="mb-4"
+        {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_optimization_run]}
+      />
       <div className="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
@@ -299,7 +323,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
         </div>
         <div className="flex items-center gap-2">
           <OptimizationsActionsPanel optimizations={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <TooltipWrapper content="Refresh optimizations list">
             <Button
               variant="outline"

@@ -15,6 +15,7 @@ import {
   generateDefaultPrompt,
   getDefaultConfigByProvider,
 } from "@/lib/playground";
+import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
 import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import PromptModelSelect from "@/components/pages-shared/llm/PromptModelSelect/PromptModelSelect";
@@ -35,8 +36,6 @@ import {
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
 
-export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
-
 interface PlaygroundPromptProps {
   workspaceName: string;
   index: number;
@@ -45,6 +44,7 @@ interface PlaygroundPromptProps {
   isPendingProviderKeys: boolean;
   providerResolver: ProviderResolver;
   modelResolver: ModelResolver;
+  scrollToPromptRef: React.MutableRefObject<string>;
 }
 
 const PlaygroundPrompt = ({
@@ -55,6 +55,7 @@ const PlaygroundPrompt = ({
   isPendingProviderKeys,
   providerResolver,
   modelResolver,
+  scrollToPromptRef,
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
 
@@ -102,6 +103,7 @@ const PlaygroundPrompt = ({
     });
 
     addPrompt(newPrompt, index + 1);
+    scrollToPromptRef.current = newPrompt.id;
   };
 
   const handleUpdateMessage = useCallback(
@@ -160,6 +162,11 @@ const PlaygroundPrompt = ({
     ],
   );
 
+  const handleDeleteProvider = useCallback(() => {
+    // initialize a model validation process described in the next useEffect hook, as soon as the providers list will be returned from BE
+    checkedIfModelIsValidRef.current = false;
+  }, []);
+
   useEffect(() => {
     // on init, to check if a prompt has a model from valid providers: (f.e., remove a provider after setting a model)
     if (!checkedIfModelIsValidRef.current && !isPendingProviderKeys) {
@@ -189,6 +196,18 @@ const PlaygroundPrompt = ({
     model,
   ]);
 
+  const setRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (element && scrollToPromptRef.current === promptId) {
+        element?.scrollIntoView({
+          behavior: "smooth",
+          inline: "start",
+        });
+      }
+    },
+    [promptId, scrollToPromptRef],
+  );
+
   return (
     <div
       className="h-[var(--prompt-height)] w-full min-w-[var(--min-prompt-width)]"
@@ -197,6 +216,7 @@ const PlaygroundPrompt = ({
           "--prompt-height": "calc(100% - 64px)",
         } as React.CSSProperties
       }
+      ref={setRef}
     >
       <div className="mb-2 flex h-8 items-center justify-between">
         <p className="comet-body-s-accented">
@@ -211,6 +231,7 @@ const PlaygroundPrompt = ({
               provider={provider}
               workspaceName={workspaceName}
               onAddProvider={handleAddProvider}
+              onDeleteProvider={handleDeleteProvider}
               hasError={!model}
             />
           </div>
@@ -247,6 +268,7 @@ const PlaygroundPrompt = ({
         onChange={handleUpdateMessage}
         onAddMessage={handleAddMessage}
         hint={hintMessage}
+        hidePromptActions={false}
       />
     </div>
   );

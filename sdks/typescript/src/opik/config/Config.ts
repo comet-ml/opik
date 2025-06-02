@@ -1,12 +1,19 @@
 import { logger } from "@/utils/logger";
 import fs from "fs";
 import ini from "ini";
+import { RequestOptions } from "@/types/request";
 
 export interface OpikConfig {
   apiKey: string;
   apiUrl?: string;
   projectName: string;
   workspaceName: string;
+  requestOptions?: RequestOptions;
+}
+
+// ALEX
+export interface ConstructorOpikConfig extends OpikConfig {
+  headers?: Record<string, string>;
 }
 
 const CONFIG_FILE_PATH_DEFAULT = "~/.opik.config";
@@ -16,11 +23,12 @@ const DEFAULT_CONFIG: OpikConfig = {
   apiUrl: "http://localhost:5173/api",
   projectName: "Default Project",
   workspaceName: "default",
+  requestOptions: undefined,
 };
 
 function filterUndefined<T extends object>(obj: Partial<T>): Partial<T> {
   return Object.fromEntries(
-    Object.entries(obj).filter(([, value]) => value !== undefined)
+    Object.entries(obj).filter(([, value]) => value !== undefined),
   ) as Partial<T>;
 }
 
@@ -65,15 +73,20 @@ function loadFromConfigFile(): Partial<OpikConfig> {
   }
 }
 
-export function loadConfig(explicit?: Partial<OpikConfig>): OpikConfig {
+export function loadConfig(
+  explicit?: Partial<ConstructorOpikConfig>,
+): OpikConfig {
   const envConfig = loadFromEnv();
   const fileConfig = loadFromConfigFile();
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { headers: _, ...explicitConfig } = explicit || {};
 
   return validateConfig({
     ...DEFAULT_CONFIG,
     ...fileConfig,
     ...envConfig,
-    ...explicit,
+    ...explicitConfig,
   });
 }
 

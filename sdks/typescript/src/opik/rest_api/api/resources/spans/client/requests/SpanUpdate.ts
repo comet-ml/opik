@@ -17,9 +17,11 @@ export interface SpanUpdate {
     projectId?: string;
     traceId: string;
     parentSpanId?: string;
+    name?: string;
+    type?: OpikApi.SpanUpdateType;
     endTime?: Date;
-    input?: OpikApi.JsonNode;
-    output?: OpikApi.JsonNode;
+    input?: OpikApi.JsonListString;
+    output?: OpikApi.JsonListString;
     metadata?: OpikApi.JsonNode;
     model?: string;
     provider?: string;

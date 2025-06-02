@@ -63,8 +63,9 @@ The Opik configuration file follows the [TOML](https://github.com/toml-lang/toml
 ```toml
 [opik]
 url_override = https://www.comet.com/opik/api
-workspace = <Workspace name>
 api_key = <API Key>
+workspace = <Workspace name>
+project_name = <Project Name>
 ```
 
     </Tab>
@@ -74,6 +75,7 @@ api_key = <API Key>
 [opik]
 url_override = http://localhost:5173/api
 workspace = default
+project_name = <Project Name>
 ```
 
     </Tab>
@@ -126,13 +128,14 @@ You can resolve it by either:
 - Disable the TLS certificate check by setting the `OPIK_CHECK_TLS_CERTIFICATE` environment variable to `false`
 - Add the Opik server's certificate to your trusted certificates by setting the `REQUESTS_CA_BUNDLE` environment variable
 
-
 ### How can I diagnose issues with Opik?
 
 If you are experiencing any problems using Opik, such as receiving 400 or 500 errors from the backend, or being unable to connect at all, we recommend running the following command in your terminal:
+
 ```bash
 opik healthcheck
 ```
+
 This command will analyze your configuration and backend connectivity, providing useful insights into potential issues.
 
 <Frame>
@@ -140,5 +143,3 @@ This command will analyze your configuration and backend connectivity, providing
 </Frame>
 
 Reviewing these sections can help pinpoint the source of the problem and suggest possible resolutions.
-
-

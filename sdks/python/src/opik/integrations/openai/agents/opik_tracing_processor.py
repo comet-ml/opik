@@ -28,11 +28,20 @@ class OpikTracingProcessor(tracing.TracingProcessor):
         self._project_name = project_name
 
         self._opik_client = opik_client.get_client_cached()
+        self._trace_id_to_first_span: Dict[str, span_data.SpanData] = {}
+        self._trace_id_to_last_llm_span: Dict[str, span_data.SpanData] = {}
 
     def on_trace_start(self, trace: tracing.Trace) -> None:
+        trace_metadata = trace.metadata or {}
+        trace_metadata["created_from"] = "openai-agents"
+        if trace.trace_id:
+            trace_metadata["agents-trace-id"] = trace.trace_id
         try:
             opik_trace_data = trace_data.TraceData(
-                name=trace.name, project_name=self._project_name
+                name=trace.name,
+                project_name=self._project_name,
+                thread_id=trace.group_id,
+                metadata=trace_metadata,
             )
             self._created_traces_data_map[trace.trace_id] = opik_trace_data
         except Exception:
@@ -43,6 +52,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
             opik_trace_data = self._created_traces_data_map[trace.trace_id]
             opik_trace_data.init_end_time()
 
+            self._collect_trace_input_and_output_from_spans(opik_trace_data)
             self._opik_client.trace(**opik_trace_data.__dict__)
         except Exception:
             LOGGER.debug("on_trace_end failed", exc_info=True)
@@ -58,6 +68,12 @@ class OpikTracingProcessor(tracing.TracingProcessor):
                 trace_id=opik_trace_id,
                 project_name=self._project_name,
             )
+
+            if (
+                opik_span_data.trace_id not in self._trace_id_to_first_span
+            ) and span.span_data.type in ["response", "generation", "custom"]:
+                self._trace_id_to_first_span[opik_span_data.trace_id] = opik_span_data
+
             self._span_data_map[span.span_id] = opik_span_data
         except Exception:
             LOGGER.debug("on_span_start failed", exc_info=True)
@@ -69,6 +85,11 @@ class OpikTracingProcessor(tracing.TracingProcessor):
             opik_span_data = self._span_data_map[span.span_id]
             opik_span_data.init_end_time().update(**parsed_span_data.__dict__)
 
+            if opik_span_data.type == "llm":
+                self._trace_id_to_last_llm_span[opik_span_data.trace_id] = (
+                    opik_span_data
+                )
+
             self._opik_client.span(**opik_span_data.__dict__)
         except Exception:
             LOGGER.debug("on_span_end failed", exc_info=True)
@@ -78,3 +99,16 @@ class OpikTracingProcessor(tracing.TracingProcessor):
 
     def shutdown(self) -> None:
         self.force_flush()
+
+    def _collect_trace_input_and_output_from_spans(
+        self, opik_trace_data: trace_data.TraceData
+    ) -> None:
+        if opik_trace_data.id in self._trace_id_to_first_span:
+            opik_trace_data.update(
+                input=self._trace_id_to_first_span[opik_trace_data.id].input
+            )
+
+        if opik_trace_data.id in self._trace_id_to_last_llm_span:
+            opik_trace_data.update(
+                output=self._trace_id_to_last_llm_span[opik_trace_data.id].output
+            )

@@ -14,6 +14,9 @@ import {
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useActionButtonActions from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/useActionButtonActions";
 import { cn } from "@/lib/utils";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { Separator } from "@/components/ui/separator";
 
 const EMPTY_DATASETS: Dataset[] = [];
 
@@ -65,6 +68,7 @@ const PlaygroundOutputActions = ({
     workspaceName,
     datasetItems,
     datasetName,
+    datasetId: datasetId ? datasetId : undefined,
   });
 
   const loadMoreHandler = useCallback(() => setIsLoadedMore(true), []);
@@ -103,7 +107,12 @@ const PlaygroundOutputActions = ({
       );
     }
 
-    const areAllPromptsValid = Object.values(promptMap).every((p) => !!p.model);
+    const allPromptsHaveModels = Object.values(promptMap).every(
+      (p) => !!p.model,
+    );
+    const allMessagesNotEmpty = Object.values(promptMap).every((p) =>
+      p.messages.every((m) => m.content?.length > 0),
+    );
     const isDatasetEmpty =
       !loadingDatasetItems && !!datasetId && datasetItems.length === 0;
 
@@ -113,15 +122,17 @@ const PlaygroundOutputActions = ({
       !datasets.find((d) => d.id === datasetId);
 
     const isDisabledButton =
-      !areAllPromptsValid ||
+      !allPromptsHaveModels ||
+      !allMessagesNotEmpty ||
       loadingDatasetItems ||
       isLoadingDatasets ||
       isDatasetRemoved ||
       isDatasetEmpty;
 
     const shouldTooltipAppear = !!(
+      !allPromptsHaveModels ||
+      !allMessagesNotEmpty ||
       isDatasetEmpty ||
-      !areAllPromptsValid ||
       isDatasetRemoved
     );
 
@@ -129,25 +140,31 @@ const PlaygroundOutputActions = ({
       ? { pointerEvents: "auto" }
       : {};
 
-    const selectLLMModelMessage =
-      promptCount === 1
-        ? "Please select a LLM model for your prompt"
-        : "Please select a LLM model for your prompts";
+    const getTooltipMessage = () => {
+      if (!isDisabledButton) {
+        return promptCount === 1 ? "Run your prompt" : "Run your prompts";
+      }
 
-    const datasetRemovedMessage = isDatasetRemoved
-      ? "Your dataset has been removed. Select another one"
-      : "";
+      if (isDatasetRemoved) {
+        return "Your dataset has been removed. Select another one";
+      }
 
-    const emptyDatasetMessage = isDatasetEmpty
-      ? "Selected dataset is empty"
-      : "";
+      if (isDatasetEmpty) {
+        return "Selected dataset is empty";
+      }
 
-    const runMessage =
-      promptCount === 1 ? "Run your prompt" : "Run your prompts";
+      if (!allPromptsHaveModels) {
+        return promptCount === 1
+          ? "Please select an LLM model for your prompt"
+          : "Please select an LLM model for your prompts";
+      }
 
-    const tooltipMessage = isDisabledButton
-      ? datasetRemovedMessage || emptyDatasetMessage || selectLLMModelMessage
-      : runMessage;
+      if (!allMessagesNotEmpty) {
+        return "Some messages are empty. Please add some text to proceed";
+      }
+
+      return "Action is disabled";
+    };
 
     const tooltipKey = shouldTooltipAppear
       ? "action-tooltip-open-tooltip"
@@ -160,7 +177,7 @@ const PlaygroundOutputActions = ({
 
     return (
       <TooltipWrapper
-        content={tooltipMessage}
+        content={getTooltipMessage()}
         key={tooltipKey}
         defaultOpen={shouldTooltipAppear}
         hotkeys={isDisabledButton ? undefined : RUN_HOT_KEYS}
@@ -214,7 +231,7 @@ const PlaygroundOutputActions = ({
           placeholder={
             <div className="flex w-full items-center text-light-slate">
               <Database className="mr-2 size-4" />
-              <span className="truncate font-normal">Dataset</span>
+              <span className="truncate font-normal">Test over dataset</span>
             </div>
           }
           onChange={handleChangeDatasetId}
@@ -250,7 +267,12 @@ const PlaygroundOutputActions = ({
           </Button>
         )}
       </div>
-
+      <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
+        <ExplainerIcon
+          {...EXPLAINERS_MAP[EXPLAINER_ID.what_does_the_dataset_do_here]}
+        />
+        <Separator orientation="vertical" className="mx-2 h-4" />
+      </div>
       {renderActionButton()}
     </div>
   );

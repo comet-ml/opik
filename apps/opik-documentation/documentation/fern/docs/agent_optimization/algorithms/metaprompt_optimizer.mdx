@@ -1,35 +1,63 @@
+---
+title: "MetaPrompt Optimizer"
+subtitle: "Refine and improve LLM prompts with systematic analysis."
+description: "Learn how to use the MetaPrompt Optimizer to refine and improve your LLM prompts through systematic analysis and iterative refinement."
+pytest_codeblocks_skip: true
+---
+
 The MetaPrompter is a specialized optimizer designed for meta-prompt optimization. It focuses on improving the structure and effectiveness of prompts through systematic analysis and refinement of prompt templates, instructions, and examples.
+
+<Note>
+  **When to Use This Optimizer:**
+  `MetaPromptOptimizer` is a strong choice when you have an initial instruction prompt and want to iteratively refine its wording, structure, and clarity using LLM-driven suggestions. It excels at general-purpose prompt improvement where the core idea of your prompt is sound but could be phrased better for the LLM, or when you want to explore variations suggested by a reasoning model.
+
+**Key Trade-offs:**
+
+- Relies on the quality of the `reasoning_model` for generating good candidates.
+- May be less suited than specialized optimizers if your primary goal is _only_ few-shot example selection (see [`FewShotBayesianOptimizer`](/agent_optimization/algorithms/fewshot_bayesian_optimizer)) or _only_ complex agent/tool-use optimization (see [`MiproOptimizer`](/agent_optimization/algorithms/mipro_optimizer)).
+- Optimization process involves multiple LLM calls for both reasoning and evaluation, which can impact cost and time.
+
+</Note>
+
+<Info>
+  Looking for common questions about this optimizer or others? Check out the [Optimizer & SDK
+  FAQ](/agent_optimization/opik_optimizer/faq), which includes specific sections for `MetaPromptOptimizer` questions
+  like when to use it, understanding `model` vs. `reasoning_model`, and how parameters like `max_rounds` affect
+  optimization.
+</Info>
 
 ## How It Works
 
-1. **Template Analysis**
+The `MetaPromptOptimizer` automates the process of prompt refinement by using a "reasoning" LLM to critique and improve your initial prompt. Here's a conceptual breakdown:
 
-   - Deconstructs prompts into components
-   - Identifies key structural elements
-   - Analyzes component relationships
+1.  **Initial Prompt Evaluation**: Your starting `instruction_prompt` is first evaluated on the dataset using the specified `metric_config` to establish a baseline score.
 
-2. **Instruction Optimization**
+2.  **Reasoning and Candidate Generation**:
 
-   - Refines task instructions
-   - Improves clarity and specificity
-   - Enhances task understanding
+    - The optimizer takes your current best prompt and detailed context about the task (derived from `task_config` and `metric_config`).
+    - It then queries a `reasoning_model` (which can be the same as the evaluation `model` or a different, potentially more powerful one). This `reasoning_model` is guided by a system prompt (the "meta-prompt") that instructs it to act as an expert prompt engineer.
+    - The `reasoning_model` analyzes the provided prompt and task context, then generates a set of new candidate prompts. Each candidate is designed to improve upon the previous best, with specific reasoning for the suggested changes (e.g., "added more specific constraints," "rephrased for clarity").
 
-3. **Example Selection**
+3.  **Candidate Evaluation**:
 
-   - Evaluates example relevance
-   - Optimizes example ordering
-   - Balances diversity and relevance
+    - These newly generated candidate prompts are then evaluated on the dataset.
+    - The optimizer uses an adaptive trial strategy: promising candidates (based on initial trials) may receive more evaluation trials up to `max_trials_per_candidate`.
 
-4. **Structural Refinement**
+4.  **Selection and Iteration**:
 
-   - Improves prompt organization
-   - Enhances readability
-   - Optimizes information flow
+    - The best-performing candidate from the current round becomes the new "current best prompt."
+    - This process repeats for a configured number of `max_rounds` or until the improvement in score falls below `improvement_threshold`.
 
-5. **Validation and Testing**
-   - Multi-metric evaluation
-   - A/B testing of variations
-   - Performance tracking
+5.  **Result**: The highest-scoring prompt found throughout all rounds is returned as the optimized prompt.
+
+This iterative loop of generation, evaluation, and selection allows the `MetaPromptOptimizer` to explore different phrasings and structures, guided by the reasoning capabilities of an LLM.
+
+<Tip>
+  The evaluation of each candidate prompt (Step 3) uses the `MetricConfig` you provide and runs against the `dataset`.
+  This process is fundamental to how the optimizer determines which prompts are better. For a deeper understanding of
+  Opik's evaluation capabilities, refer to: - [Evaluation Overview](/evaluation/overview) - [Evaluate
+  Prompts](/evaluation/evaluate_prompt) - [Metrics Overview](/evaluation/metrics/overview)
+</Tip>
 
 ## Configuration Options
 
@@ -41,30 +69,32 @@ from opik_optimizer import MetaPromptOptimizer
 prompter = MetaPromptOptimizer(
     model="openai/gpt-4",  # or "azure/gpt-4"
     project_name="my-project",
+    # LLM parameters like temperature, max_tokens are passed as keyword arguments
     temperature=0.1,
     max_tokens=5000,
+    # Optimizer-specific parameters
+    reasoning_model="openai/gpt-4-turbo", # Optional: model for generating prompt suggestions
+    max_rounds=3,
+    num_prompts_per_round=4,
     num_threads=8,
-    seed=42
+    seed=42 # Seed for LLM calls if supported by the model
 )
 ```
 
 ### Advanced Configuration
 
-```python
-prompter = MetaPromptOptimizer(
-    model="openai/gpt-4",
-    project_name="my-project",
-    temperature=0.1,
-    max_tokens=5000,
-    num_threads=8,
-    seed=42,
-    template_depth=3,           # Depth of template analysis
-    max_variations=5,           # Maximum number of variations to test
-    instruction_weight=0.6,     # Weight of instruction optimization
-    example_weight=0.4,         # Weight of example optimization
-    readability_threshold=0.8   # Minimum readability score
-)
-```
+The `MetaPromptOptimizer` primarily uses the constructor parameters listed above for its configuration.
+Key parameters include:
+
+- `model`: The LLM used for evaluating generated prompts.
+- `reasoning_model`: (Optional) A separate, potentially more powerful LLM used by the optimizer to analyze and generate new prompt candidates. If not provided, `model` is used.
+- `max_rounds`: The number of optimization iterations.
+- `num_prompts_per_round`: How many new prompt candidates are generated in each round.
+- `initial_trials_per_candidate` / `max_trials_per_candidate`: Control the number of evaluations for each candidate.
+
+Additional LLM call parameters (e.g., `temperature`, `max_tokens`, `top_p`) for both the evaluation model and the reasoning model can be passed as keyword arguments (`**model_kwargs`) to the constructor. These will be used when making calls to the respective LLMs.
+
+The optimizer works by iteratively generating new prompt suggestions using its `reasoning_model` based on the performance of previous prompts and then evaluating these suggestions.
 
 ## Example Usage
 
@@ -77,7 +107,7 @@ from opik_optimizer import (
     from_llm_response_text,
     from_dataset_field,
 )
-from opik_optimizer.demo import get_or_create_dataset
+from opik_optimizer import datasets
 
 # Initialize optimizer
 optimizer = MetaPromptOptimizer(
@@ -89,7 +119,7 @@ optimizer = MetaPromptOptimizer(
 )
 
 # Prepare dataset
-dataset = get_or_create_dataset("hotpot-300")
+dataset = datasets.hotpot_300()
 
 # Define metric and task configuration (see docs for more options)
 metric_config = MetricConfig(
@@ -100,7 +130,6 @@ metric_config = MetricConfig(
     }
 )
 task_config = TaskConfig(
-    type="text_generation",
     instruction_prompt="Provide an answer to the question.",
     input_dataset_fields=["question"],
     output_dataset_field="answer",
@@ -120,18 +149,11 @@ results.display()
 
 ## Model Support
 
-The MetaPrompter supports all models available through LiteLLM. For a complete list of supported models and providers, see the [LiteLLM Integration](./07a-litellm-integration.md) documentation.
+The MetaPrompter supports all models available through LiteLLM. This provides broad compatibility with providers like OpenAI, Azure OpenAI, Anthropic, Google, and many others, including locally hosted models.
 
-### Common Providers
+For detailed instructions on how to specify different models and configure providers, please refer to the main [LiteLLM Support for Optimizers documentation page](/agent_optimization/opik_optimizer/litellm_support).
 
-- OpenAI (gpt-4, gpt-3.5-turbo, etc.)
-- Azure OpenAI
-- Anthropic (Claude)
-- Google (Gemini)
-- Mistral
-- Cohere
-
-### Configuration Example
+### Configuration Example using LiteLLM model string
 
 ```python
 optimizer = MetaPromptOptimizer(
@@ -169,6 +191,4 @@ optimizer = MetaPromptOptimizer(
 
 ## Research and References
 
-- [Meta-Prompting for Language Models](https://arxiv.org/abs/2301.12345)
-- [Prompt Engineering Best Practices](https://arxiv.org/abs/2202.12345)
-- [Template-based Prompt Optimization](https://arxiv.org/abs/2103.12345)
+- [Meta-Prompting for Language Models](https://arxiv.org/abs/2401.12954)

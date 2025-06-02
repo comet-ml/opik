@@ -1,8 +1,8 @@
 package com.comet.opik.infrastructure.llm.gemini;
 
-import dev.ai4j.openai4j.chat.ChatCompletionRequest;
 import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import dev.langchain4j.model.googleai.GoogleAiGeminiStreamingChatModel;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import lombok.NonNull;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;

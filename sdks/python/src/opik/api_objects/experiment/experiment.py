@@ -99,14 +99,12 @@ class Experiment:
         from the backend. If truncation is enabled, the backend may return truncated details for each item.
 
         Args:
-            max_results: Maximum number of experiment items to retrieve. Defaults to None (unlimited).
-            truncate: Whether to truncate the items returned by the backend. Defaults to True.
+            max_results: Maximum number of experiment items to retrieve.
+            truncate: Whether to truncate the items returned by the backend.
 
         """
         result: List[experiment_item.ExperimentItemContent] = []
-
-        # this is the constant for the maximum number of objects sent from the backend side
-        max_endpoint_batch_size = 2_000
+        max_endpoint_batch_size = rest_stream_parser.MAX_ENDPOINT_BATCH_SIZE
 
         while True:
             if max_results is None:

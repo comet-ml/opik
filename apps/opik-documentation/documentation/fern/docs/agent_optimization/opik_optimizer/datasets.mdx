@@ -1,172 +1,186 @@
+---
+title: "Optimizer Datasets & Testing"
+subtitle: "Configure and understand Opik Datasets for optimization"
+description: "Learn about dataset requirements, testing methodologies, and best practices for effective prompt optimization with Opik Agent Optimizer."
+pytest_codeblocks_skip: true
+---
+
 ## Overview
 
-Datasets and testing are critical components of the Opik Optimizer's effectiveness. This section outlines the requirements for datasets and the methodologies for testing to ensure optimal performance.
+Datasets and testing are critical components of the Opik Agent Optimizer's
+effectiveness. This section outlines the requirements for datasets and the
+methodologies for testing to ensure optimal performance.
 
-## Dataset Requirements
+<Info>
+  This page focuses on dataset requirements specifically for **Opik Agent Optimizer**. For a general guide on creating,
+  managing, and versioning your own datasets within the Opik platform (using the SDK or UI), please refer to the [Manage
+  Datasets](/evaluation/manage_datasets) documentation.
+</Info>
+
+## Dataset Requirements for Optimization
 
 ### Format
 
-Datasets should be structured as a list of dictionaries with the following format:
+For use with Opik Agent Optimizer, datasets should generally be a list of dictionaries. Each dictionary represents a data point (an "item") and should contain key-value pairs that your chosen optimizer and configuration will use. Typically, this includes:
+
+- At least one field for **input** to the LLM (e.g., a question, a statement to complete).
+- At least one field for the **expected output** or reference (e.g., the ground truth answer, a desired summary).
 
 ```python
+# Example of a dataset item format
 dataset = [
     {
-        "input": "Your input text or query",
-        "output": "Expected output or response"
+        "question": "What is the capital of France?",         # Input field
+        "expected_answer": "Paris",                           # Output/reference field
+        "category": "geography"                             # Optional metadata
     },
+    {
+        "user_query": "Translate 'hello' to Spanish.",
+        "ground_truth_translation": "Hola",
+        "difficulty": "easy"
+    }
     # ... more examples
 ]
 ```
+
+<Note>
+  The exact field names (`"question"`, `"expected_answer"`, etc.) are up to you. You will map these names to their roles
+  (input, output/reference) in the `TaskConfig` and `MetricConfig` when running an optimizer.
+</Note>
 
 ### Size Recommendations
 
 - **Minimum**: 50 examples
   - Provides basic coverage for optimization.
-  - Suitable for simple use cases.
+  - Suitable for simple use cases or initial experimentation.
 - **Optimal**: 100-500 examples
-  - Better representation of real-world scenarios.
-  - More reliable optimization results.
-- **Maximum**: Context window dependent
-  - Limited by model's maximum context length.
-  - Consider token limits when preparing data.
+  - Offers a better representation of real-world scenarios.
+  - Leads to more reliable and generalizable optimization results.
+- **Maximum**: Context window dependent and budget-dependent
+  - Limited by the LLM's maximum context length (especially for few-shot examples).
+  - Larger datasets increase evaluation time and cost during optimization.
 
 ### Quality Guidelines
 
-1. **Diversity**
+1.  **Diversity**
+    - Cover a wide range of scenarios, topics, and complexities relevant to your task.
+    - Include different types of inputs and potential edge cases.
+    - Represent real-world usage patterns accurately.
+2.  **Accuracy**
+    - Ensure ground truth outputs/references are correct, consistent, and unambiguous.
+    - Validate all examples carefully.
+    - Maintain consistency in formatting if the LLM is expected to learn it.
+3.  **Representation**
+    - Balance different types of examples if your task has distinct sub-categories.
+    - Include both simple and complex cases to test robustness.
 
-   - Cover various scenarios and edge cases.
-   - Include different types of inputs.
-   - Represent real-world usage patterns.
+## Demo Datasets (`opik_optimizer.datasets`)
 
-2. **Accuracy**
-
-   - Ensure ground truth outputs are correct.
-   - Validate all examples.
-   - Maintain consistency in formatting.
-
-3. **Representation**
-   - Balance different types of examples.
-   - Include both simple and complex cases.
-   - Cover common and edge cases.
-
-## Testing Methodology
-
-### Evaluation Process
-
-1. **Dataset Splitting**
-
-   - Training set (80%)
-   - Validation set (20%)
-   - Optional test set for final evaluation
-
-2. **Metrics**
-
-   - Accuracy
-   - Precision
-   - Recall
-   - F1 Score
-   - Custom metrics (if applicable)
-
-3. **Baseline Comparison**
-   - Compare against unoptimized prompts.
-   - Measure improvement percentage.
-   - Document performance changes.
-
-### Running Tests
+To help you get started quickly and for testing purposes, the `opik-optimizer`
+package includes a demo module `opik_optimizer.datasets` that includes a number
+of example datasets.
 
 ```python
-from opik.optimizer import FewShotOptimizer
+from opik_optimizer.datasets import tiny_test, hotpot_300
 
-# Initialize optimizer
-optimizer = FewShotOptimizer(
-    model="openai/gpt-4",
-    project_name="test-project"
-)
+# Load a small demo dataset for quick testing
+tiny_test_dataset = tiny_test()
 
-# Run optimization with testing
-results = optimizer.optimize(
-    dataset=training_data,
-    validation_data=validation_data,
-    num_trials=10,
-    metrics=["accuracy", "f1"]
-)
+# Load a subset of the HotpotQA dataset
+hotpot_dataset = hotpot_300()
 
-# Access test results
-print(f"Training Accuracy: {results.training_accuracy}")
-print(f"Validation Accuracy: {results.validation_accuracy}")
-print(f"Improvement: {results.improvement_percentage}%")
+print(f"Loaded {len(tiny_test_dataset.get_items())} items from tiny-test.")
 ```
 
-## Optimization Process
+<Tip>
+  When you load a demo dataset, it first checks if a dataset with that name (or `{name}_test` if `test_mode=True`)
+  already exists in your Opik project. If so, and it has data, it returns the existing dataset. Otherwise, it loads the
+  data and creates/populates the dataset in Opik.
+</Tip>
 
-### How Optimization Works
+Some available demo datasets include:
 
-1. **Data Utilization**
+- `tiny_test`: A micro dataset also known as [tiny qa benchmark](https://huggingface.co/datasets/vincentkoc/tiny_qa_benchmark).
+- `hotpot_300`, `hotpot_500`: Subsets of the HotpotQA dataset for question answering.
+- `halu_eval_300`: A subset of the HaluEval dataset for hallucination detection.
+- `gsm8k`: A subset of the GSM8K dataset for grade-school math problems.
+- `ai2_arc`: A subset of the AI2 ARC dataset for science questions.
+- `truthful_qa`: A subset of the TruthfulQA dataset for evaluating truthfulness.
+- And several others (see `sdks/opik_optimizer/src/opik_optimizer/datasets/__init__.py` in the Opik repository for the full list and their structures).
 
-   - Input data is used to understand patterns.
-   - Output data guides prompt refinement.
-   - Examples inform few-shot learning.
+These demo datasets provide ready-to-use examples with various structures and
+are used throughout our documentation examples.
 
-2. **Iterative Improvement**
+**Relationship to `Manage Datasets`:**
 
-   - Multiple trials per iteration.
-   - Performance-based refinement.
-   - Continuous evaluation.
+- The `opik_optimizer.datasets` module is for **loading pre-defined example datasets** provided with the SDK for demonstration and testing the optimizers.
+- The general [Manage Datasets](/evaluation/manage_datasets) guide, on the other hand, explains how you can **create, upload, and manage your own custom datasets** using the Opik SDK (`client.create_dataset()`, `dataset.insert()`, etc.) or the Opik UI. These are the datasets you would typically curate with your own data for optimizing prompts for your specific applications.
 
-3. **Validation**
-   - Regular testing against validation set.
-   - Performance monitoring.
-   - Early stopping if needed.
+## Testing Methodology with Opik Agent Optimizer
 
-### Best Practices
+While the optimizers primarily use a single dataset (passed to `optimize_prompt`) for both guiding the optimization (e.g., selecting few-shot examples or generating new prompts) and evaluating candidate prompts, a robust testing methodology often involves more.
 
-1. **Dataset Preparation**
+1.  **Optimization Dataset**: The dataset used during the `optimize_prompt` call. The optimizer will use this to score prompts and make decisions. Performance on this dataset shows how well the optimizer adapted to it.
 
-   - Clean and preprocess data.
-   - Ensure consistent formatting.
-   - Remove duplicates and noise.
+2.  **Hold-out / Test Dataset (Recommended)**: After optimization, it's crucial to evaluate the best prompt found by the optimizer on a separate dataset that was _not_ seen during optimization. This gives a more realistic measure of how well the prompt generalizes. Note optimizers will not carry out an automatic "hold out" for you specifically.
 
-2. **Testing Strategy**
+    ```python
+    # After running optimizer.optimize_prompt(dataset=optimization_dataset, ...)
+    best_prompt = results.prompt
+    new_task_config = task_config.copy(update={"instruction_prompt": best_prompt})
 
-   - Use appropriate validation split.
-   - Monitor overfitting.
-   - Document all experiments.
+    # Evaluate on a separate test_dataset
+    test_score = optimizer.evaluate_prompt(
+        dataset=my_holdout_test_dataset,
+        metric_config=metric_config,
+        task_config=new_task_config
+    )
+    print(f"Score on hold-out test set: {test_score}")
+    ```
 
-3. **Results Analysis**
-   - Track performance metrics.
-   - Compare against baselines.
-   - Identify improvement patterns.
+3.  **Metrics**: Use a comprehensive set of metrics relevant to your task. While one metric might be used for optimization (`MetricConfig`), evaluating the final prompt with multiple metrics can provide a fuller picture.
+
+4.  **Baseline Comparison**: Always compare the performance of the optimized prompt against your original, unoptimized prompt (and potentially other baselines) on the same test dataset.
+
+The `opik_optimizer` itself does not enforce a strict train/validation/test split within the `optimize_prompt` call in the same way some traditional ML model training frameworks do. You are responsible for managing your datasets appropriately for robust evaluation (e.g. by having a separate test set as described above).
+
+## How Data is Used in Optimization
+
+1.  **Guidance & Candidate Generation**:
+
+    - `FewShotBayesianOptimizer`: Selects examples from the dataset to form few-shot prompts.
+    - `MetaPromptOptimizer` / `EvolutionaryOptimizer` (with LLM operators): May use context from dataset items (e.g., sample inputs/outputs) when instructing an LLM to generate or modify prompt candidates.
+    - `MiproOptimizer`: Uses the dataset to bootstrap demonstrations for DSPy modules.
+
+2.  **Evaluation**:
+    - All optimizers evaluate candidate prompts by running them against (a subset of) the provided dataset.
+    - The `input_dataset_fields` from `TaskConfig` are used to populate the inputs in the prompt.
+    - The LLM generates an output.
+    - This output is compared against the `output_dataset_field` (reference/ground truth) using the specified `MetricConfig`.
+    - The resulting score guides the optimizer's search process.
 
 ## Common Questions
 
-### How many records should I use?
-
-- Start with at least 50 examples.
-- Aim for 100-500 for optimal results.
-- Consider your specific use case requirements.
-
-### Does the algorithm use input and output data?
-
-Yes, the optimization process:
-
-- Uses input data to understand patterns.
-- Leverages output data for refinement.
-- Combines both for effective optimization.
-
-### How is the data used in optimization?
-
-1. **Pattern Recognition**
-
-   - Analyze input-output relationships.
-   - Identify successful patterns.
-   - Learn from examples.
-
-2. **Prompt Refinement**
-   - Generate improved prompts.
-   - Test against validation data.
-   - Iteratively optimize.
+<AccordionGroup>
+  <Accordion title="How many records should I use for the optimization dataset?">
+    As mentioned in "Size Recommendations": Aim for at least 50 examples for basic testing, and 100-500 for more robust
+    and generalizable results. The ideal number depends on task complexity, data diversity, and available resources.
+  </Accordion>
+  <Accordion title="Does the optimizer use both input and output data from my dataset?">
+    Yes. The **input fields** are used to generate the actual prompts that are sent to the LLM. The **output fields**
+    (ground truth) are used by the evaluation metric (defined in `MetricConfig`) to score the LLM's responses, and this
+    score is what the optimizer tries to maximize.
+  </Accordion>
+  <Accordion title="Can I use a different dataset for final testing than the one used for optimization?">
+    Yes, and this is highly recommended for a more objective assessment of the prompt's generalization ability. First,
+    run `optimize_prompt` with your main optimization dataset. Then, use the `evaluate_prompt` method of the optimizer
+    (or a general evaluation utility) with the best prompt found and a separate, unseen test dataset.
+  </Accordion>
+</AccordionGroup>
 
 ## Next Steps
 
-- Check [FAQ](/agent_optimization/opik_optimizer/faq) for more questions and troubleshooting tips.
-- Explore [API Reference](/agent_optimization/opik_optimizer/api_reference) for technical details.
+- Review the [Manage Datasets](/evaluation/manage_datasets) guide for creating and managing your own custom datasets in Opik.
+- Check the [FAQ](/agent_optimization/opik_optimizer/faq) for more questions and troubleshooting tips.
+- Explore the [API Reference](/agent_optimization/opik_optimizer/reference) for technical details on `TaskConfig`, `MetricConfig`, and optimizer methods.
+- See [Example Projects & Cookbooks](/agent_optimization/cookbook) for runnable Colab notebooks demonstrating dataset usage in optimization workflows.
