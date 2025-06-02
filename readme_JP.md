@@ -36,8 +36,8 @@ Opikは、LLMシステムをより良く、より高速に、より低コスト�
 </p>
 
 <div align="center" style="margin-top: 1em; margin-bottom: 1em;">
-<a href="#🚀-opikとは">🚀 Opikとは？</a> • <a href="#🛠️-opikサーバーのインストール">🛠️ Opikサーバーのインストール</a> • <a href="#💻-opikクライアントsdk">💻 OpikクライアントSDK</a> • <a href="#📝-トレースのログ記録と統合">📝 トレースのログ記録と統合</a><br>
-<a href="#🧑‍⚖️-llmをジャッジとして">🧑‍⚖️ LLMをジャッジとして</a> • <a href="#🔍-アプリケーションの評価">🔍 アプリケーションの評価</a> • <a href="#⭐-githubでスターを">⭐ GitHubでスターを</a> • <a href="#🤝-貢献">🤝 貢献</a>
+<a href="#-opikとは">🚀 Opikとは？</a> • <a href="#🛠-opikサーバーのインストール">🛠️ Opikサーバーのインストール</a> • <a href="#-opikクライアントsdk">💻 OpikクライアントSDK</a> • <a href="#-トレースのログ記録と統合">📝 トレースのログ記録と統合</a><br>
+<a href="#🧑‍⚖-llmをジャッジとして">🧑‍⚖️ LLMをジャッジとして</a> • <a href="#-アプリケーションの評価">🔍 アプリケーションの評価</a> • <a href="#-githubでスターを">⭐ GitHubでスターを</a> • <a href="#-貢献">🤝 貢献</a>
 </div>
 
 <br>
