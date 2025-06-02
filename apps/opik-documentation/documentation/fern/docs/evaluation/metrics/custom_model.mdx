@@ -106,7 +106,6 @@ class CustomOpenAICompatibleModel(OpikBaseModel):
 - **API Endpoint and Payload**: Adjust `base_url` and the JSON payload to match your specific LLM provider's 
 requirements if they deviate from the common OpenAI structure.
 - **Model Name**: The `model_name` passed to `__init__` is used as the `model` parameter in the API call. Ensure this matches an available model on your LLM service.
-- **Method usage**: Both methods of the class must be defined and in order for [`generate_provider_response()`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/OpikBaseModel.html#opik.evaluation.models.OpikBaseModel) to be used in the scoring process, it must be called in [`generate_string()`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/OpikBaseModel.html#opik.evaluation.models.OpikBaseModel).
 
 ### Using the Custom Model with the [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) Metric
 
@@ -122,9 +121,6 @@ API_KEY = os.getenv("MY_CUSTOM_LLM_API_KEY")
 BASE_URL = "YOUR_LLM_CHAT_COMPLETIONS_ENDPOINT" # e.g., "https://api.openai.com/v1/chat/completions"
 MODEL_NAME = "your-model-name" # e.g., "gpt-3.5-turbo"
 
-if not API_KEY or not BASE_URL:
-    raise ValueError("API_KEY and BASE_URL must be set for the custom model.")
-
 # Initialize your custom model
 my_custom_model = CustomOpenAICompatibleModel(
     model_name=MODEL_NAME,
@@ -138,16 +134,13 @@ hallucination_metric = Hallucination(
 )
 
 # Example usage:
-try:
-    evaluation = hallucination_metric.score(
-        input="What is the capital of Mars?",
-        output="The capital of Mars is Ares City, a bustling metropolis.",
-        context=["Mars is a planet in our solar system. It does not currently have any established cities or a designated capital."]
-    )
-    print(f"Hallucination Score: {evaluation.value}") # Expected: 1.0 (hallucination detected)
-    print(f"Reason: {evaluation.reason}")
-except Exception as e:
-    print(f"An error occurred during metric scoring: {e}")
+evaluation = hallucination_metric.score(
+    input="What is the capital of Mars?",
+    output="The capital of Mars is Ares City, a bustling metropolis.",
+    context=["Mars is a planet in our solar system. It does not currently have any established cities or a designated capital."]
+)
+print(f"Hallucination Score: {evaluation.value}") # Expected: 1.0 (hallucination detected)
+print(f"Reason: {evaluation.reason}")
 ```
 
 **Key considerations for the implementation:**
