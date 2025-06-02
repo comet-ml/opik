@@ -1,5 +1,6 @@
 import logging
 import uuid
+import functools
 from typing import Any, Dict, List, Optional, Union
 
 from google.adk.agents.callback_context import CallbackContext
@@ -43,25 +44,7 @@ class OpikTracer:
 
         self._opik_client = opik_client.get_client_cached()
 
-        # monkey patch LLMResponse to store usage_metadata
-        old_function = LlmResponse.create
-        create_wrapper = llm_response_wrapper.LlmResponseCreateWrapper(old_function)
-        LlmResponse.create = create_wrapper
-
-        if hasattr(lite_llm, "LiteLLMClient") and hasattr(
-            lite_llm.LiteLLMClient, "acompletion"
-        ):
-            lite_llm.LiteLLMClient.acompletion = (
-                litellm_wrappers.litellm_client_acompletion_decorator(
-                    lite_llm.LiteLLMClient.acompletion
-                )
-            )
-        if hasattr(lite_llm, "_model_response_to_generate_content_response"):
-            lite_llm._model_response_to_generate_content_response = (
-                litellm_wrappers.generate_content_response_decorator(
-                    lite_llm._model_response_to_generate_content_response
-                )
-            )
+        _patch_adk()
 
     def _attach_span_to_existing_span(
         self,
@@ -328,3 +311,26 @@ class OpikTracer:
         else:
             current_span_data.update(output={"output": tool_response})
         self._end_current_span()
+
+
+@functools.lru_cache()
+def _patch_adk() -> None:
+    # monkey patch LLMResponse to store usage_metadata
+    old_function = LlmResponse.create
+    create_wrapper = llm_response_wrapper.LlmResponseCreateWrapper(old_function)
+    LlmResponse.create = create_wrapper
+
+    if hasattr(lite_llm, "LiteLLMClient") and hasattr(
+        lite_llm.LiteLLMClient, "acompletion"
+    ):
+        lite_llm.LiteLLMClient.acompletion = (
+            litellm_wrappers.litellm_client_acompletion_decorator(
+                lite_llm.LiteLLMClient.acompletion
+            )
+        )
+    if hasattr(lite_llm, "_model_response_to_generate_content_response"):
+        lite_llm._model_response_to_generate_content_response = (
+            litellm_wrappers.generate_content_response_decorator(
+                lite_llm._model_response_to_generate_content_response
+            )
+        )
