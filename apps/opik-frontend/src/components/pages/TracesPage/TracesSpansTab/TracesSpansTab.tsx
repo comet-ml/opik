@@ -43,7 +43,7 @@ import {
 } from "@/lib/table";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
-import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
@@ -490,6 +490,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               accessorFn: (row: BaseTraceData) => get(row, "span_count", "-"),
             },
             {
+              id: "llm_span_count",
+              label: "LLM calls count",
+              type: COLUMN_TYPE.number,
+              accessorFn: (row: BaseTraceData) =>
+                get(row, "llm_span_count", "-"),
+            },
+            {
               id: "thread_id",
               label: "Thread ID",
               type: COLUMN_TYPE.string,
@@ -675,12 +682,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   return (
     <>
-      <PageBodyStickyContainer
-        className="pb-4"
-        direction="horizontal"
-        limitWidth
-      >
-        <CalloutAlert
+      <PageBodyStickyContainer direction="horizontal" limitWidth>
+        <ExplainerCallout
+          className="mb-4"
           {...(type === TRACE_DATA_TYPE.traces
             ? EXPLAINERS_MAP[EXPLAINER_ID.what_are_traces]
             : EXPLAINERS_MAP[EXPLAINER_ID.what_are_llm_calls])}
