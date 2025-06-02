@@ -23,9 +23,10 @@ class OpikTracingProcessor(tracing.TracingProcessor):
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
+
+        # The OpikTracingProcessor maps
         self._opik_spans_data_map: Dict[str, span_data.SpanData] = {}
         """Map from openai span id to the opik span data created for it."""
-
         self._created_opik_traces_data_map: Dict[str, trace_data.TraceData] = {}
         """Map from openai trace id to the opik trace data created for it."""
 
@@ -96,6 +97,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
         try:
             opik_trace_or_span_data = self._try_get_span_or_trace(trace.trace_id)
             if opik_trace_or_span_data is None:
+                LOGGER.error(f"on_trace_end failed: no opik span/trace found for openai trace {trace.trace_id}")
                 return
 
             opik_trace_or_span_data.init_end_time()
