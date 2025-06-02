@@ -17,6 +17,8 @@ export const TraceThread: core.serialization.ObjectSchema<serializers.TraceThrea
         firstMessage: core.serialization.property("first_message", JsonNode.optional()),
         lastMessage: core.serialization.property("last_message", JsonNode.optional()),
         numberOfMessages: core.serialization.property("number_of_messages", core.serialization.number().optional()),
+        totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
+        usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
@@ -32,6 +34,8 @@ export declare namespace TraceThread {
         first_message?: JsonNode.Raw | null;
         last_message?: JsonNode.Raw | null;
         number_of_messages?: number | null;
+        total_estimated_cost?: number | null;
+        usage?: Record<string, number> | null;
         last_updated_at?: string | null;
         created_by?: string | null;
         created_at?: string | null;

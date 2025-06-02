@@ -13,6 +13,8 @@ export interface TraceThread {
     firstMessage?: OpikApi.JsonNode;
     lastMessage?: OpikApi.JsonNode;
     numberOfMessages?: number;
+    totalEstimatedCost?: number;
+    usage?: Record<string, number>;
     lastUpdatedAt?: Date;
     createdBy?: string;
     createdAt?: Date;
