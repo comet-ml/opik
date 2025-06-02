@@ -29,6 +29,7 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
@@ -3973,6 +3974,7 @@ class DatasetsResourceTest {
                                     .usage(null)
                                     .totalEstimatedCost(null)
                                     .duration(null)
+                                    .traceVisibilityMode(null)
                                     .build()))
                     .toList());
 
@@ -3986,6 +3988,7 @@ class DatasetsResourceTest {
                                     .usage(null)
                                     .totalEstimatedCost(null)
                                     .duration(null)
+                                    .traceVisibilityMode(null)
                                     .build()),
                             datasetItemIdToExperimentItemMap.values().stream().flatMap(Collection::stream))
                             .collect(toUnmodifiableSet()))
@@ -4159,6 +4162,7 @@ class DatasetsResourceTest {
                             .feedbackScores(null)
                             .output(null)
                             .input(null)
+                            .traceVisibilityMode(null)
                             .build())
                     .toList();
 
@@ -4603,6 +4607,7 @@ class DatasetsResourceTest {
                         .experimentId(experimentId)
                         .input(trace.input())
                         .output(trace.output())
+                        .traceVisibilityMode(VisibilityMode.DEFAULT)
                         .feedbackScores(score == null
                                 ? null
                                 : Stream.of(score)
