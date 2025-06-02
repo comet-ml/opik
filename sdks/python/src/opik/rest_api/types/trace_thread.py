@@ -17,6 +17,8 @@ class TraceThread(UniversalBaseModel):
     first_message: typing.Optional[JsonNode] = None
     last_message: typing.Optional[JsonNode] = None
     number_of_messages: typing.Optional[int] = None
+    total_estimated_cost: typing.Optional[float] = None
+    usage: typing.Optional[typing.Dict[str, int]] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
