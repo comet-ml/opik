@@ -8,7 +8,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type ExplainerIconProps = {
   className?: string;
-} & Explainer;
+} & Omit<Explainer, "id">;
 
 const ExplainerIcon: React.FC<ExplainerIconProps> = ({
   type = "info",
@@ -31,7 +31,7 @@ const ExplainerIcon: React.FC<ExplainerIconProps> = ({
                 target="_blank"
                 rel="noreferrer"
               >
-                Raad more
+                Read more
                 <SquareArrowOutUpRight className="ml-0.5 size-3 shrink-0" />
               </a>
             </Button>

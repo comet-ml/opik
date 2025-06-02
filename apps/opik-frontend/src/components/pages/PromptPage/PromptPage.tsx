@@ -54,6 +54,12 @@ const PromptPage: React.FunctionComponent = () => {
           </TabsTrigger>
           <TabsTrigger variant="underline" value="experiments">
             Experiments
+            <ExplainerIcon
+              className="ml-1"
+              {...EXPLAINERS_MAP[
+                EXPLAINER_ID.why_do_i_have_experiments_in_the_prompt_library
+              ]}
+            />
           </TabsTrigger>
           <TabsTrigger variant="underline" value="commits">
             Commits

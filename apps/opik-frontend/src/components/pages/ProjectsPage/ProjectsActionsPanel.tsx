@@ -34,8 +34,9 @@ const ProjectsActionsPanel: React.FunctionComponent<
         setOpen={setOpen}
         onConfirm={deleteProjectsHandler}
         title="Delete projects"
-        description="Are you sure you want to delete all selected projects?"
+        description="Deleting projects will also remove all the traces and their data. This action can’t be undone. Are you sure you want to continue?"
         confirmText="Delete projects"
+        confirmButtonVariant="destructive"
       />
       <TooltipWrapper content="Delete">
         <Button

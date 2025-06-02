@@ -65,6 +65,7 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
         title="Delete configuration"
         description="This configuration is shared across the workspace. Deleting it will remove access for everyone. This action can’t be undone. Are you sure you want to proceed?"
         confirmText="Delete configuration"
+        confirmButtonVariant="destructive"
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
