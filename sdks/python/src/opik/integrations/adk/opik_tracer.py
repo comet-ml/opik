@@ -46,7 +46,6 @@ class OpikTracer:
 
         _patch_adk()
 
-
     def _attach_span_to_existing_span(
         self,
         current_span_data: span.SpanData,
@@ -315,7 +314,7 @@ class OpikTracer:
 
 
 @functools.lru_cache()
-def _patch_adk():
+def _patch_adk() -> None:
     # monkey patch LLMResponse to store usage_metadata
     old_function = LlmResponse.create
     create_wrapper = llm_response_wrapper.LlmResponseCreateWrapper(old_function)
