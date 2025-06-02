@@ -138,8 +138,8 @@ class OpikTracer:
         if (trace_data := self._context_storage.get_trace_data()) is not None:
             trace_data.init_end_time()
             self._opik_client.trace(**trace_data.__dict__)
-
-            self._context_storage.set_trace_data(None)
+        else:
+            LOGGER.debug("Failed during _end_current_trace(): trace is not found.")
 
     def _end_current_span(
         self,
@@ -147,8 +147,8 @@ class OpikTracer:
         if (span_data := self._context_storage.top_span_data()) is not None:
             span_data.init_end_time()
             self._opik_client.span(**span_data.__dict__)
-
-            self._context_storage.pop_span_data()
+        else:
+            LOGGER.debug("Failed during _end_current_span(): span is not found.")
 
     def _set_current_context_data(self, value: SpanOrTraceData) -> None:
         if isinstance(value, span.SpanData):
