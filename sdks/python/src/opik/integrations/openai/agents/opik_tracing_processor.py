@@ -23,8 +23,8 @@ class OpikTracingProcessor(tracing.TracingProcessor):
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
-
-        # The OpikTracingProcessor maps
+        # NOTE: The OpikTracingProcessor maps openai traces/spans to
+        # opik traces/spans. Openai traces may be logged as opik spans.
         self._opik_spans_data_map: Dict[str, span_data.SpanData] = {}
         """Map from openai span id to the opik span data created for it."""
         self._created_opik_traces_data_map: Dict[str, trace_data.TraceData] = {}
