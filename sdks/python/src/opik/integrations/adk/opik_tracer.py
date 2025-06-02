@@ -135,7 +135,7 @@ class OpikTracer:
         self._set_current_context_data(new_trace_data)
 
     def _end_current_trace(self) -> None:
-        if (trace_data := self._context_storage.get_trace_data()) is not None:
+        if (trace_data := self._context_storage.pop_trace_data()) is not None:
             trace_data.init_end_time()
             self._opik_client.trace(**trace_data.__dict__)
         else:
@@ -144,7 +144,7 @@ class OpikTracer:
     def _end_current_span(
         self,
     ) -> None:
-        if (span_data := self._context_storage.top_span_data()) is not None:
+        if (span_data := self._context_storage.pop_span_data()) is not None:
             span_data.init_end_time()
             self._opik_client.span(**span_data.__dict__)
         else:

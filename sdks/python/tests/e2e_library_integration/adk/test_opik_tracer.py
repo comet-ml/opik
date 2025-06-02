@@ -115,6 +115,7 @@ def test_opik_tracer_with_sample_agent(
     assert trace.span_count == 3  # two LLM calls and one function call
     assert trace.usage is not None
     assert "adk_invocation_id" in trace.metadata.keys()
+    assert trace.metadata["created_from"] == "google-adk"
     testlib.assert_dict_has_keys(trace.usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
     spans = opik_client_unique_project_name.search_spans()
@@ -155,6 +156,7 @@ def test_opik_tracer_with_sample_agent__openai(
     assert trace.span_count == 3  # two LLM calls and one function call
     assert trace.usage is not None
     assert "adk_invocation_id" in trace.metadata.keys()
+    assert trace.metadata["created_from"] == "google-adk"
     OpenAICompletionsUsage.from_original_usage_dict(trace.usage)
 
     spans = opik_client_unique_project_name.search_spans()
@@ -203,6 +205,7 @@ def test_opik_tracer_with_sample_agent__anthropic(
     assert trace.span_count == 3  # two LLM calls and one function call
     assert trace.usage is not None
     assert "adk_invocation_id" in trace.metadata.keys()
+    assert trace.metadata["created_from"] == "google-adk"
     OpenAICompletionsUsage.from_original_usage_dict(trace.usage)
 
     spans = opik_client_unique_project_name.search_spans()
