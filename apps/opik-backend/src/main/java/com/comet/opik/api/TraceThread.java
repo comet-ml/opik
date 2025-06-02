@@ -37,10 +37,11 @@ public record TraceThread(
             int page,
             int size,
             long total,
-            List<TraceThread> content) implements com.comet.opik.api.Page<TraceThread> {
+            List<TraceThread> content,
+            List<String> sortableBy) implements com.comet.opik.api.Page<TraceThread> {
 
-        public static TraceThreadPage empty(int page) {
-            return new TraceThreadPage(page, 0, 0, List.of());
+        public static TraceThreadPage empty(int page, List<String> sortableBy) {
+            return new TraceThreadPage(page, 0, 0, List.of(), sortableBy);
         }
     }
 
