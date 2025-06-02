@@ -682,12 +682,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   return (
     <>
-      <PageBodyStickyContainer
-        className="pb-4"
-        direction="horizontal"
-        limitWidth
-      >
+      <PageBodyStickyContainer direction="horizontal" limitWidth>
         <ExplainerCallout
+          className="mb-4"
           {...(type === TRACE_DATA_TYPE.traces
             ? EXPLAINERS_MAP[EXPLAINER_ID.what_are_traces]
             : EXPLAINERS_MAP[EXPLAINER_ID.what_are_llm_calls])}

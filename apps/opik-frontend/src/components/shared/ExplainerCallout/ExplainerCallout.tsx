@@ -1,10 +1,11 @@
 import React from "react";
-import { Info, SquareArrowOutUpRight } from "lucide-react";
+import { Info, SquareArrowOutUpRight, X } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl, cn } from "@/lib/utils";
 import { Explainer } from "@/types/shared";
+import useLocalStorageState from "use-local-storage-state";
 
 type ExplainerCalloutProps = {
   className?: string;
@@ -12,6 +13,7 @@ type ExplainerCalloutProps = {
 } & Explainer;
 
 const ExplainerCallout: React.FC<ExplainerCalloutProps> = ({
+  id,
   title,
   description,
   docLink,
@@ -19,8 +21,17 @@ const ExplainerCallout: React.FC<ExplainerCalloutProps> = ({
   className,
   Icon = Info,
 }) => {
+  const [isShown, setIsShown] = useLocalStorageState<boolean>(
+    `explainer-callout-${id}`,
+    {
+      defaultValue: true,
+    },
+  );
+
+  if (!isShown) return null;
+
   return (
-    <Alert variant="callout" size="sm" className={className}>
+    <Alert variant="callout" size="sm" className={cn("pr-10", className)}>
       <Icon />
       {title && <AlertTitle size="sm">{title}</AlertTitle>}
       <AlertDescription size="sm">
@@ -38,6 +49,14 @@ const ExplainerCallout: React.FC<ExplainerCalloutProps> = ({
           </Button>
         )}
       </AlertDescription>
+      <Button
+        variant="minimal"
+        size="icon-sm"
+        onClick={() => setIsShown(false)}
+        className="absolute right-1 top-1 !p-0"
+      >
+        <X />
+      </Button>
     </Alert>
   );
 };
