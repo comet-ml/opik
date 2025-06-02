@@ -171,7 +171,7 @@ class OpikTracer(BaseTracer):
             )
             return None, new_span_data
 
-        current_span_data = self._opik_context.get_current_span_data()
+        current_span_data = self._opik_context_storage.top_span_data()
         self._root_run_external_parent_span_id.set(
             current_span_data.id if current_span_data is not None else None
         )
@@ -183,7 +183,7 @@ class OpikTracer(BaseTracer):
             )
             return None, new_span_data
 
-        current_trace_data = self._opik_context.get_current_trace_data()
+        current_trace_data = self._opik_context_storage.get_trace_data()
         if current_trace_data is not None:
             new_span_data = self._attach_span_to_existing_trace(
                 run_dict=run_dict,
