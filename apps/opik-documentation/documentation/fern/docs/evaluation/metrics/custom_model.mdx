@@ -44,11 +44,11 @@ Opik's LLM-as-a-Judge metrics, such as `Hallucination`, are designed to work wit
 `OpikBaseModel` is an abstract base class that defines the interface Opik metrics use to interact with LLMs. To create a compatible custom model, you must implement the following methods:
 
 1.  `__init__(self, model_name: str)`:
-    Initializes your custom model. Call `super().__init__(model_name)` and add any custom initialization, such as setting API keys or endpoints.
+    Initializes the base model with a given model name.
 2.  `generate_string(self, input: str, **kwargs: Any) -> str`:
-    Generates a simple string output from the model given a string input.
+    Simplified interface to generate a string output from the model.
 3.  `generate_provider_response(self, **kwargs: Any) -> Any`:
-    The primary method used by LLM-as-a-Judge metrics. It receives the judge's prompt (typically as `kwargs['prompt']`) and should return the model's raw response. For judge metrics, this response is expected to be a JSON string containing the evaluation (e.g., `{"score": 0.0, "reason": ["..."]}`).
+     Generate a provider-specific response. Can be used to interface with the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
 
 ### Implementing a Custom Model for an OpenAI-like API
 
@@ -75,25 +75,21 @@ class CustomOpenAICompatibleModel(OpikBaseModel):
         This method is used as part of LLM as a Judge metrics to take a string prompt, pass it to
         the model as a user message and return the model's response as a string.
         """
-        messages = [
+        conversation = [
             {
                 "content": input,
                 "role": "user",
             },
         ]
 
-        provider_response = self.generate_provider_response(messages=request, **kwargs)
+        provider_response = self.generate_provider_response(messages=conversation, **kwargs)
         return provider_response["choices"][0]["message"]["content"]
 
-    def generate_provider_response(self, messages: List[Dict[str, Any]], **kwargs: Any) -> Any:
+    def generate_provider_response(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
         """
         This method is used as part of LLM as a Judge metrics to take a list of AI messages, pass it to
         the model and return the full model response.
         """
-
-        if not messages:
-            raise ValueError("'messages' must be provided in kwargs for LLM-as-a-Judge.")
-
         payload = {
             "model": self.model_name,
             "messages": messages,
@@ -107,14 +103,16 @@ class CustomOpenAICompatibleModel(OpikBaseModel):
 
 **Key considerations for the implementation:**
 
-- **API Endpoint and Payload**: Adjust `base_url` and the JSON payload in `_make_request` (and `_amake_request`) to match your specific LLM provider's requirements if they deviate from the common OpenAI structure.
-- **Model Name/ID**: The `model_id` passed to `__init__` is used as the `model` parameter in the API call. Ensure this matches an available model on your LLM service.
-- **JSON Output**: The LLM-as-a-Judge prompt (provided by the `Hallucination` metric) instructs the model to return a JSON string. Your chosen LLM must be capable of following these instructions. The custom class then just returns this JSON string.
-- **Error Handling**: The example includes basic error handling. Robust applications may require more sophisticated error management and logging.
+- **API Endpoint and Payload**: Adjust `base_url` and the JSON payload to match your specific LLM provider's 
+requirements if they deviate from the common OpenAI structure.
+- **Model Name**: The `model_name` passed to `__init__` is used as the `model` parameter in the API call. Ensure this matches an available model on your LLM service.
+- **Method usage**: Both methods of the class must be defined and in order for `generate_provider_response()` to be used in the scoring process, it must be called in `generate_string()`.
 
 ### Using the Custom Model with the `Hallucination` Metric
 
-Instantiate your custom model and pass it to the `Hallucination` metric:
+In order to run an evaluation using your Custom Model with the `Hallucination` metric, 
+you will first need to instantiate our `CustomOpenAICompatibleModel` class and pass it to the `Hallucination` metric.
+The evaluation can then be kicked off by calling the `Hallucination.score()` method.
 
 ```python
 import os
@@ -152,3 +150,6 @@ try:
 except Exception as e:
     print(f"An error occurred during metric scoring: {e}")
 ```
+
+**Key considerations for the implementation:**
+- **ScoreResult Output**: Returns a ScoreResult object containing the metric name (`name`), score value (`value`), optional explanation (`reason`), metadata (`metadata`), and a failure flag (`scoring_failed`).
