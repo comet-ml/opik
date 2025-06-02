@@ -23,6 +23,7 @@ class DockerExecutor(CodeExecutorBase):
         self.docker_registry = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY", "ghcr.io/comet-ml/opik")
         self.docker_image = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_NAME", "opik-sandbox-executor-python")
         self.docker_tag = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_TAG", "latest")
+        self.pool_check_interval = int(os.getenv("PYTHON_CODE_EXECUTOR_POOL_CHECK_INTERVAL", "3"))
 
         self.client = docker.from_env()
         self.instance_id = str(uuid7())
@@ -43,10 +44,10 @@ class DockerExecutor(CodeExecutorBase):
 
     def _start_pool_monitor(self):
         """Start a background thread that periodically checks and fills the container pool."""
-        logger.info("Starting container pool monitor")
+        logger.info(f"Starting container pool monitor with {self.pool_check_interval} second interval")
 
-        # Schedule the pool check to run every 3 seconds
-        schedule.every(3).seconds.do(self._check_pool)
+        # Schedule the pool check to run at the configured interval
+        schedule.every(self.pool_check_interval).seconds.do(self._check_pool)
 
         # Start a background thread to run the scheduler
         self.releaser_executor.submit(self._run_scheduler)
