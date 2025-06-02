@@ -191,8 +191,9 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           setOpen={setPopupOpen}
           onConfirm={handleThreadDelete}
           title="Delete thread"
-          description="Are you sure you want to delete this thread?"
+          description="Deleting a thread will also remove all traces linked to it and their data. This action can’t be undone. Are you sure you want to continue?"
           confirmText="Delete thread"
+          confirmButtonVariant="destructive"
         />
         <Button variant="outline" size="sm" onClick={() => setPopupOpen(true)}>
           <Trash className="mr-2 size-4" />
