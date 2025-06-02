@@ -78,21 +78,32 @@ class DockerExecutor(CodeExecutorBase):
         logger.info(f"Created container, id '{new_container.id}'")
 
     def release_container(self, container):
+        self.releaser_executor.submit(self.async_release, container)
 
-        def async_release():
-            try:
-                # First, ensure we have enough containers in the pool
-                self.create_container()
+    def async_release(self, container):
+        try:
+            # First, ensure we have enough containers in the pool
+            self._create_new_container()
 
-                # Now stop and remove the old container
-                logger.info(f"Stopping container {container.id}. Will create a new one.")
-                container.stop(timeout=1)
-                container.remove(force=True)
-                logger.info(f"Stopped container {container.id}")
-            except Exception as e:
-                logger.error(f"Error replacing container: {e}")
+            # Now stop and remove the old container
+            self._stopContainers(container)
+        except Exception as e:
+            logger.error(f"Error replacing container: {e}")
 
-        self.releaser_executor.submit(async_release)
+    def _create_new_container(self):
+        try:
+            self.create_container()
+        except Exception as e:
+            logger.error(f"Error replacing container: {e}")
+
+    def _stopContainers(self, container):
+        try:
+            logger.info(f"Stopping container {container.id}. Will create a new one.")
+            container.stop(timeout=1)
+            container.remove(force=True)
+            logger.info(f"Stopped container {container.id}")
+        except Exception as e:
+            logger.error(f"Failed to create new container: {e}")
 
     def get_container(self):
         if not self.running:
