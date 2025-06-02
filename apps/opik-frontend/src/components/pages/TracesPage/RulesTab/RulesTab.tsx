@@ -234,12 +234,9 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
 
   return (
     <>
-      <PageBodyStickyContainer
-        className="pb-4"
-        direction="horizontal"
-        limitWidth
-      >
+      <PageBodyStickyContainer direction="horizontal" limitWidth>
         <ExplainerCallout
+          className="mb-4"
           {...EXPLAINERS_MAP[EXPLAINER_ID.whats_online_evaluation]}
         />
       </PageBodyStickyContainer>
