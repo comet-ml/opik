@@ -121,7 +121,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
                 if span.parent_id is not None
                 else self._try_get_span_or_trace(span.trace_id)
             )
-            assert opik_span_or_trace_data is None
+            assert opik_span_or_trace_data is not None
             opik_span_data = opik_span_or_trace_data.create_child_span_data(
                 name=parsed_span_data.name,
                 type=parsed_span_data.type,
