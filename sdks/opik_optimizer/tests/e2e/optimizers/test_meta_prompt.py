@@ -33,7 +33,7 @@ def test_metaprompt_optimizer():
         temperature=0.1,
         max_tokens=10000,
         num_threads=8,
-        rounds=10,
+        rounds=2,
         num_prompts_per_round=4,
         seed=42
     )

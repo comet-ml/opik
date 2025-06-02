@@ -195,9 +195,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
         metric_config: MetricConfig,
-        use_full_dataset: bool,
-        experiment_config: Optional[Dict],
-        n_samples: Optional[int],
+        use_full_dataset: bool = True,
+        experiment_config: Optional[Dict] = None,
+        n_samples: Optional[int] = None,
         optimization_id: Optional[str] = None,
         verbose: int = 1,
     ) -> float:
@@ -305,7 +305,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             return result
 
         # Use dataset's get_items with limit for sampling
-        logger.info(
+        logger.debug(
             f"Starting evaluation with {subset_size if subset_size else 'all'} samples for metric: {metric_config.metric.name}"
         )
         score = task_evaluator.evaluate(
@@ -347,7 +347,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         Returns:
             OptimizationResult: Structured result containing optimization details
         """
-        reporting.display_header(self.__class__.__name__)
+        reporting.display_header(self.__class__.__name__, verbose=self.verbose)
         
         total_items = len(dataset.get_items())
         if n_samples is not None and n_samples > total_items:
@@ -362,7 +362,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "optimizer": self.__class__.__name__,
                 "n_samples": n_samples,
                 "auto_continue": auto_continue
-            }
+            },
+            verbose=self.verbose
         )
 
         optimization = None
@@ -372,7 +373,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 objective_name=metric_config.metric.name,
                 metadata={"optimizer": self.__class__.__name__},
             )
-            logger.info(f"Created optimization with ID: {optimization.id}")
+            logger.debug(f"Created optimization with ID: {optimization.id}")
         except Exception as e:
             logger.warning(
                 f"Opik server does not support optimizations: {e}. Please upgrade opik."
@@ -392,13 +393,13 @@ class MetaPromptOptimizer(BaseOptimizer):
             )
             if optimization:
                 self.update_optimization(optimization, status="completed")
-                logger.info("Optimization completed successfully")
+                logger.debug("Optimization completed successfully")
             return result
         except Exception as e:
             logger.error(f"Optimization failed: {e}")
             if optimization:
                 self.update_optimization(optimization, status="cancelled")
-                logger.info("Optimization marked as cancelled")
+                logger.debug("Optimization marked as cancelled")
             raise e
 
     def _optimize_prompt(
@@ -433,7 +434,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             },
         }
 
-        with reporting.display_evaluation() as baseline_reporter:
+        with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             initial_score = self.evaluate_prompt(
                 prompt=prompt,
                 optimization_id=optimization_id,
@@ -450,8 +451,8 @@ class MetaPromptOptimizer(BaseOptimizer):
 
             baseline_reporter.set_score(initial_score)
 
-        reporting.display_optimization_start_message()
-        with reporting.display_round_progress(self.rounds) as round_reporter:
+        reporting.display_optimization_start_message(verbose=self.verbose)
+        with reporting.display_round_progress(self.rounds, verbose=self.verbose) as round_reporter:
             for round_num in range(self.rounds):
                 
                 round_reporter.round_start(round_num)
@@ -474,7 +475,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 # Step 2. Score each candidate prompt
                 prompt_scores = []
                 for candidate_count, prompt in enumerate(candidate_prompts):
-                    with reporting.display_prompt_candidate_scoring_report(candidate_count, prompt) as eval_report:
+                    with reporting.display_prompt_candidate_scoring_report(candidate_count, prompt, verbose=self.verbose) as eval_report:
                         eval_report.set_generated_prompts(candidate_count, prompt)
 
                         try:
@@ -508,13 +509,13 @@ class MetaPromptOptimizer(BaseOptimizer):
                 round_reporter.round_end(round_num, best_cand_score_avg, best_score, best_prompt)
                 
                 round_data = self._create_round_data(
-                    round_num,
-                    best_prompt,
-                    best_score,
-                    best_prompt,
-                    prompt_scores,
-                    previous_best_score,
-                    improvement,
+                    round_num=round_num,
+                    current_best_prompt=chat_prompt.ChatPrompt(messages=best_candidate_this_round),
+                    current_best_score=best_cand_score_avg,
+                    best_prompt_overall=chat_prompt.ChatPrompt(messages=best_prompt),
+                    evaluated_candidates=prompt_scores,
+                    previous_best_score=previous_best_score,
+                    improvement_this_round=improvement,
                 )
                 rounds.append(round_data)
                 self._add_to_history(round_data.model_dump())
@@ -527,6 +528,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             initial_score,
             best_score,
             best_prompt,
+            verbose=self.verbose
         )
 
         return self._create_result(
@@ -678,7 +680,8 @@ class MetaPromptOptimizer(BaseOptimizer):
     ) -> List[str]:
         """Generate candidate prompts using meta-prompting."""
         with reporting.display_candidate_generation_report(
-            self.num_prompts_per_round
+            self.num_prompts_per_round,
+            verbose=self.verbose
         ) as candidate_generation_report: 
             logger.debug(f"\nGenerating candidate prompts for round {round_num + 1}")
             logger.debug(f"Generating from prompt: {current_prompt}")
@@ -775,9 +778,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                         # Log details
                         focus = item.get("improvement_focus", "N/A")
                         reasoning = item.get("reasoning", "N/A")
-                        logger.info(f"Generated prompt: {prompt_text}")
-                        logger.info(f"  Improvement focus: {focus}")
-                        logger.info(f"  Reasoning: {reasoning}")
+                        logger.debug(f"Generated prompt: {prompt_text}")
+                        logger.debug(f"  Improvement focus: {focus}")
+                        logger.debug(f"  Reasoning: {reasoning}")
                     else:
                         logger.warning(
                             f"Skipping invalid prompt item structure in JSON response: {item}"

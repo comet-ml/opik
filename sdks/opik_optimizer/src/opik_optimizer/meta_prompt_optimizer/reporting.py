@@ -18,32 +18,35 @@ console = Console()
 
 
 @contextmanager
-def display_round_progress(max_rounds: int):
+def display_round_progress(max_rounds: int, verbose: int = 1):
     """Context manager to display messages during an evaluation phase."""
     
     # Create a simple object with a method to set the score
     class Reporter:
         def failed_to_generate(self, num_prompts, error):
-            rich.print(Text(f"│    Failed to generate {num_prompts} candidate prompt{'' if num_prompts == 1 else 's'}: {error}", style="red"))
-            rich.print(Text("│"))
-        
+            if verbose >= 1:
+                rich.print(Text(f"│    Failed to generate {num_prompts} candidate prompt{'' if num_prompts == 1 else 's'}: {error}", style="red"))
+                rich.print(Text("│"))
+            
         def round_start(self, round_number):
-            rich.print(Text(f"│ - Starting optimization round {round_number + 1} of {max_rounds}"))
+            if verbose >= 1:
+                rich.print(Text(f"│ - Starting optimization round {round_number + 1} of {max_rounds}"))
 
         def round_end(self, round_number, score, best_score, best_prompt):
-            rich.print(Text(f"│    Completed optimization round {round_number + 1} of {max_rounds}"))
-            if score > best_score:
-                perc_change = (score - best_score) / best_score
-                rich.print(Text(f"│    Found a new best performing prompt: {score:.4f} ({perc_change:.2%})", style="green"))
-            elif score <= best_score:
-                perc_change = (score - best_score) / best_score
-                rich.print(Text("│    No improvement in this optimization round", style="red"))
-            
-            rich.print(Text("│"))
+            if verbose >= 1:
+                rich.print(Text(f"│    Completed optimization round {round_number + 1} of {max_rounds}"))
+                if score > best_score:
+                    perc_change = (score - best_score) / best_score
+                    rich.print(Text(f"│    Found a new best performing prompt: {score:.4f} ({perc_change:.2%})", style="green"))
+                elif score <= best_score:
+                    perc_change = (score - best_score) / best_score
+                    rich.print(Text("│    No improvement in this optimization round", style="red"))
+                
+                rich.print(Text("│"))
 
     # Use our log suppression context manager and yield the reporter
     with suppress_opik_logs():
-        with convert_tqdm_to_rich():
+        with convert_tqdm_to_rich(verbose=verbose):
             try:
                 yield Reporter()
             finally:
@@ -51,37 +54,40 @@ def display_round_progress(max_rounds: int):
 
 
 @contextmanager
-def display_evaluation(message: str = "First we will establish the baseline performance:"):
+def display_evaluation(message: str = "First we will establish the baseline performance:", verbose: int = 1):
     """Context manager to display messages during an evaluation phase."""
     score = None
     
     # Entry point
-    rich.print(Text(f"> {message}"))
+    if verbose >= 1:
+        rich.print(Text(f"> {message}"))
     
     # Create a simple object with a method to set the score
     class Reporter:
         def set_score(self, s):
-            nonlocal score
-            score = s
+            if verbose >= 1:
+                rich.print(Text(f"\r  Baseline score was: {s:.4f}.\n", style="green"))
     
     # Use our log suppression context manager and yield the reporter
     with suppress_opik_logs():
-        with convert_tqdm_to_rich("  Evaluation"):
+        with convert_tqdm_to_rich("  Evaluation", verbose=verbose):
             try:
                 yield Reporter()
             finally:
-                rich.print(Text(f"\r  Baseline score was: {score:.4f}.\n", style="green"))
+                pass
 
-def display_optimization_start_message():
-    rich.print(Text("> Starting the optimization run"))
-    rich.print(Text("│"))
+def display_optimization_start_message(verbose: int = 1):
+    if verbose >= 1:
+        rich.print(Text("> Starting the optimization run"))
+        rich.print(Text("│"))
 
 
 @contextmanager
-def display_candidate_generation_report(num_prompts: int):
+def display_candidate_generation_report(num_prompts: int, verbose: int = 1):
     """Context manager to display messages during an evaluation phase."""
     # Entry point
-    rich.print(Text(f"│    Generating candidate prompt{'' if num_prompts == 1 else 's'}:"))
+    if verbose >= 1:
+        rich.print(Text(f"│    Generating candidate prompt{'' if num_prompts == 1 else 's'}:"))
     
     # Create a simple object with a method to set the score
     class Reporter:
@@ -96,29 +102,31 @@ def display_candidate_generation_report(num_prompts: int):
 
 
 @contextmanager
-def display_prompt_candidate_scoring_report(candidate_count, prompt):
+def display_prompt_candidate_scoring_report(candidate_count, prompt, verbose: int = 1):
     """Context manager to display messages during an evaluation phase."""
     # Create a simple object with a method to set the score
     class Reporter:
         def set_generated_prompts(self, candidate_count, prompt):
-            rich.print(Text(f"│    Evaluating candidate prompt {candidate_count+1}:"))
-            display_messages(prompt, "│         ")
+            if verbose >= 1:
+                rich.print(Text(f"│    Evaluating candidate prompt {candidate_count+1}:"))
+                display_messages(prompt, "│         ")
         
         def set_final_score(self, best_score, score):
-            if score > best_score:
-                perc_change = (score - best_score) / best_score
-                rich.print(Text(f"│          Evaluation score: {score:.4f} ({perc_change:.2%})", style="green"))
-            elif score < best_score:
-                perc_change = (score - best_score) / best_score
-                rich.print(Text(f"│         Evaluation score: {score:.4f} ({perc_change:.2%})", style="red"))
-            else:
-                rich.print(Text(f"│         Evaluation score: {score:.4f}", style="dim yellow"))
+            if verbose >= 1:
+                if score > best_score:
+                    perc_change = (score - best_score) / best_score
+                    rich.print(Text(f"│          Evaluation score: {score:.4f} ({perc_change:.2%})", style="green"))
+                elif score < best_score:
+                    perc_change = (score - best_score) / best_score
+                    rich.print(Text(f"│          Evaluation score: {score:.4f} ({perc_change:.2%})", style="red"))
+                else:
+                    rich.print(Text(f"│         Evaluation score: {score:.4f}", style="dim yellow"))
             
-            rich.print(Text("│"))
-            rich.print(Text("│"))
+                rich.print(Text("│"))
+                rich.print(Text("│"))
     try:
         with suppress_opik_logs():
-            with convert_tqdm_to_rich("│         Evaluation"):
+            with convert_tqdm_to_rich("│         Evaluation", verbose=verbose):
                 yield Reporter()
     finally:
         pass

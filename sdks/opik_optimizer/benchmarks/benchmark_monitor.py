@@ -1,12 +1,12 @@
+import logging
 import os
 import time
-import logging
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
-import pandas as pd
 import matplotlib.pyplot as plt
+import pandas as pd
+
 # seaborn is imported in benchmark_config.py but not used in OptimizationMonitor
 # import seaborn as sns
 

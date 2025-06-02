@@ -21,10 +21,10 @@ class BenchmarkDatasetConfig(BaseModel):
     model_config = {"arbitrary_types_allowed":True}
     
     name: str
+    display_name: str
     metrics: List[BaseMetric]
     input_key: str
     output_key: str
-    dataset: opik.Dataset
 
 class BenchmarkProjectConfig(BaseModel):
     name: str
@@ -46,84 +46,73 @@ class BenchmarkExperimentConfig(BaseModel):
     parameters: Dict[str, Any]
     metrics: List[str]
 
-# Project configuration
-def get_project_config(test_mode: bool = False) -> BenchmarkProjectConfig:
-    return BenchmarkProjectConfig(
-        name="agent-optimizer-benchmark",
-        workspace="default",
-        # Set to True to run with 5 examples per dataset
-        test_mode=test_mode,
-    )
 
-# Dataset configurations
-def get_dataset_config(test_mode=False) -> Dict[str, BenchmarkDatasetConfig]:
-    return {
+DATASET_CONFIG = {
         "gsm8k": BenchmarkDatasetConfig(
-            name="GSM8K",
+            name="gsm8k",
+            display_name="GSM8K",
             metrics=[LevenshteinRatio()],
             input_key="question",
             output_key="answer",
-            dataset=opik_optimizer.datasets.gsm8k(test_mode),
         ),
         "ragbench_sentence_relevance": BenchmarkDatasetConfig(
-            name="RAGBench Sentence Relevance",
+            name="ragbench_sentence_relevance",
+            display_name="RAGBench Sentence Relevance",
             metrics=[AnswerRelevance(require_context=False)],
             input_key="question",
             output_key="sentence",
-            dataset=opik_optimizer.datasets.ragbench_sentence_relevance(test_mode),
         ),
         # "election_questions": BenchmarkDatasetConfig(
-        #     name="Election Questions",
+        #     name="election_questions",
+        #     display_name="Election Questions",
         #     metrics=[Hallucination()],
         #     input_key="question",
-        #     output_key="label",
-        #     dataset=opik_optimizer.datasets.election_questions(test_mode),
+        #     output_key="label"
         # ),
         "medhallu": BenchmarkDatasetConfig(
             name="MedHallu",
+            display_name="MedHallu",
             metrics=[Hallucination(), AnswerRelevance(require_context=False)],
             input_key="question",
             output_key="ground_truth",
-            dataset=opik_optimizer.datasets.medhallu(test_mode),
         ),
         # "rag_hallucinations": BenchmarkDatasetConfig(
-        #     name="RAG Hallucinations",
+        #     name="rag_hallucinations",
+        #     display_name="RAG Hallucinations",
         #     metrics=[Hallucination(), ContextPrecision()],
         #     input_key="question",
         #     output_key="answer",
-        #     dataset=opik_optimizer.datasets.rag_hallucinations(test_mode),
         # ),
-        # "hotpotqa": BenchmarkDatasetConfig(
-        #     name="HotpotQA",
+        # "hotpot_300": BenchmarkDatasetConfig(
+        #     name="hotpot_300",
+        #     display_name="HotpotQA",
         #     metrics=[AnswerRelevance(), ContextPrecision()],
         #     input_key="question",
         #     output_key="answer",
-        #     dataset=opik_optimizer.datasets.hotpot_300(test_mode),
         # ),
-        "arc": BenchmarkDatasetConfig(
-            name="ARC",
+        "ai2_arc": BenchmarkDatasetConfig(
+            name="ai2_arc",
+            display_name="ARC",
             metrics=[Equals()],
             input_key="question",
             output_key="answer",
-            dataset=opik_optimizer.datasets.ai2_arc(test_mode),
         ),
-        # "truthfulqa": BenchmarkDatasetConfig(
+        # "truthful_qa": BenchmarkDatasetConfig(
         #     name="TruthfulQA",
+        #     display_name="TruthfulQA",
         #     metrics=[Hallucination(), AnswerRelevance()],
         #     input_key="question",
         #     output_key="answer",
-        #     dataset=opik_optimizer.datasets.truthful_qa(test_mode),
         # ),
         # "cnn_dailymail": BenchmarkDatasetConfig(
-        #     name="CNN/Daily Mail",
+        #     name="cnn_dailymail",
+        #     display_name="CNN/Daily Mail",
         #     metrics=[LevenshteinRatio(), ContextRecall()],
         #     input_key="article",
         #     output_key="highlights",
-        #     dataset=opik_optimizer.datasets.cnn_dailymail(test_mode),
         # ),
     }
 
-# Optimizer configurations
 OPTIMIZER_CONFIGS: Dict[str, BenchmarkOptimizerConfig] = {
     "few_shot": BenchmarkOptimizerConfig(
         class_name="FewShotBayesianOptimizer",
@@ -179,7 +168,7 @@ OPTIMIZER_CONFIGS: Dict[str, BenchmarkOptimizerConfig] = {
     # ),
 }
 
-MODELS_TO_RUN = [
+MODELS = [
     # Standard models
     # "openai/gpt-4.1-2025-04-14",
     "openai/gpt-4o-mini",
@@ -191,46 +180,11 @@ MODELS_TO_RUN = [
     # "openrouter/google/gemini-2.5-pro-preview",
 ]
 
-# Initial prompts for each dataset
-INITIAL_PROMPTS = {
-    "gsm8k": [{"role": "system", "content": "Solve the following math problem step by step."}, {"role": "user", "content": "{question}"}],
-    "ragbench_sentence_relevance": [{"role": "system", "content": "Evaluate whether the given sentence is relevant to answering the question."}, {"role": "user", "content": "{question}"}],
-    "election_questions": [{"role": "system", "content": "Classify whether the following question about US elections is harmful or harmless."}, {"role": "user", "content": "{question}"}],
-    "medhallu": [{"role": "system", "content": "Answer the medical question accurately based on the given knowledge, avoiding any hallucinations."}, {"role": "user", "content": "{question}"}],
-    "rag_hallucinations": [{"role": "system", "content": "Answer the question based on the given context, ensuring all information is supported by the context."}, {"role": "user", "content": "{question}"}],
-    "hotpotqa": [{"role": "system", "content": "Answer the question based on the given context."}, {"role": "user", "content": "{question}"}],
-    "arc": [{"role": "system", "content": "Select the correct answer from the given options."}, {"role": "user", "content": "{question}"}],
-    "truthfulqa": [{"role": "system", "content": "Provide a truthful and accurate answer to the question."}, {"role": "user", "content": "{question}"}],
-    "cnn_dailymail": [{"role": "system", "content": "Summarize the following article concisely."}, {"role": "user", "content": "{article}"}],
-}
-
-def get_experiment_config(
-    dataset_name: str,
-    optimizer_name: str,
-    model_name: str,
-    test_mode: bool = False
-) -> BenchmarkExperimentConfig:
-    """Get experiment configuration with metadata."""
-    version_info = sys.version_info
-    
-    # Get base optimizer params and add model_name
-    optimizer_params = OPTIMIZER_CONFIGS.get(optimizer_name, {}).params
-    DATASET_CONFIGS = get_dataset_config(test_mode)
-    current_params = optimizer_params.copy()
-    current_params["model"] = model_name
-
-    return BenchmarkExperimentConfig(
-        dataset_name=dataset_name,
-        optimizer=optimizer_name,
-        model_name=model_name,
-        timestamp=datetime.now().isoformat(),
-        test_mode=test_mode,  # Include test mode in experiment config
-        environment={
-            "python_version": "{}.{}.{}".format(
-                version_info.major, version_info.minor, version_info.micro
-            ),
-            "opik_version": opik_optimizer.__version__,
-        },
-        parameters=current_params, 
-        metrics=[str(m) for m in DATASET_CONFIGS[dataset_name].metrics],
+# Project configuration
+def get_project_config(test_mode: bool = False) -> BenchmarkProjectConfig:
+    return BenchmarkProjectConfig(
+        name="agent-optimizer-benchmark",
+        workspace="default",
+        # Set to True to run with 5 examples per dataset
+        test_mode=test_mode,
     )

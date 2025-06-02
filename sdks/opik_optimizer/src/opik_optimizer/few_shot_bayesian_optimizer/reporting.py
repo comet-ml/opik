@@ -21,12 +21,13 @@ console = Console()
 
 
 @contextmanager
-def display_evaluation(message: str = "First we will establish the baseline performance:"):
+def display_evaluation(message: str = "First we will establish the baseline performance:", verbose: int = 1):
     """Context manager to display messages during an evaluation phase."""
     score = None
     
     # Entry point
-    rich.print(Text(f"> {message}"))
+    if verbose >= 1:
+        rich.print(Text(f"> {message}"))
     
     # Create a simple object with a method to set the score
     class Reporter:
@@ -36,14 +37,15 @@ def display_evaluation(message: str = "First we will establish the baseline perf
     
     # Use our log suppression context manager and yield the reporter
     with suppress_opik_logs():
-        with convert_tqdm_to_rich():
+        with convert_tqdm_to_rich(verbose=verbose):
             try:
                 yield Reporter()
             finally:
-                rich.print(Text(f"\r  Baseline score was: {score:.4f}.\n", style="green"))
+                if verbose >= 1:
+                    rich.print(Text(f"\r  Baseline score was: {score:.4f}.\n", style="green"))
 
 @contextmanager
-def creation_few_shot_prompt_template():
+def creation_few_shot_prompt_template(verbose: int = 1):
     """Context manager to display messages during the creation of a few-shot prompt template."""
     rich.print(Text("> Let's add a placeholder for few-shot examples in the messages:"))
 
@@ -59,52 +61,56 @@ def creation_few_shot_prompt_template():
     try:
         yield Reporter()
     finally:
-        rich.print(Text("│    Created the prompt template:\n│", style="dim yellow"))
-        display_messages(fewshot_template.message_list_with_placeholder, prefix="│    ")
-        rich.print(Text("│\n│   With the FEW_SHOT_EXAMPLE_PLACEHOLDER following the format:"))
-        
-        panel = Panel(Text(fewshot_template.example_template), width=PANEL_WIDTH, border_style="dim")
-        # Use a temporary buffer to render the panel
-        buffer = StringIO()
-        temp_console = Console(file=buffer, width=console.width)
-        temp_console.print(panel)
+        if verbose >= 1:
+            rich.print(Text("│    Created the prompt template:\n│", style="dim yellow"))
+            display_messages(fewshot_template.message_list_with_placeholder, prefix="│    ")
+            rich.print(Text("│\n│   With the FEW_SHOT_EXAMPLE_PLACEHOLDER following the format:"))
+            
+            panel = Panel(Text(fewshot_template.example_template), width=PANEL_WIDTH, border_style="dim")
+            # Use a temporary buffer to render the panel
+            buffer = StringIO()
+            temp_console = Console(file=buffer, width=console.width)
+            temp_console.print(panel)
 
-        # Add prefix to each line
-        panel_output = buffer.getvalue()
-        prefixed = "\n".join(f"│    {line}" for line in panel_output.splitlines())
+            # Add prefix to each line
+            panel_output = buffer.getvalue()
+            prefixed = "\n".join(f"│    {line}" for line in panel_output.splitlines())
 
-        # Print the final result
-        console.print(prefixed)
-        rich.print()
+            # Print the final result
+            console.print(prefixed)
+            rich.print()
 
-def start_optimization_run():
+def start_optimization_run(verbose: int = 1):
     """Start the optimization run"""
-    rich.print(Text("\n> Starting the optimization run"))
-    rich.print(Text("│"))
+    if verbose >= 1:
+        rich.print(Text("\n> Starting the optimization run"))
+        rich.print(Text("│"))
 
 
 @contextmanager
-def start_optimization_trial(trial_number: int, total_trials: int):
+def start_optimization_trial(trial_number: int, total_trials: int, verbose: int = 1):
     """Context manager to display messages during an evaluation phase."""
     # Create a simple object with a method to set the score
     class Reporter:
         def start_trial(self, messages: List[Dict[str, str]]):
-            rich.print(Text(f"│ - Starting optimization round {trial_number + 1} of {total_trials}"))
-            rich.print(Text("│"))
-            display_messages(messages, prefix="│    ")
-            rich.print("│")
+            if verbose >= 1:
+                rich.print(Text(f"│ - Starting optimization round {trial_number + 1} of {total_trials}"))
+                rich.print(Text("│"))
+                display_messages(messages, prefix="│    ")
+                rich.print("│")
 
         def set_score(self, baseline_score, score):
-            if score is not None and score > baseline_score:
-                rich.print(Text(f"│    Trial {trial_number + 1} - score was: {score:.4f} ({(score - baseline_score) / baseline_score * 100:.2f}%).\n│", style="green"))
-            elif score is not None and score <= baseline_score:
-                rich.print(Text(f"│    Trial {trial_number + 1} - score was: {score:.4f} ({(score - baseline_score) / baseline_score * 100:.2f}%).\n│", style="red"))
-            else:
-                rich.print(Text(f"│    Trial {trial_number + 1} - score was not set.\n│", style="dim yellow"))
+            if verbose >= 1:
+                if score is not None and score > baseline_score:
+                    rich.print(Text(f"│    Trial {trial_number + 1} - score was: {score:.4f} ({(score - baseline_score) / baseline_score * 100:.2f}%).\n│", style="green"))
+                elif score is not None and score <= baseline_score:
+                    rich.print(Text(f"│    Trial {trial_number + 1} - score was: {score:.4f} ({(score - baseline_score) / baseline_score * 100:.2f}%).\n│", style="red"))
+                else:
+                    rich.print(Text(f"│    Trial {trial_number + 1} - score was not set.\n│", style="dim yellow"))
 
     # Use our log suppression context manager and yield the reporter
     with suppress_opik_logs():
-        with convert_tqdm_to_rich("│   Evaluation"):
+        with convert_tqdm_to_rich("│   Evaluation", verbose=verbose):
             try:
                 yield Reporter()
             finally:

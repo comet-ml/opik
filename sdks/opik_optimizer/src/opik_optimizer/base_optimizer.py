@@ -86,7 +86,7 @@ class BaseOptimizer:
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
         metric_config: MetricConfig,
-        n_samples: int = 10,
+        n_samples: Optional[int] = None,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
         **kwargs,

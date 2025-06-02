@@ -101,9 +101,6 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
         verbose: int = 1,
         **model_kwargs,
     ):
-        # FIXME: Hack for verbose till its merged
-        self.verbose = 1
-
         # Initialize base class first
         super().__init__(model=model, project_name=project_name, **model_kwargs)
         self.population_size = population_size
@@ -130,6 +127,7 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
         self._generations_without_overall_improvement = 0
         self._best_primary_score_history: list[float] = []
         self._gens_since_pop_improvement: int = 0
+        self.verbose = verbose
 
         if self.seed is not None:
             random.seed(self.seed)
@@ -279,7 +277,7 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
         """Enhanced crossover operation that preserves semantic meaning.
         Attempts chunk-level crossover first, then falls back to word-level.
         """
-        reporting.display_message("      Recombining prompts by mixing and matching words and sentences.")
+        reporting.display_message("      Recombining prompts by mixing and matching words and sentences.", verbose=self.verbose)
         messages_1_orig: List[Dict[Literal["role", "content"], str]] = ind1
         messages_2_orig: List[Dict[Literal["role", "content"], str]] = ind2
 
@@ -333,17 +331,17 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
         if mutation_choice > structural_threshold:
             # This corresponds to the original 'else' (word_level_mutation)
             mutated_prompt = self._word_level_mutation_prompt(prompt)
-            reporting.display_success("      Mutation successful, prompt has been edited by randomizing words (word-level mutation).")
+            reporting.display_success("      Mutation successful, prompt has been edited by randomizing words (word-level mutation).", verbose=self.verbose)
             return creator.Individual(mutated_prompt.formatted_messages)
         elif mutation_choice > semantic_threshold:
             # This corresponds to the original 'elif' (structural_mutation)
             mutated_prompt = self._structural_mutation(prompt)
-            reporting.display_success("      Mutation successful, prompt has been edited by reordering, combining, or splitting sentences (structural mutation).")
+            reporting.display_success("      Mutation successful, prompt has been edited by reordering, combining, or splitting sentences (structural mutation).", verbose=self.verbose)
             return creator.Individual(mutated_prompt.formatted_messages)
         else:
             # This corresponds to the original 'if' (semantic_mutation)
             mutated_prompt = self._semantic_mutation(prompt, initial_prompt)
-            reporting.display_success("      Mutation successful, prompt has been edited using an LLM (semantic mutation).")
+            reporting.display_success("      Mutation successful, prompt has been edited using an LLM (semantic mutation).", verbose=self.verbose)
             return creator.Individual(mutated_prompt.formatted_messages)
 
     def _semantic_mutation(
@@ -386,7 +384,7 @@ Return only the modified prompt message list, nothing else.
 
             return chat_prompt.ChatPrompt(messages=utils.json_to_dict(response.strip()))
         except Exception as e:
-            reporting.display_error(f"      Error in semantic mutation, this is usually a parsing error: {e}")
+            reporting.display_error(f"      Error in semantic mutation, this is usually a parsing error: {e}", verbose=self.verbose)
             return prompt
 
     def _structural_mutation(
@@ -541,7 +539,7 @@ Return only the new prompt list object.
            including some 'fresh start' prompts based purely on task description.
            All generated prompts should aim to elicit answers matching self.output_style_guidance.
         """
-        with reporting.initializing_population() as init_pop_report:
+        with reporting.initializing_population(verbose=self.verbose) as init_pop_report:
             init_pop_report.start(self.population_size)
 
             population = [prompt]
@@ -746,7 +744,7 @@ Return only the new prompt list object.
                     c1_new, c2_new = self.toolbox.mate(c1, c2)
                     offspring[i], offspring[i+1] = c1_new, c2_new
                     del offspring[i].fitness.values, offspring[i+1].fitness.values
-        reporting.display_success("      Crossover successful, prompts have been combined and edited.\n│")
+        reporting.display_success("      Crossover successful, prompts have been combined and edited.\n│", verbose=self.verbose)
 
         # --- mutation --------------------------------------------------
         report.performing_mutation()
@@ -758,7 +756,7 @@ Return only the new prompt list object.
                 offspring[i] = new_ind
                 del offspring[i].fitness.values
                 n_mutations += 1
-        reporting.display_success(f"      Mutation successful, {n_mutations} prompts have been edited.\n│")
+        reporting.display_success(f"      Mutation successful, {n_mutations} prompts have been edited.\n│", verbose=self.verbose)
         
         # --- evaluation ------------------------------------------------
         invalid = [ind for ind in offspring if not ind.fitness.valid]
@@ -769,7 +767,7 @@ Return only the new prompt list object.
 
         # --- update HoF & reporter ------------------------------------
         hof.update(offspring)
-        reporting.end_gen(generation_idx, best_gen_score, best_primary_score_overall)
+        reporting.end_gen(generation_idx, best_gen_score, best_primary_score_overall, verbose=self.verbose)
         
         return offspring, len(invalid)
 
@@ -789,7 +787,7 @@ Return only the new prompt list object.
         **kwargs,
     ) -> OptimizationResult:
 
-        reporting.display_header(self.__class__.__name__)
+        reporting.display_header(self.__class__.__name__, verbose=self.verbose)
         reporting.display_configuration(
             prompt.formatted_messages,
             {
@@ -798,7 +796,8 @@ Return only the new prompt list object.
                 "generations": self.num_generations,
                 "mutation_rate": self.mutation_rate,
                 "crossover_rate": self.crossover_rate,
-            }
+            },
+            verbose=self.verbose
         )
 
         self.llm_call_counter = 0
@@ -858,7 +857,7 @@ Return only the new prompt list object.
             logger.warning(f"Opik server error: {e}. Continuing without Opik tracking.")
 
         # Step 2. Compute the initial performance of the prompt
-        with reporting.baseline_performance() as report_baseline_performance:
+        with reporting.baseline_performance(verbose=self.verbose) as report_baseline_performance:
             initial_eval_result: Tuple[float, float] | Tuple[float, ] = _deap_evaluate_individual_fitness(prompt.formatted_messages)
             initial_primary_score: float = initial_eval_result[0]
             initial_length: float = initial_eval_result[1] if self.enable_moo else float(len(json.dumps(prompt.formatted_messages)))
@@ -902,7 +901,7 @@ Return only the new prompt list object.
             hof = tools.HallOfFame(self.DEFAULT_HALL_OF_FAME_SIZE)
 
         # Step 6. Evaluate the initial population
-        with reporting.evaluate_initial_population() as report_initial_population:
+        with reporting.evaluate_initial_population(verbose=self.verbose) as report_initial_population:
             fitnesses: List[float] = list(map(self.toolbox.evaluate, deap_population))
             _best_score = max(best_primary_score_overall, max([x[0] for x in fitnesses]))
 
@@ -939,7 +938,7 @@ Return only the new prompt list object.
             ).dict()
             self._add_to_history(initial_round_data)
 
-        with reporting.start_evolutionary_algo() as report_evolutionary_algo:
+        with reporting.start_evolutionary_algo(verbose=self.verbose) as report_evolutionary_algo:
             for generation_idx in range(1, self.num_generations + 1):
                 report_evolutionary_algo.start_gen(generation_idx, self.num_generations)
 
@@ -1043,7 +1042,7 @@ Return only the new prompt list object.
             logger.info(f"Final best prompt from Hall of Fame: '{final_best_prompt}'")
             logger.info(f"Final best score ({metric_config.metric.name}): {final_primary_score:.4f}")
             final_details.update({
-                "initial_prompt": self.prompt.formatted_messages,
+                "initial_prompt": prompt.formatted_messages,
                 "initial_score": initial_primary_score,
                 "initial_score_for_display": initial_primary_score,
                 "final_prompt": final_best_prompt,
@@ -1086,7 +1085,8 @@ Return only the new prompt list object.
         reporting.display_result(
             initial_score=initial_score_for_display,
             best_score=final_primary_score,
-            best_prompt=final_best_prompt.formatted_messages
+            best_prompt=final_best_prompt.formatted_messages,
+            verbose=self.verbose
         )
         return OptimizationResult(
             optimizer=self.__class__.__name__,
@@ -1216,7 +1216,8 @@ Return only the new prompt list object.
             project_name=self.project_name,
             n_samples=n_samples if dataset_item_ids is None else None,
             experiment_config=current_experiment_config,
-            optimization_id=optimization_id
+            optimization_id=optimization_id,
+            verbose=verbose
         )
         return score
 
@@ -1226,7 +1227,7 @@ Return only the new prompt list object.
             ind2: "creator.Individual"
         ) -> Tuple["creator.Individual", "creator.Individual"]:
         """Perform crossover by asking an LLM to blend two parent prompts."""
-        reporting.display_message("      Recombining prompts using an LLM.")
+        reporting.display_message("      Recombining prompts using an LLM.", verbose=self.verbose)
 
         parent1_messages: List[Dict[Literal["role", "content"], str]] = ind1
         parent2_messages: List[Dict[Literal["role", "content"], str]] = ind2
@@ -1351,7 +1352,7 @@ Return only the new prompt string, with no preamble or explanation.
             n_examples: int = 5
         ) -> Optional[str]:
         """Analyzes dataset examples to infer the desired output style."""
-        with reporting.infer_output_style() as report_infer_output_style:
+        with reporting.infer_output_style(verbose=self.verbose) as report_infer_output_style:
             report_infer_output_style.start_style_inference(n_examples)
             
             try:

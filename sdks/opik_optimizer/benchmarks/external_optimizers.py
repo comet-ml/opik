@@ -1,20 +1,15 @@
-from typing import Dict, Any, List, Optional
-import dspy
-from dspy.teleprompt.mipro_optimizer_v2 import MIPROv2
-from dspy.teleprompt import BootstrapFewShot
-from dspy.evaluate import Evaluate
-from dspy.primitives import Example
-from adalflow.optim import (
-    AdalComponent,
-    Trainer,
-    TGDOptimizer,
-    BootstrapFewShot
-)
-from adalflow.optim.parameter import Parameter
-from adalflow.optim.types import ParameterType
+from typing import Any, Dict, List
+
 import adalflow as adal
-from opik_optimizer.integrations.dspy.utils import opik_metric_to_dspy
+import dspy
+from adalflow.optim import BootstrapFewShot, TGDOptimizer, Trainer
+from adalflow.optim.types import ParameterType
+from dspy.teleprompt import BootstrapFewShot
+from dspy.teleprompt.mipro_optimizer_v2 import MIPROv2
 from opik.integrations.dspy.callback import OpikCallback
+
+from opik_optimizer.integrations.dspy.utils import opik_metric_to_dspy
+
 
 class ExternalDspyMiproOptimizer:
     """Wrapper for DSPy MIPRO optimizer to use our evaluation metrics."""

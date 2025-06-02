@@ -14,13 +14,17 @@ PANEL_WIDTH = 70
 console = Console()
 
 @contextmanager
-def convert_tqdm_to_rich(description: Optional[str] = None):
+def convert_tqdm_to_rich(description: Optional[str] = None, verbose: int = 1):
     """Context manager to convert tqdm to rich."""
     import opik.evaluation.engine.evaluation_tasks_executor
 
     def _tqdm_to_track(iterable, desc, disable, total):
-        return track(iterable, description=description or desc, disable=disable, total=total)
-
+        return track(
+            iterable,
+            description=description or desc,
+            disable=disable or verbose >= 1,
+            total=total
+        )
 
     original__tqdm = opik.evaluation.engine.evaluation_tasks_executor._tqdm
     opik.evaluation.engine.evaluation_tasks_executor._tqdm = _tqdm_to_track
@@ -56,7 +60,6 @@ def suppress_opik_logs():
         # Restore original log level
         opik_logger.setLevel(original_level)
 
-
 def display_messages(messages: List[Dict[str, str]], prefix: str = ""):
     for i, msg in enumerate(messages):
         panel = Panel(
@@ -79,7 +82,10 @@ def display_messages(messages: List[Dict[str, str]], prefix: str = ""):
         for line in rendered_panel.splitlines():
             console.print(Text(prefix) + Text.from_ansi(line))
 
-def display_header(algorithm: str):
+def display_header(algorithm: str, verbose: int = 1):
+    if verbose < 1:
+        return
+
     content = Text.assemble(
         ("● ", "green"),  
         "Running Opik Evaluation - ",
@@ -96,7 +102,10 @@ def display_header(algorithm: str):
     rich.print("\n")
 
 
-def display_result(initial_score, best_score, best_prompt):
+def display_result(initial_score, best_score, best_prompt, verbose: int = 1):
+    if verbose < 1:
+        return
+
     rich.print(Text("\n> Optimization complete\n"))
     
     if best_score > initial_score:
@@ -133,8 +142,11 @@ def display_result(initial_score, best_score, best_prompt):
     )
 
 
-def display_configuration(messages: List[Dict[str, str]], optimizer_config: Dict[str, str]):
+def display_configuration(messages: List[Dict[str, str]], optimizer_config: Dict[str, str], verbose: int = 1):
     """Displays the LLM messages and optimizer configuration using Rich panels."""
+
+    if verbose < 1:
+        return
 
     # Panel for Optimizer configuration
     rich.print(Text("> Let's optimize the prompt:\n"))

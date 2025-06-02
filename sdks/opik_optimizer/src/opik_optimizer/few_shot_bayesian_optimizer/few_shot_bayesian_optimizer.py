@@ -40,7 +40,7 @@ Your task:
     - Add a section title in XML or markdown format. The examples will be provided as `example_1\nexample_2\n...` with each example following the example template.
 - Analyze the examples to infer a consistent structure, and create a single string few_shot_example_template using the Python .format() style. Make sure to follow the following instructions:
     - Unless absolutely relevant, do not return an object but instead a string that can be inserted as part of {FEW_SHOT_EXAMPLE_PLACEHOLDER}
-    - Make sure to include the variables as part of this string so we can before string formatting with actual examples
+    - Make sure to include the variables as part of this string so we can before string formatting with actual examples. On variables available in the examples can be used. Do not use anything else.
     - Ensure the format of the few shot examples are consistent with how the model will be called
 
 Return your output as a JSON object with:
@@ -180,7 +180,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         experiment_config: Optional[Dict] = None,
         n_samples: Optional[int] = None,
     ) -> optimization_result.OptimizationResult:
-        reporting.start_optimization_run()
+        reporting.start_optimization_run(verbose=self.verbose)
 
         random.seed(self.seed)
         self.llm_call_counter = 0
@@ -226,9 +226,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 for key, value in example.items():
                     processed_example[key] = str(value)
 
-                processed_demo_examples.append(
-                    fewshot_prompt_template.example_template.format(**processed_example)
-                )
+                try:
+                    processed_demo_examples.append(
+                        fewshot_prompt_template.example_template.format(**processed_example)
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to format fewshot prompt template {fewshot_prompt_template} with example: {processed_example} ")
+                    raise
             few_shot_examples = "\n\n".join(processed_demo_examples)
             
             messages = [{
@@ -252,7 +256,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             )
             logger.debug(f"Evaluating trial {trial.number}...")
 
-            with reporting.start_optimization_trial(trial.number, n_trials) as trial_reporter:
+            with reporting.start_optimization_trial(trial.number, n_trials, verbose=self.verbose) as trial_reporter:
                 trial_reporter.start_trial(messages)
                 score = task_evaluator.evaluate(
                     dataset=dataset,
@@ -337,7 +341,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         reporting.display_result(
             initial_score=baseline_score,
             best_score=best_score,
-            best_prompt=best_trial.user_attrs["config"]["message_list"]
+            best_prompt=best_trial.user_attrs["config"]["message_list"],
+            verbose=self.verbose
         )
 
         return optimization_result.OptimizationResult(
@@ -386,7 +391,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         try:
             # Start experiment reporting
-            reporting.display_header("Few-Shot Bayesian Optimizer")
+            reporting.display_header("Few-Shot Bayesian Optimizer", verbose=self.verbose)
             reporting.display_configuration(
                 prompt.formatted_messages,
                 optimizer_config={
@@ -394,13 +399,14 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     "metric": metric_config.metric.name,
                     "n_trials": n_trials,
                     "n_samples": n_samples
-                }
+                },
+                verbose=self.verbose
             )
 
             utils.disable_experiment_reporting()
 
             # Step 1. Compute the baseline evaluation
-            with reporting.display_evaluation(message="First we will establish the baseline performance:") as eval_report:
+            with reporting.display_evaluation(message="First we will establish the baseline performance:", verbose=self.verbose) as eval_report:
                 baseline_score = self.evaluate_prompt(
                     prompt=prompt,
                     dataset=dataset,
@@ -412,7 +418,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 eval_report.set_score(baseline_score)
             
             # Step 2. Create the few-shot prompt template
-            with reporting.creation_few_shot_prompt_template() as fewshot_template_report:
+            with reporting.creation_few_shot_prompt_template(verbose=self.verbose) as fewshot_template_report:
                 fewshot_template = self._create_fewshot_prompt_template(
                     model=self.model,
                     prompt=prompt,
