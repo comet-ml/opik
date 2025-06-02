@@ -3,11 +3,13 @@ import concurrent.futures
 import json
 import logging
 import os
+import time
 from queue import Queue
-from threading import Lock
+from threading import Lock, Event
 from uuid6 import uuid7
 
 import docker
+import schedule
 
 from opik_backend.executor import CodeExecutorBase, ExecutionResult
 from opik_backend.scoring_commands import PYTHON_SCORING_COMMAND
@@ -29,12 +31,47 @@ class DockerExecutor(CodeExecutorBase):
         self.pool_lock = Lock()
         self.releaser_executor = concurrent.futures.ThreadPoolExecutor()
         self.running = True
-        self.ensure_pool_filled()
-
+        self.stop_event = Event()
+    
         # Pre-warm the container pool
         self._pre_warm_container_pool()
+
+        # Start the pool monitor
+        self._start_pool_monitor()
+
         atexit.register(self.cleanup)
 
+    def _start_pool_monitor(self):
+        """Start a background thread that periodically checks and fills the container pool."""
+        logger.info("Starting container pool monitor")
+
+        # Schedule the pool check to run every 3 seconds
+        schedule.every(3).seconds.do(self._check_pool)
+
+        # Start a background thread to run the scheduler
+        self.releaser_executor.submit(self._run_scheduler)
+
+    def _check_pool(self):
+        """Check and fill the container pool if needed."""
+        if not self.running or self.stop_event.is_set():
+            logger.info("Container pool monitor stopped")
+            return schedule.CancelJob  # Cancel this job
+            
+        try:
+            self.ensure_pool_filled()
+            return None  # Continue the job
+        except Exception as e:
+            logger.error(f"Error in pool monitor: {e}")
+            return None  # Continue the job despite the error
+            
+    def _run_scheduler(self):
+        """Run the scheduler in a background thread."""
+        logger.info("Starting scheduler for container pool monitoring")
+        while self.running and not self.stop_event.is_set():
+            schedule.run_pending()
+        
+        logger.info("Scheduler finished running")
+        
     def _pre_warm_container_pool(self):
         """
         Pre-warm the container pool by creating all containers in parallel.
@@ -78,21 +115,32 @@ class DockerExecutor(CodeExecutorBase):
         logger.info(f"Created container, id '{new_container.id}'")
 
     def release_container(self, container):
+        self.releaser_executor.submit(self.async_release, container)
 
-        def async_release():
-            try:
-                # First, ensure we have enough containers in the pool
-                self.create_container()
+    def async_release(self, container):
+        try:
+            # First, ensure we have enough containers in the pool
+            self._create_new_container()
 
-                # Now stop and remove the old container
-                logger.info(f"Stopping container {container.id}. Will create a new one.")
-                container.stop(timeout=1)
-                container.remove(force=True)
-                logger.info(f"Stopped container {container.id}")
-            except Exception as e:
-                logger.error(f"Error replacing container: {e}")
+            # Now stop and remove the old container
+            self._stopContainers(container)
+        except Exception as e:
+            logger.error(f"Error replacing container: {e}")
 
-        self.releaser_executor.submit(async_release)
+    def _create_new_container(self):
+        try:
+            self.create_container()
+        except Exception as e:
+            logger.error(f"Error replacing container: {e}")
+
+    def _stopContainers(self, container):
+        try:
+            logger.info(f"Stopping container {container.id}. Will create a new one.")
+            container.stop(timeout=1)
+            container.remove(force=True)
+            logger.info(f"Stopped container {container.id}")
+        except Exception as e:
+            logger.error(f"Failed to create new container: {e}")
 
     def get_container(self):
         if not self.running:
@@ -105,8 +153,7 @@ class DockerExecutor(CodeExecutorBase):
                 if not self.running:
                     raise RuntimeError("Executor is shutting down, no containers available")
                     
-                logger.warning(f"Couldn't get a container to execute after waiting for {self.exec_timeout}s. Ensuring we have enough and trying again: {e}")
-                self.ensure_pool_filled()
+                logger.warning(f"Couldn't get a container to execute after waiting for {self.exec_timeout}s. Will retry: {e}")
 
     def run_scoring(self, code: str, data: dict) -> dict:
         if not self.running:
@@ -140,21 +187,29 @@ class DockerExecutor(CodeExecutorBase):
             self.release_container(container)
             
     def cleanup(self):
-        self.running = False
         """Clean up all containers managed by this executor."""
+        logger.info("Shutting down Docker executor")
+        self.running = False
+        self.stop_event.set()
+
+        # Clear all scheduled jobs
+        schedule.clear()
+
+        # Clean up containers
         while not self.container_pool.empty():
             try:
                 container = self.container_pool.get(timeout=self.exec_timeout)
-                logger.info(f"Stopping and removing container {container.id}")
-                container.stop(timeout=1)
-                container.remove(force=True)
+                self._stopContainers(container)
             except Exception as e:
                 logger.error(f"Failed to remove container from pool due to {e}")
 
         for container in self.get_managed_containers():
             try:
                 logger.info(f"Cleaning up untracked container {container.id}")
-                container.stop(timeout=1)
-                container.remove(force=True)
+                self._stopContainers(container)
             except Exception as e:
                 logger.error(f"Failed to remove zombie container {container.id}: {e}")
+
+        # Shutdown the executor
+        logger.info("Shutting down executor")
+        self.releaser_executor.shutdown(wait=False)
