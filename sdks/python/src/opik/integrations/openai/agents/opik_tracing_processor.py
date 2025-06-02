@@ -97,7 +97,9 @@ class OpikTracingProcessor(tracing.TracingProcessor):
         try:
             opik_trace_or_span_data = self._try_get_span_or_trace(trace.trace_id)
             if opik_trace_or_span_data is None:
-                LOGGER.error(f"on_trace_end failed: no opik span/trace found for openai trace {trace.trace_id}")
+                LOGGER.error(
+                    f"on_trace_end failed: no opik span/trace found for openai trace {trace.trace_id}. Probably due to an error in the previous callback execution"
+                )
                 return
 
             opik_trace_or_span_data.init_end_time()
