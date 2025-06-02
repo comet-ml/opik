@@ -10,11 +10,28 @@ from uuid6 import uuid7
 
 import docker
 import schedule
+from opentelemetry import metrics
 
 from opik_backend.executor import CodeExecutorBase, ExecutionResult
 from opik_backend.scoring_commands import PYTHON_SCORING_COMMAND
 
 logger = logging.getLogger(__name__)
+
+# Create a meter for Docker executor metrics
+meter = metrics.get_meter("docker_executor")
+
+# Create histogram metrics for container operations
+container_creation_histogram = meter.create_histogram(
+    name="container_creation_latency",
+    description="Latency of container creation operations in seconds",
+    unit="s",
+)
+
+container_stop_histogram = meter.create_histogram(
+    name="container_stop_latency",
+    description="Latency of container stop operations in seconds",
+    unit="s",
+)
 
 class DockerExecutor(CodeExecutorBase):
     def __init__(self):
@@ -102,6 +119,9 @@ class DockerExecutor(CodeExecutorBase):
         })
 
     def create_container(self):
+        # Record the start time for detailed container creation metrics
+        start_time = time.time()
+
         new_container = self.client.containers.run(
             image=f"{self.docker_registry}/{self.docker_image}:{self.docker_tag}",
             command=["tail", "-f", "/dev/null"], # a never ending process so Docker won't kill the container
@@ -112,8 +132,15 @@ class DockerExecutor(CodeExecutorBase):
             security_opt=["no-new-privileges"],
             labels=self.container_labels
         )
+
+        # Add the container to the pool
         self.container_pool.put(new_container)
-        logger.info(f"Created container, id '{new_container.id}'")
+
+        # Calculate and record the latency for the direct container creation
+        latency = time.time() - start_time
+        container_creation_histogram.record(latency, attributes={"method": "create_container"})
+
+        logger.info(f"Created container, id '{new_container.id}' in {latency:.3f} seconds")
 
     def release_container(self, container):
         self.releaser_executor.submit(self.async_release, container)
@@ -123,22 +150,32 @@ class DockerExecutor(CodeExecutorBase):
         self._create_new_container()
 
         # Now stop and remove the old container
-        self._stopContainers(container)
+        self._stopContainer(container)
 
     def _create_new_container(self):
         try:
+            # Create the container
             self.create_container()
         except Exception as e:
             logger.error(f"Error replacing container: {e}")
 
-    def _stopContainers(self, container):
+    def _stopContainer(self, container):
         try:
             logger.info(f"Stopping container {container.id}. Will create a new one.")
+
+            # Record the start time
+            start_time = time.time()
+
+            # Stop and remove the container
             container.stop(timeout=1)
             container.remove(force=True)
-            logger.info(f"Stopped container {container.id}")
+
+            # Calculate and record the latency
+            latency = time.time() - start_time
+            container_stop_histogram.record(latency, attributes={"method": "stop_container"})
+            logger.info(f"Stopped container {container.id} in {latency:.3f} seconds")
         except Exception as e:
-            logger.error(f"Failed to create new container: {e}")
+            logger.error(f"Failed to stop container: {e}")
 
     def get_container(self):
         if not self.running:
@@ -197,14 +234,14 @@ class DockerExecutor(CodeExecutorBase):
         while not self.container_pool.empty():
             try:
                 container = self.container_pool.get(timeout=self.exec_timeout)
-                self._stopContainers(container)
+                self._stopContainer(container)
             except Exception as e:
                 logger.error(f"Failed to remove container from pool due to {e}")
 
         for container in self.get_managed_containers():
             try:
                 logger.info(f"Cleaning up untracked container {container.id}")
-                self._stopContainers(container)
+                self._stopContainer(container)
             except Exception as e:
                 logger.error(f"Failed to remove zombie container {container.id}: {e}")
 
