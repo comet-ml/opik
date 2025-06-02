@@ -61,59 +61,56 @@ from typing import Any
 from opik.evaluation.models import OpikBaseModel
 
 class CustomOpenAICompatibleModel(OpikBaseModel):
-    def __init__(self, model_id: str, api_key: str, base_url: str):
-        super().__init__(model_id) # model_id is used as the model parameter in API calls
+    def __init__(self, model_name: str, api_key: str, base_url: str):
+        super().__init__(model_name)
         self.api_key = api_key
-        self.base_url = base_url # e.g., "https://api.example.com/v1/chat/completions"
+        self.base_url = base_url # e.g., "https://api.openai.com/v1/chat/completions"
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
 
-    def _make_request(self, prompt_str: str) -> str:
-        """Helper function to make the API call."""
-        payload = {
-            "model": self.model_name, # The model_id passed during __init__
-            "messages": [
-                {"role": "user", "content": prompt_str}
-            ],
-            # Add other parameters like temperature, max_tokens as needed
-            # For judge metrics, ensure the model is encouraged to output JSON
-        }
-        try:
-            response = requests.post(self.base_url, headers=self.headers, json=payload)
-            response.raise_for_status() # Raises an HTTPError for bad responses (4XX or 5XX)
-            # Assuming OpenAI-like response structure:
-            # { "choices": [ { "message": { "content": "..." } } ] }
-            # The content here should be the JSON string from the judge LLM.
-            return response.json()["choices"][0]["message"]["content"]
-        except requests.exceptions.RequestException as e:
-            print(f"API request failed: {e}")
-            # Metrics expect a string; returning an error JSON might be an option
-            # For simplicity, re-raising or returning an error string:
-            raise # Or return '{"score": -1, "reason": ["API Error"]}'
-        except (KeyError, IndexError) as e:
-            print(f"Failed to parse API response: {e}. Response: {response.text}")
-            raise # Or return '{"score": -1, "reason": ["Invalid API Response"]}'
-
-    def generate_provider_response(self, **kwargs: Any) -> str:
-        prompt_str = kwargs.get("prompt")
-        if not prompt_str:
-            raise ValueError("'prompt' must be provided in kwargs for LLM-as-a-Judge.")
-        return self._make_request(prompt_str)
-
     def generate_string(self, input: str, **kwargs: Any) -> str:
-        # For simple string generation, the input itself is the prompt
-        return self._make_request(input)
+        """
+        This method is used as part of LLM as a Judge metrics to take a string prompt, pass it to
+        the model as a user message and return the model's response as a string.
+        """
+        messages = [
+            {
+                "content": input,
+                "role": "user",
+            },
+        ]
 
+        provider_response = self.generate_provider_response(messages=request, **kwargs)
+        return provider_response["choices"][0]["message"]["content"]
+
+    def generate_provider_response(self, messages: List[Dict[str, Any]], **kwargs: Any) -> Any:
+        """
+        This method is used as part of LLM as a Judge metrics to take a list of AI messages, pass it to
+        the model and return the full model response.
+        """
+
+        if not messages:
+            raise ValueError("'messages' must be provided in kwargs for LLM-as-a-Judge.")
+
+        payload = {
+            "model": self.model_name,
+            "messages": messages,
+        }
+
+        response = requests.post(self.base_url, headers=self.headers, json=payload)
+
+        response.raise_for_status()
+        return response.json()
 ```
 
 **Key considerations for the implementation:**
 
-* **API Endpoint and Payload**: Adjust `base_url` and the JSON payload in `_make_request` (and `_amake_request`) to match your specific LLM provider's requirements if they deviate from the common OpenAI structure.
-* **Model Name/ID**: The `model_id` passed to `__init__` is used as the `model` parameter in the API call. Ensure this matches an available model on your LLM service.
-* **JSON Output**: The LLM-as-a-Judge prompt (provided by the `Hallucination` metric) instructs the model to return a JSON string. Your chosen LLM must be capable of following these instructions. The custom class then just returns this JSON string.
-* **Error Handling**: The example includes basic error handling. Robust applications may require more sophisticated error management and logging.
+- **API Endpoint and Payload**: Adjust `base_url` and the JSON payload in `_make_request` (and `_amake_request`) to match your specific LLM provider's requirements if they deviate from the common OpenAI structure.
+- **Model Name/ID**: The `model_id` passed to `__init__` is used as the `model` parameter in the API call. Ensure this matches an available model on your LLM service.
+- **JSON Output**: The LLM-as-a-Judge prompt (provided by the `Hallucination` metric) instructs the model to return a JSON string. Your chosen LLM must be capable of following these instructions. The custom class then just returns this JSON string.
+- **Error Handling**: The example includes basic error handling. Robust applications may require more sophisticated error management and logging.
 
 ### Using the Custom Model with the `Hallucination` Metric
 
@@ -126,14 +123,14 @@ from opik.evaluation.metrics import Hallucination
 # Ensure these are set securely, e.g., via environment variables
 API_KEY = os.getenv("MY_CUSTOM_LLM_API_KEY")
 BASE_URL = "YOUR_LLM_CHAT_COMPLETIONS_ENDPOINT" # e.g., "https://api.openai.com/v1/chat/completions"
-MODEL_ID = "your-model-id" # e.g., "gpt-3.5-turbo"
+MODEL_NAME = "your-model-id" # e.g., "gpt-3.5-turbo"
 
 if not API_KEY or not BASE_URL:
     raise ValueError("API_KEY and BASE_URL must be set for the custom model.")
 
 # Initialize your custom model
 my_custom_model = CustomOpenAICompatibleModel(
-    model_id=MODEL_ID,
+    model_name=MODEL_NAME,
     api_key=API_KEY,
     base_url=BASE_URL
 )
@@ -155,157 +152,3 @@ try:
 except Exception as e:
     print(f"An error occurred during metric scoring: {e}")
 ```
-
-## Runnable Example: Using a Mocked Custom Model
-
-To illustrate how a custom model integrates with Opik's LLM-as-a-Judge metrics, we can create a mock custom model. This mock model will implement the `OpikBaseModel` interface and simulate responses, allowing you to run the example code directly.
-
-### 1. Define the Mock Custom Model
-
-The `MockCustomModel` will inherit from `OpikBaseModel` and provide canned responses, especially for the `generate_provider_response` method, which is used by the `Hallucination` metric. The `Hallucination` metric expects this method to return a JSON string containing a "score" and "reason".
-
-```python
-import asyncio
-import json # For creating the JSON string response
-from typing import Any, Dict, List
-
-from opik.evaluation.models import OpikBaseModel
-from opik.evaluation.metrics import Hallucination # For the example usage
-
-class MockCustomModel(OpikBaseModel):
-    def __init__(self, model_name: str = "mock-model"):
-        super().__init__(model_name)
-        print(f"MockCustomModel '{self.model_name}' initialized.")
-
-    def _get_mock_judge_response(self, prompt_str: str) -> str:
-        """
-        Simulates a judge LLM response based on keywords in the prompt.
-        The Hallucination metric's prompt will contain the input, output, and context.
-        We'll look for keywords in the combined string to simulate hallucination detection.
-        """
-        # Keywords that might indicate a hallucination in a test scenario
-        hallucination_keywords = ["ares city", "elbonia", "green cheese", "mars capital"]
-        is_hallucination = any(keyword in prompt_str.lower() for keyword in hallucination_keywords)
-
-        if is_hallucination:
-            response_data = {
-                "score": 1.0,
-                "reason": ["Mock model detected potential hallucination based on keywords in the prompt."]
-            }
-        else:
-            response_data = {
-                "score": 0.0,
-                "reason": ["Mock model found the output faithful to the context based on the prompt."]
-            }
-        return json.dumps(response_data) # Return as a JSON string
-
-    def generate_provider_response(self, **kwargs: Any) -> str:
-        prompt_str = kwargs.get("prompt")
-        if not prompt_str:
-            raise ValueError("'prompt' must be provided in kwargs for LLM-as-a-Judge.")
-        
-        print(f"\nMockCustomModel received prompt for generate_provider_response:\n---\n{prompt_str[:300]}...\n---") # Print part of the prompt
-        mock_response = self._get_mock_judge_response(prompt_str)
-        print(f"MockCustomModel returning judge response: {mock_response}")
-        return mock_response
-
-    async def agenerate_provider_response(self, **kwargs: Any) -> str:
-        # Simulate async behavior
-        await asyncio.sleep(0.01) 
-        return self.generate_provider_response(**kwargs)
-
-    def generate_string(self, input: str, **kwargs: Any) -> str:
-        print(f"\nMockCustomModel received input for generate_string: '{input}'")
-        mock_text_response = f"Mock LLM response to: '{input}'"
-        print(f"MockCustomModel returning: '{mock_text_response}'")
-        return mock_text_response
-
-    async def agenerate_string(self, input: str, **kwargs: Any) -> str:
-        await asyncio.sleep(0.01)
-        return self.generate_string(input, **kwargs)
-
-```
-
-### 2. Using the Mock Model with the `Hallucination` Metric
-
-Now, let's instantiate this `MockCustomModel` and use it with the `Hallucination` metric.
-
-```python
-# This code can be run directly if the MockCustomModel class definition above is present.
-
-# Initialize the mock model
-mock_model_instance = MockCustomModel(model_name="my-mock-hallucination-detector")
-
-# Initialize the Hallucination metric with the mock model
-hallucination_metric = Hallucination(
-    model=mock_model_instance
-)
-
-print("\n--- Running Hallucination Metric with Mock Model (Sync) ---")
-
-# Example 1: Expected to be judged as NOT a hallucination by the mock logic
-print("\n[Test Case 1: No Hallucination Expected]")
-eval_1 = hallucination_metric.score(
-    input="What is the capital of France?",
-    output="The capital of France is Paris.",
-    context=["France is a country in Western Europe. Its capital is Paris, known for the Eiffel Tower."]
-)
-print(f"Score: {eval_1.score}")
-print(f"Reason: {eval_1.reason}")
-# Expected: Score: 0.0
-
-# Example 2: Expected to be judged AS a hallucination by the mock logic (due to "Ares City")
-print("\n[Test Case 2: Hallucination Expected]")
-eval_2 = hallucination_metric.score(
-    input="What is the capital of Mars?",
-    output="The capital of Mars is Ares City.", # "Ares City" is a keyword for the mock
-    context=["Mars is the fourth planet from the Sun. It does not have established cities."]
-)
-print(f"Score: {eval_2.score}")
-print(f"Reason: {eval_2.reason}")
-# Expected: Score: 1.0
-
-print("\n--- Running Hallucination Metric with Mock Model (Async) ---")
-
-async def main_async_eval():
-    # Example 3: Async - No Hallucination Expected
-    print("\n[Test Case 3: Async - No Hallucination Expected]")
-    eval_3_async = await hallucination_metric.ascore(
-        input="What is Comet ML?",
-        output="Comet ML is an MLOps platform.",
-        context=["Comet ML provides tools for experiment tracking, model management, and MLOps."]
-    )
-    print(f"Async Score: {eval_3_async.score}")
-    print(f"Async Reason: {eval_3_async.reason}")
-    # Expected: Score: 0.0
-
-    # Example 4: Async - Hallucination Expected (due to "green cheese")
-    print("\n[Test Case 4: Async - Hallucination Expected]")
-    eval_4_async = await hallucination_metric.ascore(
-        input="What is the moon made of?",
-        output="The moon is made of green cheese.", # "green cheese" is a keyword for the mock
-        context=["The moon is primarily composed of rock and regolith."]
-    )
-    print(f"Async Score: {eval_4_async.score}")
-    print(f"Async Reason: {eval_4_async.reason}")
-    # Expected: Score: 1.0
-
-if __name__ == "__main__":
-    # Run the synchronous examples
-    # (Already done by direct execution if not in a function)
-
-    # Run the asynchronous examples
-    asyncio.run(main_async_eval())
-    
-    print("\n--- Mock Model Demonstration Complete ---")
-
-```
-
-**Explanation of the Mock Logic:**
-
-* The `MockCustomModel`'s `_get_mock_judge_response` method contains simple logic: if it sees keywords like "ares city", "elbonia", "green cheese", or "mars capital" in the prompt string constructed by the `Hallucination` metric, it returns a JSON string indicating a hallucination (`"score": 1.0`). Otherwise, it returns a JSON string indicating no hallucination (`"score": 0.0`).
-* The `generate_provider_response` method (and its async counterpart) calls this internal mock logic.
-* The print statements inside the mock model methods help trace what the model receives and what it returns.
-* The `Hallucination` metric then parses the JSON string returned by `generate_provider_response` to determine the final score and reason.
-
-This runnable example demonstrates the complete flow: defining a custom model class that adheres to the `OpikBaseModel` interface and using it with an Opik LLM-as-a-Judge metric. Users can adapt the `MockCustomModel` to experiment with different response behaviors or use it as a template for their actual custom model implementations.
