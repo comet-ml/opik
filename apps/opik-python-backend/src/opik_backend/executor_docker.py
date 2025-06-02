@@ -33,7 +33,7 @@ class DockerExecutor(CodeExecutorBase):
         self.releaser_executor = concurrent.futures.ThreadPoolExecutor()
         self.running = True
         self.stop_event = Event()
-    
+
         # Pre-warm the container pool
         self._pre_warm_container_pool()
 
@@ -70,9 +70,9 @@ class DockerExecutor(CodeExecutorBase):
         logger.info("Starting scheduler for container pool monitoring")
         while self.running and not self.stop_event.is_set():
             schedule.run_pending()
-        
+
         logger.info("Scheduler finished running")
-        
+
     def _pre_warm_container_pool(self):
         """
         Pre-warm the container pool by creating all containers in parallel.
@@ -119,14 +119,11 @@ class DockerExecutor(CodeExecutorBase):
         self.releaser_executor.submit(self.async_release, container)
 
     def async_release(self, container):
-        try:
-            # First, ensure we have enough containers in the pool
-            self._create_new_container()
+        # First, ensure we have enough containers in the pool
+        self._create_new_container()
 
-            # Now stop and remove the old container
-            self._stopContainers(container)
-        except Exception as e:
-            logger.error(f"Error replacing container: {e}")
+        # Now stop and remove the old container
+        self._stopContainers(container)
 
     def _create_new_container(self):
         try:

@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils.traces;
 
 import com.comet.opik.api.ProjectStats.ProjectStatItem;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import jakarta.ws.rs.core.Response;
@@ -19,7 +20,9 @@ public class TraceAssertions {
 
     public static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
             "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "spanCount",
-            "duration", "comments", "threadId", "guardrailsValidations"};
+            "llmSpanCount", "duration", "comments", "threadId", "guardrailsValidations"};
+
+    public static final String[] IGNORED_FIELDS_THREADS = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
@@ -146,5 +149,14 @@ public class TraceAssertions {
         assertThat(actualPage.page()).isEqualTo(page);
         assertThat(actualPage.size()).isEqualTo(expectedPageSize);
         assertThat(actualPage.total()).isEqualTo(expectedTotal);
+    }
+
+    public static void assertThreads(List<TraceThread> expectedThreads, List<TraceThread> actualThreads) {
+        assertThat(actualThreads)
+                .usingRecursiveComparison()
+                .ignoringFields(IGNORED_FIELDS_THREADS)
+                .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                .isEqualTo(expectedThreads);
     }
 }

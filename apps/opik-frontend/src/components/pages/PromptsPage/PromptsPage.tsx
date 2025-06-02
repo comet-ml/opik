@@ -33,6 +33,8 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 
 export const getRowId = (p: Prompt) => p.id;
 
@@ -196,9 +198,13 @@ const PromptsPage: React.FunctionComponent = () => {
 
   return (
     <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-1 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">Prompt library</h1>
       </div>
+      <ExplainerDescription
+        className="mb-4"
+        {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_prompt_library]}
+      />
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
           searchText={search}
