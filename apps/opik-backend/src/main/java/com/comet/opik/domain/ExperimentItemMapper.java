@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.utils.JsonUtils;
 import io.r2dbc.spi.Result;
 import lombok.experimental.UtilityClass;
@@ -56,6 +57,10 @@ class ExperimentItemMapper {
                 .createdAt(row.get("created_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
                 .lastUpdatedBy(row.get("last_updated_by", String.class))
+                .traceVisibilityMode(row.get("trace_visibility_mode", String.class) == null
+                        ? null
+                        : VisibilityMode.fromString(row.get("trace_visibility_mode", String.class))
+                                .orElse(null))
                 .build());
     }
 
