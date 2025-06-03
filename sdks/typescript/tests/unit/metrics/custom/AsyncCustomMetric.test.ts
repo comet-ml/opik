@@ -205,7 +205,7 @@ describe("Async Custom Metrics", () => {
       const metrics = [new BasicAsyncMetric(), new SentimentAnalysisMetric()];
 
       const composite = new CompositeAsyncMetric(metrics);
-      const result = await composite.ascore("This is a good test");
+      const result = await composite.score("This is a good test");
 
       expect(result.value).toBeGreaterThan(0); // Should be between 0 and 1
       expect(result.reason).toContain("Average score");
