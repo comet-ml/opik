@@ -24,6 +24,9 @@ spec:
   tls:
     - hosts:
       - {{ $value.ingress.host }}
+      {{- if $value.ingress.tls.secretName }}
+        secretName: {{ $value.ingress.tls.secretName }}
+      {{- end }}
   {{- end }}
   rules:
   {{- range $value.ingress.hosts }}
