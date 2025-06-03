@@ -23,16 +23,6 @@ import { SpanType } from "@/rest_api/api";
  *     };
  *   }
  *
- *    async ascore(input: string, output: string, ...ignoredArgs: any[]): Promise<ScoreResult | ScoreResult[]> {
- *     // Add your asynchronous logic here
- *
- *     return {
- *       name: this.name,
- *       value: 0,
- *       reason: "Optional reason for the score"
- *     };
- *   }
- * }
  * ```
  */
 export abstract class BaseMetric {
@@ -71,16 +61,11 @@ export abstract class BaseMetric {
 
     if (trackMetric) {
       const originalScore = this.score;
-      const originalAScore = this.ascore;
 
       // Apply tracking decorator to methods
       this.score = track(
         { name: this.name, projectName, type: SpanType.General },
         originalScore,
-      );
-      this.ascore = track(
-        { name: this.name, projectName, type: SpanType.General },
-        originalAScore,
       );
     }
   }
@@ -91,24 +76,7 @@ export abstract class BaseMetric {
    * @param args Arguments required by the specific metric implementation
    * @returns A score result or list of score results
    */
-  score(
+  abstract score(
     ...args: unknown[]
-  ): Promise<EvaluationScoreResult | EvaluationScoreResult[]> {
-    throw new Error("Scoring method is not implemented.");
-  }
-
-  // ALEX
-  // REMOVE
-  /**
-   * Asynchronous version of the score method
-   * By default, this calls the synchronous score method
-   *
-   * @param args Arguments required by the specific metric implementation
-   * @returns A score result or list of score results
-   */
-  async ascore(
-    ...args: unknown[]
-  ): Promise<EvaluationScoreResult | EvaluationScoreResult[]> {
-    return this.score(...args);
-  }
+  ): Promise<EvaluationScoreResult | EvaluationScoreResult[]>;
 }

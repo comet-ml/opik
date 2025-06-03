@@ -32,7 +32,7 @@ export class IsJson extends BaseMetric {
         value: 1.0,
         reason: "IsJson: Output is valid JSON.",
       };
-    } catch (e) {
+    } catch {
       return {
         name: this.name,
         value: 0.0,

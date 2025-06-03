@@ -18,7 +18,7 @@ class BasicAsyncMetric extends BaseMetric {
 
 class ApiResponseValidator extends BaseMetric {
   constructor(
-    private readonly validateFn: (response: any) => boolean,
+    private readonly validateFn: (response: unknown) => boolean,
     private readonly apiEndpoint: string,
   ) {
     super("api_response_validator", false);
@@ -66,7 +66,6 @@ class ContentModerationMetric extends BaseMetric {
         };
       }
 
-      // Call external moderation API
       const response = await fetch(this.moderationApi, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -95,10 +94,8 @@ class ContentModerationMetric extends BaseMetric {
 
 class SentimentAnalysisMetric extends BaseMetric {
   async score(input: string): Promise<EvaluationScoreResult> {
-    // In a real implementation, this would call a sentiment analysis API
     await new Promise((resolve) => setTimeout(resolve, 50)); // Simulate API delay
 
-    // Simple sentiment analysis (for demo purposes)
     const positiveWords = ["good", "great", "excellent", "happy"];
     const negativeWords = ["bad", "terrible", "awful", "sad"];
 
@@ -110,7 +107,6 @@ class SentimentAnalysisMetric extends BaseMetric {
       if (negativeWords.includes(word)) score -= 0.1;
     });
 
-    // Clamp between 0 and 1
     score = Math.max(0, Math.min(1, score));
 
     return {
@@ -169,8 +165,7 @@ describe("Async Custom Metrics", () => {
     });
 
     it("should validate API responses", async () => {
-      // Mock successful API response
-      (global.fetch as any).mockResolvedValueOnce({
+      (global.fetch as unknown).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ valid: true, score: 0.9 }),
       });

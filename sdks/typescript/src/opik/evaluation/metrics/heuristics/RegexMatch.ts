@@ -28,27 +28,22 @@ export class RegexMatch extends BaseMetric {
     pattern: RegExp | string,
     flags?: string,
   ): Promise<EvaluationScoreResult> {
-    try {
-      let regex: RegExp | undefined;
+    let regex: RegExp | undefined;
 
-      if (typeof pattern === "string" && flags) {
-        regex = new RegExp(pattern, flags);
-      } else {
-        regex = new RegExp(pattern);
-      }
-
-      const isMatch = regex!.test(output);
-
-      return {
-        name: this.name,
-        value: isMatch ? 1.0 : 0.0,
-        reason: isMatch
-          ? `Regex: Output matches the regex pattern: ${pattern}`
-          : `Regex: Output does not match the regex pattern: ${pattern}`,
-      };
-      //   ALEX
-    } catch (e) {
-      throw e;
+    if (typeof pattern === "string" && flags) {
+      regex = new RegExp(pattern, flags);
+    } else {
+      regex = new RegExp(pattern);
     }
+
+    const isMatch = regex!.test(output);
+
+    return {
+      name: this.name,
+      value: isMatch ? 1.0 : 0.0,
+      reason: isMatch
+        ? `Regex: Output matches the regex pattern: ${pattern}`
+        : `Regex: Output does not match the regex pattern: ${pattern}`,
+    };
   }
 }
