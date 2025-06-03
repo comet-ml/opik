@@ -6,6 +6,7 @@ import * as OpikApi from "../index";
 
 export interface ExperimentItemBulkRecordExperimentItemBulkWriteView {
     datasetItemId: string;
+    evaluateTaskResult?: OpikApi.JsonListStringExperimentItemBulkWriteView;
     trace?: OpikApi.TraceExperimentItemBulkWriteView;
     spans?: OpikApi.SpanExperimentItemBulkWriteView[];
     feedbackScores?: OpikApi.FeedbackScoreExperimentItemBulkWriteView[];

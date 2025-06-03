@@ -5,12 +5,14 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .feedback_score import FeedbackScore
+from .json_list_string import JsonListString
 from .span import Span
 from .trace import Trace
 
 
 class ExperimentItemBulkRecord(UniversalBaseModel):
     dataset_item_id: str
+    evaluate_task_result: typing.Optional[JsonListString] = None
     trace: typing.Optional[Trace] = None
     spans: typing.Optional[typing.List[Span]] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScore]] = None

@@ -3232,6 +3232,10 @@ paths:
         in: query
         schema:
           type: string
+      - name: sorting
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Trace threads resource
@@ -4749,6 +4753,12 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        trace_visibility_mode:
+          type: string
+          readOnly: true
+          enum:
+          - default
+          - hidden
     FeedbackScore:
       required:
       - name
@@ -5037,6 +5047,12 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        trace_visibility_mode:
+          type: string
+          readOnly: true
+          enum:
+          - default
+          - hidden
       readOnly: true
     FeedbackScore_Compare:
       required:
@@ -5250,6 +5266,12 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        trace_visibility_mode:
+          type: string
+          readOnly: true
+          enum:
+          - default
+          - hidden
     Column_Public:
       type: object
       properties:
@@ -5583,6 +5605,8 @@ components:
         dataset_item_id:
           type: string
           format: uuid
+        evaluate_task_result:
+          $ref: "#/components/schemas/JsonListString"
         trace:
           $ref: "#/components/schemas/Trace"
         spans:
@@ -5837,6 +5861,8 @@ components:
         dataset_item_id:
           type: string
           format: uuid
+        evaluate_task_result:
+          $ref: "#/components/schemas/JsonListString_ExperimentItemBulkWriteView"
         trace:
           $ref: "#/components/schemas/Trace_ExperimentItemBulkWriteView"
         spans:
@@ -6012,6 +6038,8 @@ components:
           format: date-time
         thread_id:
           type: string
+      description: "Please provide either none, only one of evaluate_task_result or\
+        \ trace, but never both"
     Comment_Public:
       required:
       - text
@@ -8502,6 +8530,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TraceThread"
+        sortableBy:
+          type: array
+          items:
+            type: string
     TracePage_Public:
       type: object
       properties:

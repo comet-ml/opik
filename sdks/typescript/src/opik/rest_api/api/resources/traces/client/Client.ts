@@ -1443,7 +1443,7 @@ export class Traces {
         request: OpikApi.GetTraceThreadsRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.TraceThreadPage>> {
-        const { page, size, projectName, projectId, truncate, filters } = request;
+        const { page, size, projectName, projectId, truncate, filters, sorting } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -1467,6 +1467,10 @@ export class Traces {
 
         if (filters != null) {
             _queryParams["filters"] = filters;
+        }
+
+        if (sorting != null) {
+            _queryParams["sorting"] = sorting;
         }
 
         const _response = await core.fetcher({

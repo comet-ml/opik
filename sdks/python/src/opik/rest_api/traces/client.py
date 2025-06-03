@@ -709,6 +709,7 @@ class TracesClient:
         project_id: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThreadPage:
         """
@@ -727,6 +728,8 @@ class TracesClient:
         truncate : typing.Optional[bool]
 
         filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -749,6 +752,7 @@ class TracesClient:
             project_id=project_id,
             truncate=truncate,
             filters=filters,
+            sorting=sorting,
             request_options=request_options,
         )
         return _response.data
@@ -1621,6 +1625,7 @@ class AsyncTracesClient:
         project_id: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThreadPage:
         """
@@ -1639,6 +1644,8 @@ class AsyncTracesClient:
         truncate : typing.Optional[bool]
 
         filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1664,6 +1671,7 @@ class AsyncTracesClient:
             project_id=project_id,
             truncate=truncate,
             filters=filters,
+            sorting=sorting,
             request_options=request_options,
         )
         return _response.data

@@ -6,6 +6,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .comment import Comment
+from .experiment_item_trace_visibility_mode import ExperimentItemTraceVisibilityMode
 from .feedback_score import FeedbackScore
 from .json_list_string import JsonListString
 
@@ -26,6 +27,7 @@ class ExperimentItem(UniversalBaseModel):
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_by: typing.Optional[str] = None
+    trace_visibility_mode: typing.Optional[ExperimentItemTraceVisibilityMode] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

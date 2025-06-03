@@ -5,6 +5,7 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { JsonListString } from "./JsonListString";
 import { Trace } from "./Trace";
 import { Span } from "./Span";
 import { FeedbackScore } from "./FeedbackScore";
@@ -14,6 +15,7 @@ export const ExperimentItemBulkRecord: core.serialization.ObjectSchema<
     OpikApi.ExperimentItemBulkRecord
 > = core.serialization.object({
     datasetItemId: core.serialization.property("dataset_item_id", core.serialization.string()),
+    evaluateTaskResult: core.serialization.property("evaluate_task_result", JsonListString.optional()),
     trace: Trace.optional(),
     spans: core.serialization.list(Span).optional(),
     feedbackScores: core.serialization.property("feedback_scores", core.serialization.list(FeedbackScore).optional()),
@@ -22,6 +24,7 @@ export const ExperimentItemBulkRecord: core.serialization.ObjectSchema<
 export declare namespace ExperimentItemBulkRecord {
     export interface Raw {
         dataset_item_id: string;
+        evaluate_task_result?: JsonListString.Raw | null;
         trace?: Trace.Raw | null;
         spans?: Span.Raw[] | null;
         feedback_scores?: FeedbackScore.Raw[] | null;

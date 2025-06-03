@@ -910,6 +910,7 @@ class RawTracesClient:
         project_id: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[TraceThreadPage]:
         """
@@ -929,6 +930,8 @@ class RawTracesClient:
 
         filters : typing.Optional[str]
 
+        sorting : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -947,6 +950,7 @@ class RawTracesClient:
                 "project_id": project_id,
                 "truncate": truncate,
                 "filters": filters,
+                "sorting": sorting,
             },
             request_options=request_options,
         )
@@ -2054,6 +2058,7 @@ class AsyncRawTracesClient:
         project_id: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[TraceThreadPage]:
         """
@@ -2073,6 +2078,8 @@ class AsyncRawTracesClient:
 
         filters : typing.Optional[str]
 
+        sorting : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2091,6 +2098,7 @@ class AsyncRawTracesClient:
                 "project_id": project_id,
                 "truncate": truncate,
                 "filters": filters,
+                "sorting": sorting,
             },
             request_options=request_options,
         )

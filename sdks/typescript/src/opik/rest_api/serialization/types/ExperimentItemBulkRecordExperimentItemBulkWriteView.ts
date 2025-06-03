@@ -5,6 +5,7 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { JsonListStringExperimentItemBulkWriteView } from "./JsonListStringExperimentItemBulkWriteView";
 import { TraceExperimentItemBulkWriteView } from "./TraceExperimentItemBulkWriteView";
 import { SpanExperimentItemBulkWriteView } from "./SpanExperimentItemBulkWriteView";
 import { FeedbackScoreExperimentItemBulkWriteView } from "./FeedbackScoreExperimentItemBulkWriteView";
@@ -14,6 +15,10 @@ export const ExperimentItemBulkRecordExperimentItemBulkWriteView: core.serializa
     OpikApi.ExperimentItemBulkRecordExperimentItemBulkWriteView
 > = core.serialization.object({
     datasetItemId: core.serialization.property("dataset_item_id", core.serialization.string()),
+    evaluateTaskResult: core.serialization.property(
+        "evaluate_task_result",
+        JsonListStringExperimentItemBulkWriteView.optional(),
+    ),
     trace: TraceExperimentItemBulkWriteView.optional(),
     spans: core.serialization.list(SpanExperimentItemBulkWriteView).optional(),
     feedbackScores: core.serialization.property(
@@ -25,6 +30,7 @@ export const ExperimentItemBulkRecordExperimentItemBulkWriteView: core.serializa
 export declare namespace ExperimentItemBulkRecordExperimentItemBulkWriteView {
     export interface Raw {
         dataset_item_id: string;
+        evaluate_task_result?: JsonListStringExperimentItemBulkWriteView.Raw | null;
         trace?: TraceExperimentItemBulkWriteView.Raw | null;
         spans?: SpanExperimentItemBulkWriteView.Raw[] | null;
         feedback_scores?: FeedbackScoreExperimentItemBulkWriteView.Raw[] | null;
