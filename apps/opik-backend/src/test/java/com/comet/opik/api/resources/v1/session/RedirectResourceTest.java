@@ -72,6 +72,7 @@ class RedirectResourceTest {
     private static final String PROJECT_REDIRECT_URL = "%s/%s/projects/%s/traces";
     private static final String DATASET_REDIRECT_URL = "%s/%s/datasets/%s/items";
     private static final String EXPERIMENT_REDIRECT_URL = "%s/%s/experiments/%s/compare?experiments=%s";
+    private static final String OPTIMIZATION_REDIRECT_URL = "%s/%s/optimizations/%s/compare?optimizations=%s";
     public static final String NO_SUCH_WORKSPACE = "No such workspace: %s";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -232,6 +233,25 @@ class RedirectResourceTest {
             var experimentIdEncoded = URLEncoder.encode("[\"%s\"]".formatted(experimentId), StandardCharsets.UTF_8);
             assertThat(redirectURL).isEqualTo(EXPERIMENT_REDIRECT_URL.formatted(wireMock.runtimeInfo().getHttpBaseUrl(),
                     workspaceName, datasetId, experimentIdEncoded));
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("parameters")
+    @DisplayName("Create optimization redirect URL")
+    void optimizationsRedirectTest(String workspaceName, String workspaceNameForRedirectRequest, int expectedStatus) {
+        var dataset = factory.manufacturePojo(Dataset.class);
+        var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, workspaceName);
+
+        var optimizationId = UUID.randomUUID();
+
+        var redirectURL = redirectResourceClient.optimizationsRedirect(datasetId, optimizationId,
+                UUID.randomUUID().toString(), workspaceNameForRedirectRequest, getBaseUrlEncoded(), expectedStatus);
+        if (expectedStatus == 303) {
+            var optimizationIdEncoded = URLEncoder.encode("[\"%s\"]".formatted(optimizationId), StandardCharsets.UTF_8);
+            assertThat(redirectURL)
+                    .isEqualTo(OPTIMIZATION_REDIRECT_URL.formatted(wireMock.runtimeInfo().getHttpBaseUrl(),
+                            workspaceName, datasetId, optimizationIdEncoded));
         }
     }
 
