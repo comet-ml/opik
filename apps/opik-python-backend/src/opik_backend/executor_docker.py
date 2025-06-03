@@ -33,6 +33,14 @@ container_stop_histogram = meter.create_histogram(
     unit="s",
 )
 
+# Create a gauge metric to track the number of available containers in the pool
+container_pool_size_gauge = meter.create_gauge(
+    name="container_pool_size",
+    description="Number of available containers in the pool queue",
+    unit="1",
+)
+
+
 class DockerExecutor(CodeExecutorBase):
     def __init__(self):
         super().__init__()
@@ -76,6 +84,9 @@ class DockerExecutor(CodeExecutorBase):
             return schedule.CancelJob  # Cancel this job
             
         try:
+            # Update the container pool size metric
+            self._update_container_pool_size_metric()
+
             self.ensure_pool_filled()
             return None  # Continue the job
         except Exception as e:
@@ -117,6 +128,13 @@ class DockerExecutor(CodeExecutorBase):
             "label": f"managed_by={self.instance_id}",
             "status": "running"
         })
+
+    def _update_container_pool_size_metric(self):
+        """Update the container pool size metric with the current number of containers in the pool."""
+        pool_size = self.container_pool.qsize()
+        container_pool_size_gauge.record(pool_size)
+        logger.debug(f"Current container pool size: {pool_size}")
+        return pool_size
 
     def create_container(self):
         # Record the start time for detailed container creation metrics
@@ -173,6 +191,7 @@ class DockerExecutor(CodeExecutorBase):
             # Calculate and record the latency
             latency = time.time() - start_time
             container_stop_histogram.record(latency, attributes={"method": "stop_container"})
+
             logger.info(f"Stopped container {container.id} in {latency:.3f} seconds")
         except Exception as e:
             logger.error(f"Failed to stop container: {e}")
