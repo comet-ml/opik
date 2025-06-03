@@ -9,6 +9,8 @@ import { Link } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
 import AnnotateRow from "../TraceDetailsPanel/TraceAnnotateViewer/AnnotateRow";
 import { cn } from "@/lib/utils";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 
 type FeedbackScoresEditorProps = {
   feedbackScores: TraceFeedbackScore[];
@@ -69,7 +71,12 @@ const FeedbackScoresEditor = ({
   return (
     <div className={cn(className)}>
       <div className="flex flex-col px-6">
-        <div className="comet-body-s-accented pb-2">Human review</div>
+        <div className="flex items-center gap-1 pb-2">
+          <span className="comet-body-s-accented truncate">Human review</span>
+          <ExplainerIcon
+            {...EXPLAINERS_MAP[EXPLAINER_ID.what_is_human_review]}
+          />
+        </div>
         <div className="grid max-w-full grid-cols-[minmax(0,5fr)_minmax(0,5fr)__36px_30px] border-b border-border empty:border-transparent">
           {rows.map((row) => (
             <AnnotateRow

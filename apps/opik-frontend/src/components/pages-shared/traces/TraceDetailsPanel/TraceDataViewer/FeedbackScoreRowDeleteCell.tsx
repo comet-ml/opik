@@ -57,6 +57,7 @@ const FeedbackScoreRowDeleteCell: React.FunctionComponent<
           spanId ? "span" : "trace"
         }?`}
         confirmText={`${capitalize(actionName)} feedback score`}
+        confirmButtonVariant="destructive"
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

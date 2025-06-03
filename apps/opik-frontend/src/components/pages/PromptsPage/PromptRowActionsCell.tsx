@@ -53,8 +53,9 @@ export const PromptRowActionsCell: React.FunctionComponent<
         setOpen={setOpen}
         onConfirm={deletePromptHandler}
         title={`Delete ${prompt.name}`}
-        description="Are you sure you want to delete this prompt?"
+        description="Deleting a prompt will also remove all associated commits. This action can’t be undone. Are you sure you want to continue?"
         confirmText="Delete prompt"
+        confirmButtonVariant="destructive"
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

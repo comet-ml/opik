@@ -6,6 +6,14 @@ import lombok.RequiredArgsConstructor;
 
 import java.util.Arrays;
 
+/**
+ * This enum representing the visibility status of a resource.
+ * <p>
+ * This enum is used to indicate whether a resource is accessible only within its own workspace
+ * ({@link #PRIVATE}) or is publicly accessible to all users who have the URI to the resource
+ * ({@link #PUBLIC}).
+ * <p>
+ */
 @RequiredArgsConstructor
 public enum Visibility {
     PRIVATE("private"),

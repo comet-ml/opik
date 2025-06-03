@@ -71,3 +71,15 @@ def test_read_and_parse_stream__limit_samples(spans_stream_source):
     assert len(spans) == 1
     expected = rest_api_types.SpanPublic.model_validate(SPANS_STREAM_JSON[0])
     assert spans[0] == expected
+
+
+def test_read_and_parse_full_stream__happy_flow(spans_stream_source):
+    spans = rest_stream_parser.read_and_parse_full_stream(
+        read_source=lambda current_batch_size, last_retrieved_id: spans_stream_source,
+        parsed_item_class=rest_api_types.SpanPublic,
+        max_results=10,
+    )
+    assert len(spans) == 2
+    for i, span in enumerate(spans):
+        expected = rest_api_types.SpanPublic.model_validate(SPANS_STREAM_JSON[i])
+        assert span == expected

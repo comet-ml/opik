@@ -7,8 +7,10 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
@@ -24,6 +26,8 @@ public record TraceThread(
         JsonNode firstMessage,
         JsonNode lastMessage,
         long numberOfMessages,
+        BigDecimal totalEstimatedCost,
+        Map<String, Long> usage,
         Instant lastUpdatedAt,
         String createdBy,
         Instant createdAt) {
@@ -33,10 +37,11 @@ public record TraceThread(
             int page,
             int size,
             long total,
-            List<TraceThread> content) implements com.comet.opik.api.Page<TraceThread> {
+            List<TraceThread> content,
+            List<String> sortableBy) implements com.comet.opik.api.Page<TraceThread> {
 
-        public static TraceThreadPage empty(int page) {
-            return new TraceThreadPage(page, 0, 0, List.of());
+        public static TraceThreadPage empty(int page, List<String> sortableBy) {
+            return new TraceThreadPage(page, 0, 0, List.of(), sortableBy);
         }
     }
 

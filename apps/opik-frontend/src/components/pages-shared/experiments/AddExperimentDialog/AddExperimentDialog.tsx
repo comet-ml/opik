@@ -137,15 +137,16 @@ const DEFAULT_LOADED_DATASET_ITEMS = 25;
 type AddExperimentDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
+  datasetName?: string;
 };
 
 const AddExperimentDialog: React.FunctionComponent<
   AddExperimentDialogProps
-> = ({ open, setOpen }) => {
+> = ({ open, setOpen, datasetName: initialDatasetName = "" }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const [isLoadedMore, setIsLoadedMore] = useState(false);
-  const [datasetName, setDatasetName] = useState("");
+  const [datasetName, setDatasetName] = useState(initialDatasetName);
   const [models, setModels] = useState<EVALUATOR_MODEL[]>([
     LLM_JUDGES_MODELS_OPTIONS[0].value,
   ]); // Set the first LLM judge model as checked

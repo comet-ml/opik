@@ -40,9 +40,10 @@ const OptimizationRowActionsCell: React.FunctionComponent<
         open={open}
         setOpen={setOpen}
         onConfirm={deleteOptimizationHandler}
-        title={`Delete ${organisation.name}`}
-        description="Are you sure you want to delete this optimization?"
+        title="Delete optimization"
+        description="Deleting an optimization run will remove all its trials and their data. Related traces won’t be affected. This action can’t be undone. Are you sure you want to continue?"
         confirmText="Delete optimization"
+        confirmButtonVariant="destructive"
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

@@ -1,0 +1,80 @@
+# Contributing to Documentation
+
+This guide will help you get started with contributing to Opik's documentation.
+
+<Tip>
+  Before you start, please review our general [Contribution Overview](/contributing/overview) and the [Contributor
+  License Agreement (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md).
+</Tip>
+
+## Documentation Structure
+
+This guide covers how to contribute to the two main parts of Opik's documentation: **This Documentation Website**: Built with [Fern](https://www.buildwithfern.com/) and **Python SDK Reference Documentation**: Built with [Sphinx](https://www.sphinx-doc.org/en/master/).
+
+Here's how you can work with either one:
+
+<AccordionGroup>
+  <Accordion title="Contributing to this Documentation Website (Fern)">
+    This website (source in `apps/opik-documentation/documentation`) is where our main guides, tutorials, and conceptual documentation live.
+
+    <Steps>
+      ### 1. Install Prerequisites
+      Ensure you have Node.js and npm installed. You can follow the official guide [here](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm/).
+
+      ### 2. Set up Locally
+      ```bash
+      cd apps/opik-documentation/documentation
+
+      # Install dependencies - Only needs to be run once
+      npm install
+
+      # Optional - Install Python dependencies if updating Jupyter Cookbooks
+      pip install -r requirements.txt
+
+      # Run the documentation website locally
+      npm run dev
+
+
+      ```
+      Access the local site at `http://localhost:3000`. Changes will update in real-time.
+
+      ### 3. Make Your Changes
+      Update content primarily in:
+      - `fern/docs/`: Main markdown content (like this page).
+      - `/docs/cookbook`: Our collection of cookbooks and examples - Please note that you should not be updating the `cookbook` markdown files directly as they are generated from the Jupyter Notebook.
+
+      Refer to the `docs.yml` file for the overall structure and navigation.
+
+      ### 4. Submitting Changes
+      Once you're happy with your changes, commit them and open a Pull Request against the `main` branch of the `comet-ml/opik` repository.
+    </Steps>
+
+  </Accordion>
+  <Accordion title="Contributing to the Python SDK Reference Documentation (Sphinx)">
+    The Python SDK reference docs (source in `apps/opik-documentation/python-sdk-docs`) are generated from docstrings in the Python codebase using [Sphinx](https://www.sphinx-doc.org/en/master/).
+    <Steps>
+      ### 1. Install Prerequisites
+      Ensure you have Python and pip installed. A virtual environment is highly recommended.
+
+      ### 2. Set up Locally
+      ```bash
+      cd apps/opik-documentation/python-sdk-docs
+      # Install dependencies - Only needs to be run once
+      pip install -r requirements.txt
+      # Run the python sdk reference documentation locally
+      make dev
+      ```
+      Access the local site at `http://127.0.0.1:8000`. Changes will update in real-time as you modify docstrings in the SDK (`sdks/python`) and rebuild.
+
+      ### 3. Making Changes
+      Improvements to the SDK reference usually involve updating the Python docstrings directly in the SDK source files located in the `sdks/python` directory.
+
+      ### 4. Building and Previewing
+      After editing docstrings, run `make dev` (or `make html` for a one-time build) in the `apps/opik-documentation/python-sdk-docs` directory to regenerate the HTML and preview your changes.
+
+      ### 5. Submitting Changes
+      Commit your changes to both the Python SDK source files and any necessary updates in the `python-sdk-docs` directory. Open a Pull Request against the `main` branch.
+    </Steps>
+
+  </Accordion>
+</AccordionGroup>

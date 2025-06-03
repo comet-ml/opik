@@ -71,7 +71,6 @@ const MetricBarChart = ({
 
   const xTickFormatter = useCallback(
     (val: string) => {
-      console.log("vakl", val);
       if (interval === INTERVAL_TYPE.HOURLY) {
         return dayjs(val).utc().format("MM/DD hh:mm A");
       }

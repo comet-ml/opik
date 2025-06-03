@@ -14,6 +14,8 @@ import {
 } from "@/store/PlaygroundStore";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 interface PlaygroundPromptsState {
   workspaceName: string;
@@ -32,6 +34,7 @@ const PlaygroundPrompts = ({
   const addPrompt = useAddPrompt();
   const setPromptMap = useSetPromptMap();
   const resetKeyRef = useRef(0);
+  const scrollToPromptRef = useRef<string>("");
   const [open, setOpen] = useState<boolean>(false);
 
   const promptIds = usePromptIds();
@@ -50,6 +53,7 @@ const PlaygroundPrompts = ({
       modelResolver: calculateDefaultModel,
     });
     addPrompt(newPrompt);
+    scrollToPromptRef.current = newPrompt.id;
   };
 
   const resetPlayground = useCallback(() => {
@@ -80,7 +84,12 @@ const PlaygroundPrompts = ({
   return (
     <>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-title-l">Playground</h1>
+        <div className="flex items-center gap-1">
+          <h1 className="comet-title-l">Playground</h1>
+          <ExplainerIcon
+            {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_playground]}
+          />
+        </div>
 
         <div className="sticky right-0 flex gap-2 ">
           <Button
@@ -113,6 +122,7 @@ const PlaygroundPrompts = ({
             isPendingProviderKeys={isPendingProviderKeys}
             providerResolver={calculateModelProvider}
             modelResolver={calculateDefaultModel}
+            scrollToPromptRef={scrollToPromptRef}
           />
         ))}
       </div>
@@ -122,7 +132,7 @@ const PlaygroundPrompts = ({
         setOpen={setOpen}
         onConfirm={resetPlayground}
         title="Reset playground"
-        description="Resetting the Playground will discard all unsaved prompts. This action is irreversible. Do you want to proceed?"
+        description="Resetting the Playground will discard all unsaved prompts. This action can’t be undone. Are you sure you want to continue?"
         confirmText="Reset playground"
       />
     </>

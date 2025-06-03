@@ -50,9 +50,10 @@ const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
         open={open === 1}
         setOpen={setOpen}
         onConfirm={deleteFeedbackDefinitionHandler}
-        title={`Delete ${feedbackDefinition.name}`}
-        description="Are you sure you want to delete this feedback definition?"
+        title="Delete feedback definition"
+        description="This action can’t be undone. Existing scored traces won’t be affected. Are you sure you want to continue?"
         confirmText="Delete feedback definition"
+        confirmButtonVariant="destructive"
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

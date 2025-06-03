@@ -1,10 +1,10 @@
 import React, { useCallback } from "react";
-
 import cloneDeep from "lodash/cloneDeep";
 import get from "lodash/get";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, UseFormReturn } from "react-hook-form";
+import { MessageCircleWarning } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,7 @@ import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
 import useRuleUpdateMutation from "@/api/automations/useRuleUpdateMutation";
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import PythonCodeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/PythonCodeRuleDetails";
 import LLMJudgeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/LLMJudgeRuleDetails";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
@@ -53,6 +54,11 @@ import { LLM_JUDGE } from "@/types/llm";
 import { LLM_PROMPT_CUSTOM_TEMPLATE } from "@/constants/llm";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { Description } from "@/components/ui/description";
+import { ToastAction } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/use-toast";
+import { useNavigate } from "@tanstack/react-router";
 
 export const DEFAULT_SAMPLING_RATE = 1;
 
@@ -107,6 +113,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED,
   );
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
   const form: UseFormReturn<EvaluationRuleFormType> = useForm<
     z.infer<typeof EvaluationRuleFormSchema>
   >({
@@ -139,6 +148,38 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
 
   const isCodeMetricEditBlock = !isCodeMetricEnabled && !isLLMJudge && isEdit;
 
+  const onRuleCreatedEdited = useCallback(() => {
+    const explainer =
+      EXPLAINERS_MAP[
+        EXPLAINER_ID.i_added_edited_a_new_online_evaluation_rule_now_what
+      ];
+
+    toast({
+      title: explainer.title,
+      description: explainer.description,
+      actions: [
+        <ToastAction
+          variant="link"
+          size="sm"
+          className="px-0"
+          altText="Go to project"
+          key="Go to project"
+          onClick={() => {
+            navigate({
+              to: "/$workspaceName/projects/$projectId/traces",
+              params: {
+                projectId: form.getValues("projectId"),
+                workspaceName,
+              },
+            });
+          }}
+        >
+          Go to project
+        </ToastAction>,
+      ],
+    });
+  }, [form, navigate, toast, workspaceName]);
+
   const getRule = useCallback(() => {
     const formData = form.getValues();
     return {
@@ -154,19 +195,25 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   }, [form]);
 
   const createPrompt = useCallback(() => {
-    createMutate({
-      rule: getRule(),
-    });
+    createMutate(
+      {
+        rule: getRule(),
+      },
+      { onSuccess: onRuleCreatedEdited },
+    );
     setOpen(false);
-  }, [createMutate, getRule, setOpen]);
+  }, [createMutate, getRule, onRuleCreatedEdited, setOpen]);
 
   const editPrompt = useCallback(() => {
-    updateMutate({
-      ruleId: defaultRule!.id,
-      rule: getRule(),
-    });
+    updateMutate(
+      {
+        ruleId: defaultRule!.id,
+        rule: getRule(),
+      },
+      { onSuccess: onRuleCreatedEdited },
+    );
     setOpen(false);
-  }, [updateMutate, getRule, defaultRule, setOpen]);
+  }, [updateMutate, defaultRule, getRule, onRuleCreatedEdited, setOpen]);
 
   const onSubmit = useCallback(
     () => (isEdit ? editPrompt() : createPrompt()),
@@ -180,6 +227,13 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <DialogAutoScrollBody>
+          {isEdit && (
+            <ExplainerCallout
+              Icon={MessageCircleWarning}
+              className="mb-2"
+              {...EXPLAINERS_MAP[EXPLAINER_ID.what_happens_if_i_edit_a_rule]}
+            />
+          )}
           <Form {...form}>
             <form
               className="flex flex-col gap-4 pb-4"
@@ -300,6 +354,13 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                           </ToggleGroup>
                         </div>
                       </FormControl>
+                      <Description>
+                        {isLLMJudge
+                          ? EXPLAINERS_MAP[EXPLAINER_ID.whats_llm_as_a_judge]
+                              .description
+                          : EXPLAINERS_MAP[EXPLAINER_ID.whats_a_code_metric]
+                              .description}
+                      </Description>
                     </FormItem>
                   )}
                 />

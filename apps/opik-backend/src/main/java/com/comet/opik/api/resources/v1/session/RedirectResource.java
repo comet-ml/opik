@@ -81,4 +81,21 @@ public class RedirectResource {
                         new String(Base64.getUrlDecoder().decode(path), StandardCharsets.UTF_8))))
                 .build();
     }
+
+    @GET
+    @Path("/optimizations")
+    @Operation(operationId = "optimizationsRedirect", summary = "Create optimization redirect url", description = "Create optimization redirect url", responses = {
+            @ApiResponse(responseCode = "303", description = "Redirect"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
+    })
+    public Response optimizationsRedirect(@QueryParam("dataset_id") @NotNull UUID datasetId,
+            @QueryParam("optimization_id") @NotNull UUID optimizationId,
+            @QueryParam("workspace_name") String workspaceName,
+            @QueryParam("path") @NotNull String path) {
+        return Response
+                .seeOther(URI.create(redirectService.optimizationsRedirectUrl(datasetId, optimizationId, workspaceName,
+                        new String(Base64.getUrlDecoder().decode(path), StandardCharsets.UTF_8))))
+                .build();
+    }
 }

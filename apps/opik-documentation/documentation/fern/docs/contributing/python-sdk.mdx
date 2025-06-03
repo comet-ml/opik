@@ -1,0 +1,113 @@
+# Contributing to the Opik Python SDK
+
+The Opik Python SDK is a key component of our platform, allowing developers to integrate Opik into their Python applications seamlessly. The SDK source code is located in the `sdks/python` directory of the main `comet-ml/opik` repository.
+
+<Tip>
+  Before you start, please review our general [Contribution Overview](/contributing/overview) and the [Contributor
+  License Agreement (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md).
+</Tip>
+
+## Getting Started
+
+<Steps>
+  ### 1. Set up Opik Locally
+  To develop and test Python SDK features, you'll need a local Opik instance running. You can set this up by following the instructions in the [Docker Compose README](https://github.com/comet-ml/opik/blob/main/deployment/docker-compose/README.md) or by using the helper scripts provided in the root of the repository:
+
+  <Tabs>
+    <Tab title="Linux/Mac">
+    ```bash
+    # From the root of the repository
+    ./opik.sh
+
+    # Configure the Python SDK to point to the local Opik deployment
+    opik configure --use_local
+    ```
+    </Tab>
+    <Tab title="Windows">
+    ```powershell
+    # From the root of the repository
+    powershell -ExecutionPolicy ByPass -c ".\opik.ps1"
+
+    # Configure the Python SDK to point to the local Opik deployment
+    opik configure --use_local
+    ```
+    </Tab>
+
+  </Tabs>
+  Your local Opik server will be accessible at `http://localhost:5173`.
+
+  <Tip title="Windows Users">
+    - Ensure the Python `Scripts` directory (e.g., `C:\Users\<name>\AppData\Local\Programs\Python<version>\Scripts\`) is in your system's PATH for the `opik` CLI command to work after installation. Restart your terminal after adding it.
+    - Using a Python virtual environment is highly recommended:
+      ```powershell
+      # Create a virtual environment
+      py -m venv my-opik-env
+      
+      # Activate it (example path)
+      cd my-opik-env\Scripts && .\activate.bat
+      
+      # Install the SDK in editable mode (adjust path to sdks/python from your current location)
+      pip install -e ../../sdks/python 
+      
+      # Configure the SDK to use your local Opik instance
+      opik configure --use_local
+      ```
+  </Tip>
+
+### 2. Install SDK for Development
+
+Navigate to the `sdks/python` directory (or use the path from your virtual environment setup) and install the SDK in editable mode:
+
+```bash
+pip install -e .
+```
+
+### 3. Review Coding Guidelines
+
+Familiarize yourself with the [coding guidelines for our Python SDK](https://github.com/comet-ml/opik/blob/main/sdks/python/README.md). This will cover style, conventions, and other important aspects.
+
+### 4. Implement Your Changes
+
+Make your desired code changes, additions, or bug fixes within the `sdks/python` directory.
+
+### 5. Test Your Changes
+
+Testing is crucial. For most SDK contributions, you should run the end-to-end (e2e) tests:
+
+```bash
+cd sdks/python # Ensure you are in this directory
+
+# Install test-specific requirements
+pip install -r tests/test_requirements.txt
+
+# Install pre-commit for linting checks (optional but good practice)
+pip install pre-commit
+
+# Run e2e tests
+pytest tests/e2e
+```
+
+If you're making changes to specific integrations (e.g., OpenAI, Anthropic):
+
+1. Install the integration-specific requirements: `pip install -r tests/integrations/openai/requirements.txt` (example for OpenAI).
+2. Configure any necessary API keys for the integration as environment variables or per your test setup.
+3. Run the specific integration tests: `pytest tests/integrations/openai` (example for OpenAI).
+
+### 6. Run Linters
+
+Ensure your code adheres to our linting standards:
+
+```bash
+cd sdks/python
+pre-commit run --all-files
+```
+
+### 7. Update Documentation (If Applicable)
+
+If your changes impact public-facing methods, parameters, or docstrings, please also update the documentation. Refer to the [Documentation Contribution Guide](/contributing/guides/documentation) for how to update the Python SDK Reference Documentation (Sphinx).
+
+### 8. Submit a Pull Request
+
+Once all tests and checks pass, and any relevant documentation is updated, commit your changes and open a Pull Request against the `main` branch of the `comet-ml/opik` repository. Clearly describe your changes and link to any relevant issues.
+
+</Steps>

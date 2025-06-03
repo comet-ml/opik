@@ -34,8 +34,9 @@ const OptimizationsActionsPanel: React.FunctionComponent<
         setOpen={setOpen}
         onConfirm={deleteOptimizationsHandler}
         title="Delete optimizations"
-        description="Are you sure you want to delete all selected optimizations?"
+        description="Deleting these optimization runs will remove all their trials and associated data. Related traces won’t be affected. This action cannot be undone. Are you sure you want to continue?"
         confirmText="Delete optimizations"
+        confirmButtonVariant="destructive"
       />
       <TooltipWrapper content="Delete">
         <Button

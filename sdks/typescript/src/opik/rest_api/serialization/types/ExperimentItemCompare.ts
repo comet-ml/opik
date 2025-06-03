@@ -8,6 +8,7 @@ import * as core from "../../core";
 import { JsonListStringCompare } from "./JsonListStringCompare";
 import { FeedbackScoreCompare } from "./FeedbackScoreCompare";
 import { CommentCompare } from "./CommentCompare";
+import { ExperimentItemCompareTraceVisibilityMode } from "./ExperimentItemCompareTraceVisibilityMode";
 
 export const ExperimentItemCompare: core.serialization.ObjectSchema<
     serializers.ExperimentItemCompare.Raw,
@@ -31,6 +32,10 @@ export const ExperimentItemCompare: core.serialization.ObjectSchema<
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
+    traceVisibilityMode: core.serialization.property(
+        "trace_visibility_mode",
+        ExperimentItemCompareTraceVisibilityMode.optional(),
+    ),
 });
 
 export declare namespace ExperimentItemCompare {
@@ -50,5 +55,6 @@ export declare namespace ExperimentItemCompare {
         last_updated_at?: string | null;
         created_by?: string | null;
         last_updated_by?: string | null;
+        trace_visibility_mode?: ExperimentItemCompareTraceVisibilityMode.Raw | null;
     }
 }

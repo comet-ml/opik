@@ -24,6 +24,8 @@ import { formatCost } from "@/lib/money";
 import TraceDataViewerActionsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/TraceDataViewerActionsPanel";
 import { LastSectionValue } from "../TraceDetailsPanel";
 import TraceDataViewerHeader from "./TraceDataViewerHeader";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 
 type TraceDataViewerProps = {
   data: Trace | Span;
@@ -154,6 +156,10 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             </TabsTrigger>
             <TabsTrigger variant="underline" value="feedback_scores">
               Feedback scores
+              <ExplainerIcon
+                className="ml-1"
+                {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
+              />
             </TabsTrigger>
             <TabsTrigger variant="underline" value="metadata">
               Metadata

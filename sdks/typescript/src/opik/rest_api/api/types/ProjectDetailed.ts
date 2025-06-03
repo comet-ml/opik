@@ -17,6 +17,7 @@ export interface ProjectDetailed {
     feedbackScores?: OpikApi.FeedbackScoreAverageDetailed[];
     duration?: OpikApi.PercentageValuesDetailed;
     totalEstimatedCost?: number;
+    totalEstimatedCostSum?: number;
     usage?: Record<string, number>;
     traceCount?: number;
     guardrailsFailedCount?: number;

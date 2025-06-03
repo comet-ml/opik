@@ -1,0 +1,110 @@
+# Contributing to the Frontend
+
+This guide will help you get started with contributing to the Opik frontend.
+
+<Tip>
+  Before you start, please review our general [Contribution Overview](/contributing/overview) and the [Contributor
+  License Agreement (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md).
+</Tip>
+
+## Project Structure
+
+The Opik frontend is a React application located in the `apps/opik-frontend` directory of the `comet-ml/opik` repository. It provides the user interface for interacting with the Opik platform.
+
+## Setting Up Your Development Environment
+
+Follow these steps to run the frontend locally and see your changes instantly upon saving files:
+
+<Steps>
+  ### 1. Prerequisites
+  Ensure you have **Node.js** (which includes npm) installed on your system. You can download it from [nodejs.org](https://nodejs.org/).
+
+### 2. Configure Environment Variables
+
+Navigate to the `apps/opik-frontend/` directory and create or update the `.env.development` file with the following values:
+
+```ini
+VITE_BASE_URL=/
+VITE_BASE_API_URL=http://localhost:8080
+```
+
+This tells the frontend development server where to find the backend API.
+
+### 3. Enable CORS in the Back-End
+
+For local development, the backend needs to allow Cross-Origin Resource Sharing (CORS) from the frontend development server.
+
+- Open `deployment/docker-compose/docker-compose.yaml` in the root of the repository (view on [GitHub](https://github.com/comet-ml/opik/blob/main/deployment/docker-compose/docker-compose.yaml)).
+- In the `services.backend.environment` section, add `CORS: true`:
+
+  ```yaml
+  ---
+  OPIK_USAGE_REPORT_ENABLED: ${OPIK_USAGE_REPORT_ENABLED:-true}
+  CORS: true # Add this line
+  ```
+
+- If your backend services are already running via Docker Compose, you might need to restart them for this change to take effect: `docker compose down && docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d`
+
+### 4. Start Required Backend Services
+
+The frontend relies on various backend services. Run the following command from the root of the repository to start them (along with other necessary services like the database):
+
+```bash
+# Optionally, you can force a pull of the latest images first
+# docker compose pull
+
+docker compose -f docker-compose.yaml -f docker-compose.override.yaml up -d
+```
+
+### 5. Verify the Back-End is Running
+
+Wait for the Docker containers to build and start. To confirm that the backend is running successfully, open `http://localhost:8080/is-alive/ver` in your browser.
+If you see a version number displayed, the backend is ready.
+
+### 6. Install Front-End Dependencies
+
+Navigate to the frontend project directory:
+
+```bash
+cd apps/opik-frontend
+```
+
+Install the necessary Node.js dependencies:
+
+```bash
+npm install
+```
+
+### 7. Start the Front-End Development Server
+
+Run the following command to start the frontend:
+
+```bash
+npm run start
+```
+
+Once the script completes, open `http://localhost:5174/` in your browser.
+You should see the Opik app running! 🎉
+
+{" "}
+
+<Tip title="Alternative Build Port">
+  Another built version of the frontend (served by the backend) will be available at `http://localhost:5173/`. The
+  `localhost:5174` instance provides hot-reloading and is generally preferred for active development.
+</Tip>
+
+### 8. Making Changes and Submitting a PR
+
+Now you can make your code changes in the `apps/opik-frontend` directory. Before submitting a Pull Request, please ensure your code passes the following checks:
+
+```bash
+cd apps/opik-frontend
+
+npm run e2e       # End-to-end tests
+npm run lint      # Linter checks
+npm run typecheck # TypeScript type checking
+```
+
+Commit your changes and open a Pull Request against the `main` branch of the `comet-ml/opik` repository.
+
+</Steps>

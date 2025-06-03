@@ -160,7 +160,7 @@ const FormMessage = React.forwardRef<
     <FormErrorSkeleton
       ref={ref}
       id={formMessageId}
-      className={cn("-mt-2", className)}
+      className={cn(className)}
       {...props}
     >
       {body}

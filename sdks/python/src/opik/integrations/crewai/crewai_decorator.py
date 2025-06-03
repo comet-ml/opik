@@ -188,7 +188,7 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         if object_type == "crew":
             output_dict = output.model_dump()
-            _ = output_dict.pop("token_usage")
+            _ = output_dict.pop("token_usage", None)
         elif object_type == "agent":
             output_dict = {"output": output}
         elif object_type == "task":

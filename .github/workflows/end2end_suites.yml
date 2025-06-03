@@ -44,7 +44,7 @@ jobs:
             - name: Checkout repo
               uses: actions/checkout@v4
               with:
-                ref: ${{ github.ref }}
+                ref: ${{ github.event.pull_request.base.ref }}
             
             - name: Setup Python
               uses: actions/setup-python@v5

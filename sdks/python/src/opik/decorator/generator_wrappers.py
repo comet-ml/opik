@@ -58,7 +58,7 @@ class BaseTrackedGenerator(Generic[YieldType]):
             return
 
         self._created_trace_data, self._created_span_data = (
-            span_creation_handler.create_span_for_current_context(
+            span_creation_handler.create_span_respecting_context(
                 self._start_span_arguments, self._opik_distributed_trace_headers
             )
         )

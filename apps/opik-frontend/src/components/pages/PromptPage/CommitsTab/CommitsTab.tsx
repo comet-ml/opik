@@ -21,6 +21,7 @@ import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import CommitsActionsPanel from "@/components/pages/PromptPage/CommitsTab/CommitsActionsPanel";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 export const getRowId = (p: PromptVersion) => p.id;
 
@@ -29,6 +30,7 @@ interface CommitsTabInterface {
 }
 
 const PAGINATION_SIZE_KEY = "prompt-commits-pagination-size";
+const COLUMNS_WIDTH_KEY = "prompt-commits-columns-width";
 
 export const COMMITS_DEFAULT_COLUMNS = [
   generateSelectColumDef<PromptVersion>(),
@@ -45,6 +47,7 @@ export const COMMITS_DEFAULT_COLUMNS = [
         activeVersionId: get(data, "id", null),
       }),
     },
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
   }),
   ...convertColumnDataToColumn<PromptVersion, PromptVersion>(
     [
@@ -92,6 +95,11 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
   });
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [columnsWidth, setColumnsWidth] = useLocalStorageState<
+    Record<string, number>
+  >(COLUMNS_WIDTH_KEY, {
+    defaultValue: {},
+  });
 
   const { data, isPending } = usePromptVersionsById(
     {
@@ -109,6 +117,15 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
   const versions = useMemo(() => data?.content ?? [], [data?.content]);
   const total = data?.total ?? 0;
   const noDataText = "There are no commits yet";
+
+  const resizeConfig = useMemo(
+    () => ({
+      enabled: true,
+      columnSizing: columnsWidth,
+      onColumnResize: setColumnsWidth,
+    }),
+    [columnsWidth, setColumnsWidth],
+  );
 
   const selectedRows: PromptVersion[] = useMemo(() => {
     return versions.filter((row) => rowSelection[row.id]);
@@ -128,6 +145,7 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
       <DataTable
         columns={COMMITS_DEFAULT_COLUMNS}
         data={versions}
+        resizeConfig={resizeConfig}
         selectionConfig={{
           rowSelection,
           setRowSelection,

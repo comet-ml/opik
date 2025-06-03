@@ -16,6 +16,7 @@ import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 
 import PlaygroundVariableCell from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundVariableCell";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 type PlaygroundOutputTableData = {
   variables: { [key: string]: string };
@@ -46,7 +47,7 @@ const PlaygroundOutputTable = ({
 
   const noDataMessage = isLoadingDatasetItems
     ? "Loading..."
-    : "No datataset items";
+    : "No dataset items";
 
   const rows = useMemo(() => {
     return datasetItems.map((di) => {
@@ -66,6 +67,8 @@ const PlaygroundOutputTable = ({
     }
 
     const retVal: ColumnDef<PlaygroundOutputTableData>[] = [];
+    const explainer =
+      EXPLAINERS_MAP[EXPLAINER_ID.how_do_i_use_the_dataset_in_the_playground];
 
     const inputColumns = datasetColumns
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
@@ -80,6 +83,10 @@ const PlaygroundOutputTable = ({
             },
             accessorFn: (row) => get(row, ["variables", c.name], ""),
             cell: PlaygroundVariableCell as never,
+            explainer: {
+              ...explainer,
+              description: explainer.description + `{{${c.name}}}`,
+            },
           }) as ColumnData<PlaygroundOutputTableData>,
       );
 

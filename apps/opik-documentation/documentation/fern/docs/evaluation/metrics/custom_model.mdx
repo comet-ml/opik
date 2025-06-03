@@ -35,36 +35,113 @@ hallucination_metric = Hallucination(
 )
 ```
 
-## Creating your own custom model class
+## Creating Your Own Custom Model Class
 
-You can create your own custom model class by subclassing the [`OpikBaseModel`](https://www.comet.com/docs/opik/python-sdk-reference//Objects/OpikBaseModel.html) class and implementing a few methods:
+Opik's LLM-as-a-Judge metrics, such as [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html), are designed to work with various language models. While Opik supports many models out-of-the-box via LiteLLM, you can integrate any LLM by creating a custom model class. This involves subclassing [`opik.evaluation.models.OpikBaseModel`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/OpikBaseModel.html#opik.evaluation.models.OpikBaseModel) and implementing its required methods.
+
+### The [`OpikBaseModel`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/OpikBaseModel.html#opik.evaluation.models.OpikBaseModel) Interface
+
+[`OpikBaseModel`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/OpikBaseModel.html#opik.evaluation.models.OpikBaseModel) is an abstract base class that defines the interface Opik metrics use to interact with LLMs. To create a compatible custom model, you must implement the following methods:
+
+1.  `__init__(self, model_name: str)`:
+    Initializes the base model with a given model name.
+2.  `generate_string(self, input: str, **kwargs: Any) -> str`:
+    Simplified interface to generate a string output from the model.
+3.  `generate_provider_response(self, **kwargs: Any) -> Any`:
+     Generate a provider-specific response. Can be used to interface with the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
+
+### Implementing a Custom Model for an OpenAI-like API
+
+Here's an example of a custom model class that interacts with an LLM service exposing an OpenAI-compatible API endpoint.
 
 ```python
-from opik.evaluation.models import OpikBaseModel
+import requests
 from typing import Any
 
-class CustomModel(OpikBaseModel):
-    def __init__(self, model_name: str):
-        super().__init__(model_name)
+from opik.evaluation.models import OpikBaseModel
 
-    def generate_provider_response(self, messages: List[Dict[str, Any]], **kwargs: Any) -> str:
-        """
-        Generate a provider-specific response. Can be used to interface with
-        the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
-        """
-        pass
+class CustomOpenAICompatibleModel(OpikBaseModel):
+    def __init__(self, model_name: str, api_key: str, base_url: str):
+        super().__init__(model_name)
+        self.api_key = api_key
+        self.base_url = base_url # e.g., "https://api.openai.com/v1/chat/completions"
+        self.headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
 
     def generate_string(self, input: str, **kwargs: Any) -> str:
-        """Simplified interface to generate a string output from the model."""
-        return input
+        """
+        This method is used as part of LLM as a Judge metrics to take a string prompt, pass it to
+        the model as a user message and return the model's response as a string.
+        """
+        conversation = [
+            {
+                "content": input,
+                "role": "user",
+            },
+        ]
+
+        provider_response = self.generate_provider_response(messages=conversation, **kwargs)
+        return provider_response["choices"][0]["message"]["content"]
+
+    def generate_provider_response(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
+        """
+        This method is used as part of LLM as a Judge metrics to take a list of AI messages, pass it to
+        the model and return the full model response.
+        """
+        payload = {
+            "model": self.model_name,
+            "messages": messages,
+        }
+
+        response = requests.post(self.base_url, headers=self.headers, json=payload)
+
+        response.raise_for_status()
+        return response.json()
 ```
 
-This model class can then be used in the same way as the built-in models:
+**Key considerations for the implementation:**
+
+- **API Endpoint and Payload**: Adjust `base_url` and the JSON payload to match your specific LLM provider's 
+requirements if they deviate from the common OpenAI structure.
+- **Model Name**: The `model_name` passed to `__init__` is used as the `model` parameter in the API call. Ensure this matches an available model on your LLM service.
+
+### Using the Custom Model with the [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) Metric
+
+In order to run an evaluation using your Custom Model with the [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) metric, 
+you will first need to instantiate our `CustomOpenAICompatibleModel` class and pass it to the [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) class.
+The evaluation can then be kicked off by calling the [`Hallucination.score()`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html)` method.
 
 ```python
 from opik.evaluation.metrics import Hallucination
 
-hallucination_metric = Hallucination(
-    model=CustomModel(model_name="demo_model")
+# Ensure these are set securely, e.g., via environment variables
+API_KEY = os.getenv("MY_CUSTOM_LLM_API_KEY")
+BASE_URL = "YOUR_LLM_CHAT_COMPLETIONS_ENDPOINT" # e.g., "https://api.openai.com/v1/chat/completions"
+MODEL_NAME = "your-model-name" # e.g., "gpt-3.5-turbo"
+
+# Initialize your custom model
+my_custom_model = CustomOpenAICompatibleModel(
+    model_name=MODEL_NAME,
+    api_key=API_KEY,
+    base_url=BASE_URL
 )
+
+# Initialize the Hallucination metric with the custom model
+hallucination_metric = Hallucination(
+    model=my_custom_model
+)
+
+# Example usage:
+evaluation = hallucination_metric.score(
+    input="What is the capital of Mars?",
+    output="The capital of Mars is Ares City, a bustling metropolis.",
+    context=["Mars is a planet in our solar system. It does not currently have any established cities or a designated capital."]
+)
+print(f"Hallucination Score: {evaluation.value}") # Expected: 1.0 (hallucination detected)
+print(f"Reason: {evaluation.reason}")
 ```
+
+**Key considerations for the implementation:**
+- **ScoreResult Output**: [`Hallucination.score()`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) returns a ScoreResult object containing the metric name (`name`), score value (`value`), optional explanation (`reason`), metadata (`metadata`), and a failure flag (`scoring_failed`).

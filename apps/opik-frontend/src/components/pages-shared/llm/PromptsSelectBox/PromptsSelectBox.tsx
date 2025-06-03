@@ -78,7 +78,6 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
     () =>
       asNewOption ? (
         <div className="flex w-full items-center text-foreground">
-          <Plus className="mr-2 size-4 shrink-0" />
           <span className="truncate">Save as a new prompt</span>
         </div>
       ) : (

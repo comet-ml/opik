@@ -92,6 +92,9 @@ export const mapColumnDataFields = <TColumnData, TData>(
       ...(columnData.overrideRowHeight && {
         overrideRowHeight: columnData.overrideRowHeight,
       }),
+      ...(columnData.explainer && {
+        explainer: columnData.explainer,
+      }),
       ...(columnData.customMeta && { custom: columnData.customMeta }),
     },
     ...(columnData.size && { size: columnData.size }),

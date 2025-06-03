@@ -9,4 +9,5 @@ export interface TraceThreadPage {
     size?: number;
     total?: number;
     content?: OpikApi.TraceThread[];
+    sortableBy?: string[];
 }

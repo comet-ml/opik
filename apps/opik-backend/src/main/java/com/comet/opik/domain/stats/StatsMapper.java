@@ -21,6 +21,8 @@ public class StatsMapper {
     public static final String USAGE = "usage";
     public static final String FEEDBACK_SCORE = "feedback_scores";
     public static final String TOTAL_ESTIMATED_COST = "total_estimated_cost";
+    public static final String TOTAL_ESTIMATED_COST_AVG = "total_estimated_cost_avg";
+    public static final String TOTAL_ESTIMATED_COST_SUM = "total_estimated_cost_sum";
     public static final String DURATION = "duration";
     public static final String INPUT = "input";
     public static final String OUTPUT = "output";
@@ -46,12 +48,19 @@ public class StatsMapper {
                 .add(new CountValueStat(METADATA, row.get("metadata", Long.class)))
                 .add(new AvgValueStat(TAGS, row.get("tags", Double.class)));
 
-        BigDecimal totalEstimatedCost = row.get("total_estimated_cost_avg", BigDecimal.class);
-        if (totalEstimatedCost == null) {
-            totalEstimatedCost = BigDecimal.ZERO;
+        BigDecimal totalEstimatedCostAvg = row.get(TOTAL_ESTIMATED_COST_AVG, BigDecimal.class);
+        if (totalEstimatedCostAvg == null) {
+            totalEstimatedCostAvg = BigDecimal.ZERO;
         }
 
-        stats.add(new AvgValueStat(TOTAL_ESTIMATED_COST, totalEstimatedCost.doubleValue()));
+        stats.add(new AvgValueStat(TOTAL_ESTIMATED_COST, totalEstimatedCostAvg.doubleValue()));
+
+        BigDecimal totalEstimatedCostSum = row.get(TOTAL_ESTIMATED_COST_SUM, BigDecimal.class);
+        if (totalEstimatedCostSum == null) {
+            totalEstimatedCostSum = BigDecimal.ZERO;
+        }
+
+        stats.add(new AvgValueStat(TOTAL_ESTIMATED_COST_SUM, totalEstimatedCostSum.doubleValue()));
 
         Map<String, Double> usage = row.get(USAGE, Map.class);
         Map<String, Double> feedbackScores = row.get(FEEDBACK_SCORE, Map.class);
@@ -97,11 +106,19 @@ public class StatsMapper {
                 .orElse(null);
     }
 
-    public static Double getStatsTotalEstimatedCost(Map<String, ?> stats) {
+    private static Double getStatAsDouble(Map<String, ?> stats, String key) {
         return Optional.ofNullable(stats)
-                .map(map -> map.get(TOTAL_ESTIMATED_COST))
+                .map(map -> map.get(key))
                 .map(v -> (Double) v)
                 .orElse(null);
+    }
+
+    public static Double getStatsTotalEstimatedCostSum(Map<String, ?> stats) {
+        return getStatAsDouble(stats, TOTAL_ESTIMATED_COST_SUM);
+    }
+
+    public static Double getStatsTotalEstimatedCost(Map<String, ?> stats) {
+        return getStatAsDouble(stats, TOTAL_ESTIMATED_COST);
     }
 
     public static List<FeedbackScoreAverage> getStatsFeedbackScores(Map<String, ?> stats) {

@@ -34,6 +34,8 @@ public interface RedirectService {
     String datasetRedirectUrl(UUID datasetId, String workspaceName, String opikBEPath);
 
     String experimentsRedirectUrl(UUID datasetId, UUID experimentId, String workspaceName, String opikBEPath);
+
+    String optimizationsRedirectUrl(UUID datasetId, UUID optimizationId, String workspaceName, String opikBEPath);
 }
 
 @Slf4j
@@ -44,6 +46,7 @@ class RedirectServiceImpl implements RedirectService {
     private static final String PROJECT_REDIRECT_URL = "%s/%s/projects/%s/traces";
     private static final String DATASET_REDIRECT_URL = "%s/%s/datasets/%s/items";
     private static final String EXPERIMENT_REDIRECT_URL = "%s/%s/experiments/%s/compare?experiments=%s";
+    private static final String OPTIMIZATION_REDIRECT_URL = "%s/%s/optimizations/%s/compare?optimizations=%s";
 
     private final @NonNull Client client;
     private final @NonNull TraceService traceService;
@@ -63,11 +66,7 @@ class RedirectServiceImpl implements RedirectService {
     @Override
     public String datasetRedirectUrl(@NotNull UUID datasetId, String workspaceName, @NotNull String OpikBEBaseUrl) {
 
-        String resolvedWorkspaceName = Optional.ofNullable(workspaceName)
-                .orElseGet(() -> {
-                    String workspaceId = datasetService.findWorkspaceIdByDatasetId(datasetId);
-                    return getWorkspaceName(workspaceId, OpikBEBaseUrl);
-                });
+        String resolvedWorkspaceName = resolveWorkspaceNameByDatasetId(workspaceName, datasetId, OpikBEBaseUrl);
 
         return DATASET_REDIRECT_URL.formatted(feBaseUrl(OpikBEBaseUrl), resolvedWorkspaceName, datasetId);
     }
@@ -76,15 +75,29 @@ class RedirectServiceImpl implements RedirectService {
     public String experimentsRedirectUrl(@NotNull UUID datasetId, @NotNull UUID experimentId, String workspaceName,
             @NotNull String OpikBEBaseUrl) {
 
-        String resolvedWorkspaceName = Optional.ofNullable(workspaceName)
-                .orElseGet(() -> {
-                    String workspaceId = datasetService.findWorkspaceIdByDatasetId(datasetId);
-                    return getWorkspaceName(workspaceId, OpikBEBaseUrl);
-                });
+        String resolvedWorkspaceName = resolveWorkspaceNameByDatasetId(workspaceName, datasetId, OpikBEBaseUrl);
 
         var experimentIdEncoded = URLEncoder.encode("[\"%s\"]".formatted(experimentId), StandardCharsets.UTF_8);
         return EXPERIMENT_REDIRECT_URL.formatted(feBaseUrl(OpikBEBaseUrl), resolvedWorkspaceName, datasetId,
                 experimentIdEncoded);
+    }
+
+    @Override
+    public String optimizationsRedirectUrl(UUID datasetId, UUID optimizationId, String workspaceName,
+            String OpikBEBaseUrl) {
+        String resolvedWorkspaceName = resolveWorkspaceNameByDatasetId(workspaceName, datasetId, OpikBEBaseUrl);
+
+        var optimizationIdEncoded = URLEncoder.encode("[\"%s\"]".formatted(optimizationId), StandardCharsets.UTF_8);
+        return OPTIMIZATION_REDIRECT_URL.formatted(feBaseUrl(OpikBEBaseUrl), resolvedWorkspaceName, datasetId,
+                optimizationIdEncoded);
+    }
+
+    private String resolveWorkspaceNameByDatasetId(String workspaceName, UUID datasetId, String OpikBEBaseUrl) {
+        return Optional.ofNullable(workspaceName)
+                .orElseGet(() -> {
+                    String workspaceId = datasetService.findWorkspaceIdByDatasetId(datasetId);
+                    return getWorkspaceName(workspaceId, OpikBEBaseUrl);
+                });
     }
 
     private String getWorkspaceName(String workspaceId, String opikBEPath) {
