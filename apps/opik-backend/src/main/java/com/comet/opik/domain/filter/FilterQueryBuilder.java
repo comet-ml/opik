@@ -58,6 +58,7 @@ public class FilterQueryBuilder {
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
     private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
     private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
+    private static final String VISIBILITY_MODE_DB = "visibility_mode";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -80,7 +81,8 @@ public class FilterQueryBuilder {
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 1",
                             FieldType.DICTIONARY,
-                            "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)")))
+                            "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)",
+                            FieldType.ENUM, "%1$s = :filter%2$d")))
                     .put(Operator.NOT_EQUAL, new EnumMap<>(Map.of(
                             FieldType.STRING, "lower(%1$s) != lower(:filter%2$d)",
                             FieldType.DATE_TIME, "%1$s != parseDateTime64BestEffort(:filter%2$d, 9)",
@@ -88,7 +90,8 @@ public class FilterQueryBuilder {
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 0",
                             FieldType.DICTIONARY,
-                            "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)")))
+                            "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)",
+                            FieldType.ENUM, "%1$s != :filter%2$d")))
                     .put(Operator.GREATER_THAN, new EnumMap<>(Map.of(
                             FieldType.DATE_TIME, "%1$s > parseDateTime64BestEffort(:filter%2$d, 9)",
                             FieldType.NUMBER, "%1$s > :filter%2$d",
@@ -139,6 +142,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.DURATION, DURATION_ANALYTICS_DB)
                     .put(TraceField.THREAD_ID, THREAD_ID_ANALYTICS_DB)
                     .put(TraceField.GUARDRAILS, GUARDRAILS_RESULT_DB)
+                    .put(TraceField.VISIBILITY_MODE, VISIBILITY_MODE_DB)
                     .build());
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
@@ -191,6 +195,7 @@ public class FilterQueryBuilder {
                     .add(TraceField.DURATION)
                     .add(TraceField.THREAD_ID)
                     .add(TraceField.GUARDRAILS)
+                    .add(TraceField.VISIBILITY_MODE)
                     .build()),
             FilterStrategy.TRACE_AGGREGATION, EnumSet.copyOf(ImmutableSet.<TraceField>builder()
                     .add(TraceField.USAGE_COMPLETION_TOKENS)

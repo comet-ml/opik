@@ -79,7 +79,7 @@ class DockerExecutor(CodeExecutorBase):
         if self.stop_event.is_set():
             logger.info("Container pool monitor stopped")
             return schedule.CancelJob  # Cancel this job
-            
+
         try:
             # Update the container pool size metric
             self._update_container_pool_size_metric()
@@ -89,7 +89,7 @@ class DockerExecutor(CodeExecutorBase):
         except Exception as e:
             logger.error(f"Error in pool monitor: {e}")
             return None  # Continue the job despite the error
-            
+
     def _run_scheduler(self):
         """Run the scheduler in a background thread."""
         logger.info("Starting scheduler for container pool monitoring")

@@ -421,7 +421,7 @@ class ExperimentsResourceTest {
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             var workspaceName = UUID.randomUUID().toString();
 
-            var createRequest = getExperimentItemsBatch();
+            var createRequest = createItemsWithoutTrace();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
@@ -668,7 +668,8 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
-            var createRequest = getExperimentItemsBatch();
+            var createRequest = createItemsWithoutTrace();
+
             createAndAssert(createRequest, API_KEY, workspaceName);
             createRequest.experimentItems().forEach(item -> getAndAssert(item, workspaceName, API_KEY));
 
@@ -2967,7 +2968,8 @@ class ExperimentsResourceTest {
         @Test
         @DisplayName("Success")
         void delete() {
-            var createRequest = getExperimentItemsBatch();
+            var createRequest = createItemsWithoutTrace();
+
             createAndAssert(createRequest, API_KEY, TEST_WORKSPACE);
             createRequest.experimentItems()
                     .stream()
@@ -2989,6 +2991,18 @@ class ExperimentsResourceTest {
             ids.forEach(id -> getAndAssertNotFound(id, API_KEY, TEST_WORKSPACE));
         }
 
+    }
+
+    private ExperimentItemsBatch createItemsWithoutTrace() {
+        ExperimentItemsBatch itemsBatch = getExperimentItemsBatch();
+        var createRequest = itemsBatch.toBuilder()
+                .experimentItems(itemsBatch.experimentItems().stream()
+                        .map(experimentItem -> experimentItem.toBuilder()
+                                .traceVisibilityMode(null)
+                                .build())
+                        .collect(toSet()))
+                .build();
+        return createRequest;
     }
 
     @Nested
@@ -3422,6 +3436,7 @@ class ExperimentsResourceTest {
                                     .feedbackScores(null)
                                     .input(null)
                                     .output(null)
+                                    .traceVisibilityMode(null)
                                     .build())
                             .collect(toSet()))
                     .build();
@@ -3837,6 +3852,7 @@ class ExperimentsResourceTest {
                             .lastUpdatedAt(Optional.ofNullable(trace).map(Trace::lastUpdatedAt).orElse(null))
                             .createdBy(USER)
                             .lastUpdatedBy(USER)
+                            .traceVisibilityMode(trace == null ? VisibilityMode.HIDDEN : VisibilityMode.DEFAULT)
                             .build());
         }
 
