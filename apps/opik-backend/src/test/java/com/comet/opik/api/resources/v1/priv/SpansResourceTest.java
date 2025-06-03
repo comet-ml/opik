@@ -1190,7 +1190,7 @@ class SpansResourceTest {
 
         private String getValidValue(Field field) {
             return switch (field.getType()) {
-                case STRING, LIST, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
+                case STRING, LIST, DICTIONARY, ENUM -> RandomStringUtils.secure().nextAlphanumeric(10);
                 case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
                 case DATE_TIME -> Instant.now().toString();
             };
@@ -1198,14 +1198,14 @@ class SpansResourceTest {
 
         private String getKey(Field field) {
             return switch (field.getType()) {
-                case STRING, NUMBER, DATE_TIME, LIST -> null;
+                case STRING, NUMBER, DATE_TIME, LIST, ENUM -> null;
                 case FEEDBACK_SCORES_NUMBER, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
             };
         }
 
         private String getInvalidValue(Field field) {
             return switch (field.getType()) {
-                case STRING, DICTIONARY, LIST -> " ";
+                case STRING, DICTIONARY, LIST, ENUM -> " ";
                 case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
             };
         }

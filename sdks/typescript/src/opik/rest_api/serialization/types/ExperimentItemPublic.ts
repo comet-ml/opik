@@ -5,6 +5,7 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { ExperimentItemPublicTraceVisibilityMode } from "./ExperimentItemPublicTraceVisibilityMode";
 
 export const ExperimentItemPublic: core.serialization.ObjectSchema<
     serializers.ExperimentItemPublic.Raw,
@@ -18,6 +19,10 @@ export const ExperimentItemPublic: core.serialization.ObjectSchema<
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
+    traceVisibilityMode: core.serialization.property(
+        "trace_visibility_mode",
+        ExperimentItemPublicTraceVisibilityMode.optional(),
+    ),
 });
 
 export declare namespace ExperimentItemPublic {
@@ -30,5 +35,6 @@ export declare namespace ExperimentItemPublic {
         last_updated_at?: string | null;
         created_by?: string | null;
         last_updated_by?: string | null;
+        trace_visibility_mode?: ExperimentItemPublicTraceVisibilityMode.Raw | null;
     }
 }

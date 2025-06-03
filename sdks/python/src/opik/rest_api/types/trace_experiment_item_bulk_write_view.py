@@ -11,6 +11,10 @@ from .json_node_experiment_item_bulk_write_view import JsonNodeExperimentItemBul
 
 
 class TraceExperimentItemBulkWriteView(UniversalBaseModel):
+    """
+    Please provide either none, only one of evaluate_task_result or trace, but never both
+    """
+
     id: typing.Optional[str] = None
     project_name: typing.Optional[str] = pydantic.Field(default=None)
     """
