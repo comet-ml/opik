@@ -19,16 +19,16 @@ class OpikAgent:
 
 
 class OpikAgentOptimizer(BaseOptimizer):
-    def __init__(self, project_name, agent_class, tags=None):
+    def __init__(self, project_name, agent_class, task_config, tags=None):
         self.project_name = project_name
         self.agent_class = agent_class
         self.tags = tags
+        self.task_config = task_config
 
     def optimize_prompt(
-        self, agent_config, dataset, metric_config, task_config, n_samples, num_threads
+        self, agent_config, dataset, metric_config, n_samples, num_threads
     ):
         self._opik_client = opik.Opik()
-        self.task_config = task_config
         optimization = None
         try:
             optimization = self._opik_client.create_optimization(

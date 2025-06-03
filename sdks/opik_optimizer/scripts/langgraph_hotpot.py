@@ -168,6 +168,7 @@ optimizer = OpikAgentOptimizer(
     agent_class=LangGraphAgent,
     project_name=project_name,
     tags=["langchain-agent"],
+    task_config=task_config,
 )
 
 agent_config = {
@@ -180,11 +181,19 @@ agent_config = {
     "system-prompt": {"type": "prompt", "value": prompt_template, "template": True},
 }
 
+agent = LangGraphAgent(optimizer, agent_config)
+result = agent.invoke({"question": "Which is heavier: a newborn elephant, or a motor boat?"})
+print(result)
+
 optimizer.optimize_prompt(
     agent_config=agent_config,
     dataset=dataset,
     metric_config=metric_config,
-    task_config=task_config,
     n_samples=10,
     num_threads=16,
 )
+
+# TODO: get the optimizer out of Agent
+# 1. self.optimizer.project_name
+# 2. self.optimizer.tags
+# 3. self.optimizer.task_config.input_dataset_fields
