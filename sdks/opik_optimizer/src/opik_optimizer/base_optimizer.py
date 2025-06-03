@@ -7,7 +7,7 @@ import opik
 from opik.rest_api.core import ApiError
 from pydantic import BaseModel
 
-from . import _throttle
+from . import _throttle, optimization_result
 from .cache_config import initialize_cache
 from .optimization_config import chat_prompt
 from .optimization_config.configs import MetricConfig
@@ -63,7 +63,7 @@ class BaseOptimizer:
         metric_config: MetricConfig,
         experiment_config: Optional[Dict] = None,
         **kwargs,
-    ):
+    ) -> optimization_result.OptimizationResult:
         """
         Optimize a prompt.
 

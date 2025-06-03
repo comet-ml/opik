@@ -106,5 +106,10 @@ def json_to_dict(json_str: str) -> Any:
             cleaned_json_string = cleaned_json_string[3:]
             if cleaned_json_string.endswith("```"):
                 cleaned_json_string = cleaned_json_string[:-3]
-        
-        return json.loads(cleaned_json_string)
+
+        try:
+            return json.loads(cleaned_json_string)
+        except json.JSONDecodeError as e:
+            print(f"Failed to parse JSON string: {json_str}")
+            logger.debug(f"Failed to parse JSON string: {json_str}")
+            raise e

@@ -17,12 +17,15 @@ console = Console()
 def convert_tqdm_to_rich(description: Optional[str] = None, verbose: int = 1):
     """Context manager to convert tqdm to rich."""
     import opik.evaluation.engine.evaluation_tasks_executor
+    
+    optimizer_logger = logging.getLogger('opik_optimizer')
 
     def _tqdm_to_track(iterable, desc, disable, total):
+        disable = verbose == 0 or optimizer_logger.level > logging.INFO
         return track(
             iterable,
             description=description or desc,
-            disable=disable or verbose >= 1,
+            disable=disable,
             total=total
         )
 
@@ -44,6 +47,8 @@ def convert_tqdm_to_rich(description: Optional[str] = None, verbose: int = 1):
 @contextmanager
 def suppress_opik_logs():
     """Suppress Opik startup logs by temporarily increasing the log level."""
+    # Optimizer log level
+    optimizer_logger = logging.getLogger('opik_optimizer')
     
     # Get the Opik logger
     opik_logger = logging.getLogger("opik.api_objects.opik_client")
@@ -52,7 +57,7 @@ def suppress_opik_logs():
     original_level = opik_logger.level
     
     # Set log level to ERROR to suppress INFO messages
-    opik_logger.setLevel(logging.ERROR)
+    opik_logger.setLevel(optimizer_logger.level)
     
     try:
         yield

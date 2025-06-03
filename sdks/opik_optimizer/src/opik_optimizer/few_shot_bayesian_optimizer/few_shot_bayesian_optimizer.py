@@ -40,7 +40,7 @@ Your task:
     - Add a section title in XML or markdown format. The examples will be provided as `example_1\nexample_2\n...` with each example following the example template.
 - Analyze the examples to infer a consistent structure, and create a single string few_shot_example_template using the Python .format() style. Make sure to follow the following instructions:
     - Unless absolutely relevant, do not return an object but instead a string that can be inserted as part of {FEW_SHOT_EXAMPLE_PLACEHOLDER}
-    - Make sure to include the variables as part of this string so we can before string formatting with actual examples. On variables available in the examples can be used. Do not use anything else.
+    - Make sure to include the variables as part of this string so we can before string formatting with actual examples. On variables available in the examples can be used. Do not use anything else, do not apply any transformations to the variables either.
     - Ensure the format of the few shot examples are consistent with how the model will be called
 
 Return your output as a JSON object with:
@@ -308,8 +308,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         optuna_history_processed = []
         for trial_idx, trial in enumerate(study.trials):
             if trial.state == optuna.trial.TrialState.COMPLETE:
-                trial_config = trial.user_attrs.get("config")
-                prompt_cand_display = trial_config['message_list'] # Default to None
+                trial_config = trial.user_attrs.get("config", {})
+                prompt_cand_display = trial_config.get('message_list') # Default to None
                 
                 score_val = trial.value # This can be None if trial failed to produce a score
                 duration_val = None
@@ -359,7 +359,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "total_trials": n_trials,
                 "rounds": [],
                 "stopped_early": False,
-                "metric_config": metric_config.model_dump(),
+                "metric_name": metric_config.metric.name,
+                "metric_inputs": metric_config.inputs,
                 "model": self.model,
                 "temperature": self.model_kwargs.get("temperature"),
             },
@@ -367,14 +368,14 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             llm_calls=self.llm_call_counter
         )
 
-    def optimize_prompt(
+    def optimize_prompt( # type: ignore
         self,
-        dataset: Dataset,
         prompt: chat_prompt.ChatPrompt,
+        dataset: Dataset,
         metric_config: MetricConfig,
         n_trials: int = 10,
         experiment_config: Optional[Dict] = None,
-        n_samples: Optional[int] = None
+        n_samples: Optional[int] = None,
     ) -> optimization_result.OptimizationResult:
         optimization = None
         try:

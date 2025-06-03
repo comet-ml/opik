@@ -372,7 +372,7 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
 Task context: {self._get_task_description_for_llm(initial_prompt)}
 Desired output style from target LLM: '{current_output_style_guidance}'
 Instruction for this modification: {strategy_prompts[strategy]}.
-Return only the modified prompt message list, nothing else.
+Return only the modified prompt message list, nothing else. Make sure to return a valid JSON object.
 """
             response = self._call_model(
                 messages=[
@@ -760,11 +760,14 @@ Return only the new prompt list object.
         
         # --- evaluation ------------------------------------------------
         invalid = [ind for ind in offspring if not ind.fitness.valid]
-        report.performing_evaluation()
-        for ind, fit in zip(invalid, map(self.toolbox.evaluate, invalid)):
+        report.performing_evaluation(len(invalid))
+        for ind_idx, ind in enumerate(invalid):
+            fit = self.toolbox.evaluate(ind)
             ind.fitness.values = fit
             best_gen_score = max(best_gen_score, fit[0])
 
+            report.performed_evaluation(ind_idx, ind.fitness.values[0])
+        
         # --- update HoF & reporter ------------------------------------
         hof.update(offspring)
         reporting.end_gen(generation_idx, best_gen_score, best_primary_score_overall, verbose=self.verbose)
@@ -1065,7 +1068,8 @@ Return only the new prompt list object.
             "crossover_probability": self.crossover_rate,
             "elitism_size": self.elitism_size if not self.enable_moo else "N/A (MOO uses NSGA-II)",
             "adaptive_mutation": self.adaptive_mutation,
-            "metric_config": metric_config.dict(),
+            "metric_name": metric_config.metric.name,
+            "metric_inputs": metric_config.inputs,
             "model": self.model,
             "moo_enabled": self.enable_moo,
             "llm_crossover_enabled": self.enable_llm_crossover,
@@ -1145,6 +1149,8 @@ Return only the new prompt list object.
             response = litellm.completion(
                 model=self.model, messages=messages, **final_call_params
             )
+
+            logger.debug(f"Response: {response}")
             return response.choices[0].message.content
         except litellm_exceptions.RateLimitError as e:
             logger.error(f"LiteLLM Rate Limit Error: {e}")
@@ -1194,10 +1200,14 @@ Return only the new prompt list object.
         def llm_task(
                 dataset_item: Dict[str, Any]
             ) -> Dict[str, str]:
-            messages = [{
-                "role": item["role"],
-                "content": item["content"].format(**dataset_item)
-            } for item in prompt.formatted_messages]
+            try:
+                messages = [{
+                    "role": item["role"],
+                    "content": item["content"].format(**dataset_item)
+                } for item in prompt.formatted_messages]
+            except Exception as e:
+                logger.warning(f"Error in llm_task, this is usually a parsing error: {e}")
+                return {mappers.EVALUATED_LLM_TASK_OUTPUT: ""}
             
             model_output = self._call_model(
                 messages=messages,

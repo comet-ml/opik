@@ -79,3 +79,16 @@ class ChatPrompt:
 
     def format(self, **kwargs: Any) -> str:
         return self.prompt.format(**kwargs)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert ChatPrompt to a dictionary for JSON serialization.
+        
+        Returns:
+            Dict containing the serializable representation of this ChatPrompt
+        """
+        return {
+            "system": self.system,
+            "prompt": self.prompt,
+            "messages": self.messages,
+            "formatted_messages": self.formatted_messages
+        }

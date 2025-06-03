@@ -31,8 +31,10 @@ def test_few_shot_optimizer():
     )
 
     prompt = chat_prompt.ChatPrompt(
-        system="Provide an answer to the question.",
-        prompt="{question}"
+        messages=[
+            {"role": "system", "content": "Provide an answer to the question."},
+            {"role": "user", "content": "{question}"}
+        ],
     )
 
     results = optimizer.optimize_prompt(

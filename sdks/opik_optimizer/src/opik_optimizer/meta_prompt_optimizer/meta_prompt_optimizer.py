@@ -601,7 +601,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             "final_score": best_score,
             "rounds": rounds,
             "total_rounds": len(rounds),
-            "metric_config": metric_config.model_dump(),
+            "metric_name": metric_config.metric.name,
+            "metric_inputs": metric_config.inputs,
             "model": self.model,
             "temperature": self.model_kwargs.get("temperature"),
         }

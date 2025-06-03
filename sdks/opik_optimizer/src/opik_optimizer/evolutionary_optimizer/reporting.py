@@ -206,10 +206,14 @@ def start_evolutionary_algo(verbose: int = 1):
             if verbose >= 1:
                 rich.print(Text("│      Performing mutation - Altering prompts to improve their performance."))
         
-        def performing_evaluation(self):
+        def performing_evaluation(self, num_prompts: int):
             if verbose >= 1:
-                rich.print(Text("│      Performing evaluation - Assessing prompts' performance."))
+                rich.print(Text(f"│      Performing evaluation - Assessing {num_prompts} prompts' performance."))
         
+        def performed_evaluation(self, prompt_idx: int, score: float):
+            if verbose >= 1:
+                rich.print(Text(f"│      Performed evaluation for prompt {prompt_idx} - Score: {score:.4f}.", style="dim"))
+
     # Use our log suppression context manager and yield the reporter
     with suppress_opik_logs():
         with convert_tqdm_to_rich("│         Evaluation", verbose=verbose):

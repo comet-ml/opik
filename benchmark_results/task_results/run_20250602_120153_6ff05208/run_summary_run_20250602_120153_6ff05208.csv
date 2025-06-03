@@ -1,4 +1,0 @@
-run_id,task_id,dataset,optimizer,model_name,status,duration_seconds_task,error_message,json_file_path
-run_20250602_120153_6ff05208,arc-few_shot-openai-gpt-4o-mini-future_exception,arc,few_shot,,failure_exception_processing_future,,cannot pickle '_thread.RLock' object,
-run_20250602_120153_6ff05208,ragbench_sentence_relevance-few_shot-openai-gpt-4o-mini-future_exception,ragbench_sentence_relevance,few_shot,,failure_exception_processing_future,,cannot pickle '_thread.RLock' object,
-run_20250602_120153_6ff05208,ragbench_sentence_relevance-meta_prompt-openai-gpt-4o-mini-future_exception,ragbench_sentence_relevance,meta_prompt,,failure_exception_processing_future,,cannot pickle '_thread.RLock' object,
