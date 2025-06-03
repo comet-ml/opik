@@ -122,19 +122,31 @@ class OpikTracer:
         self._opik_created_trace_id = new_trace_data.id
 
     def _end_current_trace(self) -> None:
-        if (trace_data := self._context_storage.pop_trace_data()) is not None:
-            trace_data.init_end_time()
-            self._opik_client.trace(**trace_data.__dict__)
-        else:
+        is_error = True
+
+        if trace_data := self._context_storage.get_trace_data():
+            if trace_data.id == self._opik_created_trace_id:
+                self._context_storage.set_trace_data(None)
+                trace_data.init_end_time()
+                self._opik_client.trace(**trace_data.__dict__)
+                is_error = False
+
+        if is_error:
             LOGGER.error("Failed during _end_current_trace(): trace is not found.")
 
     def _end_current_span(
         self,
     ) -> None:
-        if (span_data := self._context_storage.pop_span_data()) is not None:
-            span_data.init_end_time()
-            self._opik_client.span(**span_data.__dict__)
-        else:
+        is_error = True
+
+        if span_data := self._context_storage.top_span_data():
+            if span_data.id in self._opik_created_spans:
+                self._context_storage.pop_span_data()
+                span_data.init_end_time()
+                self._opik_client.span(**span_data.__dict__)
+                is_error = False
+
+        if is_error:
             LOGGER.error("Failed during _end_current_span(): span is not found.")
 
     def _set_current_context_data(self, value: SpanOrTraceData) -> None:
@@ -146,18 +158,18 @@ class OpikTracer:
             raise ValueError(f"Invalid context type: {type(value)}")
 
     def _ensure_no_hanging_opik_tracer_spans(self) -> None:
-        external_parent_span_id = self._external_parent_span_id.get()
-        there_were_no_external_spans_before_chain_invocation = (
-            external_parent_span_id is None
-        )
-
-        if there_were_no_external_spans_before_chain_invocation:
-            self._context_storage.clear_spans()
+        # handle spans created by this tracer
+        if external_parent_span_id := self._external_parent_span_id.get():
+            self._context_storage.trim_span_data_stack_to_certain_span(external_parent_span_id)
         else:
-            assert external_parent_span_id is not None
-            self._context_storage.trim_span_data_stack_to_certain_span(
-                external_parent_span_id
-            )
+            self._context_storage.clear_spans()
+        self._opik_created_spans.clear()
+
+        # handle trace created by this tracer
+        if current_trace_data := self._context_storage.get_trace_data():
+            if current_trace_data.id == self._opik_created_trace_id:
+                self._opik_created_trace_id = None
+                self._context_storage.set_trace_data(None)
 
     def before_agent_callback(
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
@@ -212,15 +224,15 @@ class OpikTracer:
         try:
             output = self._last_model_output
 
-            if (span_data := self._context_storage.top_span_data()) is None:
+            if span_data := self._context_storage.top_span_data():
+                span_data.update(output=output).init_end_time()
+                self._end_current_span()
+            else:
                 trace_data = self._context_storage.get_trace_data()
                 assert trace_data is not None
                 trace_data.update(output=output).init_end_time()
                 self._end_current_trace()
                 self._last_model_output = None
-            else:
-                span_data.update(output=output).init_end_time()
-                self._end_current_span()
         except Exception as e:
             LOGGER.error(f"Failed during after_agent_callback(): {e}", exc_info=True)
         finally:
