@@ -19,13 +19,14 @@ class OpikAgent:
 
 
 class OpikAgentOptimizer(BaseOptimizer):
-    def __init__(self, project_name, agent_class, num_threads, tags=None):
+    def __init__(self, project_name, agent_class, tags=None):
         self.project_name = project_name
         self.agent_class = agent_class
-        self.num_threads = num_threads
         self.tags = tags
 
-    def optimize_prompt(self, dataset, metric_config, task_config, n_samples):
+    def optimize_prompt(
+        self, agent_config, dataset, metric_config, task_config, n_samples, num_threads
+    ):
         self._opik_client = opik.Opik()
         self.task_config = task_config
         optimization = None
@@ -33,7 +34,7 @@ class OpikAgentOptimizer(BaseOptimizer):
             optimization = self._opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric_config.metric.name,
-                metadata={"optimizer": self.__class__.__name__},
+                metadata={"optimizer": self.agent_class.__name__},
             )
         except Exception:
             logger.warning(
@@ -44,14 +45,6 @@ class OpikAgentOptimizer(BaseOptimizer):
         if not optimization:
             logger.warning("Continuing without Opik optimization tracking.")
 
-        self.tools = self.task_config.tools
-        prompt_template = self.task_config.instruction_prompt
-
-        agent_config = {
-            "prompts": [prompt_template],
-            "tools": self.tools,
-        }
-
         # Build user's agent invoke method:
         agent = self.agent_class(self, agent_config)
 
@@ -59,8 +52,14 @@ class OpikAgentOptimizer(BaseOptimizer):
             item["id"] for item in random.sample(dataset.get_items(), n_samples)
         ]
 
+        prompt = [
+            agent_config[key]
+            for key in agent_config
+            if agent_config[key]["type"] == "prompt"
+        ][0]
+
         experiment_config = {
-            "optimizer": self.__class__.__name__,
+            "optimizer": self.agent_class.__name__,
             "tools": (
                 [f["name"] for f in self.task_config.tools]
                 if self.task_config.tools
@@ -69,19 +68,19 @@ class OpikAgentOptimizer(BaseOptimizer):
             "metric": metric_config.metric.name,
             "dataset": dataset.name,
             "configuration": {
-                "prompt": prompt_template,
+                "prompt": prompt["value"],
             },
             "evaluation": "initial",
         }
         print("Initial prompt:")
-        print(prompt_template)
+        print(prompt["value"])
         score = task_evaluator.evaluate(
             dataset=dataset,
             evaluated_task=agent.invoke,
             metric_config=metric_config,
             dataset_item_ids=dataset_item_ids,
             project_name=self.project_name,
-            num_threads=self.num_threads,
+            num_threads=num_threads,
             experiment_config=experiment_config,
             optimization_id=optimization.id,
         )
@@ -105,17 +104,14 @@ Here is the prompt:
 
 %r
 """
-                % prompt_template
+                % prompt["value"]
             )
             new_prompt = new_prompt.replace("\\n", "\n")
             experiment_config["configuration"]["prompt"] = new_prompt
 
             print(new_prompt)
 
-            agent_config = {
-                "prompts": [new_prompt],
-                "tools": self.tools,
-            }
+            prompt["value"] = new_prompt
 
             agent = self.agent_class(self, agent_config)
 
@@ -126,7 +122,7 @@ Here is the prompt:
                 metric_config=metric_config,
                 dataset_item_ids=dataset_item_ids,
                 project_name=self.project_name,
-                num_threads=self.num_threads,
+                num_threads=num_threads,
                 experiment_config=experiment_config,
                 optimization_id=optimization.id,
             )

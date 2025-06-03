@@ -77,35 +77,34 @@ metric_config = MetricConfig(
     },
 )
 
-tools = [
-    {
-        "name": "Wikipedia Search",
-        "func": search_wikipedia,
-        "description": "Search wikipedia for abstracts. Gives a brief paragraph about a topic.",
-    },
-]
-
 task_config = TaskConfig(
     instruction_prompt=prompt_template,
     input_dataset_fields=["question"],
     output_dataset_field="answer",
-    tools=tools,
 )
 
 
 class LangGraphAgent(OpikAgent):
-    def init_agent(self, agent_config):
-        prompt_template = agent_config["prompts"][0]
-        prompt = PromptTemplate.from_template(prompt_template)
-        tools = agent_config["tools"]
-        self.llm = ChatOpenAI(model="gpt-4o", temperature=0, stream_usage=True)
+    def __init__(self, optimizer, agent_config):
+        self.optimizer = optimizer
+        if agent_config["system-prompt"]["template"]:
+            prompt_template = agent_config["system-prompt"]["value"]
+            prompt = PromptTemplate.from_template(prompt_template)
+        else:
+            prompt = agent_config["system-prompt"]["value"]
 
         agent_tools = []
-        for tool in tools:
-            tool_instance = Tool(
-                name=tool["name"], func=tool["func"], description=tool["description"]
-            )
-            agent_tools.append(tool_instance)
+        for key in agent_config:
+            item = agent_config[key]
+            if item["type"] == "tool":
+                agent_tools.append(
+                    Tool(
+                        name=key,
+                        func=item["function"],
+                        description=item["value"],
+                    )
+                )
+        self.llm = ChatOpenAI(model="gpt-4o", temperature=0, stream_usage=True)
 
         agent = create_react_agent(self.llm, tools=agent_tools, prompt=prompt)
         agent_executor = AgentExecutor(
@@ -154,10 +153,13 @@ class LangGraphAgent(OpikAgent):
     def invoke(self, item: Dict[str, Any]) -> Dict[str, Any]:
         # "input" and "output" are Agent State fields
         # FIXME: need to map input_dataset_fields to correct state fields:
+        messages = agent_config["chat-prompt"]["value"]
         state = {
             "input": item[key]
             for key in self.optimizer.task_config.input_dataset_fields
         }
+        messages.append(state)
+        # FIXME: allow messages
         result = self.graph.invoke(state)
         return {"output": result["output"]}
 
@@ -166,12 +168,23 @@ optimizer = OpikAgentOptimizer(
     agent_class=LangGraphAgent,
     project_name=project_name,
     tags=["langchain-agent"],
-    num_threads=16,
 )
 
+agent_config = {
+    "chat-prompt": {"type": "chat", "value": []},
+    "Wikipedia Search": {
+        "type": "tool",
+        "value": "Search wikipedia for abstracts. Gives a brief paragraph about a topic.",
+        "function": search_wikipedia,
+    },
+    "system-prompt": {"type": "prompt", "value": prompt_template, "template": True},
+}
+
 optimizer.optimize_prompt(
+    agent_config=agent_config,
     dataset=dataset,
     metric_config=metric_config,
     task_config=task_config,
     n_samples=10,
+    num_threads=16,
 )
