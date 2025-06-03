@@ -10,13 +10,18 @@ from opik.types import DistributedTraceHeadersDict
 from . import arguments_helpers
 
 
-def create_span_for_current_context(
+def create_span_respecting_context(
     start_span_arguments: arguments_helpers.StartSpanParameters,
     distributed_trace_headers: Optional[DistributedTraceHeadersDict],
+    opik_context_storage: Optional[context_storage.OpikContextStorage] = None,
 ) -> Tuple[Optional[trace.TraceData], span.SpanData]:
     """
     Handles different span creation flows.
     """
+
+    if opik_context_storage is None:
+        opik_context_storage = context_storage.get_current_context_instance()
+
     if distributed_trace_headers:
         span_data = arguments_helpers.create_span_data(
             start_span_arguments=start_span_arguments,
@@ -26,8 +31,8 @@ def create_span_for_current_context(
 
         return None, span_data
 
-    current_span_data = context_storage.top_span_data()
-    current_trace_data = context_storage.get_trace_data()
+    current_span_data = opik_context_storage.top_span_data()
+    current_trace_data = opik_context_storage.get_trace_data()
 
     if current_span_data is not None:
         # There is already at least one span in the current context - attach a new span to it.
