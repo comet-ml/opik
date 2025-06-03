@@ -46,7 +46,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
   const handleAddTag = () => {
     if (!newTag) return;
 
-    const promises: Promise<any>[] = [];
+    const promises: Promise<unknown>[] = [];
 
     rows.forEach((row) => {
       const currentTags = row.tags || [];
@@ -65,7 +65,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
               project_id: projectId,
               tags: newTags,
             },
-          })
+          }),
         );
       } else {
         const span = row as Span;
@@ -82,7 +82,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
               trace_id: span.trace_id,
               tags: newTags,
             },
-          })
+          }),
         );
       }
     });
@@ -102,7 +102,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
 
         handleClose();
       })
-      .catch((error) => {
+      .catch(() => {
         // Error handling is already done by the mutation hooks,this just ensures we don't close the dialog on error
       });
   };
