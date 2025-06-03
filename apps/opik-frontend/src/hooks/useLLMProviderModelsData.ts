@@ -752,7 +752,7 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     },
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_GUARD_4_12B,
-      label: "meta-llama/llama-guard-3-12b",
+      label: "meta-llama/llama-guard-4-12b",
     },
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_4_MAVERICK,
