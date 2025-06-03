@@ -52,7 +52,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.BadRequestException;
-import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -76,7 +75,6 @@ import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
@@ -216,21 +214,12 @@ public class TracesResource {
     @UsageLimited
     public Response createTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceBatch.class))) @JsonView(Trace.View.Write.class) @NotNull @Valid TraceBatch traces) {
-
-        traces.traces()
-                .stream()
-                .filter(trace -> trace.id() != null) // Filter out spans with null IDs
-                .collect(Collectors.groupingBy(Trace::id))
-                .forEach((id, traceGroup) -> {
-                    if (traceGroup.size() > 1) {
-                        throw new ClientErrorException("Duplicate trace id '%s'".formatted(id), 422);
-                    }
-                });
-
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Creating traces batch with size '{}' on workspaceId '{}'", traces.traces().size(), workspaceId);
         service.create(traces)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-
+        log.info("Created traces batch with size '{}' on workspaceId '{}'", traces.traces().size(), workspaceId);
         return Response.noContent().build();
     }
 
@@ -400,17 +389,12 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     public Response deleteTraceFeedbackScore(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = DeleteFeedbackScore.class))) @NotNull @Valid DeleteFeedbackScore score) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        log.info("Delete span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
-
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Delete trace feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
         feedbackScoreService.deleteTraceScore(id, score.name())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-
-        log.info("Deleted span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
-
+        log.info("Deleted trace feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
         return Response.noContent().build();
     }
 

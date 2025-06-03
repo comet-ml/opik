@@ -4943,26 +4943,6 @@ class SpansResourceTest {
         }
 
         @Test
-        void batch__whenSendingMultipleSpansWithSameId__thenReturn422() {
-            var id = generator.generate();
-            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
-                    .map(span -> span.toBuilder()
-                            .id(id)
-                            .build())
-                    .toList();
-            try (var actualResponse = spanResourceClient.callBatchCreateSpans(spans, API_KEY, TEST_WORKSPACE)) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode())
-                        .isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                var actualErrorMessage = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                var expectedErrorMessage = new io.dropwizard.jersey.errors.ErrorMessage(
-                        HttpStatus.SC_UNPROCESSABLE_ENTITY, "Duplicate span id '%s'".formatted(id));
-                assertThat(actualErrorMessage).isEqualTo(expectedErrorMessage);
-            }
-        }
-
-        @Test
         void batch__whenMissingFields__thenReturnNoContent() {
             var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
             var expectedSpans = IntStream.range(0, 5)

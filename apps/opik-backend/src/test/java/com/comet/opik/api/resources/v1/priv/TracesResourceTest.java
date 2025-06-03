@@ -5874,26 +5874,6 @@ class TracesResourceTest {
         }
 
         @Test
-        void batch__whenSendingMultipleTracesWithSameId__thenReturn422() {
-            var id = generator.generate();
-            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
-                    .map(trace -> trace.toBuilder()
-                            .id(id)
-                            .build())
-                    .toList();
-            try (var actualResponse = traceResourceClient.callBatchCreateTraces(traces, API_KEY, TEST_WORKSPACE)) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode())
-                        .isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                var actualErrorMessage = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                var expectedErrorMessage = new io.dropwizard.jersey.errors.ErrorMessage(
-                        HttpStatus.SC_UNPROCESSABLE_ENTITY, "Duplicate trace id '%s'".formatted(id));
-                assertThat(actualErrorMessage).isEqualTo(expectedErrorMessage);
-            }
-        }
-
-        @Test
         void batch__whenMissingFields__thenReturnNoContent() {
             var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
             var expectedTraces = IntStream.range(0, 5)
