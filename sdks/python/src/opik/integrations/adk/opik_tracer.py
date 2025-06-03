@@ -160,7 +160,9 @@ class OpikTracer:
     def _ensure_no_hanging_opik_tracer_spans(self) -> None:
         # handle spans created by this tracer
         if external_parent_span_id := self._external_parent_span_id.get():
-            self._context_storage.trim_span_data_stack_to_certain_span(external_parent_span_id)
+            self._context_storage.trim_span_data_stack_to_certain_span(
+                external_parent_span_id
+            )
         else:
             self._context_storage.clear_spans()
         self._opik_created_spans.clear()
@@ -245,32 +247,37 @@ class OpikTracer:
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        input = adk_helpers.convert_adk_base_model_to_dict(llm_request)
+        try:
+            input = adk_helpers.convert_adk_base_model_to_dict(llm_request)
 
-        provider, model = litellm_wrappers.parse_provider_and_model(llm_request.model)
+            provider, model = litellm_wrappers.parse_provider_and_model(
+                llm_request.model
+            )
 
-        if (current_span_data := self._context_storage.top_span_data()) is not None:
-            self._attach_span_to_existing_span(
-                current_span_data=current_span_data,
-                name=llm_request.model,
-                provider=provider,
-                model=model,
-                input=input,
-                type="llm",
-                metadata=self.metadata,
-            )
-        else:
-            current_trace_data = self._context_storage.get_trace_data()
-            assert current_trace_data is not None
-            self._attach_span_to_existing_trace(
-                current_trace_data=current_trace_data,
-                name=llm_request.model,
-                provider=provider,
-                model=model,
-                input=input,
-                type="llm",
-                metadata=self.metadata,
-            )
+            if current_span_data := self._context_storage.top_span_data():
+                self._attach_span_to_existing_span(
+                    current_span_data=current_span_data,
+                    name=llm_request.model,
+                    provider=provider,
+                    model=model,
+                    input=input,
+                    type="llm",
+                    metadata=self.metadata,
+                )
+            else:
+                current_trace_data = self._context_storage.get_trace_data()
+                assert current_trace_data is not None
+                self._attach_span_to_existing_trace(
+                    current_trace_data=current_trace_data,
+                    name=llm_request.model,
+                    provider=provider,
+                    model=model,
+                    input=input,
+                    type="llm",
+                    metadata=self.metadata,
+                )
+        except Exception as e:
+            LOGGER.error(f"Failed during before_model_callback(): {e}", exc_info=True)
 
     def after_model_callback(
         self,
@@ -307,18 +314,18 @@ class OpikTracer:
 
         self._last_model_output = output
 
-        span_data = self._context_storage.top_span_data()
-        if span_data is None:
-            LOGGER.debug("Failed during after_model_callback(): span is not found.")
-            return
-
-        span_data.update(
-            output=output,
-            usage=usage,
-            model=model,
-            provider=provider,
-        )
-        self._end_current_span()
+        try:
+            span_data = self._context_storage.top_span_data()
+            assert span_data is not None
+            span_data.update(
+                output=output,
+                usage=usage,
+                model=model,
+                provider=provider,
+            )
+            self._end_current_span()
+        except Exception as e:
+            LOGGER.error(f"Failed during after_model_callback(): {e}", exc_info=True)
 
     def before_tool_callback(
         self,
