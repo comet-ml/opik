@@ -167,10 +167,12 @@ export class Experiment {
 
   async getUrl(): Promise<string> {
     const dataset = await this.opik.getDataset(this.datasetName);
+    const baseUrl = this.opik.config.apiUrl || DEFAULT_CONFIG.apiUrl;
+
     return getExperimentUrlById({
       datasetId: dataset.id,
       experimentId: this.id,
-      baseUrl: this.opik.config.apiUrl || DEFAULT_CONFIG.apiUrl,
+      baseUrl,
     });
   }
 }

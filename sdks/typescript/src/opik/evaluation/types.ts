@@ -2,8 +2,8 @@
  * Evaluation task function type
  * Takes a dataset item as input and returns a result object
  */
-export type EvaluationTask = (
-  datasetItem: Record<string, unknown>
+export type EvaluationTask<T = Record<string, unknown>> = (
+  datasetItem: T
 ) => Promise<Record<string, unknown>> | Record<string, unknown>;
 
 /**

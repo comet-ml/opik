@@ -1,5 +1,6 @@
 import { track } from "@/decorators/track";
 import { EvaluationScoreResult } from "../types";
+import { SpanType } from "@/rest_api/api";
 
 /**
  * Abstract base class for all metrics. When creating a new metric, you should extend
@@ -63,8 +64,14 @@ export abstract class BaseMetric {
       const originalAScore = this.ascore;
 
       // Apply tracking decorator to methods
-      this.score = track({ name: this.name, projectName })(originalScore);
-      this.ascore = track({ name: this.name, projectName })(originalAScore);
+      this.score = track(
+        { name: this.name, projectName, type: SpanType.General },
+        originalScore
+      );
+      this.ascore = track(
+        { name: this.name, projectName, type: SpanType.General },
+        originalAScore
+      );
     }
   }
 

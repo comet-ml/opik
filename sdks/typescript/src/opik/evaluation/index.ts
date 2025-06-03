@@ -4,10 +4,5 @@
  */
 
 export * from "./evaluate";
-export * from "./metrics/BaseMetric";
-export * from "./metrics/ExactMatch";
-export * from "./metrics/Contains";
-export * from "./metrics/RegexMatch";
+export * from "./metrics";
 export * from "./types";
-export * from "./engine/EvaluationEngine";
-export * from "./results/EvaluationResultProcessor";

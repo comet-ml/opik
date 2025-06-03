@@ -3,6 +3,7 @@ import { Dataset } from "../../dataset/Dataset";
 import { Experiment } from "../../experiment/Experiment";
 import { BaseMetric } from "../metrics/BaseMetric";
 import {
+  EvaluationResult,
   EvaluationScoreResult,
   EvaluationTask,
   EvaluationTestCase,
@@ -11,19 +12,29 @@ import {
 } from "../types";
 import { logger } from "@/utils/logger";
 import { EvaluateOptions } from "../evaluate";
+import { validateRequiredArguments } from "../metrics/argumentsValidator";
+import { Trace } from "@/tracer/Trace";
+import { track, trackStorage } from "@/decorators/track";
+import { EvaluationResultProcessor } from "../results";
+import { DatasetItemData } from "../../dataset/DatasetItem";
+import { ExperimentItemReferences } from "@/experiment";
+import { SpanType } from "@/rest_api/api";
 
 /**
  * Core class that handles the evaluation process
  */
-export class EvaluationEngine {
+export class EvaluationEngine<T = Record<string, unknown>> {
   private readonly client: OpikClient;
-  private readonly experiment: Experiment;
-  private readonly dataset: Dataset;
-  private readonly task: EvaluationTask;
+  private readonly dataset: Dataset<
+    T extends DatasetItemData ? T : DatasetItemData & T
+  >;
+  private readonly task: EvaluationTask<T>;
   private readonly scoringMetrics: BaseMetric[];
   private readonly projectName?: string;
   private readonly nbSamples?: number;
   private readonly scoringKeyMapping?: ScoringKeyMappingType;
+  private readonly experiment: Experiment;
+  private rootTrace!: Trace;
 
   /**
    * Create a new EvaluationEngine
@@ -33,13 +44,13 @@ export class EvaluationEngine {
    * @param experiment Experiment instance
    */
   constructor(
-    options: EvaluateOptions,
+    options: EvaluateOptions<T>,
     client: OpikClient,
     experiment: Experiment
   ) {
     this.client = client;
-    this.experiment = experiment;
     this.dataset = options.dataset;
+    this.experiment = experiment;
     this.task = options.task;
     this.scoringMetrics = options.scoringMetrics || [];
     this.projectName = options.projectName;
@@ -52,7 +63,10 @@ export class EvaluationEngine {
    *
    * @returns An array of test results
    */
-  public async execute(): Promise<EvaluationTestResult[]> {
+  public async execute(): Promise<EvaluationResult> {
+    // Record start time
+    const startTime = performance.now();
+
     // Process dataset items
     const datasetItems = await this.dataset.getItems(this.nbSamples);
 
@@ -61,14 +75,56 @@ export class EvaluationEngine {
 
     for (const datasetItem of datasetItems) {
       try {
+        this.rootTrace = this.client.trace({
+          projectName: this.projectName,
+          name: `evaluation_task`,
+          createdBy: "evaluation",
+          input: datasetItem,
+        });
+        trackStorage.enterWith({ trace: this.rootTrace });
         const testResult = await this.executeTask(datasetItem);
         testResults.push(testResult);
+
+        this.rootTrace.update({
+          output: testResult.testCase.taskOutput,
+        });
+        this.rootTrace.end();
       } catch (error) {
         logger.error(`Error processing dataset item: ${datasetItem.id}`, error);
+
+        if (error instanceof Error) {
+          this.rootTrace.update({
+            errorInfo: {
+              message: error.message,
+              exceptionType: error.name,
+              traceback: error.stack ?? "",
+            },
+          });
+        }
+        this.rootTrace.end();
       }
     }
 
-    return testResults;
+    const experimentItemReferences = testResults.map(
+      (testResult) =>
+        new ExperimentItemReferences({
+          datasetItemId: testResult.testCase.datasetItemId,
+          traceId: testResult.testCase.traceId,
+        })
+    );
+    this.experiment.insert(experimentItemReferences);
+
+    await this.client.flush();
+
+    // Calculate total execution time in seconds
+    const endTime = performance.now();
+    const totalTimeSeconds = (endTime - startTime) / 1000;
+
+    return EvaluationResultProcessor.processResults(
+      testResults,
+      this.experiment,
+      totalTimeSeconds
+    );
   }
 
   /**
@@ -78,93 +134,80 @@ export class EvaluationEngine {
    * @returns The test result
    */
   private async executeTask(
-    datasetItem: Record<string, unknown>
+    datasetItem: DatasetItemData & T
   ): Promise<EvaluationTestResult> {
     let taskOutput: Record<string, unknown> = {};
-    let scoreResults: EvaluationScoreResult[] = [];
+    const scoreResults: EvaluationScoreResult[] = [];
 
-    try {
-      // Execute the task and capture the output
-      taskOutput = await this.task(datasetItem);
+    logger.info(`Starting evaluation task on dataset item ${datasetItem.id}`);
+    taskOutput = await track(
+      { name: "llm_task", type: SpanType.General },
+      this.task
+    )(datasetItem);
+    logger.info(`Finished evaluation task on dataset item ${datasetItem.id}`);
+    // Map scoring keys if needed
+    const scoringInputs = this.prepareScoringInputs(datasetItem, taskOutput);
 
-      // Map scoring keys if needed
-      const scoringInputs = this.prepareScoringInputs(datasetItem, taskOutput);
+    // Create test case
+    const testCase: EvaluationTestCase = {
+      traceId: this.rootTrace.data.id,
+      datasetItemId: datasetItem.id as string,
+      scoringInputs,
+      taskOutput,
+    };
 
-      // Calculate scores for each metric
-      if (this.scoringMetrics.length > 0) {
-        scoreResults = await this.calculateScores(scoringInputs);
-      }
-
-      // Create test case
-      const testCase: EvaluationTestCase = {
-        traceId: "traceId",
-        datasetItemId: datasetItem.id as string,
-        scoringInputs,
-        taskOutput,
-      };
-
-      return {
-        testCase,
-        scoreResults,
-      };
-    } catch (error) {
-      logger.error("Error executing task", error);
-
-      // Create a failed test case
-      const testCase: EvaluationTestCase = {
-        traceId: "traceId",
-        datasetItemId: datasetItem.id as string,
-        scoringInputs: {},
-        taskOutput: {},
-      };
-
-      return {
-        testCase,
-        scoreResults: [
-          {
-            name: "task_execution",
-            value: 0,
-            reason: `Task execution failed: ${error}`,
-            scoringFailed: true,
-          },
-        ],
-      };
-    } finally {
-      /// end trace
+    // Calculate scores for each metric
+    if (this.scoringMetrics.length > 0) {
+      return this.calculateScores(testCase);
     }
+
+    return {
+      testCase,
+      scoreResults,
+    };
   }
 
   /**
    * Calculate scores for all metrics
    *
-   * @param scoringInputs Inputs for the scoring metrics
+   * @param testCase The test case to calculate scores for
    * @returns Array of score results
    */
+  @track({ name: "metrics_calculation", type: SpanType.General })
   private async calculateScores(
-    scoringInputs: Record<string, unknown>
-  ): Promise<EvaluationScoreResult[]> {
+    testCase: EvaluationTestCase
+  ): Promise<EvaluationTestResult> {
     const scoreResults: EvaluationScoreResult[] = [];
+    const { scoringInputs } = testCase;
 
     for (const metric of this.scoringMetrics) {
-      try {
-        const metricResults = await metric.score(scoringInputs);
-        const resultArray = Array.isArray(metricResults)
-          ? metricResults
-          : [metricResults];
+      // Check if all required arguments exist in the scoring inputs
+      validateRequiredArguments(metric, scoringInputs);
 
-        // Add all results to the array
-        scoreResults.push(...resultArray);
-      } catch (error) {
-        scoreResults.push({
-          name: metric.name,
-          value: 0,
-          reason: `Metric calculation failed: ${error}`,
-          scoringFailed: true,
-        });
-      }
+      // If all required arguments exist, call the metric's score method
+      logger.info(`Calculating score for metric ${metric.name}`);
+      const metricResults = await metric.score(scoringInputs);
+      const resultArray = Array.isArray(metricResults)
+        ? metricResults
+        : [metricResults];
+
+      // Add all results to the array
+      scoreResults.push(...resultArray);
+      logger.info(`Finished calculating score for metric ${metric.name}`);
     }
 
-    return scoreResults;
+    scoreResults.forEach((score) =>
+      this.rootTrace?.score({
+        name: score.name,
+        value: score.value,
+        reason: score.reason,
+      })
+    );
+
+    return {
+      testCase,
+      scoreResults,
+    };
   }
 
   /**

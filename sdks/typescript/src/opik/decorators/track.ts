@@ -15,7 +15,7 @@ type TrackContext =
 
 const DEFAULT_TRACK_NAME = "track.decorator";
 
-const trackStorage = new AsyncLocalStorage<TrackContext>();
+export const trackStorage = new AsyncLocalStorage<TrackContext>();
 
 export const getTrackContext = (): Required<TrackContext> | undefined => {
   const { span, trace } = trackStorage.getStore() || {};
@@ -194,8 +194,9 @@ function executeTrack<T extends (...args: any[]) => any>(
     const fnThis = this as any;
 
     return trackStorage.run({ span, trace }, () => {
+      const currentTrace = isRootSpan ? trace : undefined;
       try {
-        logStart({ args, span, trace: isRootSpan ? trace : undefined });
+        logStart({ args, span, trace: currentTrace });
 
         const result = originalFn.apply(fnThis, args);
 
@@ -205,7 +206,7 @@ function executeTrack<T extends (...args: any[]) => any>(
               logSuccess({
                 span,
                 result: res,
-                trace: isRootSpan ? trace : undefined,
+                trace: currentTrace,
               });
               return res;
             },
@@ -213,7 +214,7 @@ function executeTrack<T extends (...args: any[]) => any>(
               logError({
                 span,
                 error: err,
-                trace: isRootSpan ? trace : undefined,
+                trace: currentTrace,
               });
 
               throw err;
@@ -224,7 +225,7 @@ function executeTrack<T extends (...args: any[]) => any>(
         logSuccess({
           span,
           result,
-          trace: isRootSpan ? trace : undefined,
+          trace: currentTrace,
         });
 
         return result;
@@ -232,7 +233,7 @@ function executeTrack<T extends (...args: any[]) => any>(
         logError({
           span,
           error,
-          trace: isRootSpan ? trace : undefined,
+          trace: currentTrace,
         });
         throw error;
       }

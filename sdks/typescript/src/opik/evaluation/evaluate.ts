@@ -7,9 +7,9 @@ import {
 import { BaseMetric } from "./metrics/BaseMetric";
 import { logger } from "@/utils/logger";
 import { EvaluationEngine } from "./engine/EvaluationEngine";
-import { EvaluationResultProcessor } from "./results/EvaluationResultProcessor";
-import { generateId } from "@/utils/generateId";
 import { OpikSingleton } from "@/client/SingletonClient";
+import { DatasetItemData } from "../dataset/DatasetItem";
+import { OpikClient } from "@/client/Client";
 
 /**
  * Performs evaluation of an LLM task on a dataset with specified metrics.
@@ -43,12 +43,12 @@ import { OpikSingleton } from "@/client/SingletonClient";
  * ```
  */
 
-export interface EvaluateOptions {
+export interface EvaluateOptions<T = Record<string, unknown>> {
   /** The dataset to evaluate against, containing inputs and expected outputs */
-  dataset: Dataset;
+  dataset: Dataset<T extends DatasetItemData ? T : DatasetItemData & T>;
 
   /** The specific LLM task to perform (e.g., classification, generation, question-answering) */
-  task: EvaluationTask;
+  task: EvaluationTask<T>;
 
   /** Optional array of metrics to evaluate model performance (e.g., accuracy, F1 score) */
   scoringMetrics?: BaseMetric[];
@@ -66,14 +66,19 @@ export interface EvaluateOptions {
   nbSamples?: number;
 
   /**
+   * Optional Opik client instance to use for tracking
+   */
+  client?: OpikClient;
+
+  /**
    * Optional mapping between dataset keys and scoring metric inputs
    * Allows renaming keys from dataset or task output to match what metrics expect
    */
   scoringKeyMapping?: ScoringKeyMappingType;
 }
 
-export async function evaluate(
-  options: EvaluateOptions
+export async function evaluate<T = Record<string, unknown>>(
+  options: EvaluateOptions<T>
 ): Promise<EvaluationResult> {
   // Validate required parameters
   if (!options.dataset) {
@@ -84,42 +89,24 @@ export async function evaluate(
     throw new Error("Task function is required for evaluation");
   }
 
-  // Set defaults for optional parameters
-  const experimentName = options.experimentName || `Evaluation-${generateId()}`;
-
   // Get Opik client
-  const client = OpikSingleton.getInstance();
+  const client = options.client ?? OpikSingleton.getInstance();
 
   // Create experiment for this evaluation run
   const experiment = await client.createExperiment({
-    name: experimentName,
+    name: options.experimentName,
     datasetName: options.dataset.name,
     experimentConfig: options.experimentConfig,
   });
 
   try {
     // Create and run the evaluation engine
-    const engine = new EvaluationEngine(options, client, experiment);
-    const testResults = await engine.execute();
+    const engine = new EvaluationEngine<T>(options, client, experiment);
 
-    // Process results into final format
-    const evaluationResult = EvaluationResultProcessor.processResults(
-      testResults,
-      experiment
-    );
-
-    return evaluationResult;
+    logger.info("Starting evaluation");
+    return engine.execute();
   } catch (error) {
     logger.error(`Error during evaluation: ${error}`);
     throw error;
   }
 }
-
-/**
- * Exports all evaluation components
- */
-export * from "./metrics/BaseMetric";
-export * from "./metrics/ExactMatch";
-export * from "./metrics/Contains";
-export * from "./metrics/RegexMatch";
-export * from "./types";

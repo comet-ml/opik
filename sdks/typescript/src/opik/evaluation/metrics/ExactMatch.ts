@@ -26,7 +26,11 @@ export class ExactMatch extends BaseMetric {
     output: string,
     expected: string
   ): Promise<EvaluationScoreResult> {
-    // Implementation will be added later
-    throw new Error("Method not implemented");
+    const score = output === expected ? 1.0 : 0.0;
+    return {
+      name: this.name,
+      value: score,
+      reason: `Exact match: ${score === 1.0 ? "Match" : "No match"}`,
+    };
   }
 }
