@@ -13,8 +13,18 @@ import { SpanType } from "@/rest_api/api";
  *     super(name, track);
  *   }
  *
- *   async score(input: string, output: string, ...ignoredArgs: any[]): Promise<ScoreResult | ScoreResult[]> {
+ *   score(input: string, output: string, ...ignoredArgs: any[]): Promise<ScoreResult | ScoreResult[]> {
  *     // Add your logic here
+ *
+ *     return {
+ *       name: this.name,
+ *       value: 0,
+ *       reason: "Optional reason for the score"
+ *     };
+ *   }
+ *
+ *    async ascore(input: string, output: string, ...ignoredArgs: any[]): Promise<ScoreResult | ScoreResult[]> {
+ *     // Add your asynchronous logic here
  *
  *     return {
  *       name: this.name,
@@ -55,7 +65,7 @@ export abstract class BaseMetric {
 
     if (!trackMetric && projectName !== undefined) {
       throw new Error(
-        "projectName can be set only when 'trackMetric' is set to true"
+        "projectName can be set only when 'trackMetric' is set to true",
       );
     }
 
@@ -66,11 +76,11 @@ export abstract class BaseMetric {
       // Apply tracking decorator to methods
       this.score = track(
         { name: this.name, projectName, type: SpanType.General },
-        originalScore
+        originalScore,
       );
       this.ascore = track(
         { name: this.name, projectName, type: SpanType.General },
-        originalAScore
+        originalAScore,
       );
     }
   }
@@ -81,10 +91,14 @@ export abstract class BaseMetric {
    * @param args Arguments required by the specific metric implementation
    * @returns A score result or list of score results
    */
-  abstract score(
+  score(
     ...args: unknown[]
-  ): Promise<EvaluationScoreResult | EvaluationScoreResult[]>;
+  ): Promise<EvaluationScoreResult | EvaluationScoreResult[]> {
+    throw new Error("Scoring method is not implemented.");
+  }
 
+  // ALEX
+  // REMOVE
   /**
    * Asynchronous version of the score method
    * By default, this calls the synchronous score method

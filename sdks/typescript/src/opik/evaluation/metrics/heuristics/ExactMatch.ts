@@ -1,5 +1,5 @@
-import { EvaluationScoreResult } from "../types";
-import { BaseMetric } from "./BaseMetric";
+import { EvaluationScoreResult } from "../../types";
+import { BaseMetric } from "../BaseMetric";
 
 /**
  * ExactMatch metric - checks if the actual output exactly matches the expected output.
@@ -24,9 +24,10 @@ export class ExactMatch extends BaseMetric {
    */
   async score(
     output: string,
-    expected: string
+    expected: string,
   ): Promise<EvaluationScoreResult> {
     const score = output === expected ? 1.0 : 0.0;
+
     return {
       name: this.name,
       value: score,
