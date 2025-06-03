@@ -84,7 +84,7 @@ const UploadField: React.FC<UploadFieldProps> = ({
           onChange={handleSelect}
         />
         <CloudUpload className="-mr-0.5 size-[18px] " />
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <span className="comet-body-s-accented">{description}</span>
           <Button
             size="sm"
@@ -97,23 +97,23 @@ const UploadField: React.FC<UploadFieldProps> = ({
         </div>
       </div>
       {file && (
-        <div className="mt-5 flex flex-col gap-2 rounded-sm bg-primary-foreground p-3">
-          <div className="flex flex-nowrap items-center justify-between gap-3 rounded border border-border p-2">
+        <div className="mt-5 overflow-hidden rounded-sm bg-primary-foreground p-3">
+          <div className="flex max-w-full flex-nowrap items-center justify-between gap-3 rounded">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-[rgba(203,213,225,0.25)]">
               <FileSpreadsheet className="size-5 text-muted-foreground" />
             </div>
-            <div className="flex flex-auto flex-col justify-center">
-              <span className="comet-body-s-accented text-foreground">
+            <div className="flex min-w-1 flex-auto flex-col justify-center">
+              <span className="comet-body-s-accented truncate text-foreground">
                 {file.name}
               </span>
               {errorText && (
-                <div className="comet-body-s flex items-center text-destructive">
-                  <TriangleAlert className="mr-1 size-3 shrink-0" />
+                <div className="comet-body-xs flex text-[#EF6868]">
+                  <TriangleAlert className="my-0.5 mr-1 size-3 shrink-0" />
                   {errorText}
                 </div>
               )}
               {!errorText && successText && (
-                <span className="comet-body-s flex items-center text-success">
+                <span className="comet-body-xs flex items-center text-[#19A979]">
                   <Check className="mr-1 size-3 shrink-0" />
                   {successText}
                 </span>

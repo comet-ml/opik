@@ -245,7 +245,6 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         <DialogAutoScrollBody>
           <ExplainerDescription
             className="mb-4"
-            size="sm"
             {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_an_ai_provider]}
           />
           <Form {...form}>

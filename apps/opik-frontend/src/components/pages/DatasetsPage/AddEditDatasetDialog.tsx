@@ -20,15 +20,19 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Card } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import UploadField from "@/components/shared/UploadField/UploadField";
+import Loader from "@/components/shared/Loader/Loader";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { buildDocsUrl } from "@/lib/utils";
 import { Dataset, DATASET_ITEM_SOURCE } from "@/types/datasets";
 
 const ACCEPTED_TYPE = ".csv";
+const FILE_SIZE_LIMIT_IN_MB = 20;
+const MAX_ITEMS_COUNT_LIMIT = 1000;
 
 type AddEditDatasetDialogProps = {
   dataset?: Dataset;
@@ -47,6 +51,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
   const { mutate: updateMutate } = useDatasetUpdateMutation();
   const { mutate: createItemsMutate } = useDatasetItemBatchMutation();
 
+  const [isOverlayShown, setIsOverlayShown] = useState<boolean>(false);
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const [csvData, setCsvData] = useState<Record<string, unknown>[] | undefined>(
     undefined,
@@ -60,12 +65,13 @@ const AddEditDatasetDialog: React.FunctionComponent<
 
   const isEdit = Boolean(dataset);
   const isValid = Boolean(name.length);
+  const hasValidCsvData = csvData && csvData.length > 0;
   const title = isEdit ? "Edit dataset" : "Create a new dataset";
   const buttonText = isEdit ? "Update dataset" : "Create dataset";
 
   const onCreateSuccessHandler = useCallback(
     (newDataset: Dataset) => {
-      if (csvData && csvData.length > 0) {
+      if (hasValidCsvData) {
         // Prepare items with manual source and data fields
         const headers = Object.keys(csvData[0]);
         const [inputKey, outputKey] = headers;
@@ -98,6 +104,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
               });
             },
             onSettled: () => {
+              setOpen(false);
               if (onDatasetCreated) {
                 onDatasetCreated(newDataset);
               }
@@ -108,7 +115,15 @@ const AddEditDatasetDialog: React.FunctionComponent<
         onDatasetCreated(newDataset);
       }
     },
-    [createItemsMutate, csvData, onDatasetCreated, toast, workspaceName],
+    [
+      createItemsMutate,
+      csvData,
+      hasValidCsvData,
+      onDatasetCreated,
+      setOpen,
+      toast,
+      workspaceName,
+    ],
   );
 
   const submitHandler = useCallback(() => {
@@ -133,16 +148,21 @@ const AddEditDatasetDialog: React.FunctionComponent<
         },
       );
     }
-    setOpen(false);
+    if (hasValidCsvData) {
+      setIsOverlayShown(true);
+    } else {
+      setOpen(false);
+    }
   }, [
     isEdit,
-    setOpen,
+    hasValidCsvData,
     updateMutate,
     dataset,
     name,
     description,
     createMutate,
     onCreateSuccessHandler,
+    setOpen,
   ]);
 
   const handleFileSelect = useCallback(async (file?: File) => {
@@ -151,9 +171,8 @@ const AddEditDatasetDialog: React.FunctionComponent<
     if (!file) return;
 
     try {
-      // Validate file size (50MB = 50 * 1024 * 1024 bytes)
-      if (file.size > 50 * 1024 * 1024) {
-        setCsvError("File exceeds maximum size (50MB).");
+      if (file.size > FILE_SIZE_LIMIT_IN_MB * 1024 * 1024) {
+        setCsvError(`File exceeds maximum size (${FILE_SIZE_LIMIT_IN_MB}MB).`);
         return;
       }
 
@@ -171,6 +190,8 @@ const AddEditDatasetDialog: React.FunctionComponent<
         trimFieldValues: true,
       });
 
+      console.log(parsed);
+
       if (!Array.isArray(parsed)) {
         setCsvError("Invalid CSV format.");
         return;
@@ -181,8 +202,10 @@ const AddEditDatasetDialog: React.FunctionComponent<
         return;
       }
 
-      if (parsed.length > 1000) {
-        setCsvError("File is too large (max. 1,000 rows)");
+      if (parsed.length > MAX_ITEMS_COUNT_LIMIT) {
+        setCsvError(
+          `File is too large (max. ${MAX_ITEMS_COUNT_LIMIT.toLocaleString()} rows)`,
+        );
         return;
       }
 
@@ -193,7 +216,10 @@ const AddEditDatasetDialog: React.FunctionComponent<
         !headers.includes("output")
       ) {
         setCsvError(
-          "File must have only two columns named 'input' and 'output'.",
+          `File must have only two columns named 'input' and 'output'. Instead, the file has the following columns: ${headers
+            .slice(0, 5)
+            .map((h) => `"${h}"`)
+            .join(",")}`,
         );
         return;
       }
@@ -213,10 +239,32 @@ const AddEditDatasetDialog: React.FunctionComponent<
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <DialogAutoScrollBody>
+          {isOverlayShown && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/10">
+              <Card className="w-3/4">
+                <Loader
+                  className="min-h-56"
+                  message={
+                    <div>
+                      <div className="comet-body-s-accented text-center">
+                        Processing the CSV
+                      </div>
+                      <div className="comet-body-s mt-2 text-center text-light-slate">
+                        This should take less than a minute. <br /> You can
+                        safely close this popup while we work.
+                      </div>
+                      <div className="mt-4 flex items-center justify-center">
+                        <Button onClick={() => setOpen(false)}>Close</Button>
+                      </div>
+                    </div>
+                  }
+                />
+              </Card>
+            </div>
+          )}
           {!isEdit && (
             <ExplainerDescription
               className="mb-4"
-              size="sm"
               {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_multiple_datasets]}
             />
           )}
@@ -247,7 +295,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
               <Description className="tracking-normal">
                 Your CSV file should contain only two columns (input and output)
                 and up to 1,000 rows. For larger datasets, use the SDK instead.
-                <Button variant="link" size="sm" className="px-0" asChild>
+                <Button variant="link" size="sm" className="px-1" asChild>
                   <a
                     href={buildDocsUrl("/evaluation/manage_datasets")}
                     target="_blank"
@@ -276,7 +324,9 @@ const AddEditDatasetDialog: React.FunctionComponent<
         </DialogAutoScrollBody>
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
+            <Button variant="outline">
+              {isOverlayShown ? "Close" : "Cancel"}
+            </Button>
           </DialogClose>
           <Button
             type="submit"
