@@ -42,6 +42,9 @@ class OpikTracer:
         # in case we need to use different context storage for ADK in the future
         self._context_storage = context_storage.get_current_context_instance()
 
+        self._external_trace_id: contextvars.ContextVar[Optional[str]] = (
+            contextvars.ContextVar("external_trace_id", default=None)
+        )
         self._external_parent_span_id: contextvars.ContextVar[Optional[str]] = (
             contextvars.ContextVar("external_parent_span_id", default=None)
         )
@@ -179,6 +182,7 @@ class OpikTracer:
                     type="general",
                     metadata=self.metadata,
                 )
+                self._external_parent_span_id.set(current_span_data.id)
             elif current_trace_data := self._context_storage.get_trace_data():
                 self._attach_span_to_existing_trace(
                     current_trace_data=current_trace_data,
@@ -187,6 +191,7 @@ class OpikTracer:
                     type="general",
                     metadata=self.metadata,
                 )
+                self._external_trace_id.set(current_trace_data.id)
             else:
                 new_trace_data = trace.TraceData(
                     name=name,
@@ -196,10 +201,6 @@ class OpikTracer:
                     thread_id=thread_id,
                 )
                 self._start_trace(new_trace_data)
-
-            self._external_parent_span_id.set(
-                current_span_data.id if current_span_data is not None else None
-            )
         except Exception as e:
             LOGGER.error(f"Failed during before_agent_callback(): {e}", exc_info=True)
 
@@ -211,6 +212,7 @@ class OpikTracer:
 
             if (span_data := self._context_storage.top_span_data()) is None:
                 trace_data = self._context_storage.get_trace_data()
+                assert trace_data is not None
                 trace_data.update(output=output).init_end_time()
                 self._end_current_trace()
                 self._last_model_output = None
