@@ -17,7 +17,7 @@ setup(
     python_requires=">=3.9,<3.13",
     install_requires=[
         "opik>=1.7.17",
-        "dspy>=2.6.18,<3",
+        "dspy>=2.6.18,<=2.6.24",
         "litellm",
         "tqdm",
         "datasets",
