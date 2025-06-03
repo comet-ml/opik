@@ -22,6 +22,7 @@ public enum TraceField implements Field {
     DURATION(DURATION_QUERY_PARAM, FieldType.NUMBER),
     THREAD_ID(THREAD_ID_QUERY_PARAM, FieldType.STRING),
     GUARDRAILS(GUARDRAILS_QUERY_PARAM, FieldType.STRING),
+    VISIBILITY_MODE(VISIBILITY_MODE_QUERY_PARAM, FieldType.ENUM),
     ;
 
     private final String queryParamField;

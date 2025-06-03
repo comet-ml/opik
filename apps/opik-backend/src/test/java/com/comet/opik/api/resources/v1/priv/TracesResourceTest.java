@@ -4384,7 +4384,7 @@ class TracesResourceTest {
 
     private String getValidValue(Field field) {
         return switch (field.getType()) {
-            case STRING, LIST, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
+            case STRING, LIST, DICTIONARY, ENUM -> RandomStringUtils.secure().nextAlphanumeric(10);
             case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
             case DATE_TIME -> Instant.now().toString();
         };
@@ -4392,14 +4392,14 @@ class TracesResourceTest {
 
     private String getKey(Field field) {
         return switch (field.getType()) {
-            case STRING, NUMBER, DATE_TIME, LIST -> null;
+            case STRING, NUMBER, DATE_TIME, LIST, ENUM -> null;
             case FEEDBACK_SCORES_NUMBER, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
         };
     }
 
     private String getInvalidValue(Field field) {
         return switch (field.getType()) {
-            case STRING, DICTIONARY, LIST -> " ";
+            case STRING, DICTIONARY, LIST, ENUM -> " ";
             case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
         };
     }
@@ -4914,6 +4914,62 @@ class TracesResourceTest {
         }
 
         @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void whenFilterByVisibilityScoreEqual__thenReturnTracesFiltered(boolean stream) {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .threadId(null)
+                            .comments(null)
+                            .totalEstimatedCost(null)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            TraceFilter filter = TraceFilter.builder()
+                    .field(TraceField.VISIBILITY_MODE)
+                    .operator(Operator.EQUAL)
+                    .value(VisibilityMode.DEFAULT.getValue())
+                    .build();
+
+            var actualTraces = traceResourceClient.getStreamAndAssertContent(apiKey, workspaceName,
+                    TraceSearchStreamRequest.builder()
+                            .projectName(projectName)
+                            .filters(List.of(filter))
+                            .build());
+
+            if (stream) {
+                TraceAssertions.assertTraces(actualTraces, traces.reversed(), USER);
+            } else {
+                getAndAssertPage(
+                        1,
+                        100,
+                        projectName,
+                        null,
+                        List.of(filter),
+                        traces.reversed(),
+                        List.of(),
+                        workspaceName,
+                        apiKey,
+                        List.of(),
+                        traces.size(), Set.of());
+            }
+        }
+
+        @ParameterizedTest
         @MethodSource
         void getTracesByProject__whenSortingByValidFields__thenReturnTracesSorted(Comparator<Trace> comparator,
                 SortingField sorting) {
@@ -5036,6 +5092,7 @@ class TracesResourceTest {
                     .as("Total llmSpanCount across all traces should match the expected total")
                     .isEqualTo(expectedTotalSpanCount);
         }
+
         private Stream<Arguments> getTracesByProject__whenSortingByValidFields__thenReturnTracesSorted() {
 
             Comparator<Trace> inputComparator = Comparator.comparing(trace -> trace.input().toString());
