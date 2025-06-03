@@ -335,26 +335,29 @@ class OpikTracer:
         *other_args: Any,
         **kwargs: Any,
     ) -> None:
-        metadata = {"function_call_id": tool_context.function_call_id}
+        try:
+            metadata = {"function_call_id": tool_context.function_call_id}
 
-        if (current_span_data := self._context_storage.top_span_data()) is not None:
-            self._attach_span_to_existing_span(
-                current_span_data=current_span_data,
-                name=tool.name,
-                input=args,
-                type="tool",
-                metadata=metadata,
-            )
-        else:
-            current_trace_data = self._context_storage.get_trace_data()
-            assert current_trace_data is not None
-            self._attach_span_to_existing_trace(
-                current_trace_data=current_trace_data,
-                name=tool.name,
-                input=args,
-                type="tool",
-                metadata=metadata,
-            )
+            if (current_span_data := self._context_storage.top_span_data()) is not None:
+                self._attach_span_to_existing_span(
+                    current_span_data=current_span_data,
+                    name=tool.name,
+                    input=args,
+                    type="tool",
+                    metadata=metadata,
+                )
+            else:
+                current_trace_data = self._context_storage.get_trace_data()
+                assert current_trace_data is not None
+                self._attach_span_to_existing_trace(
+                    current_trace_data=current_trace_data,
+                    name=tool.name,
+                    input=args,
+                    type="tool",
+                    metadata=metadata,
+                )
+        except Exception as e:
+            LOGGER.error(f"Failed during before_tool_callback(): {e}", exc_info=True)
 
     def after_tool_callback(
         self,
@@ -365,16 +368,17 @@ class OpikTracer:
         *other_args: Any,
         **kwargs: Any,
     ) -> None:
-        current_span_data = self._context_storage.top_span_data()
-        if current_span_data is None:
-            LOGGER.debug("Failed during after_tool_callback(): span is not found.")
-            return
+        try:
+            current_span_data = self._context_storage.top_span_data()
+            assert current_span_data is not None
 
-        if isinstance(tool_response, dict):
-            current_span_data.update(output=tool_response)
-        else:
-            current_span_data.update(output={"output": tool_response})
-        self._end_current_span()
+            if isinstance(tool_response, dict):
+                current_span_data.update(output=tool_response)
+            else:
+                current_span_data.update(output={"output": tool_response})
+            self._end_current_span()
+        except Exception as e:
+            LOGGER.error(f"Failed during after_tool_callback(): {e}", exc_info=True)
 
 
 @functools.lru_cache()
