@@ -1,8 +1,8 @@
 import contextvars
+import functools
 import logging
 import uuid
-import functools
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models import LlmRequest, LlmResponse, lite_llm
@@ -42,12 +42,12 @@ class OpikTracer:
         # in case we need to use different context storage for ADK in the future
         self._context_storage = context_storage.get_current_context_instance()
 
-        self._external_trace_id: contextvars.ContextVar[Optional[str]] = (
-            contextvars.ContextVar("external_trace_id", default=None)
-        )
         self._external_parent_span_id: contextvars.ContextVar[Optional[str]] = (
             contextvars.ContextVar("external_parent_span_id", default=None)
         )
+
+        self._opik_created_trace_id: Optional[str] = None
+        self._opik_created_spans: Set[str] = set()
 
         self._opik_client = opik_client.get_client_cached()
 
@@ -82,6 +82,7 @@ class OpikTracer:
             else {**self.metadata, **metadata},
         )
         self._set_current_context_data(span_data)
+        self._opik_created_spans.add(span_data.id)
 
     def _attach_span_to_existing_trace(
         self,
@@ -111,12 +112,14 @@ class OpikTracer:
             else {**self.metadata, **metadata},
         )
         self._set_current_context_data(span_data)
+        self._opik_created_spans.add(span_data.id)
 
     def _start_trace(
         self,
         new_trace_data: trace.TraceData,
     ) -> None:
         self._set_current_context_data(new_trace_data)
+        self._opik_created_trace_id = new_trace_data.id
 
     def _end_current_trace(self) -> None:
         if (trace_data := self._context_storage.pop_trace_data()) is not None:
@@ -191,7 +194,6 @@ class OpikTracer:
                     type="general",
                     metadata=self.metadata,
                 )
-                self._external_trace_id.set(current_trace_data.id)
             else:
                 new_trace_data = trace.TraceData(
                     name=name,
