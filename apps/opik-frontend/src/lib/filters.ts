@@ -2,6 +2,7 @@ import uniqid from "uniqid";
 import flatten from "lodash/flatten";
 import { Filter } from "@/types/filters";
 import { COLUMN_TYPE, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
+import { TRACE_VISIBILITY_MODE } from "@/types/traces";
 import {
   makeEndOfMinute,
   makeStartOfMinute,
@@ -45,6 +46,19 @@ export const generateSearchByIDFilters = (search?: string) => {
       operator: "contains",
       key: "",
       value: search,
+    },
+  ] as Filter[];
+};
+
+export const generateVisibilityFilters = () => {
+  return [
+    {
+      id: uniqid(),
+      field: "visibility_mode",
+      type: COLUMN_TYPE.string,
+      operator: "=",
+      key: "",
+      value: TRACE_VISIBILITY_MODE.default,
     },
   ] as Filter[];
 };

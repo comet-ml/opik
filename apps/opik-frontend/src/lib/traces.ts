@@ -8,6 +8,7 @@ import isObject from "lodash/isObject";
 import isString from "lodash/isString";
 import { TAG_VARIANTS } from "@/components/ui/tag";
 import { ExperimentItem } from "@/types/datasets";
+import { TRACE_VISIBILITY_MODE } from "@/types/traces";
 
 export const generateTagVariant = (label: string) => {
   const hash = md5(label);
@@ -24,6 +25,9 @@ export const isNumericFeedbackScoreValid = (
 
 export const traceExist = (item: ExperimentItem) =>
   item.output || item.input || item.feedback_scores;
+
+export const traceVisible = (item: ExperimentItem) =>
+  item.trace_visibility_mode === TRACE_VISIBILITY_MODE.default;
 
 type PrettifyMessageConfig = {
   type: "input" | "output";

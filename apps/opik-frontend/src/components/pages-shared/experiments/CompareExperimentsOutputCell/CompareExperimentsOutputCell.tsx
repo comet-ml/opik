@@ -7,6 +7,7 @@ import isFunction from "lodash/isFunction";
 import isObject from "lodash/isObject";
 
 import { toString } from "@/lib/utils";
+import { traceVisible } from "@/lib/traces";
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import { ROW_HEIGHT } from "@/types/shared";
 import VerticallySplitCellWrapper, {
@@ -60,26 +61,29 @@ const CompareExperimentsOutputCell: React.FC<
 
   const renderContent = (item: ExperimentItem | undefined) => {
     const data = get(item, ["output", outputKey], undefined);
+    const isTraceVisible = item && traceVisible(item);
 
     if (!data) return "-";
 
     return (
       <>
-        <TooltipWrapper content="Click to open original trace">
-          <Button
-            size="icon-xs"
-            variant="outline"
-            onClick={(event) => {
-              if (isFunction(openTrace) && item?.trace_id) {
-                openTrace(item.trace_id);
-              }
-              event.stopPropagation();
-            }}
-            className="absolute right-1 top-1 hidden group-hover:flex"
-          >
-            <ListTree />
-          </Button>
-        </TooltipWrapper>
+        {isTraceVisible && (
+          <TooltipWrapper content="Click to open original trace">
+            <Button
+              size="icon-xs"
+              variant="outline"
+              onClick={(event) => {
+                if (isFunction(openTrace) && item?.trace_id) {
+                  openTrace(item.trace_id);
+                }
+                event.stopPropagation();
+              }}
+              className="absolute right-1 top-1 hidden group-hover:flex"
+            >
+              <ListTree />
+            </Button>
+          </TooltipWrapper>
+        )}
         {isObject(data)
           ? renderCodeContent(data)
           : renderTextContent(toString(data))}
