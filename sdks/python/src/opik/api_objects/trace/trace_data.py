@@ -104,12 +104,22 @@ class TraceData:
 
     @property
     def trace_start_parameters(self) -> Dict[str, Any]:
-        return {
+        start_parameters: Dict[str, Any] = {
             "id": self.id,
             "start_time": self.start_time,
             "project_name": self.project_name,
             "_trace_start": True,
         }
+        if self.name is not None:
+            start_parameters["name"] = self.name
+        if self.input is not None:
+            start_parameters["input"] = self.input
+        if self.metadata is not None:
+            start_parameters["metadata"] = self.metadata
+        if self.tags is not None:
+            start_parameters["tags"] = self.tags
+
+        return start_parameters
 
     @property
     def trace_end_parameters(self) -> Dict[str, Any]:
