@@ -408,7 +408,7 @@ class BaseTrackDecorator(abc.ABC):
             )
 
         created_trace_data, created_span_data = (
-            span_creation_handler.create_span_for_current_context(
+            span_creation_handler.create_span_respecting_context(
                 start_span_arguments=start_span_arguments,
                 distributed_trace_headers=opik_distributed_trace_headers,
             )
