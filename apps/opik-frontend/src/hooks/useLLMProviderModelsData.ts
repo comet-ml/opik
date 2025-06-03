@@ -751,6 +751,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "meta-llama/llama-guard-3-8b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_GUARD_4_12B,
+      label: "meta-llama/llama-guard-3-12b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_4_MAVERICK,
+      label: "meta-llama/llama-4-maverick",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_4_SCOUT,
+      label: "meta-llama/llama-4-scout",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_3_5_MINI_128K_INSTRUCT,
       label: "microsoft/phi-3.5-mini-128k-instruct",
     },
