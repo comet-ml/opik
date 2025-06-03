@@ -122,7 +122,10 @@ from .experiment_item_bulk_record_experiment_item_bulk_write_view import (
 )
 from .experiment_item_bulk_upload import ExperimentItemBulkUpload
 from .experiment_item_compare import ExperimentItemCompare
+from .experiment_item_compare_trace_visibility_mode import ExperimentItemCompareTraceVisibilityMode
 from .experiment_item_public import ExperimentItemPublic
+from .experiment_item_public_trace_visibility_mode import ExperimentItemPublicTraceVisibilityMode
+from .experiment_item_trace_visibility_mode import ExperimentItemTraceVisibilityMode
 from .experiment_page_public import ExperimentPagePublic
 from .experiment_public import ExperimentPublic
 from .experiment_public_type import ExperimentPublicType
@@ -404,7 +407,10 @@ __all__ = [
     "ExperimentItemBulkRecordExperimentItemBulkWriteView",
     "ExperimentItemBulkUpload",
     "ExperimentItemCompare",
+    "ExperimentItemCompareTraceVisibilityMode",
     "ExperimentItemPublic",
+    "ExperimentItemPublicTraceVisibilityMode",
+    "ExperimentItemTraceVisibilityMode",
     "ExperimentPagePublic",
     "ExperimentPublic",
     "ExperimentPublicType",
