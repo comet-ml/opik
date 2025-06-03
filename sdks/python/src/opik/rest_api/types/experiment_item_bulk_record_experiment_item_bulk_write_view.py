@@ -5,12 +5,14 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .feedback_score_experiment_item_bulk_write_view import FeedbackScoreExperimentItemBulkWriteView
+from .json_list_string_experiment_item_bulk_write_view import JsonListStringExperimentItemBulkWriteView
 from .span_experiment_item_bulk_write_view import SpanExperimentItemBulkWriteView
 from .trace_experiment_item_bulk_write_view import TraceExperimentItemBulkWriteView
 
 
 class ExperimentItemBulkRecordExperimentItemBulkWriteView(UniversalBaseModel):
     dataset_item_id: str
+    evaluate_task_result: typing.Optional[JsonListStringExperimentItemBulkWriteView] = None
     trace: typing.Optional[TraceExperimentItemBulkWriteView] = None
     spans: typing.Optional[typing.List[SpanExperimentItemBulkWriteView]] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreExperimentItemBulkWriteView]] = None
