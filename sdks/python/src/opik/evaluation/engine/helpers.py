@@ -34,7 +34,7 @@ def evaluate_llm_task_context(
         trace_data.init_end_time()
 
         client = client if client is not None else opik_client.get_client_cached()
-        client.trace(**trace_data.trace_end_parameters)
+        client.trace(**trace_data.as_parameters)
 
         experiment_item_ = experiment_item.ExperimentItemReferences(
             dataset_item_id=dataset_item_id,

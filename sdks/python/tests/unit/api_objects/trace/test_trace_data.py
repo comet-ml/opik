@@ -4,10 +4,13 @@ from opik.api_objects import trace
 from ....testlib import assert_equal, ANY_BUT_NONE
 
 
-def test_trace_data__trace_start_parameters__expected_parameters_are_set():
+def test_trace_data__as_start_parameters__expected_parameters_are_set():
     trace_data = trace.TraceData(
         name="name",
         project_name="project_name",
+        metadata={"foo": "bar"},
+        input={"input": "input"},
+        tags=["one", "two"],
         created_by="evaluation",
     )
 
@@ -15,14 +18,16 @@ def test_trace_data__trace_start_parameters__expected_parameters_are_set():
         "id": ANY_BUT_NONE,
         "start_time": ANY_BUT_NONE,
         "project_name": "project_name",
-        "_trace_start": True,
+        "name": "name",
+        "metadata": {"foo": "bar"},
+        "input": {"input": "input"},
+        "tags": ["one", "two"],
     }
-    start_parameters = trace_data.trace_start_parameters
 
-    assert_equal(expected_parameters, start_parameters)
+    assert_equal(expected_parameters, trace_data.as_start_parameters)
 
 
-def test_trace_data__trace_end_parameters__expected_parameters_are_set():
+def test_trace_data__as_parameters__expected_parameters_are_set():
     trace_data = trace.TraceData(
         name="name",
         end_time=datetime.datetime.now(),
@@ -32,10 +37,10 @@ def test_trace_data__trace_end_parameters__expected_parameters_are_set():
         tags=["one", "two"],
         feedback_scores=[{"name": "score_name", "value": 0.5}],
         project_name="project_name",
-        created_by="evaluation",
         error_info={},
         thread_id="thread_id",
         attachments=[],
+        created_by="evaluation",
     )
 
     expected_parameters = {
@@ -52,8 +57,6 @@ def test_trace_data__trace_end_parameters__expected_parameters_are_set():
         "error_info": ANY_BUT_NONE,
         "thread_id": ANY_BUT_NONE,
         "attachments": ANY_BUT_NONE,
-        "_trace_start": False,
     }
-    end_parameters = trace_data.trace_end_parameters
 
-    assert_equal(expected_parameters, end_parameters)
+    assert_equal(expected_parameters, trace_data.as_parameters)

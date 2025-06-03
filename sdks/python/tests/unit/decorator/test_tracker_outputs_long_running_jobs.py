@@ -26,7 +26,8 @@ def test_track__trace_logged_at_start_and_end(fake_backend_with_patched_environm
     EXPECTED_TRACE_TREE = [
         TraceModel(
             id=ANY_BUT_NONE,
-            name=None,
+            name="f",
+            input={"x": "the-input"},
             start_time=ANY_BUT_NONE,
             project_name="Default Project",
             last_updated_at=ANY_BUT_NONE,
