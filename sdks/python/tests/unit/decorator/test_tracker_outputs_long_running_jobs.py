@@ -58,7 +58,7 @@ def test_track__trace_logged_at_start_and_end(fake_backend_with_patched_environm
     trace_trees = fake_backend_with_patched_environment.trace_trees
     assert len(trace_trees) == 2
 
-    assert_equal(EXPECTED_TRACE_TREE, trace_trees)
+    assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_trees)
 
     assert trace_trees[0].id == trace_trees[1].id
     assert trace_trees[0].last_updated_at < trace_trees[1].last_updated_at

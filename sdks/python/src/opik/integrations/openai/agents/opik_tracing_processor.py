@@ -71,7 +71,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
                 self._opik_context_storage.set_trace_data(current_trace)
                 self._created_opik_traces_data_map[trace.trace_id] = current_trace
                 if self._opik_client.config.log_start_trace:
-                  self._opik_client.trace(**current_trace.as_start_parameters)
+                    self._opik_client.trace(**current_trace.as_start_parameters)
             else:
                 start_span_arguments = arguments_helpers.StartSpanParameters(
                     name=trace.name,
