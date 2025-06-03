@@ -316,6 +316,7 @@ export enum PROVIDER_MODEL_TYPE {
   QWEN_QWEN_PLUS = "qwen/qwen-plus",
   QWEN_QWEN_TURBO = "qwen/qwen-turbo",
   QWEN_QWEN_VL_PLUS_FREE = "qwen/qwen-vl-plus:free",
+  QWEN_QWQ_32B = "qwen/qwq-32b",
   QWEN_QWQ_32B_PREVIEW = "qwen/qwq-32b-preview",
   RAIFLE_SORCERERLM_8X22B = "raifle/sorcererlm-8x22b",
   RECURSAL_EAGLE_7B = "recursal/eagle-7b",

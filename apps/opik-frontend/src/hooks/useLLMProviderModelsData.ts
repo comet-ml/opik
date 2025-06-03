@@ -1312,6 +1312,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen-vl-plus:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B,
+      label: "qwen/qwq-32b",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B_PREVIEW,
       label: "qwen/qwq-32b-preview",
       structuredOutput: true,
