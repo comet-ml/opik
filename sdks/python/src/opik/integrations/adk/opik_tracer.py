@@ -42,8 +42,8 @@ class OpikTracer:
         # in case we need to use different context storage for ADK in the future
         self._context_storage = context_storage.get_current_context_instance()
 
-        self._root_parent_span_id: contextvars.ContextVar[Optional[str]] = (
-            contextvars.ContextVar("root_parent_span_id", default=None)
+        self._external_parent_span_id: contextvars.ContextVar[Optional[str]] = (
+            contextvars.ContextVar("external_parent_span_id", default=None)
         )
 
         self._opik_client = opik_client.get_client_cached()
@@ -120,7 +120,7 @@ class OpikTracer:
             trace_data.init_end_time()
             self._opik_client.trace(**trace_data.__dict__)
         else:
-            LOGGER.debug("Failed during _end_current_trace(): trace is not found.")
+            LOGGER.error("Failed during _end_current_trace(): trace is not found.")
 
     def _end_current_span(
         self,
@@ -129,7 +129,7 @@ class OpikTracer:
             span_data.init_end_time()
             self._opik_client.span(**span_data.__dict__)
         else:
-            LOGGER.debug("Failed during _end_current_span(): span is not found.")
+            LOGGER.error("Failed during _end_current_span(): span is not found.")
 
     def _set_current_context_data(self, value: SpanOrTraceData) -> None:
         if isinstance(value, span.SpanData):
@@ -140,86 +140,87 @@ class OpikTracer:
             raise ValueError(f"Invalid context type: {type(value)}")
 
     def _ensure_no_hanging_opik_tracer_spans(self) -> None:
-        root_parent_span_id = self._root_parent_span_id.get()
+        external_parent_span_id = self._external_parent_span_id.get()
         there_were_no_external_spans_before_chain_invocation = (
-            root_parent_span_id is None
+            external_parent_span_id is None
         )
 
         if there_were_no_external_spans_before_chain_invocation:
             self._context_storage.clear_spans()
         else:
-            assert root_parent_span_id is not None
+            assert external_parent_span_id is not None
             self._context_storage.trim_span_data_stack_to_certain_span(
-                root_parent_span_id
+                external_parent_span_id
             )
 
     def before_agent_callback(
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
     ) -> None:
-        if "opik_thread_id" in callback_context.state:
-            thread_id = callback_context.state["opik_thread_id"]
-        else:
-            thread_id = str(uuid.uuid4())
-            callback_context.state["opik_thread_id"] = thread_id
+        try:
+            if "opik_thread_id" in callback_context.state:
+                thread_id = callback_context.state["opik_thread_id"]
+            else:
+                thread_id = str(uuid.uuid4())
+                callback_context.state["opik_thread_id"] = thread_id
 
-        trace_metadata = self.metadata.copy()
-        trace_metadata["adk_invocation_id"] = callback_context.invocation_id
+            trace_metadata = self.metadata.copy()
+            trace_metadata["adk_invocation_id"] = callback_context.invocation_id
 
-        user_input = adk_helpers.convert_adk_base_model_to_dict(
-            callback_context.user_content
-        )
-        name = self.name or callback_context.agent_name
-
-        if (current_span_data := self._context_storage.top_span_data()) is not None:
-            self._attach_span_to_existing_span(
-                current_span_data=current_span_data,
-                name=name,
-                input=user_input,
-                type="general",
-                metadata=self.metadata,
+            user_input = adk_helpers.convert_adk_base_model_to_dict(
+                callback_context.user_content
             )
-        elif (current_trace_data := self._context_storage.get_trace_data()) is not None:
-            self._attach_span_to_existing_trace(
-                current_trace_data=current_trace_data,
-                name=name,
-                input=user_input,
-                type="general",
-                metadata=self.metadata,
-            )
-        else:
-            new_trace_data = trace.TraceData(
-                name=name,
-                input=user_input,
-                metadata=trace_metadata,
-                project_name=self.project_name,
-                thread_id=thread_id,
-            )
-            self._start_trace(new_trace_data)
+            name = self.name or callback_context.agent_name
 
-        self._root_parent_span_id.set(
-            current_span_data.id if current_span_data is not None else None
-        )
+            if current_span_data := self._context_storage.top_span_data():
+                self._attach_span_to_existing_span(
+                    current_span_data=current_span_data,
+                    name=name,
+                    input=user_input,
+                    type="general",
+                    metadata=self.metadata,
+                )
+            elif current_trace_data := self._context_storage.get_trace_data():
+                self._attach_span_to_existing_trace(
+                    current_trace_data=current_trace_data,
+                    name=name,
+                    input=user_input,
+                    type="general",
+                    metadata=self.metadata,
+                )
+            else:
+                new_trace_data = trace.TraceData(
+                    name=name,
+                    input=user_input,
+                    metadata=trace_metadata,
+                    project_name=self.project_name,
+                    thread_id=thread_id,
+                )
+                self._start_trace(new_trace_data)
+
+            self._external_parent_span_id.set(
+                current_span_data.id if current_span_data is not None else None
+            )
+        except Exception as e:
+            LOGGER.error(f"Failed during before_agent_callback(): {e}", exc_info=True)
 
     def after_agent_callback(
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
     ) -> None:
-        output = self._last_model_output
+        try:
+            output = self._last_model_output
 
-        if (span_data := self._context_storage.top_span_data()) is None:
-            trace_data = self._context_storage.get_trace_data()
-            if trace_data is None:
-                LOGGER.debug(
-                    "Failed during after_agent_callback(): trace is not found."
-                )
-                return
-            trace_data.update(output=output).init_end_time()
-            self._end_current_trace()
-            self._last_model_output = None
-        else:
-            span_data.update(output=output).init_end_time()
-            self._end_current_span()
-
-        self._ensure_no_hanging_opik_tracer_spans()
+            if (span_data := self._context_storage.top_span_data()) is None:
+                trace_data = self._context_storage.get_trace_data()
+                trace_data.update(output=output).init_end_time()
+                self._end_current_trace()
+                self._last_model_output = None
+            else:
+                span_data.update(output=output).init_end_time()
+                self._end_current_span()
+        except Exception as e:
+            LOGGER.error(f"Failed during after_agent_callback(): {e}", exc_info=True)
+        finally:
+            self._ensure_no_hanging_opik_tracer_spans()
 
     def before_model_callback(
         self,
