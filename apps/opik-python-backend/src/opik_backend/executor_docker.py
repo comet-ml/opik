@@ -130,7 +130,7 @@ class DockerExecutor(CodeExecutorBase):
     def _update_container_pool_size_metric(self):
         """Update the container pool size metric with the current number of containers in the pool."""
         pool_size = self.container_pool.qsize()
-        container_pool_size_gauge.record(pool_size)
+        container_pool_size_gauge.set(pool_size)
         logger.debug(f"Current container pool size: {pool_size}")
         return pool_size
 
