@@ -74,7 +74,7 @@ class OpikTracer:
             if metadata is None
             else {**self.metadata, **metadata},
         )
-        self._set_current_context_data(span_data)
+        self._start_span(span_data)
 
     def _attach_span_to_existing_trace(
         self,
@@ -103,7 +103,16 @@ class OpikTracer:
             if metadata is None
             else {**self.metadata, **metadata},
         )
-        self._set_current_context_data(span_data)
+        self._start_span(span_data)
+
+    def _start_span(
+        self,
+        new_span_data: span.SpanData,
+    ) -> None:
+        self._set_current_context_data(new_span_data)
+
+        if self._opik_client.config.log_start_span:
+            self._opik_client.span(**new_span_data.as_start_parameters)
 
     def _start_trace(
         self,
@@ -126,7 +135,7 @@ class OpikTracer:
     ) -> None:
         if (span_data := self._context_storage.top_span_data()) is not None:
             span_data.init_end_time()
-            self._opik_client.span(**span_data.__dict__)
+            self._opik_client.span(**span_data.as_parameters)
 
             self._context_storage.pop_span_data()
 
