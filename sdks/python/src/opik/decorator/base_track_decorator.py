@@ -413,12 +413,13 @@ class BaseTrackDecorator(abc.ABC):
                 distributed_trace_headers=opik_distributed_trace_headers,
             )
         )
+        client = opik_client.get_client_cached()
+        if client.config.log_start_span:
+            client.span(**created_span_data.as_start_parameters)
 
         if created_trace_data is not None:
             context_storage.set_trace_data(created_trace_data)
             TRACES_CREATED_BY_DECORATOR.add(created_trace_data.id)
-
-            client = opik_client.get_client_cached()
             if client.config.log_start_trace:
                 client.trace(**created_trace_data.as_start_parameters)
 
@@ -474,7 +475,7 @@ class BaseTrackDecorator(abc.ABC):
                 **end_arguments.to_kwargs(),
             )
 
-            client.span(**span_data_to_end.__dict__)
+            client.span(**span_data_to_end.as_parameters)
 
             if trace_data_to_end is not None:
                 trace_data_to_end.init_end_time().update(

@@ -341,7 +341,7 @@ class Opik:
             self.trace(**trace_data_.as_parameters)
 
         for span_data_ in new_span_data:
-            self.span(**span_data_.__dict__)
+            self.span(**span_data_.as_parameters)
 
         if delete_original_project:
             trace_ids = [trace_.id for trace_ in trace_data]
