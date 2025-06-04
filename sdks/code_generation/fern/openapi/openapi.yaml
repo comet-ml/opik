@@ -3401,6 +3401,50 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/session/redirect/optimizations:
+    get:
+      tags:
+      - Redirect
+      summary: Create optimization redirect url
+      description: Create optimization redirect url
+      operationId: optimizationsRedirect
+      parameters:
+      - name: dataset_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: optimization_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: workspace_name
+        in: query
+        schema:
+          type: string
+      - name: path
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        "303":
+          description: Redirect
+        "400":
+          description: Bad Request
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/session/redirect/projects:
     get:
       tags:
