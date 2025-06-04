@@ -34,8 +34,13 @@ public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
                 .credentialsProvider(credentialsProvider);
 
         if (config.isMinIO()) {
+            S3Configuration s3Config = S3Configuration.builder()
+                    .checksumValidationEnabled(false)
+                    .build();
+
             builder.forcePathStyle(true)
-                    .endpointOverride(URI.create(config.getS3Url()));
+                    .endpointOverride(URI.create(config.getS3Url()))
+                    .serviceConfiguration(s3Config);
         }
 
         return builder.build();
