@@ -122,7 +122,7 @@ def test_broken_decorator__start_span_preprocessor__no_error(fake_backend):
     assert len(fake_backend.trace_trees) == 1
     assert len(fake_backend.span_trees) == 1
 
-    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+    assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
 
 
 def test_broken_decorator__end_span_preprocessor__no_error(fake_backend):
@@ -163,4 +163,4 @@ def test_broken_decorator__end_span_preprocessor__no_error(fake_backend):
     assert len(fake_backend.trace_trees) == 1
     assert len(fake_backend.span_trees) == 1
 
-    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+    assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
