@@ -4,7 +4,7 @@ from typing_extensions import override
 
 from opik.api_objects import opik_client, span
 from opik.decorator import arguments_helpers, base_track_decorator, inspect_helpers
-from tests.testlib import ANY_BUT_NONE, ANY_STRING, SpanModel, TraceModel, assert_equal
+from ...testlib import ANY_BUT_NONE, ANY_STRING, SpanModel, TraceModel, assert_equal
 
 
 class BrokenOpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
@@ -102,6 +102,7 @@ def test_broken_decorator__start_span_preprocessor__no_error(fake_backend):
         name="f_inner",
         output={"output": 42},
         start_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         error_info=None,
         spans=[
             SpanModel(
@@ -142,6 +143,7 @@ def test_broken_decorator__end_span_preprocessor__no_error(fake_backend):
         name="f_inner",
         output={"output": 42},
         start_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         error_info=None,
         spans=[
             SpanModel(
