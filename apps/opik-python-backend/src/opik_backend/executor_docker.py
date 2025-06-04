@@ -159,7 +159,7 @@ class DockerExecutor(CodeExecutorBase):
         latency = self._calculate_latency_ms(start_time)
         container_creation_histogram.record(latency, attributes={"method": "create_container"})
 
-        logger.debug(f"Created container, id '{new_container.id}' in {latency:.3f} milliseconds")
+        logger.info(f"Created container, id '{new_container.id}' in {latency:.3f} milliseconds")
 
     def release_container(self, container):
         self.releaser_executor.submit(self.async_release, container)
@@ -193,7 +193,7 @@ class DockerExecutor(CodeExecutorBase):
             latency = self._calculate_latency_ms(start_time)
             container_stop_histogram.record(latency, attributes={"method": "stop_container"})
 
-            logger.debug(f"Stopped container {container.id} in {latency:.3f} milliseconds")
+            logger.info(f"Stopped container {container.id} in {latency:.3f} milliseconds")
         except Exception as e:
             logger.error(f"Failed to stop container: {e}")
 
