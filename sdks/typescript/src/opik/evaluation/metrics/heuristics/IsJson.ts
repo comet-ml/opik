@@ -1,6 +1,10 @@
 import { EvaluationScoreResult } from "../../types";
 import { BaseMetric } from "../BaseMetric";
 
+interface IsJsonArgs {
+  output: string;
+}
+
 /**
  * IsJson metric - checks if a given output string is valid JSON.
  */
@@ -9,22 +13,19 @@ export class IsJson extends BaseMetric {
    * Creates a new IsJson metric
    * @param name Optional name for the metric (defaults to "is_json_metric")
    * @param trackMetric Whether to track the metric
-   * @param projectName Optional project name for tracking
    */
-  constructor(
-    name = "is_json_metric",
-    trackMetric = true,
-    projectName?: string,
-  ) {
-    super(name, trackMetric, projectName);
+  constructor(name = "is_json_metric", trackMetric = true) {
+    super(name, trackMetric);
   }
 
   /**
    * Calculates a score based on whether output is a valid JSON
-   * @param output Actual output to evaluate
+   * @param input Actual output to evaluate
    * @returns Score result (1.0 if valid json, 0.0 if not valid json)
    */
-  async score(output: string): Promise<EvaluationScoreResult> {
+  async score(input: IsJsonArgs): Promise<EvaluationScoreResult> {
+    const { output } = input;
+
     try {
       JSON.parse(output);
       return {

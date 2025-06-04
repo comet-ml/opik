@@ -1,22 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BaseMetric, EvaluationScoreResult } from "opik";
 
-class BasicAsyncMetric extends BaseMetric {
+interface OneOutputMetricArgs {
+  output: string;
+}
+
+class BasicAsyncMetric extends BaseMetric<OneOutputMetricArgs> {
   constructor(private readonly delayMs = 0) {
     super("basic_async_metric", false);
   }
 
-  async score(input: string): Promise<EvaluationScoreResult> {
+  async score(input: OneOutputMetricArgs): Promise<EvaluationScoreResult> {
     await new Promise((resolve) => setTimeout(resolve, this.delayMs));
     return {
       name: this.name,
-      value: input.length > 0 ? 1.0 : 0.0,
-      reason: `Processed input of length ${input.length}`,
+      value: input.output.length > 0 ? 1.0 : 0.0,
+      reason: `Processed input of length ${input.output.length}`,
     };
   }
 }
 
-class ApiResponseValidator extends BaseMetric {
+class ApiResponseValidator extends BaseMetric<OneOutputMetricArgs> {
   constructor(
     private readonly validateFn: (response: unknown) => boolean,
     private readonly apiEndpoint: string,
@@ -24,11 +28,11 @@ class ApiResponseValidator extends BaseMetric {
     super("api_response_validator", false);
   }
 
-  async score(input: string): Promise<EvaluationScoreResult> {
+  async score(input: OneOutputMetricArgs): Promise<EvaluationScoreResult> {
     try {
       const response = await fetch(this.apiEndpoint, {
         method: "POST",
-        body: JSON.stringify({ input }),
+        body: JSON.stringify({ input: input.output }),
       });
       const data = await response.json();
       const isValid = this.validateFn(data);
@@ -48,14 +52,18 @@ class ApiResponseValidator extends BaseMetric {
   }
 }
 
-class ContentModerationMetric extends BaseMetric {
+class ContentModerationMetric extends BaseMetric<OneOutputMetricArgs> {
   private readonly bannedWords = ["spam", "scam", "fraud"];
   private readonly moderationApi = "https://api.moderatecontent.com/text/";
 
-  async score(input: string): Promise<EvaluationScoreResult> {
+  constructor() {
+    super("content_moderation_metric", false);
+  }
+
+  async score(input: OneOutputMetricArgs): Promise<EvaluationScoreResult> {
     try {
       const hasBannedWord = this.bannedWords.some((word) =>
-        input.toLowerCase().includes(word),
+        input.output.toLowerCase().includes(word),
       );
 
       if (hasBannedWord) {
@@ -92,14 +100,18 @@ class ContentModerationMetric extends BaseMetric {
   }
 }
 
-class SentimentAnalysisMetric extends BaseMetric {
-  async score(input: string): Promise<EvaluationScoreResult> {
+class SentimentAnalysisMetric extends BaseMetric<OneOutputMetricArgs> {
+  constructor() {
+    super("sentiment_analysis_metric", false);
+  }
+
+  async score(input: OneOutputMetricArgs): Promise<EvaluationScoreResult> {
     await new Promise((resolve) => setTimeout(resolve, 50)); // Simulate API delay
 
     const positiveWords = ["good", "great", "excellent", "happy"];
     const negativeWords = ["bad", "terrible", "awful", "sad"];
 
-    const words = input.toLowerCase().split(/\s+/);
+    const words = input.output.toLowerCase().split(/\s+/);
     let score = 0.5; // Neutral
 
     words.forEach((word) => {
@@ -117,17 +129,16 @@ class SentimentAnalysisMetric extends BaseMetric {
   }
 }
 
-class CompositeAsyncMetric extends BaseMetric {
+class CompositeAsyncMetric extends BaseMetric<OneOutputMetricArgs> {
   constructor(private readonly metrics: BaseMetric[]) {
     super("composite_async_metric", false);
   }
 
-  async score(input: string): Promise<EvaluationScoreResult> {
+  async score(input: OneOutputMetricArgs): Promise<EvaluationScoreResult> {
     const results = await Promise.all(
       this.metrics.map(async (metric) => {
         try {
-          const result = await metric.score(input);
-          return result;
+          return await metric.score(input);
         } catch (error) {
           return {
             name: metric.name,
@@ -153,7 +164,7 @@ describe("Async Custom Metrics", () => {
   describe("BasicAsyncMetric", () => {
     it("should process input asynchronously", async () => {
       const metric = new BasicAsyncMetric(10);
-      const result = await metric.score("test");
+      const result = await metric.score({ output: "test" });
       expect(result.value).toBe(1.0);
       expect(result.reason).toContain("Processed input");
     });
@@ -175,7 +186,7 @@ describe("Async Custom Metrics", () => {
         "https://api.example.com/validate",
       );
 
-      const result = await validator.score("test input");
+      const result = await validator.score({ output: "test input" });
       expect(result.value).toBe(1.0);
     });
   });
@@ -183,7 +194,7 @@ describe("Async Custom Metrics", () => {
   describe("ContentModerationMetric", () => {
     it("should detect banned words", async () => {
       const metric = new ContentModerationMetric();
-      const result = await metric.score("This is a spam message");
+      const result = await metric.score({ output: "This is a spam message" });
       expect(result.value).toBe(0.0);
       expect(result.reason).toBe("Contains banned words");
     });
@@ -192,8 +203,10 @@ describe("Async Custom Metrics", () => {
   describe("SentimentAnalysisMetric", () => {
     it("should analyze sentiment", async () => {
       const metric = new SentimentAnalysisMetric();
-      const positiveResult = await metric.score("I am happy with this");
-      const negativeResult = await metric.score("This is bad");
+      const positiveResult = await metric.score({
+        output: "I am happy with this",
+      });
+      const negativeResult = await metric.score({ output: "This is bad" });
 
       expect(positiveResult.value).toBeGreaterThan(0.5);
       expect(negativeResult.value).toBeLessThan(0.5);
@@ -205,7 +218,7 @@ describe("Async Custom Metrics", () => {
       const metrics = [new BasicAsyncMetric(), new SentimentAnalysisMetric()];
 
       const composite = new CompositeAsyncMetric(metrics);
-      const result = await composite.score("This is a good test");
+      const result = await composite.score({ output: "This is a good test" });
 
       expect(result.value).toBeGreaterThan(0); // Should be between 0 and 1
       expect(result.reason).toContain("Average score");

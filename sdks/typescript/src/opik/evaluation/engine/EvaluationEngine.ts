@@ -46,7 +46,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
   constructor(
     options: EvaluateOptions<T>,
     client: OpikClient,
-    experiment: Experiment
+    experiment: Experiment,
   ) {
     this.client = client;
     this.dataset = options.dataset;
@@ -110,7 +110,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         new ExperimentItemReferences({
           datasetItemId: testResult.testCase.datasetItemId,
           traceId: testResult.testCase.traceId,
-        })
+        }),
     );
     this.experiment.insert(experimentItemReferences);
 
@@ -123,7 +123,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     return EvaluationResultProcessor.processResults(
       testResults,
       this.experiment,
-      totalTimeSeconds
+      totalTimeSeconds,
     );
   }
 
@@ -134,7 +134,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
    * @returns The test result
    */
   private async executeTask(
-    datasetItem: DatasetItemData & T
+    datasetItem: DatasetItemData & T,
   ): Promise<EvaluationTestResult> {
     let taskOutput: Record<string, unknown> = {};
     const scoreResults: EvaluationScoreResult[] = [];
@@ -142,7 +142,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     logger.info(`Starting evaluation task on dataset item ${datasetItem.id}`);
     taskOutput = await track(
       { name: "llm_task", type: SpanType.General },
-      this.task
+      this.task,
     )(datasetItem);
     logger.info(`Finished evaluation task on dataset item ${datasetItem.id}`);
     // Map scoring keys if needed
@@ -175,7 +175,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
    */
   @track({ name: "metrics_calculation", type: SpanType.General })
   private async calculateScores(
-    testCase: EvaluationTestCase
+    testCase: EvaluationTestCase,
   ): Promise<EvaluationTestResult> {
     const scoreResults: EvaluationScoreResult[] = [];
     const { scoringInputs } = testCase;
@@ -186,6 +186,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
 
       // If all required arguments exist, call the metric's score method
       logger.info(`Calculating score for metric ${metric.name}`);
+
       const metricResults = await metric.score(scoringInputs);
       const resultArray = Array.isArray(metricResults)
         ? metricResults
@@ -201,7 +202,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         name: score.name,
         value: score.value,
         reason: score.reason,
-      })
+      }),
     );
 
     return {
@@ -220,7 +221,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
    */
   private prepareScoringInputs(
     datasetItem: Record<string, unknown>,
-    taskOutput: Record<string, unknown>
+    taskOutput: Record<string, unknown>,
   ): Record<string, unknown> {
     // Combine dataset item and task output (task output has priority)
     const combined = { ...datasetItem, ...taskOutput };
@@ -234,7 +235,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     const mapped: Record<string, unknown> = { ...combined };
 
     for (const [targetKey, sourceKey] of Object.entries(
-      this.scoringKeyMapping
+      this.scoringKeyMapping,
     )) {
       if (sourceKey in combined) {
         mapped[targetKey] = combined[sourceKey];

@@ -26,7 +26,7 @@ describe("DependentMetric", () => {
     };
 
     const metric = new DependentMetric(mockService);
-    const result = metric.score("test");
+    const result = metric.score();
 
     expect(mockService.getScore).toHaveBeenCalledTimes(2); // Called twice in the score method
 
@@ -38,7 +38,7 @@ describe("DependentMetric", () => {
   it("should use the provided name", () => {
     const mockService = { getScore: () => 0.5 };
     const metric = new DependentMetric(mockService, "custom_name");
-    const result = metric.score("test");
+    const result = metric.score();
 
     expect(result.name).toBe("custom_name");
   });
@@ -49,7 +49,7 @@ describe("DependentMetric", () => {
     };
 
     const metric = new DependentMetric(mockService);
-    const result = metric.score("test");
+    const result = metric.score();
 
     expect(result.value).toBe(0.1);
     expect(result.reason).toBe("Dependent score: 0.2");

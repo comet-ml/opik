@@ -8,13 +8,13 @@ describe("IsJson Metric", () => {
   });
 
   it("should return 1.0 for valid JSON objects", async () => {
-    const result = await isJson.score('{ "key": "value" }');
+    const result = await isJson.score({ output: '{ "key": "value" }' });
     expect(result.value).toBe(1.0);
     expect(result.reason).toContain("valid JSON");
   });
 
   it("should return 1.0 for valid JSON arrays", async () => {
-    const result = await isJson.score('[1, 2, 3, "test"]');
+    const result = await isJson.score({ output: '[1, 2, 3, "test"]' });
     expect(result.value).toBe(1.0);
   });
 
@@ -27,7 +27,7 @@ describe("IsJson Metric", () => {
     ];
 
     for (const testCase of testCases) {
-      const result = await isJson.score(testCase);
+      const result = await isJson.score({ output: testCase });
       expect(result.value).toBe(1.0);
     }
   });
@@ -46,7 +46,7 @@ describe("IsJson Metric", () => {
     ];
 
     for (const testCase of testCases) {
-      const result = await isJson.score(testCase);
+      const result = await isJson.score({ output: testCase });
       expect(result.value).toBe(0.0);
       expect(result.reason).toContain("not valid JSON");
     }
@@ -63,20 +63,20 @@ describe("IsJson Metric", () => {
       }
     });
 
-    const result = await isJson.score(complexJson);
+    const result = await isJson.score({ output: complexJson });
     expect(result.value).toBe(1.0);
   });
 
   it("should respect custom metric name", async () => {
     const customName = "custom_json_check";
     const customIsJson = new IsJson(customName);
-    const result = await customIsJson.score('{}');
+    const result = await customIsJson.score({ output: '{}' });
     expect(result.name).toBe(customName);
   });
 
   it("should handle whitespace correctly", async () => {
     const validWithWhitespace = '\n\t{ \n\t\t"key"\t: \t"value"\n\t}\n';
-    const result = await isJson.score(validWithWhitespace);
+    const result = await isJson.score({ output: validWithWhitespace });
     expect(result.value).toBe(1.0);
   });
 });

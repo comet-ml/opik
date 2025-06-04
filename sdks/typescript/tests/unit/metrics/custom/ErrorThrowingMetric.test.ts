@@ -16,5 +16,5 @@ class ErrorThrowingMetric extends BaseMetric {
 
 it("should handle async errors", async () => {
   const metric = new ErrorThrowingMetric(true);
-  await expect(metric.score("test")).rejects.toThrow("Test error");
+  await expect(metric.score()).rejects.toThrow("Test error");
 });
