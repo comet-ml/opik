@@ -751,6 +751,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "meta-llama/llama-guard-3-8b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_GUARD_4_12B,
+      label: "meta-llama/llama-guard-4-12b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_4_MAVERICK,
+      label: "meta-llama/llama-4-maverick",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_4_SCOUT,
+      label: "meta-llama/llama-4-scout",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_3_5_MINI_128K_INSTRUCT,
       label: "microsoft/phi-3.5-mini-128k-instruct",
     },
@@ -1298,6 +1310,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN_VL_PLUS_FREE,
       label: "qwen/qwen-vl-plus:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B,
+      label: "qwen/qwq-32b",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B_PREVIEW,
