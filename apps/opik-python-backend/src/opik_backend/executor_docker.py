@@ -23,14 +23,14 @@ meter = metrics.get_meter("docker_executor")
 # Create histogram metrics for container operations
 container_creation_histogram = meter.create_histogram(
     name="container_creation_latency",
-    description="Latency of container creation operations in seconds",
-    unit="s",
+    description="Latency of container creation operations in milliseconds",
+    unit="ms",
 )
 
 container_stop_histogram = meter.create_histogram(
     name="container_stop_latency",
-    description="Latency of container stop operations in seconds",
-    unit="s",
+    description="Latency of container stop operations in milliseconds",
+    unit="ms",
 )
 
 # Create a gauge metric to track the number of available containers in the pool
@@ -134,6 +134,9 @@ class DockerExecutor(CodeExecutorBase):
         logger.debug(f"Current container pool size: {pool_size}")
         return pool_size
 
+    def _calculate_latency_ms(self, start_time):
+        return (time.time() - start_time) * 1000  # Convert to milliseconds
+
     def create_container(self):
         # Record the start time for detailed container creation metrics
         start_time = time.time()
@@ -153,10 +156,10 @@ class DockerExecutor(CodeExecutorBase):
         self.container_pool.put(new_container)
 
         # Calculate and record the latency for the direct container creation
-        latency = time.time() - start_time
+        latency = self._calculate_latency_ms(start_time)
         container_creation_histogram.record(latency, attributes={"method": "create_container"})
 
-        logger.info(f"Created container, id '{new_container.id}' in {latency:.3f} seconds")
+        logger.info(f"Created container, id '{new_container.id}' in {latency:.3f} milliseconds")
 
     def release_container(self, container):
         self.releaser_executor.submit(self.async_release, container)
@@ -187,10 +190,10 @@ class DockerExecutor(CodeExecutorBase):
             container.remove(force=True)
 
             # Calculate and record the latency
-            latency = time.time() - start_time
+            latency = self._calculate_latency_ms(start_time)
             container_stop_histogram.record(latency, attributes={"method": "stop_container"})
 
-            logger.info(f"Stopped container {container.id} in {latency:.3f} seconds")
+            logger.info(f"Stopped container {container.id} in {latency:.3f} milliseconds")
         except Exception as e:
             logger.error(f"Failed to stop container: {e}")
 
