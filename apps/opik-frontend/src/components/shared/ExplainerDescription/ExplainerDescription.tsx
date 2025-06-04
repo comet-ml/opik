@@ -28,7 +28,7 @@ const ExplainerDescription: React.FC<ExplainerDescriptionProps> = ({
         {description}
       </span>
       {docLink && (
-        <Button variant="link" className="px-1" asChild>
+        <Button variant="link" className="h-5 px-1" asChild>
           <a
             href={buildDocsUrl(docLink, docHash)}
             target="_blank"

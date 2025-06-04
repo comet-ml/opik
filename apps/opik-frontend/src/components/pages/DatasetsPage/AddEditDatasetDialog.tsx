@@ -293,7 +293,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
               <Description className="tracking-normal">
                 Your CSV file should contain only two columns (input and output)
                 and up to 1,000 rows. For larger datasets, use the SDK instead.
-                <Button variant="link" size="sm" className="px-1" asChild>
+                <Button variant="link" size="sm" className="h-5 px-1" asChild>
                   <a
                     href={buildDocsUrl("/evaluation/manage_datasets")}
                     target="_blank"
