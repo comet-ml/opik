@@ -1,5 +1,4 @@
 import React, { useCallback, useState } from "react";
-import { csv2json } from "json-2-csv";
 import { SquareArrowOutUpRight } from "lucide-react";
 
 import useAppStore from "@/store/AppStore";
@@ -28,6 +27,7 @@ import UploadField from "@/components/shared/UploadField/UploadField";
 import Loader from "@/components/shared/Loader/Loader";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { buildDocsUrl } from "@/lib/utils";
+import { validateCsvFile } from "@/lib/file";
 import { Dataset, DATASET_ITEM_SOURCE } from "@/types/datasets";
 
 const ACCEPTED_TYPE = ".csv";
@@ -71,7 +71,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
 
   const onCreateSuccessHandler = useCallback(
     (newDataset: Dataset) => {
-      if (hasValidCsvData) {
+      if (hasValidCsvData && newDataset.id) {
         // Prepare items with manual source and data fields
         const headers = Object.keys(csvData[0]);
         const [inputKey, outputKey] = headers;
@@ -85,7 +85,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
 
         createItemsMutate(
           {
-            datasetName: newDataset.name,
+            datasetId: newDataset.id,
             datasetItems: items,
             workspaceName,
           },
@@ -145,6 +145,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
         },
         {
           onSuccess: onCreateSuccessHandler,
+          onError: () => setOpen(false),
         },
       );
     }
@@ -168,65 +169,20 @@ const AddEditDatasetDialog: React.FunctionComponent<
   const handleFileSelect = useCallback(async (file?: File) => {
     setCsvError(undefined);
     setCsvData(undefined);
-    if (!file) return;
 
-    try {
-      if (file.size > FILE_SIZE_LIMIT_IN_MB * 1024 * 1024) {
-        setCsvError(`File exceeds maximum size (${FILE_SIZE_LIMIT_IN_MB}MB).`);
-        return;
-      }
+    const { data, error } = await validateCsvFile(
+      file,
+      FILE_SIZE_LIMIT_IN_MB,
+      MAX_ITEMS_COUNT_LIMIT,
+    );
 
-      // Validate mime type
-      if (!file.type || !file.type.includes("text/csv")) {
-        setCsvError("File must be in .csv format");
-        return;
-      }
-
-      const text = await file.text();
-
-      const parsed = await csv2json(text, {
-        excelBOM: true,
-        trimHeaderFields: true,
-        trimFieldValues: true,
-      });
-
-      if (!Array.isArray(parsed)) {
-        setCsvError("Invalid CSV format.");
-        return;
-      }
-
-      if (parsed.length === 0) {
-        setCsvError("CSV file is empty.");
-        return;
-      }
-
-      if (parsed.length > MAX_ITEMS_COUNT_LIMIT) {
-        setCsvError(
-          `File is too large (max. ${MAX_ITEMS_COUNT_LIMIT.toLocaleString()} rows)`,
-        );
-        return;
-      }
-
-      const headers = Object.keys(parsed[0] as object);
-      if (
-        headers.length !== 2 ||
-        !headers.includes("input") ||
-        !headers.includes("output")
-      ) {
-        setCsvError(
-          `File must have only two columns named 'input' and 'output'. Instead, the file has the following columns: ${headers
-            .slice(0, 5)
-            .map((h) => `"${h}"`)
-            .join(",")}`,
-        );
-        return;
-      }
-
-      setCsvData(parsed as Record<string, unknown>[]);
-    } catch (err) {
-      setCsvError("Failed to process CSV file.");
-      console.error(err);
+    if (error) {
+      setCsvError(error);
       return;
+    }
+
+    if (data) {
+      setCsvData(data);
     }
   }, []);
 

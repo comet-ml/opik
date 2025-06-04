@@ -6,8 +6,7 @@ import { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
 
 type UseDatasetItemBatchMutationParams = {
-  datasetId?: string;
-  datasetName?: string;
+  datasetId: string;
   datasetItems: Partial<DatasetItem>[];
   workspaceName: string;
 };
@@ -19,13 +18,11 @@ const useDatasetItemBatchMutation = () => {
   return useMutation({
     mutationFn: async ({
       datasetId,
-      datasetName,
       datasetItems,
       workspaceName,
     }: UseDatasetItemBatchMutationParams) => {
       const { data } = await api.put(`${DATASETS_REST_ENDPOINT}items`, {
         dataset_id: datasetId,
-        dataset_name: datasetName,
         items: datasetItems,
         workspace_name: workspaceName,
       });
