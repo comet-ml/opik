@@ -103,6 +103,50 @@ class RedirectClient:
         )
         return _response.data
 
+    def optimizations_redirect(
+        self,
+        *,
+        dataset_id: str,
+        optimization_id: str,
+        path: str,
+        workspace_name: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create optimization redirect url
+
+        Parameters
+        ----------
+        dataset_id : str
+
+        optimization_id : str
+
+        path : str
+
+        workspace_name : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.redirect.optimizations_redirect(dataset_id='dataset_id', optimization_id='optimization_id', path='path', )
+        """
+        _response = self._raw_client.optimizations_redirect(
+            dataset_id=dataset_id,
+            optimization_id=optimization_id,
+            path=path,
+            workspace_name=workspace_name,
+            request_options=request_options,
+        )
+        return _response.data
+
     def projects_redirect(
         self,
         *,
@@ -237,6 +281,53 @@ class AsyncRedirectClient:
         _response = await self._raw_client.experiments_redirect(
             dataset_id=dataset_id,
             experiment_id=experiment_id,
+            path=path,
+            workspace_name=workspace_name,
+            request_options=request_options,
+        )
+        return _response.data
+
+    async def optimizations_redirect(
+        self,
+        *,
+        dataset_id: str,
+        optimization_id: str,
+        path: str,
+        workspace_name: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create optimization redirect url
+
+        Parameters
+        ----------
+        dataset_id : str
+
+        optimization_id : str
+
+        path : str
+
+        workspace_name : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.redirect.optimizations_redirect(dataset_id='dataset_id', optimization_id='optimization_id', path='path', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.optimizations_redirect(
+            dataset_id=dataset_id,
+            optimization_id=optimization_id,
             path=path,
             workspace_name=workspace_name,
             request_options=request_options,
