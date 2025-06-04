@@ -1,3 +1,5 @@
+import datetime
+
 import pytest
 
 from opik.decorator import tracker
@@ -62,3 +64,5 @@ def test_track__trace_logged_at_start_and_end(fake_backend_with_patched_environm
 
     assert trace_trees[0].id == trace_trees[1].id
     assert trace_trees[0].last_updated_at < trace_trees[1].last_updated_at
+
+    assert isinstance(trace_trees[1].spans[0].last_updated_at, datetime.datetime)

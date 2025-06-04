@@ -462,6 +462,7 @@ class Opik:
             provider=provider,
             error_info=error_info,
             total_cost=total_cost,
+            last_updated_at=last_updated_at,
         )
         self._streamer.put(create_span_message)
 
