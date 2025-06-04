@@ -40,15 +40,27 @@ class CompositeMetric extends BaseMetric<OneOutputMetricArgs> {
     super("composite_metric", false);
   }
 
-  score(input: OneOutputMetricArgs): EvaluationScoreResult {
-    const results = this.metrics.map((metric) => metric.score(input));
+  async score(input: OneOutputMetricArgs): Promise<EvaluationScoreResult> {
+    const results = await Promise.all(
+      this.metrics.map(async (metric) => {
+        const result = metric.score(input);
+        const resolvedResult =
+          result instanceof Promise ? await result : result;
+        return Array.isArray(resolvedResult)
+          ? resolvedResult
+          : [resolvedResult];
+      }),
+    );
+
+    const flattenedResults = results.flat();
+    const totalScore = flattenedResults.reduce((sum, r) => sum + r.value, 0);
     const avgScore =
-      results.reduce((sum, r) => sum + r.value, 0) / results.length;
+      flattenedResults.length > 0 ? totalScore / flattenedResults.length : 0;
 
     return {
       name: this.name,
       value: avgScore,
-      reason: `Average score from ${results.length} metrics`,
+      reason: `Average score from ${flattenedResults.length} metrics`,
     };
   }
 }
@@ -76,11 +88,11 @@ describe("Sync Custom Metrics", () => {
   });
 
   describe("CompositeMetric", () => {
-    it("should calculate average score", () => {
+    it("should calculate average score", async () => {
       const metrics = [new BasicSyncMetric(), new LengthThresholdMetric(3)];
       const composite = new CompositeMetric(metrics);
 
-      expect(composite.score({ output: "test" }).value).toBe(1.0);
+      expect((await composite.score({ output: "test" })).value).toBe(1.0);
     });
   });
 });

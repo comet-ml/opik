@@ -149,13 +149,18 @@ class CompositeAsyncMetric extends BaseMetric<OneOutputMetricArgs> {
       }),
     );
 
+    const flatResults = results.flatMap((result) =>
+      Array.isArray(result) ? result : [result],
+    );
+
+    const totalScore = flatResults.reduce((sum, r) => sum + r.value, 0);
     const avgScore =
-      results.reduce((sum, r) => sum + r.value, 0) / results.length;
+      flatResults.length > 0 ? totalScore / flatResults.length : 0;
 
     return {
       name: this.name,
       value: avgScore,
-      reason: `Average score from ${results.length} metrics`,
+      reason: `Average score from ${flatResults.length} metrics`,
     };
   }
 }
@@ -176,13 +181,23 @@ describe("Async Custom Metrics", () => {
     });
 
     it("should validate API responses", async () => {
-      (global.fetch as unknown).mockResolvedValueOnce({
+      const mockFetch = vi.mocked(global.fetch);
+
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ valid: true, score: 0.9 }),
-      });
+      } as Response);
+
+      interface ApiResponse {
+        valid: boolean;
+        score: number;
+      }
 
       const validator = new ApiResponseValidator(
-        (data) => data.valid && data.score > 0.8,
+        (data: unknown) => {
+          const response = data as ApiResponse;
+          return response.valid && response.score > 0.8;
+        },
         "https://api.example.com/validate",
       );
 

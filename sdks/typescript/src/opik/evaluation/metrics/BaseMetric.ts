@@ -25,7 +25,7 @@ import { SpanType } from "@/rest_api/api";
  *
  * ```
  */
-export abstract class BaseMetric<T extends object = { output: unknown }> {
+export abstract class BaseMetric<T extends object = object> {
   /**
    * The name of the metric
    */
@@ -64,6 +64,10 @@ export abstract class BaseMetric<T extends object = { output: unknown }> {
    * @returns A score result or list of score results
    */
   abstract score(
-    input: T,
-  ): Promise<EvaluationScoreResult | EvaluationScoreResult[]>;
+    input?: T,
+  ):
+    | EvaluationScoreResult
+    | EvaluationScoreResult[]
+    | Promise<EvaluationScoreResult>
+    | Promise<EvaluationScoreResult[]>;
 }
