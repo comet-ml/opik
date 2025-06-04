@@ -635,7 +635,7 @@ class ProjectMetricsResourceTest {
                             .usage(usageNames == null
                                     ? null
                                     : usageNames.stream().collect(
-                                            Collectors.toMap(name -> name, n -> RANDOM.nextInt())))
+                                            Collectors.toMap(name -> name, n -> Math.abs(RANDOM.nextInt()))))
                             .build())
                     .toList();
 
