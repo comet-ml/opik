@@ -59,7 +59,7 @@ class OpikTracer:
         input: Dict[str, Any],
         type: SpanType,
         trace_id: str,
-        parent_project_name: str,
+        parent_project_name: Optional[str],
         metadata: Optional[Dict[str, Any]] = None,
         provider: Optional[Union[str, LLMProvider]] = None,
         model: Optional[str] = None,
