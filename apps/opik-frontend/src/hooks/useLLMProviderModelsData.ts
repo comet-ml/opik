@@ -1060,8 +1060,17 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-4",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_ONLINE,
+      label: "openai/gpt-4:online",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
       label: "openai/gpt-4o",
+      structuredOutput: true,
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_ONLINE,
+      label: "openai/gpt-4o:online",
       structuredOutput: true,
     },
     {
