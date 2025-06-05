@@ -53,53 +53,23 @@ class OpikTracer:
 
         _patch_adk()
 
-    def _attach_span_to_existing_span(
+    def _attach_span_to_existing_trace_or_span(
         self,
-        current_span_data: span.SpanData,
         name: str,
         input: Dict[str, Any],
         type: SpanType,
+        trace_id: str,
+        parent_project_name: str,
         metadata: Optional[Dict[str, Any]] = None,
         provider: Optional[Union[str, LLMProvider]] = None,
         model: Optional[str] = None,
     ) -> None:
         project_name = helpers.resolve_child_span_project_name(
-            parent_project_name=current_span_data.project_name,
-            child_project_name=self.project_name,
-        )
-
-        span_data = span.SpanData(
-            trace_id=current_span_data.trace_id,
-            parent_span_id=current_span_data.id,
-            name=name,
-            provider=provider,
-            model=model,
-            input=input,
-            type=type,
-            project_name=project_name,
-            metadata=self.metadata
-            if metadata is None
-            else {**self.metadata, **metadata},
-        )
-
-        self._start_span(span_data)
-
-    def _attach_span_to_existing_trace(
-        self,
-        current_trace_data: trace.TraceData,
-        name: str,
-        input: Dict[str, Any],
-        type: SpanType,
-        metadata: Optional[Dict[str, Any]] = None,
-        provider: Optional[Union[str, LLMProvider]] = None,
-        model: Optional[str] = None,
-    ) -> None:
-        project_name = helpers.resolve_child_span_project_name(
-            parent_project_name=current_trace_data.project_name,
+            parent_project_name=parent_project_name,
             child_project_name=self.project_name,
         )
         span_data = span.SpanData(
-            trace_id=current_trace_data.id,
+            trace_id=trace_id,
             parent_span_id=None,
             name=name,
             provider=provider,
@@ -112,17 +82,11 @@ class OpikTracer:
             else {**self.metadata, **metadata},
         )
 
-        self._start_span(span_data)
-
-    def _start_span(
-        self,
-        new_span_data: span.SpanData,
-    ) -> None:
-        self._set_current_context_data(new_span_data)
+        self._set_current_context_data(span_data)
         self._opik_created_spans.add(span_data.id)
 
         if self._opik_client.config.log_start_span:
-            self._opik_client.span(**new_span_data.as_start_parameters)
+            self._opik_client.span(**span_data.as_start_parameters)
 
     def _start_trace(
         self,
@@ -205,20 +169,22 @@ class OpikTracer:
             name = self.name or callback_context.agent_name
 
             if current_span_data := self._context_storage.top_span_data():
-                self._attach_span_to_existing_span(
-                    current_span_data=current_span_data,
+                self._attach_span_to_existing_trace_or_span(
                     name=name,
                     input=user_input,
                     type="general",
+                    trace_id=current_span_data.trace_id,
+                    parent_project_name=current_span_data.project_name,
                     metadata=self.metadata,
                 )
                 self._external_parent_span_id.set(current_span_data.id)
             elif current_trace_data := self._context_storage.get_trace_data():
-                self._attach_span_to_existing_trace(
-                    current_trace_data=current_trace_data,
+                self._attach_span_to_existing_trace_or_span(
                     name=name,
                     input=user_input,
                     type="general",
+                    trace_id=current_trace_data.id,
+                    parent_project_name=current_trace_data.project_name,
                     metadata=self.metadata,
                 )
             else:
@@ -268,25 +234,27 @@ class OpikTracer:
             )
 
             if current_span_data := self._context_storage.top_span_data():
-                self._attach_span_to_existing_span(
-                    current_span_data=current_span_data,
+                self._attach_span_to_existing_trace_or_span(
                     name=llm_request.model,
                     provider=provider,
                     model=model,
                     input=input,
                     type="llm",
+                    trace_id=current_span_data.trace_id,
+                    parent_project_name=current_span_data.project_name,
                     metadata=self.metadata,
                 )
             else:
                 current_trace_data = self._context_storage.get_trace_data()
                 assert current_trace_data is not None
-                self._attach_span_to_existing_trace(
-                    current_trace_data=current_trace_data,
+                self._attach_span_to_existing_trace_or_span(
                     name=llm_request.model,
                     provider=provider,
                     model=model,
                     input=input,
                     type="llm",
+                    trace_id=current_trace_data.id,
+                    parent_project_name=current_trace_data.project_name,
                     metadata=self.metadata,
                 )
         except Exception as e:
@@ -352,21 +320,23 @@ class OpikTracer:
             metadata = {"function_call_id": tool_context.function_call_id}
 
             if (current_span_data := self._context_storage.top_span_data()) is not None:
-                self._attach_span_to_existing_span(
-                    current_span_data=current_span_data,
+                self._attach_span_to_existing_trace_or_span(
                     name=tool.name,
                     input=args,
                     type="tool",
+                    trace_id=current_span_data.trace_id,
+                    parent_project_name=current_span_data.project_name,
                     metadata=metadata,
                 )
             else:
                 current_trace_data = self._context_storage.get_trace_data()
                 assert current_trace_data is not None
-                self._attach_span_to_existing_trace(
-                    current_trace_data=current_trace_data,
+                self._attach_span_to_existing_trace_or_span(
                     name=tool.name,
                     input=args,
                     type="tool",
+                    trace_id=current_trace_data.id,
+                    parent_project_name=current_trace_data.project_name,
                     metadata=metadata,
                 )
         except Exception as e:
