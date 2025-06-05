@@ -12,13 +12,14 @@ from ..reporting_utils import (
     convert_tqdm_to_rich,
     display_configuration,  # noqa: F401
     display_header,  # noqa: F401
-    display_messages,
+    display_messages,  # noqa: F401
     display_result,  # noqa: F401
+    get_console,
     suppress_opik_logs,
 )
 
 PANEL_WIDTH = 70
-console = Console()
+console = get_console()
 
 
 @contextmanager
@@ -47,7 +48,7 @@ def infer_output_style(verbose: int = 1):
 
                 # Use a temporary buffer to render the panel
                 buffer = StringIO()
-                temp_console = Console(file=buffer, width=console.width)
+                temp_console = get_console(file=buffer, width=console.width)
                 temp_console.print(panel)
 
                 # Add prefix to each line

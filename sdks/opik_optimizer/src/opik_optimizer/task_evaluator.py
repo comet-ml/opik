@@ -14,7 +14,14 @@ def _create_metric_class(metric: Callable):
         
         def score(self, llm_output, **kwargs) -> score_result.ScoreResult:
             try:
-                return metric(dataset_item=kwargs, llm_output=llm_output)
+                metric_val = metric(dataset_item=kwargs, llm_output=llm_output)
+                if isinstance(metric_val , score_result.ScoreResult):
+                    return metric_val
+                else:
+                    return score_result.ScoreResult(
+                        name = self.name,
+                        value = metric_val
+                    )
             except Exception:
                 return score_result.ScoreResult(
                     name = self.name,

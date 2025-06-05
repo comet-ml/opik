@@ -11,7 +11,8 @@ from rich.text import Text
 
 PANEL_WIDTH = 70
 
-console = Console()
+def get_console(*args, **kwargs):
+    return Console(*args, force_jupyter=False, **kwargs)
 
 @contextmanager
 def convert_tqdm_to_rich(description: Optional[str] = None, verbose: int = 1):
@@ -77,6 +78,7 @@ def display_messages(messages: List[Dict[str, str]], prefix: str = ""):
         )
 
         # Capture the panel as rendered text with ANSI styles
+        console = get_console()
         with console.capture() as capture:
             console.print(panel)
 

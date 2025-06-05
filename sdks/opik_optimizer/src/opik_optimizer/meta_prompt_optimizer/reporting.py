@@ -1,7 +1,6 @@
 from contextlib import contextmanager
 
 import rich
-from rich.console import Console
 from rich.text import Text
 
 from ..reporting_utils import (
@@ -10,11 +9,12 @@ from ..reporting_utils import (
     display_header,  # noqa: F401
     display_messages,
     display_result,  # noqa: F401
+    get_console,
     suppress_opik_logs,
 )
 
 PANEL_WIDTH = 70
-console = Console()
+console = get_console()
 
 
 @contextmanager

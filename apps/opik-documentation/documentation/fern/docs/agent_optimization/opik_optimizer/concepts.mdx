@@ -83,7 +83,7 @@ examples, or tool interactions.
     - `dataset_item`: A dictionary with the dataset item keys
     - `llm_output`: This will be populated with the LLM response
 
-    It should return either a [ScoreResult]() object or a float.
+    It should return either a [ScoreResult](https://www.comet.com/docs/opik/python-sdk-reference/Objects/ScoreResult.html) object or a float.
 
   </Accordion>
   <Accordion title="Ground Truth">
@@ -136,7 +136,7 @@ Here's how it generally works:
    - Use `result.display()` for a console summary or inspect its attributes (`result.prompt`, `result.score`, `result.history`) programmatically.
    - Analyze the detailed run information in the Opik UI to understand performance improvements and identify the best prompt(s).
 4. **Refinement (Optional / Iterative)**
-   - Based on the results, you might choose to adjust optimizer parameters, refine your initial `TaskConfig.instruction_prompt`, improve your dataset, or even try a different optimizer and run further optimization trials.
+   - Based on the results, you might choose to adjust optimizer parameters, refine your initial `ChatPrompt`, improve your dataset, or even try a different optimizer and run further optimization trials.
 5. **Validation (Recommended)**
    - Test the best prompt(s) found during optimization on a separate, unseen validation or test dataset to ensure the improvements generalize well.
 

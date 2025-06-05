@@ -13,11 +13,12 @@ from ..reporting_utils import (
     display_header,  # noqa: F401
     display_messages,
     display_result,  # noqa: F401
+    get_console,
     suppress_opik_logs,
 )
 
 PANEL_WIDTH = 70
-console = Console()
+console = get_console()
 
 
 @contextmanager
@@ -69,7 +70,7 @@ def creation_few_shot_prompt_template(verbose: int = 1):
             panel = Panel(Text(fewshot_template.example_template), width=PANEL_WIDTH, border_style="dim")
             # Use a temporary buffer to render the panel
             buffer = StringIO()
-            temp_console = Console(file=buffer, width=console.width)
+            temp_console = get_console(file=buffer, width=console.width)
             temp_console.print(panel)
 
             # Add prefix to each line

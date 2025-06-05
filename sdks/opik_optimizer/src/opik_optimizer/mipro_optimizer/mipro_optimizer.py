@@ -452,7 +452,7 @@ class MiproOptimizer(BaseOptimizer):
             }
 
             current_score = candidate_data.get("score")
-            metric_name_for_history = self.opik_metric.name if hasattr(self, 'opik_metric') and self.opik_metric else "unknown_metric"
+            metric_name_for_history = self.opik_metric.__name__
 
             # Unscale if it's a known 0-1 metric that MIPRO might scale to 0-100
             # For now, specifically targeting Levenshtein-like metrics
