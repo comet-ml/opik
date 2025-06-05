@@ -2,15 +2,16 @@
 subtitle: Step by step guide to using the Experiments REST API to log evaluation results
 ---
 
-If you’re working in Python or JavaScript, the easiest way to integrate with Opik is through our official SDKs.  
+If you’re working in Python or JavaScript, the easiest way to integrate with Opik is through our official SDKs.
 
-But if your stack includes something else, like **Go, Java, Kotlin, or Ruby**, no problem! 
+But if your stack includes something else, like **Go, Java, Kotlin, or Ruby**, no problem!
 That’s where the **[REST API](https://www.comet.com/docs/opik/reference/rest-api)** comes in: it gives you flexible, language-agnostic access to log and manage your projects and experiments directly in Opik.
 
 This guide shows you how to record experiment results for your LLM application using the Experiments bulk logging API.
 
 <Tip>
-The full API reference for the **Record experiment items in bulk** endpoint is available [here](https://www.comet.com/docs/opik/reference/rest-api/experiments/experiment-items-bulk).
+  The full API reference for the **Record experiment items in bulk** endpoint is available
+  [here](https://www.comet.com/docs/opik/reference/rest-api/experiments/experiment-items-bulk).
 </Tip>
 
 ## Endpoint Overview
@@ -21,7 +22,8 @@ The **Record Experiment Items in Bulk** endpoint allows you to log multiple expe
 **URL:** `/api/v1/private/experiments/items/bulk`
 
 <Warning>
-**Request Size Limit**: The maximum allowed payload size is **4MB**. For larger submissions, please divide the data into smaller batches.
+  **Request Size Limit**: The maximum allowed payload size is **4MB**. For larger submissions, please divide the data
+  into smaller batches.
 </Warning>
 
 ## Minimum Required Fields
@@ -41,9 +43,7 @@ Each `item` can optionally include:
 - `evaluate_task_result`: A map, list, or string representing the output of your application.
 - `trace`: An object representing the full execution trace.
 
-<Warning>
-Important: you may supply *either* `evaluate_task_result` or `trace` — not both.
-</Warning>
+<Warning>Important: you may supply *either* `evaluate_task_result` or `trace` — not both.</Warning>
 
 - `spans`: A list of structured span objects representing sub-steps or stages of execution.
 - `feedback_scores`: A list of structured objects that describe evaluation signals. Each feedback score includes:
@@ -54,7 +54,8 @@ Important: you may supply *either* `evaluate_task_result` or `trace` — not bot
   - `source`
 
 <Tip>
-Tip: use feedback scores to record evaluations such as accuracy, fluency, or custom criteria from heuristics or human reviewers.
+  Tip: use feedback scores to record evaluations such as accuracy, fluency, or custom criteria from heuristics or human
+  reviewers.
 </Tip>
 
 ## Example Use Cases
@@ -65,7 +66,6 @@ Here are a few common ways teams can use the bulk logging endpoint to evaluate t
 - **Log application responses** with `evaluate_task_result`.
 - **Attach feedback scores** like accuracy scores or annotations.
 - **Enable full experiment observability** with traces and spans.
-
 
 ## Example Requests
 
@@ -289,6 +289,7 @@ public static void main(String[] args) {
 ```
 
 ## Authentication
+
 Depending on your deployment, you can access the Experiments REST API either without authentication for local open-source on-premise setups, or with API key authentication for the Opik Cloud environment
 
 <Tabs>
