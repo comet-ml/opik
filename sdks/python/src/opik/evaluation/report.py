@@ -100,3 +100,18 @@ def display_experiment_link(
     console_container.print(
         f"View the results [link={experiment_url}]in your Opik dashboard[/link]."
     )
+
+
+def display_optimization_run_link(
+    optimization_id: str, dataset_id: str, url_override: str
+) -> None:
+    console_container = console.Console()
+
+    optimization_url = url_helpers.get_optimization_run_url_by_id(
+        optimization_id=optimization_id,
+        dataset_id=dataset_id,
+        url_override=url_override,
+    )
+    console_container.print(
+        f"View the optimization run [link={optimization_url}]in your Opik dashboard[/link]."
+    )

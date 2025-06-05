@@ -39,6 +39,18 @@ def get_experiment_url_by_id(
     return urllib.parse.urljoin(ensure_ending_slash(url_override), project_path)
 
 
+def get_optimization_run_url_by_id(
+    dataset_id: str, optimization_id: str, url_override: str
+) -> str:
+    encoded_opik_url = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
+
+    run_path = urllib.parse.quote(
+        f"v1/session/redirect/optimizations/?optimization_id={optimization_id}&dataset_id={dataset_id}&path={encoded_opik_url}",
+        safe=ALLOWED_URL_CHARACTERS,
+    )
+    return urllib.parse.urljoin(ensure_ending_slash(url_override), run_path)
+
+
 def get_project_url_by_workspace(
     workspace: str, project_name: str
 ) -> str:  # don't use or update, will be removed soon
