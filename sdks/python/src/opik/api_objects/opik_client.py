@@ -126,7 +126,7 @@ class OptimizationContext:
             else:
                 self.optimization.update(status="cancelled")
         except Exception as e:
-            logging.error(f"Failed to update optimization status: {e}")
+            LOGGER.error(f"Failed to update optimization status: {e}")
             return False
         return False
 
