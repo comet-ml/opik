@@ -7,6 +7,7 @@ import requests
 
 from opik import synchronization
 from opik.integrations.adk import helpers as adk_helpers
+from opik.llm_usage.openai_chat_completions_usage import OpenAICompletionsUsage
 from ... import testlib
 
 ADK_SERVER_PORT = 21345
@@ -18,21 +19,6 @@ EXPECTED_USAGE_KEYS_GOOGLE = [
     "original_usage.candidates_token_count",
     "original_usage.prompt_token_count",
     "original_usage.total_token_count",
-    "prompt_tokens",
-    "total_tokens",
-]
-
-EXPECTED_USAGE_KEYS_OPENAI = [
-    "completion_tokens",
-    "original_usage.completion_tokens",
-    "original_usage.completion_tokens_details.accepted_prediction_tokens",
-    "original_usage.completion_tokens_details.audio_tokens",
-    "original_usage.completion_tokens_details.reasoning_tokens",
-    "original_usage.completion_tokens_details.rejected_prediction_tokens",
-    "original_usage.prompt_tokens",
-    "original_usage.prompt_tokens_details.audio_tokens",
-    "original_usage.prompt_tokens_details.cached_tokens",
-    "original_usage.total_tokens",
     "prompt_tokens",
     "total_tokens",
 ]
@@ -62,7 +48,7 @@ def start_api_server(request):
 
     agent_name = getattr(request, "param", None)
     if agent_name is None:
-        agent_name = "sample_agent_openai"  # default
+        agent_name = "sample_agent"  # default
 
     with subprocess.Popen(
         ["adk", "api_server", "--port", str(ADK_SERVER_PORT)],
@@ -129,6 +115,7 @@ def test_opik_tracer_with_sample_agent(
     assert trace.span_count == 3  # two LLM calls and one function call
     assert trace.usage is not None
     assert "adk_invocation_id" in trace.metadata.keys()
+    assert trace.metadata["created_from"] == "google-adk"
     testlib.assert_dict_has_keys(trace.usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
     spans = opik_client_unique_project_name.search_spans()
@@ -169,7 +156,8 @@ def test_opik_tracer_with_sample_agent__openai(
     assert trace.span_count == 3  # two LLM calls and one function call
     assert trace.usage is not None
     assert "adk_invocation_id" in trace.metadata.keys()
-    testlib.assert_dict_has_keys(trace.usage, EXPECTED_USAGE_KEYS_OPENAI)
+    assert trace.metadata["created_from"] == "google-adk"
+    OpenAICompletionsUsage.from_original_usage_dict(trace.usage)
 
     spans = opik_client_unique_project_name.search_spans()
 
@@ -177,9 +165,58 @@ def test_opik_tracer_with_sample_agent__openai(
     assert spans[0].type == "llm"
     assert spans[0].provider == "openai"
     assert spans[0].model.startswith("gpt-4o")
-    testlib.assert_dict_has_keys(spans[0].usage, EXPECTED_USAGE_KEYS_OPENAI)
+    OpenAICompletionsUsage.from_original_usage_dict(spans[0].usage)
 
     assert spans[2].type == "llm"
     assert spans[2].provider == "openai"
     assert spans[2].model.startswith("gpt-4o")
-    testlib.assert_dict_has_keys(spans[2].usage, EXPECTED_USAGE_KEYS_OPENAI)
+    OpenAICompletionsUsage.from_original_usage_dict(spans[2].usage)
+
+
+@pytest.mark.parametrize("start_api_server", ["sample_agent_anthropic"], indirect=True)
+def test_opik_tracer_with_sample_agent__anthropic(
+    opik_client_unique_project_name, start_api_server
+) -> None:
+    base_url = start_api_server
+
+    # send the request to the ADK API server
+    json_data = {
+        "app_name": "sample_agent_anthropic",
+        "user_id": ADK_USER,
+        "session_id": ADK_SESSION,
+        "new_message": {
+            "role": "user",
+            "parts": [{"text": "Hey, whats the weather in New York today?"}],
+        },
+    }
+    result = requests.post(
+        f"{base_url}/run",
+        json=json_data,
+    )
+    # print("Response: ", result.text)
+    assert result.status_code == 200
+
+    traces = opik_client_unique_project_name.search_traces(
+        filter_string='input contains "Hey, whats the weather in New York today?"',
+    )
+    assert len(traces) == 1
+
+    trace = traces[0]
+    assert trace.span_count == 3  # two LLM calls and one function call
+    assert trace.usage is not None
+    assert "adk_invocation_id" in trace.metadata.keys()
+    assert trace.metadata["created_from"] == "google-adk"
+    OpenAICompletionsUsage.from_original_usage_dict(trace.usage)
+
+    spans = opik_client_unique_project_name.search_spans()
+
+    assert len(spans) == 3
+    assert spans[0].type == "llm"
+    assert spans[0].provider == "anthropic"
+    assert spans[0].model.startswith("claude-3-5-haiku")
+    OpenAICompletionsUsage.from_original_usage_dict(spans[0].usage)
+
+    assert spans[2].type == "llm"
+    assert spans[2].provider == "anthropic"
+    assert spans[2].model.startswith("claude-3-5-haiku")
+    OpenAICompletionsUsage.from_original_usage_dict(spans[0].usage)
