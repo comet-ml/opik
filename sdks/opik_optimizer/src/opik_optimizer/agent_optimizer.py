@@ -26,7 +26,7 @@ class OpikAgentOptimizer(BaseOptimizer):
         self.task_config = task_config
 
     def optimize_prompt(
-        self, agent_config, dataset, metric_config, n_samples, num_threads
+        self, agent_config, dataset, metric_config, n_samples, num_threads, metaprompt
     ):
         self._opik_client = opik.Opik()
         optimization = None
@@ -92,20 +92,7 @@ class OpikAgentOptimizer(BaseOptimizer):
         # these out:
         count = 0
         while count < 3:
-            new_prompt = agent.llm_invoke(
-                """Refine this prompt template to make it better. Just give me the better prompt, nothing else. 
-
-The new prompt must contain {tools}, {agent_scratchpad}, {input}, and [{tool_names}]
-
-Suggest things like keeping the answer brief. The answers should be like answers
-to a trivia question.
-
-Here is the prompt: 
-
-%r
-"""
-                % prompt["value"]
-            )
+            new_prompt = agent.llm_invoke(metaprompt % prompt["value"])
             new_prompt = new_prompt.replace("\\n", "\n")
             experiment_config["configuration"]["prompt"] = new_prompt
 

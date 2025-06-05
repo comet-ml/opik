@@ -182,8 +182,22 @@ agent_config = {
 }
 
 agent = LangGraphAgent(optimizer, agent_config)
-result = agent.invoke({"question": "Which is heavier: a newborn elephant, or a motor boat?"})
+result = agent.invoke(
+    {"question": "Which is heavier: a newborn elephant, or a motor boat?"}
+)
 print(result)
+
+metaprompt = """Refine this prompt template to make it better. Just give me the better prompt, nothing else.
+
+The new prompt must contain {tools}, {agent_scratchpad}, {input}, and [{tool_names}]
+
+Suggest things like keeping the answer brief. The answers should be like answers
+to a trivia question.
+
+Here is the prompt:
+
+%r
+"""
 
 optimizer.optimize_prompt(
     agent_config=agent_config,
@@ -191,6 +205,7 @@ optimizer.optimize_prompt(
     metric_config=metric_config,
     n_samples=10,
     num_threads=16,
+    metaprompt=metaprompt,
 )
 
 # TODO: get the optimizer out of Agent
