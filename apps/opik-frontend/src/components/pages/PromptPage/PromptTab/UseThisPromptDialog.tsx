@@ -61,7 +61,6 @@ const UseThisPromptDialog: React.FunctionComponent<
         <DialogAutoScrollBody>
           <ExplainerDescription
             className="mb-4"
-            size="sm"
             {...EXPLAINERS_MAP[EXPLAINER_ID.how_do_i_use_this_prompt]}
           />
           <div className="flex flex-col gap-2">

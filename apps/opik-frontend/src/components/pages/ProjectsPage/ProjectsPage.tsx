@@ -363,8 +363,8 @@ const ProjectsPage: React.FunctionComponent = () => {
         <h1 className="comet-title-l truncate break-words">Projects</h1>
       </div>
       <ExplainerDescription
-        {...EXPLAINERS_MAP[EXPLAINER_ID.what_do_you_use_projects_for]}
         className="mb-4"
+        {...EXPLAINERS_MAP[EXPLAINER_ID.what_do_you_use_projects_for]}
       />
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
