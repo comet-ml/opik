@@ -59,7 +59,8 @@ from the top right of the page
 
 ### Are there are rate limits on Opik Cloud?
 
-Yes, in order to ensure all users have a good experience we have implemented rate limits.
+Yes, in order to ensure all users have a good experience we have implemented rate limits. When you encounter a rate limit,
+endpoints will return the status code `429`.
 
 There's a global rate limit of `2,000` request/minute per user across all REST API endpoints, with an extra burst of
 `100` requests.
@@ -71,6 +72,13 @@ Additionally, there's another data ingestion limit of `5,000` events/minute per 
 
 Finally, there's a rate limit of `250` requests/minute per user for the `Get span by id` endpoint:
 `GET /api/v1/private/spans/:id`.
+
+<Note>
+The Python SDK has implemented some logic to slow down the logging to avoid data loss when encountering rate limits. You
+will see the message: `OPIK: Ingestion rate limited, retrying in 55 seconds, remaining queue size: 1, ...`.
+
+If you are using other logging methods, you will need to implement your own "backoff and retry" strategy
+</Note>
 
 For questions about rate limits, reach out to us on [Slack](https://chat.comet.com).
 

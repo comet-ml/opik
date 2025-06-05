@@ -163,6 +163,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     AND workspace_id = :workspace_id
                 ) s ON s.trace_id = t.id
                 ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
+                WHERE value > 0
             )
             SELECT <bucket> AS bucket,
                     name,

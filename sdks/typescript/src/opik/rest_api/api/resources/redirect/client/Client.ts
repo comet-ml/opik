@@ -242,6 +242,107 @@ export class Redirect {
     }
 
     /**
+     * Create optimization redirect url
+     *
+     * @param {OpikApi.OptimizationsRedirectRequest} request
+     * @param {Redirect.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.redirect.optimizationsRedirect({
+     *         datasetId: "dataset_id",
+     *         optimizationId: "optimization_id",
+     *         path: "path"
+     *     })
+     */
+    public optimizationsRedirect(
+        request: OpikApi.OptimizationsRedirectRequest,
+        requestOptions?: Redirect.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__optimizationsRedirect(request, requestOptions));
+    }
+
+    private async __optimizationsRedirect(
+        request: OpikApi.OptimizationsRedirectRequest,
+        requestOptions?: Redirect.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const { datasetId, optimizationId, workspaceName, path } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        _queryParams["dataset_id"] = datasetId;
+        _queryParams["optimization_id"] = optimizationId;
+        if (workspaceName != null) {
+            _queryParams["workspace_name"] = workspaceName;
+        }
+
+        _queryParams["path"] = path;
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/session/redirect/optimizations",
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling GET /v1/session/redirect/optimizations.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Create project redirect url
      *
      * @param {OpikApi.ProjectsRedirectRequest} request

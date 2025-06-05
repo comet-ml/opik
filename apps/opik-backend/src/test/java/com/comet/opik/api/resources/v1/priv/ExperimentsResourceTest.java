@@ -59,6 +59,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -420,7 +421,7 @@ class ExperimentsResourceTest {
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             var workspaceName = UUID.randomUUID().toString();
 
-            var createRequest = getExperimentItemsBatch();
+            var createRequest = createItemsWithoutTrace();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
@@ -667,7 +668,8 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
-            var createRequest = getExperimentItemsBatch();
+            var createRequest = createItemsWithoutTrace();
+
             createAndAssert(createRequest, API_KEY, workspaceName);
             createRequest.experimentItems().forEach(item -> getAndAssert(item, workspaceName, API_KEY));
 
@@ -2973,7 +2975,8 @@ class ExperimentsResourceTest {
         @Test
         @DisplayName("Success")
         void delete() {
-            var createRequest = getExperimentItemsBatch();
+            var createRequest = createItemsWithoutTrace();
+
             createAndAssert(createRequest, API_KEY, TEST_WORKSPACE);
             createRequest.experimentItems()
                     .stream()
@@ -2995,6 +2998,18 @@ class ExperimentsResourceTest {
             ids.forEach(id -> getAndAssertNotFound(id, API_KEY, TEST_WORKSPACE));
         }
 
+    }
+
+    private ExperimentItemsBatch createItemsWithoutTrace() {
+        ExperimentItemsBatch itemsBatch = getExperimentItemsBatch();
+        var createRequest = itemsBatch.toBuilder()
+                .experimentItems(itemsBatch.experimentItems().stream()
+                        .map(experimentItem -> experimentItem.toBuilder()
+                                .traceVisibilityMode(null)
+                                .build())
+                        .collect(toSet()))
+                .build();
+        return createRequest;
     }
 
     @Nested
@@ -3428,6 +3443,7 @@ class ExperimentsResourceTest {
                                     .feedbackScores(null)
                                     .input(null)
                                     .output(null)
+                                    .traceVisibilityMode(null)
                                     .build())
                             .collect(toSet()))
                     .build();
@@ -3797,7 +3813,7 @@ class ExperimentsResourceTest {
 
             var feedbackScore = createScore();
 
-            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, trace, feedbackScore);
+            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, trace, feedbackScore, null);
 
             var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
             var bulkRecord = ExperimentItemBulkRecord.builder()
@@ -3827,7 +3843,7 @@ class ExperimentsResourceTest {
         }
 
         private List<ExperimentItem> getExpectedItem(DatasetItem datasetItem, Trace trace,
-                FeedbackScore feedbackScore) {
+                FeedbackScore feedbackScore, JsonNode evaluateTaskResult) {
             return List.of(
                     ExperimentItem.builder()
                             .datasetItemId(datasetItem.id())
@@ -3837,12 +3853,13 @@ class ExperimentsResourceTest {
                                             t.endTime()))
                                     .orElse(0.0))
                             .input(Optional.ofNullable(trace).map(Trace::input).orElse(null))
-                            .output(Optional.ofNullable(trace).map(Trace::output).orElse(null))
+                            .output(Optional.ofNullable(trace).map(Trace::output).orElse(evaluateTaskResult))
                             .feedbackScores(List.of(feedbackScore))
                             .createdAt(Optional.ofNullable(trace).map(Trace::createdAt).orElse(null))
                             .lastUpdatedAt(Optional.ofNullable(trace).map(Trace::lastUpdatedAt).orElse(null))
                             .createdBy(USER)
                             .lastUpdatedBy(USER)
+                            .traceVisibilityMode(trace == null ? VisibilityMode.HIDDEN : VisibilityMode.DEFAULT)
                             .build());
         }
 
@@ -3895,7 +3912,7 @@ class ExperimentsResourceTest {
 
             var feedbackScore = createScore();
 
-            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, null, feedbackScore);
+            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, null, feedbackScore, null);
 
             var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
             var bulkItemRecord = ExperimentItemBulkRecord.builder()
@@ -4082,6 +4099,104 @@ class ExperimentsResourceTest {
 
         private String generateLargeString(int size) {
             return "a".repeat(Math.max(0, size));
+        }
+
+        @Test
+        void experimentItemsBulk__whenBothEvaluateTaskResultAndTraceProvided__thenReturnBadRequest() {
+            // given
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    TEST_WORKSPACE,
+                    API_KEY);
+
+            // Create a bulk upload request with both evaluateTaskResult and trace
+            var trace = createTrace();
+            var evaluateTaskResult = podamFactory.manufacturePojo(JsonNode.class);
+
+            var bulkItemRecord = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem.id())
+                    .trace(trace)
+                    .evaluateTaskResult(evaluateTaskResult)
+                    .build();
+
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
+                    .experimentName("Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20))
+                    .datasetName(dataset.name())
+                    .items(List.of(bulkItemRecord))
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUploadRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var errorMessage = response.readEntity(com.comet.opik.api.error.ErrorMessage.class);
+
+                assertThat(errorMessage.errors()).contains(
+                        "items[0].<list element> cannot provide both evaluate_task_result and trace together");
+            }
+        }
+
+        @Test
+        void experimentItemsBulk__whenOnlyEvaluateTaskResultProvided__thenSucceed() {
+            // given
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    TEST_WORKSPACE,
+                    API_KEY);
+
+            // Create a bulk upload request with only evaluateTaskResult
+            var evaluateTaskResult = podamFactory.manufacturePojo(JsonNode.class);
+            var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+
+            var feedbackScore = createScore();
+
+            var bulkItemRecord = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem.id())
+                    .evaluateTaskResult(evaluateTaskResult)
+                    .feedbackScores(List.of(feedbackScore))
+                    .build();
+
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(dataset.name())
+                    .items(List.of(bulkItemRecord))
+                    .build();
+
+            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, null, feedbackScore, evaluateTaskResult);
+
+            // when
+            experimentResourceClient.bulkUploadExperimentItem(bulkUploadRequest, API_KEY, TEST_WORKSPACE);
+
+            // then
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+
+            String[] ignoringFields = Stream
+                    .concat(Arrays.stream(ExperimentTestAssertions.EXPERIMENT_ITEMS_IGNORED_FIELDS),
+                            Stream.of("traceId", "id", "experimentId"))
+                    .toArray(String[]::new);
+
+            ExperimentTestAssertions.assertExperimentResultsIgnoringFields(actualExperimentItems, expectedItems,
+                    ignoringFields);
+
+            Trace trace = traceResourceClient.getById(actualExperimentItems.getFirst().traceId(), TEST_WORKSPACE,
+                    API_KEY);
+
+            assertThat(trace).isNotNull();
+            assertThat(trace.visibilityMode()).isEqualTo(VisibilityMode.HIDDEN);
         }
     }
 }

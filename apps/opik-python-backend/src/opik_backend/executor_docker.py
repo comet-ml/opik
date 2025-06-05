@@ -3,18 +3,41 @@ import concurrent.futures
 import json
 import logging
 import os
+import time
 from queue import Queue
-from threading import Lock
+from threading import Lock, Event
 from uuid6 import uuid7
 
 import docker
+import schedule
+from opentelemetry import metrics
 
 from opik_backend.executor import CodeExecutorBase, ExecutionResult
 from opik_backend.scoring_commands import PYTHON_SCORING_COMMAND
 
 logger = logging.getLogger(__name__)
-client = docker.from_env()
-executor = concurrent.futures.ThreadPoolExecutor()
+
+# Create a meter for Docker executor metrics
+meter = metrics.get_meter("docker_executor")
+
+# Create histogram metrics for container operations
+container_creation_histogram = meter.create_histogram(
+    name="container_creation_latency",
+    description="Latency of container creation operations in milliseconds",
+    unit="ms",
+)
+
+container_stop_histogram = meter.create_histogram(
+    name="container_stop_latency",
+    description="Latency of container stop operations in milliseconds",
+    unit="ms",
+)
+
+# Create a gauge metric to track the number of available containers in the pool
+container_pool_size_gauge = meter.create_gauge(
+    name="container_pool_size",
+    description="Number of available containers in the pool queue",
+)
 
 class DockerExecutor(CodeExecutorBase):
     def __init__(self):
@@ -23,74 +46,172 @@ class DockerExecutor(CodeExecutorBase):
         self.docker_registry = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY", "ghcr.io/comet-ml/opik")
         self.docker_image = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_NAME", "opik-sandbox-executor-python")
         self.docker_tag = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_TAG", "latest")
+        self.pool_check_interval = int(os.getenv("PYTHON_CODE_EXECUTOR_POOL_CHECK_INTERVAL_IN_SECONDS", "3"))
 
+        self.client = docker.from_env()
         self.instance_id = str(uuid7())
         self.container_labels = {"managed_by": self.instance_id}
         self.container_pool = Queue()
         self.pool_lock = Lock()
-        releaser_executor = concurrent.futures.ThreadPoolExecutor()
-        self.running = True
-        self.ensure_pool_filled()
+        self.releaser_executor = concurrent.futures.ThreadPoolExecutor()
+        self.stop_event = Event()
+
+        # Pre-warm the container pool
+        self._pre_warm_container_pool()
+
+        # Start the pool monitor
+        self._start_pool_monitor()
+
         atexit.register(self.cleanup)
 
+    def _start_pool_monitor(self):
+        """Start a background thread that periodically checks and fills the container pool."""
+        logger.info(f"Starting container pool monitor with {self.pool_check_interval} second interval")
+
+        # Schedule the pool check to run at the configured interval
+        schedule.every(self.pool_check_interval).seconds.do(self._check_pool)
+
+        # Start a background thread to run the scheduler
+        self.releaser_executor.submit(self._run_scheduler)
+
+    def _check_pool(self):
+        """Check and fill the container pool if needed."""
+        if self.stop_event.is_set():
+            logger.info("Container pool monitor stopped")
+            return schedule.CancelJob  # Cancel this job
+
+        try:
+            # Update the container pool size metric
+            self._update_container_pool_size_metric()
+
+            self.ensure_pool_filled()
+            return None  # Continue the job
+        except Exception as e:
+            logger.error(f"Error in pool monitor: {e}")
+            return None  # Continue the job despite the error
+
+    def _run_scheduler(self):
+        """Run the scheduler in a background thread."""
+        logger.info("Starting scheduler for container pool monitoring")
+        while not self.stop_event.is_set():
+            schedule.run_pending()
+            time.sleep(1)  # Sleep to avoid busy-waiting
+
+        logger.info("Scheduler finished running")
+
+    def _pre_warm_container_pool(self):
+        """
+        Pre-warm the container pool by creating all containers in parallel.
+        This ensures containers are ready when the service starts.
+        """
+        logger.info(f"Pre-warming container pool with {self.max_parallel} containers")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel) as pool_init:
+            # Submit container creation tasks in parallel
+            futures = [pool_init.submit(self.create_container) for _ in range(self.max_parallel)]
+            # Wait for all containers to be created
+            concurrent.futures.wait(futures)
+
     def ensure_pool_filled(self):
-        if not self.running:
+        if self.stop_event.is_set():
             logger.warning("Executor is shutting down, skipping container creation")
             return
 
         with self.pool_lock:
-            while self.running and len(self.get_managed_containers()) < self.max_parallel:
+            while not self.stop_event.is_set() and len(self.get_managed_containers()) < self.max_parallel:
                 logger.info("Not enough python runner containers running; creating more...")
                 self.create_container()
 
     def get_managed_containers(self):
-        return client.containers.list(filters={
+        return self.client.containers.list(filters={
             "label": f"managed_by={self.instance_id}",
             "status": "running"
         })
 
+    def _update_container_pool_size_metric(self):
+        """Update the container pool size metric with the current number of containers in the pool."""
+        pool_size = self.container_pool.qsize()
+        container_pool_size_gauge.set(pool_size)
+        logger.debug(f"Current container pool size: {pool_size}")
+        return pool_size
+
+    def _calculate_latency_ms(self, start_time):
+        return (time.time() - start_time) * 1000  # Convert to milliseconds
+
     def create_container(self):
-        new_container = client.containers.run(
+        # Record the start time for detailed container creation metrics
+        start_time = time.time()
+
+        new_container = self.client.containers.run(
             image=f"{self.docker_registry}/{self.docker_image}:{self.docker_tag}",
-        command=["tail", "-f", "/dev/null"], # a never ending process so Docker won't kill the container
-        mem_limit="256mb",
+            command=["tail", "-f", "/dev/null"], # a never ending process so Docker won't kill the container
+            mem_limit="256mb",
             cpu_shares=2,
             detach=True,
             network_disabled=True,
             security_opt=["no-new-privileges"],
             labels=self.container_labels
         )
+
+        # Add the container to the pool
         self.container_pool.put(new_container)
-        logger.info(f"Created container, id '{new_container.id}'")
+
+        # Calculate and record the latency for the direct container creation
+        latency = self._calculate_latency_ms(start_time)
+        container_creation_histogram.record(latency, attributes={"method": "create_container"})
+
+        logger.info(f"Created container, id '{new_container.id}' in {latency:.3f} milliseconds")
 
     def release_container(self, container):
-        def async_release():
-            try:
-                logger.info(f"Stopping container {container.id}. Will create a new one.")
-                container.stop(timeout=1)
-                container.remove(force=True)
-                self.create_container()
-            except Exception as e:
-                logger.error(f"Error replacing container: {e}")
+        self.releaser_executor.submit(self.async_release, container)
 
-        releaser_executor.submit(async_release)
+    def async_release(self, container):
+        # First, ensure we have enough containers in the pool
+        self._create_new_container()
+
+        # Now stop and remove the old container
+        self._stopContainer(container)
+
+    def _create_new_container(self):
+        try:
+            # Create the container
+            self.create_container()
+        except Exception as e:
+            logger.error(f"Error replacing container: {e}")
+
+    def _stopContainer(self, container):
+        try:
+            logger.info(f"Stopping container {container.id}. Will create a new one.")
+
+            # Record the start time
+            start_time = time.time()
+
+            # Stop and remove the container
+            container.stop(timeout=1)
+            container.remove(force=True)
+
+            # Calculate and record the latency
+            latency = self._calculate_latency_ms(start_time)
+            container_stop_histogram.record(latency, attributes={"method": "stop_container"})
+
+            logger.info(f"Stopped container {container.id} in {latency:.3f} milliseconds")
+        except Exception as e:
+            logger.error(f"Failed to stop container: {e}")
 
     def get_container(self):
-        if not self.running:
+        if self.stop_event.is_set():
             raise RuntimeError("Executor is shutting down, no containers available")
             
-        while self.running:
+        while not self.stop_event.is_set():
             try:
                 return self.container_pool.get(timeout=self.exec_timeout)
             except Exception as e:
-                if not self.running:
+                if self.stop_event.is_set():
                     raise RuntimeError("Executor is shutting down, no containers available")
                     
-                logger.warning(f"Couldn't get a container to execute after waiting for {self.exec_timeout}s. Ensuring we have enough and trying again: {e}")
-                self.ensure_pool_filled()
+                logger.warning(f"Couldn't get a container to execute after waiting for {self.exec_timeout}s. Will retry: {e}")
 
     def run_scoring(self, code: str, data: dict) -> dict:
-        if not self.running:
+        if self.stop_event.is_set():
             return {"code": 503, "error": "Service is shutting down"}
             
         container = self.get_container()
@@ -118,37 +239,25 @@ class DockerExecutor(CodeExecutorBase):
             return {"code": 500, "error": "An unexpected error occurred"}
         finally:
             # Stop and remove the container, then create a new one asynchronously
-            try:
-                container.stop(timeout=1)
-                container.remove(force=True)
-            except Exception as e:
-                logger.error(f"Error cleaning up container {container.id}: {e}")
+            self.release_container(container)
             
-            # Create new container asynchronously
-            def async_replace():
-                try:
-                    self.create_container()
-                except Exception as e:
-                    logger.error(f"Error creating replacement container: {e}")
-
-            executor.submit(async_replace)
-
     def cleanup(self):
-        self.running = False
         """Clean up all containers managed by this executor."""
+        logger.info("Shutting down Docker executor")
+        self.stop_event.set()
+
+        # Clear all scheduled jobs
+        schedule.clear()
+
+        # Clean up containers
         while not self.container_pool.empty():
-            try:
-                container = self.container_pool.get(timeout=self.exec_timeout)
-                logger.info(f"Stopping and removing container {container.id}")
-                container.stop(timeout=1)
-                container.remove(force=True)
-            except Exception as e:
-                logger.error(f"Failed to remove container from pool due to {e}")
+            container = self.container_pool.get(timeout=self.exec_timeout)
+            self._stopContainer(container)
 
         for container in self.get_managed_containers():
-            try:
-                logger.info(f"Cleaning up untracked container {container.id}")
-                container.stop(timeout=1)
-                container.remove(force=True)
-            except Exception as e:
-                logger.error(f"Failed to remove zombie container {container.id}: {e}")
+            logger.info(f"Cleaning up untracked container {container.id}")
+            self._stopContainer(container)
+
+        # Shutdown the executor
+        logger.info("Shutting down executor")
+        self.releaser_executor.shutdown(wait=False, cancel_futures=True)

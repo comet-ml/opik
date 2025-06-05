@@ -1,4 +1,4 @@
-import { TraceFeedbackScore } from "@/types/traces";
+import { TRACE_VISIBILITY_MODE, TraceFeedbackScore } from "@/types/traces";
 import { AggregatedFeedbackScore, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
 import { CommentItems } from "./comment";
 
@@ -83,6 +83,7 @@ export interface ExperimentItem {
   experiment_id: string;
   dataset_item_id: string;
   trace_id?: string;
+  trace_visibility_mode?: TRACE_VISIBILITY_MODE;
   input: object;
   output: object;
   feedback_scores?: TraceFeedbackScore[];
