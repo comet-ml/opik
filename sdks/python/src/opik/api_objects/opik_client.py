@@ -406,6 +406,14 @@ class Opik:
         Returns:
             span.Span: The created span object.
         """
+        id = id if id is not None else id_helpers.generate_id()
+        start_time = (
+            start_time if start_time is not None else datetime_helpers.local_timestamp()
+        )
+
+        if project_name is None:
+            project_name = self._project_name
+
         if trace_id is None:
             trace_id = id_helpers.generate_id()
             # TODO: decide what needs to be passed to CreateTraceMessage.
@@ -431,9 +439,6 @@ class Opik:
                 feedback_score["id"] = id
 
             self.log_spans_feedback_scores(feedback_scores, project_name)
-
-        if project_name is None:
-            project_name = self._project_name
 
         return span.span_client.create_span(
             trace_id=trace_id,
