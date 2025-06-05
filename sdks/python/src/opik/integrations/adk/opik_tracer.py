@@ -43,7 +43,9 @@ class OpikTracer:
         # in case we need to use different context storage for ADK in the future
         self._context_storage = context_storage.get_current_context_instance()
 
-        self._opik_created_spans: Set[str] = set()  # TODO: use contextvar set for a more reliable clean-up?
+        self._opik_created_spans: Set[str] = (
+            set()
+        )  # TODO: use contextvar set for a more reliable clean-up?
 
         self._current_trace_created_by_opik_tracer: contextvars.ContextVar[
             Optional[str]
@@ -94,7 +96,7 @@ class OpikTracer:
             name = self.name or callback_context.agent_name
 
             current_trace_data = self._context_storage.get_trace_data()
-            if current_trace_data is None:
+            if current_trace_data is None:  # todo: support distributed headers
                 current_trace = trace.TraceData(
                     name=name,
                     project_name=self.project_name,
@@ -240,7 +242,10 @@ class OpikTracer:
         **kwargs: Any,
     ) -> None:
         try:
-            metadata = {"function_call_id": tool_context.function_call_id, **self.metadata}
+            metadata = {
+                "function_call_id": tool_context.function_call_id,
+                **self.metadata,
+            }
 
             _, span_data = span_creation_handler.create_span_respecting_context(
                 start_span_arguments=arguments_helpers.StartSpanParameters(
