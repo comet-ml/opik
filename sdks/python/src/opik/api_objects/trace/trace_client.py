@@ -131,7 +131,7 @@ class Trace:
         Create a new span within the trace.
 
         Args:
-            id: The ID of the span, should be in UUIDv7 format. If not provided, a new ID will be generated.
+            id: The ID of the span should be in UUIDv7 format. If not provided, a new ID will be generated.
             parent_span_id: The ID of the parent span, if any.
             name: The name of the span.
             type: The type of the span. Defaults to "general".

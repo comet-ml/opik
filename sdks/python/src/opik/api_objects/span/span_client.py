@@ -179,23 +179,23 @@ class Span:
         Create a new child span within the current span.
 
         Args:
-            id: The ID of the span, should be in UUIDv7 format. If not provided, a new ID will be generated.
+            id: The ID of the span should be in UUIDv7 format. If not provided, a new ID will be generated.
             name: The name of the span.
             type: The type of the span. Defaults to "general".
-            start_time: The start time of the span. If not provided, current time will be used.
+            start_time: The start time of the span. If not provided, the current time will be used.
             end_time: The end time of the span.
             metadata: Additional metadata to be associated with the span.
             input: The input data for the span.
             output: The output data for the span.
             tags: A list of tags to be associated with the span.
             usage: Usage data for the span. In order for input, output and total tokens to be visible in the UI,
-                the usage must contain OpenAI-formatted keys (they can be passed additionaly to original usage on the top level of the dict):  prompt_tokens, completion_tokens and total_tokens.
+                the usage must contain OpenAI-formatted keys (they can be passed additionally to the original usage on the top level of the dict): prompt_tokens, completion_tokens and total_tokens.
                 If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
                 format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
             model: The name of LLM (in this case `type` parameter should be == `llm`)
             provider: The provider of LLM. You can find providers officially supported by Opik for cost tracking
-                in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
-                If your provider not in the list, you can still specify it but the cost tracking will not be available
+                in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our GitHub - https://github.com/comet-ml/opik.
+                If your provider is not in the list, you can still specify it, but the cost tracking will not be available
             error_info: The dictionary with error information (typically used when the span function has failed).
             total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
             attachments: The list of attachments to be uploaded to the span.
@@ -329,15 +329,14 @@ def create_span(
 
     if attachments is not None:
         for attachment_data in attachments:
-            message_streamer.put(
-                attachment_converters.attachment_to_message(
-                    attachment_data=attachment_data,
-                    entity_type="span",
-                    entity_id=span_id,
-                    project_name=project_name,
-                    url_override=url_override,
-                )
+            create_attachment_message = attachment_converters.attachment_to_message(
+                attachment_data=attachment_data,
+                entity_type="span",
+                entity_id=span_id,
+                project_name=project_name,
+                url_override=url_override,
             )
+            message_streamer.put(create_attachment_message)
 
     return Span(
         id=span_id,

@@ -847,7 +847,7 @@ def test_span_span__attachments(opik_client, data_file):
         input={"input": "Some random input 2"},
         output={"output": "span-output"},
     )
-    span.span(
+    last_span = span.span(
         name="span-name",
         input={"input": "Some random input 2"},
         output={"output": "span-output"},
@@ -860,7 +860,7 @@ def test_span_span__attachments(opik_client, data_file):
     verifiers.verify_attachments(
         opik_client=opik_client,
         entity_type="span",
-        entity_id=span.id,
+        entity_id=last_span.id,
         attachments=attachments,
         data_sizes=data_sizes,
     )
