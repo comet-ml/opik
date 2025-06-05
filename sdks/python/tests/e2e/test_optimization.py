@@ -38,3 +38,37 @@ def test_optimization_lifecycle__happyflow(opik_client: opik.Opik, dataset_name:
 
     with pytest.raises(rest_api_core.ApiError):
         opik_client.get_optimization_by_id(optimization.id)
+
+
+def test_optimization_context_lifecycle__happyflow(
+    opik_client: opik.Opik, dataset_name: str
+):
+    dataset = opik_client.create_dataset(dataset_name)
+
+    with opik_client.optimization_context(
+        objective_name="some-objective-name",
+        dataset_name=dataset.name,
+        name="some-optimization-name",
+    ) as optimization_id:
+        verifiers.verify_optimization(
+            opik_client=opik_client,
+            optimization_id=optimization_id,
+            name="some-optimization-name",
+            dataset_name=dataset.name,
+            status="running",
+            objective_name="some-objective-name",
+        )
+
+    verifiers.verify_optimization(
+        opik_client=opik_client,
+        optimization_id=optimization_id,
+        name="some-optimization-name",
+        dataset_name=dataset.name,
+        status="completed",
+        objective_name="some-objective-name",
+    )
+
+    opik_client.delete_optimizations([optimization_id])
+
+    with pytest.raises(rest_api_core.ApiError):
+        opik_client.get_optimization_by_id(optimization_id)

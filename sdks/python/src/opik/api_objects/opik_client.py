@@ -2,7 +2,18 @@ import atexit
 import datetime
 import functools
 import logging
-from typing import Any, Dict, List, Optional, TypeVar, Union, Literal
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    TypeVar,
+    Union,
+    Literal,
+    Type,
+)
+
+from types import TracebackType
 
 import httpx
 
@@ -46,6 +57,78 @@ from .trace import migration as trace_migration
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
+
+
+class OptimizationContext:
+    """
+    Context manager for handling optimization lifecycle.
+    Automatically updates optimization status to "completed" or "cancelled" based on context exit.
+    """
+
+    def __init__(
+        self,
+        client: "Opik",
+        dataset_name: str,
+        objective_name: str,
+        name: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ):
+        """
+        Initialize the optimization context.
+
+        Args:
+            client: The Opik client instance
+            dataset_name: Name of the dataset for optimization
+            objective_name: Name of the optimization objective
+            name: Optional name for the optimization
+            metadata: Optional metadata for the optimization
+        """
+        self.client = client
+        self.dataset_name = dataset_name
+        self.objective_name = objective_name
+        self.name = name
+        self.metadata = metadata
+        self.optimization = None
+
+    def __enter__(self) -> Union[str, None]:
+        """Create and return the optimization ID."""
+        try:
+            self.optimization = self.client.create_optimization(
+                dataset_name=self.dataset_name,
+                objective_name=self.objective_name,
+                name=self.name,
+                metadata=self.metadata,
+            )
+            if self.optimization:
+                return self.optimization.id
+            else:
+                return None
+        except Exception:
+            LOGGER.warning(
+                "Opik server does not support optimizations. Please upgrade opik."
+            )
+            LOGGER.warning("Continuing without Opik optimization tracking.")
+            return None
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> Literal[False]:
+        """Update optimization status based on context exit."""
+        if self.optimization is None:
+            return False
+
+        try:
+            if exc_type is None:
+                self.optimization.update(status="completed")
+            else:
+                self.optimization.update(status="cancelled")
+        except Exception as e:
+            logging.error(f"Failed to update optimization status: {e}")
+            return False
+        return False
 
 
 class Opik:
@@ -1120,6 +1203,34 @@ class Opik:
     def get_optimization_by_id(self, id: str) -> optimization.Optimization:
         _ = self._rest_client.optimizations.get_optimization_by_id(id)
         return optimization.Optimization(id=id, rest_client=self._rest_client)
+
+    def optimization_context(
+        self,
+        dataset_name: str,
+        objective_name: str,
+        name: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> OptimizationContext:
+        """
+        Create a context manager for handling optimization lifecycle.
+        Automatically updates optimization status to "completed" or "cancelled" based on context exit.
+
+        Args:
+            dataset_name: Name of the dataset for optimization
+            objective_name: Name of the optimization objective
+            name: Optional name for the optimization
+            metadata: Optional metadata for the optimization
+
+        Returns:
+            OptimizationContext: A context manager that handles optimization lifecycle
+        """
+        return OptimizationContext(
+            client=self,
+            dataset_name=dataset_name,
+            objective_name=objective_name,
+            name=name,
+            metadata=metadata,
+        )
 
 
 @functools.lru_cache()
