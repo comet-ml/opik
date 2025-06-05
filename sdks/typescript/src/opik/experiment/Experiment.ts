@@ -68,7 +68,7 @@ export class Experiment {
           experimentItems: batch,
         });
       }
-      logger.info(
+      logger.debug(
         `Inserted ${experimentItemReferences.length} items into experiment ${this.id}`
       );
     } catch (error) {

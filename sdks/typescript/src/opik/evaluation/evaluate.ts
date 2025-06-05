@@ -11,38 +11,6 @@ import { OpikSingleton } from "@/client/SingletonClient";
 import { DatasetItemData } from "../dataset/DatasetItem";
 import { OpikClient } from "@/client/Client";
 
-/**
- * Performs evaluation of an LLM task on a dataset with specified metrics.
- *
- * @param options Configuration options for the evaluation process
- * @returns Result of the evaluation with metrics and statistics
- *
- * @example
- * ```typescript
- * import { evaluate, ExactMatch } from "opik";
- *
- * // Define a task that takes a dataset item and returns a result
- * const myTask = async (datasetItem) => {
- *   const { input } = datasetItem;
- *   // Process the input with your LLM or other logic
- *   const output = await myLLM.process(input);
- *   return { output };
- * };
- *
- * // Run evaluation
- * const result = await evaluate({
- *   dataset: myDataset,
- *   task: myTask,
- *   scoringMetrics: [new ExactMatch("output_match", "expected_output", "output")],
- *   experimentName: "My First Evaluation",
- *   projectName: "My Project",
- *   verbose: 1
- * });
- *
- * console.log(`Overall score: ${result.mean}`);
- * ```
- */
-
 export interface EvaluateOptions<T = Record<string, unknown>> {
   /** The dataset to evaluate against, containing inputs and expected outputs */
   dataset: Dataset<T extends DatasetItemData ? T : DatasetItemData & T>;

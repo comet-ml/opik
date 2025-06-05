@@ -54,10 +54,26 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
 
     const reqItems = await this.getDeduplicatedItems(items);
 
-    await this.opik.api.datasets.createOrUpdateDatasetItems({
-      datasetId: this.id,
-      items: reqItems,
-    });
+    const batches = splitIntoBatches(reqItems, { maxBatchSize: 1000 });
+
+    try {
+      let totalInserted = 0;
+      for (const batch of batches) {
+        await this.opik.api.datasets.createOrUpdateDatasetItems({
+          datasetId: this.id,
+          items: batch,
+        });
+        totalInserted += batch.length;
+        logger.info(
+          `Inserted ${Math.min(totalInserted, reqItems.length)} of ${reqItems.length} items into dataset ${this.id}`
+        );
+      }
+    } catch (error) {
+      logger.error(
+        `Error inserting items into dataset: ${error instanceof Error ? error.message : String(error)}`
+      );
+      throw error;
+    }
   }
 
   /**

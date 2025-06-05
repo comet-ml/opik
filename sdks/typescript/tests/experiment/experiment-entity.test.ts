@@ -263,10 +263,6 @@ describe("Experiment entity operations", () => {
           }),
         ]),
       });
-
-      expect(loggerInfoSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Inserted 2 items into experiment")
-      );
     });
 
     it("should do nothing when inserting empty array", async () => {
@@ -348,10 +344,6 @@ describe("Experiment entity operations", () => {
           datasetItemId: `dataset-item-${DEFAULT_BATCH_SIZE * 2}`,
           traceId: `trace-${DEFAULT_BATCH_SIZE * 2}`,
         })
-      );
-
-      expect(loggerInfoSpy).toHaveBeenCalledWith(
-        expect.stringContaining(`Inserted ${totalItems} items`)
       );
     });
 

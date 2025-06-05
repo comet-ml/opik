@@ -19,6 +19,7 @@ import { EvaluationResultProcessor } from "../results";
 import { DatasetItemData } from "../../dataset/DatasetItem";
 import { ExperimentItemReferences } from "@/experiment";
 import { SpanType } from "@/rest_api/api";
+import { getSourceObjValue } from "@/utils/common";
 
 /**
  * Core class that handles the evaluation process
@@ -46,7 +47,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
   constructor(
     options: EvaluateOptions<T>,
     client: OpikClient,
-    experiment: Experiment,
+    experiment: Experiment
   ) {
     this.client = client;
     this.dataset = options.dataset;
@@ -64,13 +65,10 @@ export class EvaluationEngine<T = Record<string, unknown>> {
    * @returns An array of test results
    */
   public async execute(): Promise<EvaluationResult> {
-    // Record start time
     const startTime = performance.now();
 
-    // Process dataset items
     const datasetItems = await this.dataset.getItems(this.nbSamples);
 
-    // Execute tasks sequentially (one thread in MVP)
     const testResults: EvaluationTestResult[] = [];
 
     for (const datasetItem of datasetItems) {
@@ -105,25 +103,25 @@ export class EvaluationEngine<T = Record<string, unknown>> {
       }
     }
 
+    const endTime = performance.now();
+
     const experimentItemReferences = testResults.map(
       (testResult) =>
         new ExperimentItemReferences({
           datasetItemId: testResult.testCase.datasetItemId,
           traceId: testResult.testCase.traceId,
-        }),
+        })
     );
     this.experiment.insert(experimentItemReferences);
 
     await this.client.flush();
 
-    // Calculate total execution time in seconds
-    const endTime = performance.now();
     const totalTimeSeconds = (endTime - startTime) / 1000;
 
     return EvaluationResultProcessor.processResults(
       testResults,
       this.experiment,
-      totalTimeSeconds,
+      totalTimeSeconds
     );
   }
 
@@ -134,21 +132,20 @@ export class EvaluationEngine<T = Record<string, unknown>> {
    * @returns The test result
    */
   private async executeTask(
-    datasetItem: DatasetItemData & T,
+    datasetItem: DatasetItemData & T
   ): Promise<EvaluationTestResult> {
     let taskOutput: Record<string, unknown> = {};
     const scoreResults: EvaluationScoreResult[] = [];
 
-    logger.info(`Starting evaluation task on dataset item ${datasetItem.id}`);
+    logger.debug(`Starting evaluation task on dataset item ${datasetItem.id}`);
     taskOutput = await track(
       { name: "llm_task", type: SpanType.General },
-      this.task,
+      this.task
     )(datasetItem);
-    logger.info(`Finished evaluation task on dataset item ${datasetItem.id}`);
-    // Map scoring keys if needed
+    logger.debug(`Finished evaluation task on dataset item ${datasetItem.id}`);
+
     const scoringInputs = this.prepareScoringInputs(datasetItem, taskOutput);
 
-    // Create test case
     const testCase: EvaluationTestCase = {
       traceId: this.rootTrace.data.id,
       datasetItemId: datasetItem.id as string,
@@ -156,7 +153,6 @@ export class EvaluationEngine<T = Record<string, unknown>> {
       taskOutput,
     };
 
-    // Calculate scores for each metric
     if (this.scoringMetrics.length > 0) {
       return this.calculateScores(testCase);
     }
@@ -175,26 +171,22 @@ export class EvaluationEngine<T = Record<string, unknown>> {
    */
   @track({ name: "metrics_calculation", type: SpanType.General })
   private async calculateScores(
-    testCase: EvaluationTestCase,
+    testCase: EvaluationTestCase
   ): Promise<EvaluationTestResult> {
     const scoreResults: EvaluationScoreResult[] = [];
     const { scoringInputs } = testCase;
 
     for (const metric of this.scoringMetrics) {
-      // Check if all required arguments exist in the scoring inputs
       validateRequiredArguments(metric, scoringInputs);
 
-      // If all required arguments exist, call the metric's score method
-      logger.info(`Calculating score for metric ${metric.name}`);
-
+      logger.debug(`Calculating score for metric ${metric.name}`);
       const metricResults = await metric.score(scoringInputs);
       const resultArray = Array.isArray(metricResults)
         ? metricResults
         : [metricResults];
 
-      // Add all results to the array
       scoreResults.push(...resultArray);
-      logger.info(`Finished calculating score for metric ${metric.name}`);
+      logger.debug(`Finished calculating score for metric ${metric.name}`);
     }
 
     scoreResults.forEach((score) =>
@@ -202,7 +194,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         name: score.name,
         value: score.value,
         reason: score.reason,
-      }),
+      })
     );
 
     return {
@@ -221,24 +213,22 @@ export class EvaluationEngine<T = Record<string, unknown>> {
    */
   private prepareScoringInputs(
     datasetItem: Record<string, unknown>,
-    taskOutput: Record<string, unknown>,
+    taskOutput: Record<string, unknown>
   ): Record<string, unknown> {
-    // Combine dataset item and task output (task output has priority)
     const combined = { ...datasetItem, ...taskOutput };
 
-    // If no mapping provided, return combined inputs
     if (!this.scoringKeyMapping) {
       return combined;
     }
-
-    // Apply key mapping
     const mapped: Record<string, unknown> = { ...combined };
 
     for (const [targetKey, sourceKey] of Object.entries(
-      this.scoringKeyMapping,
+      this.scoringKeyMapping
     )) {
-      if (sourceKey in combined) {
-        mapped[targetKey] = combined[sourceKey];
+      const value = getSourceObjValue(combined, sourceKey);
+
+      if (value !== undefined) {
+        mapped[targetKey] = value;
       }
     }
 
