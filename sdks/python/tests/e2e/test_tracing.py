@@ -763,7 +763,7 @@ def test_tracked_function__update_current_trace__with_attachments(
     )
 
 
-def test_opik_span__attachments(opik_client, data_file):
+def test_opik_client_span__attachments(opik_client, data_file):
     trace_id = helpers.generate_id()
     file_name = os.path.basename(data_file.name)
     names = [file_name + "_first", file_name + "_second"]
@@ -794,6 +794,60 @@ def test_opik_span__attachments(opik_client, data_file):
     )
     span = opik_client.span(
         trace_id=trace_id,
+        name="span-name",
+        input={"input": "Some random input 2"},
+        output={"output": "span-output"},
+        attachments=attachments.values(),
+    )
+
+    opik_client.flush()
+
+    # check that the attachment was uploaded
+    verifiers.verify_attachments(
+        opik_client=opik_client,
+        entity_type="span",
+        entity_id=span.id,
+        attachments=attachments,
+        data_sizes=data_sizes,
+    )
+
+
+def test_span_span__attachments(opik_client, data_file):
+    trace_id = helpers.generate_id()
+    file_name = os.path.basename(data_file.name)
+    names = [file_name + "_first", file_name + "_second"]
+    attachments = {
+        names[0]: Attachment(
+            data=data_file.name,
+            file_name=names[0],
+            content_type="application/octet-stream",
+        ),
+        names[1]: Attachment(
+            data=data_file.name,
+            file_name=names[1],
+            content_type="application/octet-stream",
+        ),
+    }
+    data_sizes = {
+        names[0]: FILE_SIZE,
+        names[1]: FILE_SIZE,
+    }
+
+    # Send a trace that matches the input filter
+    opik_client.trace(
+        id=trace_id,
+        name="trace-name",
+        input={"input": "Some random input"},
+        output={"output": "trace-output"},
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+    span = opik_client.span(
+        trace_id=trace_id,
+        name="span-name",
+        input={"input": "Some random input 2"},
+        output={"output": "span-output"},
+    )
+    span.span(
         name="span-name",
         input={"input": "Some random input 2"},
         output={"output": "span-output"},

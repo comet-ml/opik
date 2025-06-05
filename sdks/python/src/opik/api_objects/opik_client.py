@@ -406,24 +406,6 @@ class Opik:
         Returns:
             span.Span: The created span object.
         """
-        id = id if id is not None else id_helpers.generate_id()
-        start_time = (
-            start_time if start_time is not None else datetime_helpers.local_timestamp()
-        )
-        last_updated_at = datetime_helpers.local_timestamp()
-
-        backend_compatible_usage = validation_helpers.validate_and_parse_usage(
-            usage=usage,
-            logger=LOGGER,
-            provider=provider,
-        )
-
-        if backend_compatible_usage is not None:
-            metadata = helpers.add_usage_to_metadata(usage=usage, metadata=metadata)
-
-        if project_name is None:
-            project_name = self._project_name
-
         if trace_id is None:
             trace_id = id_helpers.generate_id()
             # TODO: decide what needs to be passed to CreateTraceMessage.
@@ -440,14 +422,25 @@ class Opik:
                 tags=tags,
                 error_info=error_info,
                 thread_id=None,
-                last_updated_at=last_updated_at,
+                last_updated_at=datetime_helpers.local_timestamp(),
             )
             self._streamer.put(create_trace_message)
 
-        create_span_message = messages.CreateSpanMessage(
-            span_id=id,
+        if feedback_scores is not None:
+            for feedback_score in feedback_scores:
+                feedback_score["id"] = id
+
+            self.log_spans_feedback_scores(feedback_scores, project_name)
+
+        if project_name is None:
+            project_name = self._project_name
+
+        return span.span_client.create_span(
             trace_id=trace_id,
             project_name=project_name,
+            url_override=self._config.url_override,
+            message_streamer=self._streamer,
+            span_id=id,
             parent_span_id=parent_span_id,
             name=name,
             type=type,
@@ -457,39 +450,12 @@ class Opik:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=backend_compatible_usage,
+            usage=usage,
             model=model,
             provider=provider,
             error_info=error_info,
             total_cost=total_cost,
-            last_updated_at=last_updated_at,
-        )
-        self._streamer.put(create_span_message)
-
-        if feedback_scores is not None:
-            for feedback_score in feedback_scores:
-                feedback_score["id"] = id
-
-            self.log_spans_feedback_scores(feedback_scores, project_name)
-
-        if attachments is not None:
-            for attachment_data in attachments:
-                self._streamer.put(
-                    attachment_converters.attachment_to_message(
-                        attachment_data=attachment_data,
-                        entity_type="span",
-                        entity_id=id,
-                        project_name=project_name,
-                        url_override=self._config.url_override,
-                    )
-                )
-
-        return span.Span(
-            id=id,
-            parent_span_id=parent_span_id,
-            trace_id=trace_id,
-            project_name=project_name,
-            message_streamer=self._streamer,
+            attachments=attachments,
         )
 
     def log_spans_feedback_scores(
