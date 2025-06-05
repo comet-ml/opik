@@ -253,7 +253,6 @@ describe("processInputData", () => {
 
     const result = processInputData(input);
 
-    console.log(result, input);
     expect(result.images).toHaveLength(extensions.length);
 
     extensions.forEach((ext, idx) => {

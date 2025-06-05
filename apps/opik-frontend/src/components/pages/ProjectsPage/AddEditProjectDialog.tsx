@@ -129,7 +129,6 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
         {!isEdit && (
           <ExplainerDescription
             className="mb-4"
-            size="sm"
             {...EXPLAINERS_MAP[
               EXPLAINER_ID.why_would_i_want_to_create_a_new_project
             ]}

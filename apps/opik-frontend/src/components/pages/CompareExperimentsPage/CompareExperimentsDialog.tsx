@@ -120,7 +120,6 @@ const CompareExperimentsDialog: React.FC<CompareExperimentsDialogProps> = ({
         <div className="w-full overflow-hidden">
           <ExplainerDescription
             className="mb-4"
-            size="sm"
             {...EXPLAINERS_MAP[
               EXPLAINER_ID.what_does_it_mean_to_compare_my_experiments
             ]}

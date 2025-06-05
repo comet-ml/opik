@@ -134,7 +134,6 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
           {!isEdit && (
             <ExplainerDescription
               className="mb-4"
-              size="sm"
               {...EXPLAINERS_MAP[EXPLAINER_ID.how_do_i_write_my_prompt]}
             />
           )}

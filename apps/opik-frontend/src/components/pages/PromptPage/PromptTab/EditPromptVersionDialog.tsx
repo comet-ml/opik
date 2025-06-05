@@ -107,7 +107,6 @@ const EditPromptVersionDialog: React.FunctionComponent<
         <DialogAutoScrollBody>
           <ExplainerDescription
             className="mb-4"
-            size="sm"
             {...EXPLAINERS_MAP[EXPLAINER_ID.what_happens_if_i_edit_my_prompt]}
           />
           <div className="flex flex-col gap-2 pb-4">

@@ -106,7 +106,6 @@ const PromptModelConfigs = ({
       >
         <ExplainerDescription
           className="mb-5 w-72"
-          size="sm"
           {...EXPLAINERS_MAP[EXPLAINER_ID.whats_these_configuration_things]}
         />
         {getProviderForm()}

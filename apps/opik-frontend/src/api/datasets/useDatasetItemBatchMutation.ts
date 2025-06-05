@@ -48,8 +48,11 @@ const useDatasetItemBatchMutation = () => {
     },
     onSettled: (data, error, variables, context) => {
       if (context) {
-        return queryClient.invalidateQueries({ queryKey: context.queryKey });
+        queryClient.invalidateQueries({ queryKey: context.queryKey });
       }
+      return queryClient.invalidateQueries({
+        queryKey: ["datasets"],
+      });
     },
   });
 };

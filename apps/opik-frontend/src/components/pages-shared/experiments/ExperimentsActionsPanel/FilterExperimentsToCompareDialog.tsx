@@ -97,10 +97,7 @@ const FilterExperimentsToCompareDialog: React.FunctionComponent<
           <DialogTitle>Select experiments to compare</DialogTitle>
         </DialogHeader>
         <div className="w-full overflow-hidden">
-          <ExplainerDescription
-            size="sm"
-            description="You can only compare experiments that use the same dataset. Please make sure all the experiments use the same dataset."
-          />
+          <ExplainerDescription description="You can only compare experiments that use the same dataset. Please make sure all the experiments use the same dataset." />
           <div className="my-4 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch gap-2.5 overflow-y-auto">
             {renderListItems()}
           </div>
