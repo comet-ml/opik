@@ -1,16 +1,18 @@
+import z from "zod";
 import { EvaluationScoreResult } from "../../types";
 import { BaseMetric } from "../BaseMetric";
 
-interface ContainsMetricArgs {
-  output: string;
-  substring: string;
-}
+const validationSchema = z.object({
+  output: z.string(),
+  substring: z.string(),
+});
+type Input = z.infer<typeof validationSchema>;
 
 /**
  * Contains metric - checks if the actual output contains the substring string.
  * Simple metric for substring matching.
  */
-export class Contains extends BaseMetric<ContainsMetricArgs> {
+export class Contains extends BaseMetric {
   private caseSensitive: boolean;
 
   /**
@@ -24,12 +26,14 @@ export class Contains extends BaseMetric<ContainsMetricArgs> {
     this.caseSensitive = caseSensitive;
   }
 
+  public validationSchema = validationSchema;
+
   /**
    * Calculates a score based on whether output contains substring
    * @param input Actual output to evaluate, must include `output` and `substring` properties
    * @returns Score result (1.0 if found, 0.0 if not found)
    */
-  async score(input: ContainsMetricArgs): Promise<EvaluationScoreResult> {
+  async score(input: Input): Promise<EvaluationScoreResult> {
     const { output, substring } = input;
 
     const handledOutput = this.caseSensitive ? output : output.toLowerCase();

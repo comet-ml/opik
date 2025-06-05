@@ -1,10 +1,12 @@
+import z from "zod";
 import { EvaluationScoreResult } from "../../types";
 import { BaseMetric } from "../BaseMetric";
 
-interface ExactMatchArgs {
-  output: unknown;
-  expected: unknown;
-}
+const validationSchema = z.object({
+  output: z.unknown(),
+  expected: z.unknown(),
+});
+type Input = z.infer<typeof validationSchema>;
 
 /**
  * ExactMatch metric - checks if the actual output exactly matches the expected output.
@@ -20,12 +22,14 @@ export class ExactMatch extends BaseMetric {
     super(name, trackMetric);
   }
 
+  public validationSchema = validationSchema;
+
   /**
    * Calculates a score based on exact match between output and expected
    * @param input Actual output to evaluate, must include `output` and `expected` properties
    * @returns Score result (1.0 for match, 0.0 for no match)
    */
-  async score(input: ExactMatchArgs): Promise<EvaluationScoreResult> {
+  async score(input: Input): Promise<EvaluationScoreResult> {
     const { output, expected } = input;
     const score = output === expected ? 1.0 : 0.0;
 

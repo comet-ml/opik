@@ -1,9 +1,11 @@
+import z from "zod";
 import { EvaluationScoreResult } from "../../types";
 import { BaseMetric } from "../BaseMetric";
 
-interface IsJsonArgs {
-  output: string;
-}
+const validationSchema = z.object({
+  output: z.unknown(),
+});
+type Input = z.infer<typeof validationSchema>;
 
 /**
  * IsJson metric - checks if a given output string is valid JSON.
@@ -18,16 +20,18 @@ export class IsJson extends BaseMetric {
     super(name, trackMetric);
   }
 
+  public validationSchema = validationSchema;
+
   /**
    * Calculates a score based on whether output is a valid JSON
    * @param input Actual output to evaluate
    * @returns Score result (1.0 if valid json, 0.0 if not valid json)
    */
-  async score(input: IsJsonArgs): Promise<EvaluationScoreResult> {
+  async score(input: Input): Promise<EvaluationScoreResult> {
     const { output } = input;
 
     try {
-      JSON.parse(output);
+      JSON.parse(output as string);
       return {
         name: this.name,
         value: 1.0,

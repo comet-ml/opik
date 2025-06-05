@@ -1,16 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BaseMetric, EvaluationScoreResult } from "opik";
+import { z } from "zod";
 
-interface OneOutputMetricArgs {
-  output: string;
-}
+const validationSchema = z.object({
+  output: z.string(),
+});
+type Input = z.infer<typeof validationSchema>;
 
-class BasicAsyncMetric extends BaseMetric<OneOutputMetricArgs> {
+class BasicAsyncMetric extends BaseMetric {
   constructor(private readonly delayMs = 0) {
     super("basic_async_metric", false);
   }
 
-  async score(input: OneOutputMetricArgs): Promise<EvaluationScoreResult> {
+  public validationSchema = validationSchema;
+
+  async score(input: Input): Promise<EvaluationScoreResult> {
     await new Promise((resolve) => setTimeout(resolve, this.delayMs));
     return {
       name: this.name,
@@ -20,15 +24,17 @@ class BasicAsyncMetric extends BaseMetric<OneOutputMetricArgs> {
   }
 }
 
-class ApiResponseValidator extends BaseMetric<OneOutputMetricArgs> {
+class ApiResponseValidator extends BaseMetric {
   constructor(
     private readonly validateFn: (response: unknown) => boolean,
-    private readonly apiEndpoint: string,
+    private readonly apiEndpoint: string
   ) {
     super("api_response_validator", false);
   }
 
-  async score(input: OneOutputMetricArgs): Promise<EvaluationScoreResult> {
+  public validationSchema = validationSchema;
+
+  async score(input: Input): Promise<EvaluationScoreResult> {
     try {
       const response = await fetch(this.apiEndpoint, {
         method: "POST",
@@ -52,7 +58,7 @@ class ApiResponseValidator extends BaseMetric<OneOutputMetricArgs> {
   }
 }
 
-class ContentModerationMetric extends BaseMetric<OneOutputMetricArgs> {
+class ContentModerationMetric extends BaseMetric {
   private readonly bannedWords = ["spam", "scam", "fraud"];
   private readonly moderationApi = "https://api.moderatecontent.com/text/";
 
@@ -60,10 +66,12 @@ class ContentModerationMetric extends BaseMetric<OneOutputMetricArgs> {
     super("content_moderation_metric", false);
   }
 
-  async score(input: OneOutputMetricArgs): Promise<EvaluationScoreResult> {
+  public validationSchema = validationSchema;
+
+  async score(input: Input): Promise<EvaluationScoreResult> {
     try {
       const hasBannedWord = this.bannedWords.some((word) =>
-        input.output.toLowerCase().includes(word),
+        input.output.toLowerCase().includes(word)
       );
 
       if (hasBannedWord) {
@@ -100,12 +108,14 @@ class ContentModerationMetric extends BaseMetric<OneOutputMetricArgs> {
   }
 }
 
-class SentimentAnalysisMetric extends BaseMetric<OneOutputMetricArgs> {
+class SentimentAnalysisMetric extends BaseMetric {
   constructor() {
     super("sentiment_analysis_metric", false);
   }
 
-  async score(input: OneOutputMetricArgs): Promise<EvaluationScoreResult> {
+  public validationSchema = validationSchema;
+
+  async score(input: Input): Promise<EvaluationScoreResult> {
     await new Promise((resolve) => setTimeout(resolve, 50)); // Simulate API delay
 
     const positiveWords = ["good", "great", "excellent", "happy"];
@@ -129,12 +139,14 @@ class SentimentAnalysisMetric extends BaseMetric<OneOutputMetricArgs> {
   }
 }
 
-class CompositeAsyncMetric extends BaseMetric<OneOutputMetricArgs> {
+class CompositeAsyncMetric extends BaseMetric {
   constructor(private readonly metrics: BaseMetric[]) {
     super("composite_async_metric", false);
   }
 
-  async score(input: OneOutputMetricArgs): Promise<EvaluationScoreResult> {
+  public validationSchema = validationSchema;
+
+  async score(input: Input): Promise<EvaluationScoreResult> {
     const results = await Promise.all(
       this.metrics.map(async (metric) => {
         try {
@@ -146,11 +158,11 @@ class CompositeAsyncMetric extends BaseMetric<OneOutputMetricArgs> {
             reason: `Error in ${metric.name}: ${error instanceof Error ? error.message : String(error)}`,
           };
         }
-      }),
+      })
     );
 
     const flatResults = results.flatMap((result) =>
-      Array.isArray(result) ? result : [result],
+      Array.isArray(result) ? result : [result]
     );
 
     const totalScore = flatResults.reduce((sum, r) => sum + r.value, 0);
@@ -193,13 +205,10 @@ describe("Async Custom Metrics", () => {
         score: number;
       }
 
-      const validator = new ApiResponseValidator(
-        (data: unknown) => {
-          const response = data as ApiResponse;
-          return response.valid && response.score > 0.8;
-        },
-        "https://api.example.com/validate",
-      );
+      const validator = new ApiResponseValidator((data: unknown) => {
+        const response = data as ApiResponse;
+        return response.valid && response.score > 0.8;
+      }, "https://api.example.com/validate");
 
       const result = await validator.score({ output: "test input" });
       expect(result.value).toBe(1.0);

@@ -76,7 +76,7 @@ describe("evaluate function", () => {
         mockAPIFunctionWithStream(
           JSON.stringify({
             id: "item-1",
-            data: { input: "test input 1", expected_output: "test output 1" },
+            data: { input: "test input 1", expected: "test output 1" },
             source: "sdk",
           }) + "\n"
         )
@@ -121,7 +121,7 @@ describe("evaluate function", () => {
             endTime: expect.any(Date),
             id: expect.any(String),
             input: {
-              expected_output: "test output 1",
+              expected: "test output 1",
               id: "item-1",
               input: "test input 1",
             },
@@ -160,7 +160,7 @@ describe("evaluate function", () => {
             taskOutput: { output: "generated output" },
             scoringInputs: expect.objectContaining({
               input: "test input 1",
-              expected_output: "test output 1",
+              expected: "test output 1",
               output: "generated output",
             }),
           }),

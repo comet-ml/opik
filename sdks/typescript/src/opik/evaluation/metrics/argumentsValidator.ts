@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { BaseMetric } from "./BaseMetric";
 
 /**
@@ -5,8 +6,7 @@ import { BaseMetric } from "./BaseMetric";
  *
  * @param metric The metric that will be executed
  * @param args The arguments object to validate
- * @param requiredArgs List of required argument names for this metric
- * @returns true if all required arguments exist, false otherwise
+ * @returns void, throws an error if validation fails
  */
 export function validateRequiredArguments(
   metric: BaseMetric,
@@ -16,11 +16,38 @@ export function validateRequiredArguments(
     throw new Error("Arguments must be an object");
   }
 
-  // TODO: implement metric required args
-  const requiredArgs: string[] = [];
+  // Handle the schema based on its type
+  const validationSchema = metric.validationSchema;
 
-  if (!requiredArgs.every((argName) => argName in args)) {
-    throw new Error(getMissingArgumentsMessage(metric, args, requiredArgs));
+  // Ensure we're working with an object schema
+  if (!(validationSchema instanceof z.ZodObject)) {
+    // If the schema is not an object schema, wrap it as one to apply our validations
+    throw new Error(
+      `Metric '${metric.name}' validation schema must be a ZodObject, got ${validationSchema.constructor.name}`
+    );
+  }
+
+  const enhancedSchema = validationSchema.extend(
+    Object.fromEntries(
+      Object.entries(validationSchema.shape).map(([key, schema]) => [
+        key,
+        (schema as z.ZodTypeAny).refine((val) => val !== undefined, {
+          message: `${key} cannot be undefined`,
+          path: [key],
+        }),
+      ])
+    )
+  );
+
+  const parsedData = enhancedSchema.safeParse(args);
+
+  if (!parsedData.success) {
+    const missedKeys = parsedData.error.issues
+      .map((issue) => issue.path[0])
+      .filter(Boolean);
+    const uniqueMissedKeys = [...new Set(missedKeys)];
+
+    throw new Error(getMissingArgumentsMessage(metric, args, uniqueMissedKeys));
   }
 }
 
@@ -35,10 +62,10 @@ export function validateRequiredArguments(
 export function getMissingArgumentsMessage(
   metric: BaseMetric,
   args: Record<string, unknown>,
-  requiredArgs: string[]
+  missedArgs: Array<string | number>
 ): string {
   const availableArgs = Object.keys(args);
-  const missingArgs = requiredArgs.filter((arg) => !(arg in args));
+  const missingArgs = missedArgs.filter((arg) => !(arg in args));
 
   return `Metric '${metric.name}' is missing required arguments: ${missingArgs.join(", ")}. Available arguments: ${availableArgs.join(", ")}.`;
 }

@@ -1,14 +1,21 @@
 import { describe, it, expect, vi } from "vitest";
 import { BaseMetric, EvaluationScoreResult } from "opik";
+import { z } from "zod";
+
+const validationSchema = z.object({
+  output: z.unknown(),
+});
 
 class DependentMetric extends BaseMetric {
   constructor(
     private readonly service: { getScore: () => number },
     name = "dependent_metric",
-    trackMetric = false,
+    trackMetric = false
   ) {
     super(name, trackMetric);
   }
+
+  public validationSchema = validationSchema;
 
   score(): EvaluationScoreResult {
     return {

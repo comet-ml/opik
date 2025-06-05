@@ -1,70 +1,43 @@
 import { track } from "@/decorators/track";
 import { EvaluationScoreResult } from "../types";
 import { SpanType } from "@/rest_api/api";
+import { z } from "zod";
 
-/**
- * Abstract base class for all metrics. When creating a new metric, you should extend
- * this class and implement the abstract methods.
- *
- * @example
- * ```typescript
- * class MyCustomMetric extends BaseMetric {
- *   constructor(name: string, track: boolean = true) {
- *     super(name, track);
- *   }
- *
- *   score(input: T): Promise<ScoreResult | ScoreResult[]> {
- *     // Add your logic here
- *
- *     return {
- *       name: this.name,
- *       value: 0,
- *       reason: "Optional reason for the score"
- *     };
- *   }
- *
- * ```
- */
-export abstract class BaseMetric<T extends object = object> {
+export abstract class BaseMetric {
   /**
    * The name of the metric
    */
   public readonly name: string;
 
   /**
-   * Whether this metric should be tracked in Opik
+   * Whether this metric should be tracked
    */
   public readonly trackMetric: boolean;
 
   /**
-   * Creates a new metric
-   *
-   * @param name The name of the metric
-   * @param trackMetric Whether to track the metric. Defaults to true
+   * Zod schema for validating input parameters to the score method
    */
+  public abstract readonly validationSchema: z.ZodTypeAny;
+
   protected constructor(name: string, trackMetric = true) {
     this.name = name;
     this.trackMetric = trackMetric;
 
     if (trackMetric) {
-      const originalScore = this.score;
-
-      // Apply tracking decorator to methods
+      const originalScore = this.score.bind(this);
       this.score = track(
         { name: this.name, type: SpanType.General },
-        originalScore,
-      );
+        originalScore
+      ) as this["score"];
     }
   }
 
   /**
-   * Calculate a score for the given inputs
-   *
-   * @param input Arguments required by the specific metric implementation
-   * @returns A score result or list of score results
+   * Compute the score using validated input
+   * @param input - The validated input of type inferred from the schema
    */
   abstract score(
-    input?: T,
+    input: unknown
   ):
     | EvaluationScoreResult
     | EvaluationScoreResult[]

@@ -1,15 +1,19 @@
 import { BaseMetric, EvaluationScoreResult } from "opik";
+import { z } from "zod";
 
-interface OneOutputMetricArgs {
-  output: string;
-}
+const validationSchema = z.object({
+  output: z.string(),
+});
+type Input = z.infer<typeof validationSchema>;
 
-class BasicSyncMetric extends BaseMetric<OneOutputMetricArgs> {
+class BasicSyncMetric extends BaseMetric {
   constructor() {
     super("basic_sync_metric", false);
   }
 
-  score(input: OneOutputMetricArgs): EvaluationScoreResult {
+  public validationSchema = validationSchema;
+
+  score(input: Input): EvaluationScoreResult {
     return {
       name: this.name,
       value: input.output.length > 0 ? 1.0 : 0.0,
@@ -18,12 +22,14 @@ class BasicSyncMetric extends BaseMetric<OneOutputMetricArgs> {
   }
 }
 
-class LengthThresholdMetric extends BaseMetric<OneOutputMetricArgs> {
+class LengthThresholdMetric extends BaseMetric {
   constructor(private readonly minLength: number) {
     super("length_threshold_metric", false);
   }
 
-  score(input: OneOutputMetricArgs): EvaluationScoreResult {
+  public validationSchema = validationSchema;
+
+  score(input: Input): EvaluationScoreResult {
     const isValid = input.output.length >= this.minLength;
     return {
       name: this.name,
@@ -35,12 +41,14 @@ class LengthThresholdMetric extends BaseMetric<OneOutputMetricArgs> {
   }
 }
 
-class CompositeMetric extends BaseMetric<OneOutputMetricArgs> {
-  constructor(private readonly metrics: BaseMetric<OneOutputMetricArgs>[]) {
+class CompositeMetric extends BaseMetric {
+  constructor(private readonly metrics: BaseMetric[]) {
     super("composite_metric", false);
   }
 
-  async score(input: OneOutputMetricArgs): Promise<EvaluationScoreResult> {
+  public validationSchema = validationSchema;
+
+  async score(input: Input): Promise<EvaluationScoreResult> {
     const results = await Promise.all(
       this.metrics.map(async (metric) => {
         const result = metric.score(input);
@@ -49,7 +57,7 @@ class CompositeMetric extends BaseMetric<OneOutputMetricArgs> {
         return Array.isArray(resolvedResult)
           ? resolvedResult
           : [resolvedResult];
-      }),
+      })
     );
 
     const flattenedResults = results.flat();
