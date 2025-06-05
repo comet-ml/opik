@@ -4,6 +4,7 @@ import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Sets;
@@ -64,6 +65,11 @@ class DatasetItemResultMapper {
                         .duration((Double) experimentItem.get(12))
                         .totalEstimatedCost(getTotalEstimatedCost(experimentItem))
                         .usage(getUsage(experimentItem))
+                        .traceVisibilityMode(Optional.ofNullable(experimentItem.get(15))
+                                .map(Object::toString)
+                                .filter(StringUtils::isNotBlank)
+                                .flatMap(VisibilityMode::fromString)
+                                .orElse(null))
                         .build())
                 .toList();
 
