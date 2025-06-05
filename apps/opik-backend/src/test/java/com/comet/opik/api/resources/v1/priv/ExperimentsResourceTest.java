@@ -1432,7 +1432,7 @@ class ExperimentsResourceTest {
                     .map(Span::usage)
                     .map(Map::entrySet)
                     .flatMap(Collection::stream)
-                    .collect(groupingBy(Map.Entry::getKey, Collectors.averagingLong(e -> e.getValue())));
+                    .collect(groupingBy(Map.Entry::getKey, Collectors.averagingLong(Map.Entry::getValue)));
         }
 
         private BigDecimal getTotalEstimatedCostAvg(List<Span> spans) {
@@ -2191,16 +2191,11 @@ class ExperimentsResourceTest {
                                     return buildVersionLink(promptVersion);
                                 })
                                 .toList();
-                        var experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
+                        var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(datasetName)
                                 .name(name)
                                 .promptVersion(promptVersions.getFirst())
                                 .promptVersions(promptVersions)
-                                .usage(null)
-                                .duration(null)
-                                .totalEstimatedCost(null)
-                                .type(ExperimentType.REGULAR)
-                                .optimizationId(null)
                                 .build();
                         // Only 2 scores per experiment is enough for this test
                         var scores = IntStream.range(0, 2)
@@ -2496,14 +2491,9 @@ class ExperimentsResourceTest {
             var versionLink = new PromptVersionLink(promptVersion.id(), promptVersion.commit(),
                     promptVersion.promptId());
 
-            var expectedExperiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
+            var expectedExperiment = experimentResourceClient.createPartialExperiment()
                     .promptVersion(versionLink)
                     .promptVersions(List.of(versionLink))
-                    .duration(null)
-                    .usage(null)
-                    .totalEstimatedCost(null)
-                    .type(ExperimentType.REGULAR)
-                    .optimizationId(null)
                     .build();
 
             var expectedId = createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
@@ -2979,7 +2969,6 @@ class ExperimentsResourceTest {
 
             createAndAssert(createRequest, API_KEY, TEST_WORKSPACE);
             createRequest.experimentItems()
-                    .stream()
                     .forEach(item -> getAndAssert(item, TEST_WORKSPACE, API_KEY));
 
             var ids = createRequest.experimentItems().stream().map(ExperimentItem::id).collect(toSet());
@@ -3002,14 +2991,13 @@ class ExperimentsResourceTest {
 
     private ExperimentItemsBatch createItemsWithoutTrace() {
         ExperimentItemsBatch itemsBatch = getExperimentItemsBatch();
-        var createRequest = itemsBatch.toBuilder()
+        return itemsBatch.toBuilder()
                 .experimentItems(itemsBatch.experimentItems().stream()
                         .map(experimentItem -> experimentItem.toBuilder()
                                 .traceVisibilityMode(null)
                                 .build())
                         .collect(toSet()))
                 .build();
-        return createRequest;
     }
 
     @Nested
