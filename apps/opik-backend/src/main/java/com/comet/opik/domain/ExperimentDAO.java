@@ -157,7 +157,8 @@ class ExperimentDAO {
                     arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration_values,
                     count(DISTINCT trace_id) as trace_count,
                     avgMap(usage) as usage,
-                    avg(total_estimated_cost) as total_estimated_cost
+                    sum(total_estimated_cost) as total_estimated_cost_sum,
+                    avg(total_estimated_cost) as total_estimated_cost_avg
                 FROM (
                     SELECT DISTINCT
                         ei.experiment_id,
@@ -184,6 +185,7 @@ class ExperimentDAO {
                             sum(total_estimated_cost) as total_estimated_cost
                         FROM spans final
                         WHERE workspace_id = :workspace_id
+                        AND trace_id IN (SELECT trace_id FROM experiment_items_final)
                         GROUP BY workspace_id, project_id, trace_id
                     ) AS s ON ei.trace_id = s.trace_id
                 )
@@ -271,7 +273,8 @@ class ExperimentDAO {
                 ed.trace_count as trace_count,
                 ed.duration_values AS duration,
                 ed.usage as usage,
-                ed.total_estimated_cost as total_estimated_cost,
+                ed.total_estimated_cost_sum as total_estimated_cost,
+                ed.total_estimated_cost_avg as total_estimated_cost_avg,
                 ca.comments_array_agg as comments_array_agg
             FROM experiments_final AS e
             LEFT JOIN experiment_durations AS ed ON e.id = ed.experiment_id
@@ -308,6 +311,7 @@ class ExperimentDAO {
                 null AS trace_count,
                 null AS duration,
                 null AS total_estimated_cost,
+                null AS total_estimated_cost_avg,
                 null AS usage,
                 null AS comments_array_agg
             FROM experiments
@@ -494,7 +498,8 @@ class ExperimentDAO {
                     .comments(getComments(row.get("comments_array_agg", List[].class)))
                     .traceCount(row.get("trace_count", Long.class))
                     .duration(getDuration(row))
-                    .totalEstimatedCost(getTotalEstimatedCost(row))
+                    .totalEstimatedCost(getCostValue(row, "total_estimated_cost"))
+                    .totalEstimatedCostAvg(getCostValue(row, "total_estimated_cost_avg"))
                     .usage(row.get("usage", Map.class))
                     .promptVersion(promptVersions.stream().findFirst().orElse(null))
                     .promptVersions(promptVersions.isEmpty() ? null : promptVersions)
@@ -507,8 +512,8 @@ class ExperimentDAO {
         });
     }
 
-    private static BigDecimal getTotalEstimatedCost(Row row) {
-        return Optional.ofNullable(row.get("total_estimated_cost", BigDecimal.class))
+    private static BigDecimal getCostValue(Row row, String fieldName) {
+        return Optional.ofNullable(row.get(fieldName, BigDecimal.class))
                 .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
                 .orElse(null);
     }
