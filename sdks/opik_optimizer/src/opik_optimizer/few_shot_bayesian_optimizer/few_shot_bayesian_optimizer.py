@@ -2,7 +2,7 @@ import json
 import logging
 import random
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import litellm
 import opik
@@ -14,7 +14,6 @@ from pydantic import BaseModel
 
 from opik_optimizer import base_optimizer
 from opik_optimizer.optimization_config import mappers
-from opik_optimizer.optimization_config.configs import MetricConfig
 
 from .. import _throttle, optimization_result, task_evaluator, utils
 from ..optimization_config import chat_prompt
@@ -40,7 +39,8 @@ Your task:
     - Add a section title in XML or markdown format. The examples will be provided as `example_1\nexample_2\n...` with each example following the example template.
 - Analyze the examples to infer a consistent structure, and create a single string few_shot_example_template using the Python .format() style. Make sure to follow the following instructions:
     - Unless absolutely relevant, do not return an object but instead a string that can be inserted as part of {FEW_SHOT_EXAMPLE_PLACEHOLDER}
-    - Make sure to include the variables as part of this string so we can before string formatting with actual examples. On variables available in the examples can be used. Do not use anything else, do not apply any transformations to the variables either.
+    - Make sure to include the variables as part of this string so we can before string formatting with actual examples. Only variables available in the examples can be used. Do not use anything else, do not apply any transformations to the variables either.
+    - The few shot examples should include the expected response as the goal is to provide examples of the expected output format.
     - Ensure the format of the few shot examples are consistent with how the model will be called
 
 Return your output as a JSON object with:
@@ -56,6 +56,17 @@ class FewShotPromptTemplate(BaseModel):
     example_template: str
 
 class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
+    """
+    The Few-Shot Bayesian Optimizer can be used to add few-shot examples to prompts. This algorithm
+    employes a two stage pipeline:
+
+    1. We generate a few-shot prompt template that is inserted can be inserted into the prompt 
+       provided
+    2. We use Bayesian Optimization to determine the best examples to include in the prompt.
+
+    This algorithm is best used when you have a well defined task and would like to guide the LLM
+    by providing some examples.
+    """
     def __init__(
         self,
         model: str,
@@ -67,6 +78,17 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         verbose: int = 1,
         **model_kwargs,
     ) -> None:
+        """
+        Args:
+            model: The model to used to evaluate the prompt
+            project_name: Optional project name for tracking
+            min_examples: Minimum number of examples to include
+            max_examples: Maximum number of examples to include
+            seed: Random seed for reproducibility
+            n_threads: Number of threads for parallel evaluation
+            verbose: Controls internal logging/progress bars (0=off, 1=on).
+            **model_kwargs: Additional model parameters
+        """
         super().__init__(model, project_name, **model_kwargs)
         self.min_examples = min_examples
         self.max_examples = max_examples
@@ -173,7 +195,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self,
         fewshot_prompt_template: FewShotPromptTemplate,
         dataset: Dataset,
-        metric_config: MetricConfig,
+        metric: Callable,
         n_trials: int = 10,
         baseline_score: Optional[float] = None,
         optimization_id: Optional[str] = None,
@@ -198,7 +220,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             **experiment_config,
             **{
                 "optimizer": self.__class__.__name__,
-                "metric": metric_config.metric.name,
+                "metric": metric.__name__,
                 "dataset": dataset.name,
                 "configuration": {},
             },
@@ -261,7 +283,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 score = task_evaluator.evaluate(
                     dataset=dataset,
                     dataset_item_ids=eval_dataset_item_ids,
-                    metric_config=metric_config,
+                    metric=metric,
                     evaluated_task=llm_task,
                     num_threads=self.n_threads,
                     project_name=self.project_name,
@@ -325,7 +347,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                         "example_indices": trial.user_attrs.get("example_indices", []) # Default to empty list
                     },
                     "scores": [{
-                        "metric_name": metric_config.metric.name, 
+                        "metric_name": metric.__name__, 
                         "score": score_val, # Can be None
                     }],
                     "duration_seconds": duration_val,
@@ -349,7 +371,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             optimizer=self.__class__.__name__,
             prompt=best_trial.user_attrs["config"]["message_list"],
             score=best_score,
-            metric_name=metric_config.metric.name,
+            metric_name=metric.__name__,
             details={
                 "chat_messages": best_trial.user_attrs["config"]["message_list"],
                 "prompt_parameter": best_trial.user_attrs["config"],
@@ -359,8 +381,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "total_trials": n_trials,
                 "rounds": [],
                 "stopped_early": False,
-                "metric_name": metric_config.metric.name,
-                "metric_inputs": metric_config.inputs,
+                "metric_name": metric.__name__,
                 "model": self.model,
                 "temperature": self.model_kwargs.get("temperature"),
             },
@@ -372,16 +393,28 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
-        metric_config: MetricConfig,
+        metric: Callable,
         n_trials: int = 10,
         experiment_config: Optional[Dict] = None,
         n_samples: Optional[int] = None,
     ) -> optimization_result.OptimizationResult:
+        """
+        Args:
+            prompt: The prompt to optimize
+            dataset: Opik Dataset to optimize on
+            metric: Metric function to evaluate on
+            n_trials: Number of trials for Bayesian Optimization
+            experiment_config: Optional configuration for the experiment, useful to log additional metadata
+            n_samples: Optional number of items to test in the dataset
+        
+        Returns:
+            OptimizationResult: Result of the optimization
+        """
         optimization = None
         try:
             optimization = self._opik_client.create_optimization(
                 dataset_name=dataset.name,
-                objective_name=metric_config.metric.name,
+                objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
             )
         except Exception:
@@ -397,7 +430,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 prompt.formatted_messages,
                 optimizer_config={
                     "optimizer": self.__class__.__name__,
-                    "metric": metric_config.metric.name,
+                    "metric": metric.__name__,
                     "n_trials": n_trials,
                     "n_samples": n_samples
                 },
@@ -411,7 +444,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 baseline_score = self.evaluate_prompt(
                     prompt=prompt,
                     dataset=dataset,
-                    metric_config=metric_config,
+                    metric=metric,
                     n_samples=n_samples,
                     optimization_id=optimization.id if optimization is not None else None
                 )
@@ -433,7 +466,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             result = self._run_optimization(
                 fewshot_prompt_template=fewshot_template,
                 dataset=dataset,
-                metric_config=metric_config,
+                metric=metric,
                 optimization_id=optimization.id if optimization is not None else None,
                 experiment_config=experiment_config,
                 n_trials=n_trials,
@@ -456,12 +489,24 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
-        metric_config: MetricConfig,
+        metric: Callable,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
         optimization_id: Optional[str] = None,
         n_samples: Optional[int] = None,
     ) -> float:
+        """
+        Args:
+            prompt: The prompt to evaluate
+            dataset: Opik Dataset to evaluate the prompt on
+            metric: Metric function to evaluate on, should have the arguments `dataset_item` and `llm_output`
+            dataset_item_ids: Optional list of dataset item IDs to evaluate
+            experiment_config: Optional configuration for the experiment
+            optimization_id: Optional ID of the optimization
+            n_samples: Optional number of items to test in the dataset
+        Returns:
+            float: The evaluation score
+        """
         # Ensure prompt is correctly formatted
         if not all(
             isinstance(item, dict) and "role" in item and "content" in item
@@ -478,7 +523,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             **experiment_config,
             **{
                 "optimizer": self.__class__.__name__,
-                "metric": metric_config.metric.name,
+                "metric": metric.__name__,
                 "dataset": dataset.name,
                 "configuration": {
                     "prompt": prompt.formatted_messages,
@@ -497,7 +542,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         score = task_evaluator.evaluate(
             dataset=dataset,
             dataset_item_ids=dataset_item_ids,
-            metric_config=metric_config,
+            metric=metric,
             evaluated_task=llm_task,
             num_threads=self.n_threads,
             project_name=self.project_name,

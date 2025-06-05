@@ -49,12 +49,12 @@ class BenchmarkCheckpointManager():
 
         with open(self.checkpoint_file, "r") as f:
             checkpoint_data = json.load(f)
-            
+
             self.test_mode = checkpoint_data['test_mode']
             self.demo_datasets = checkpoint_data['demo_datasets']
             self.optimizers = checkpoint_data['optimizers']
             self.models = checkpoint_data['models']
-            self.task_results = [TaskResult(**x) for x in checkpoint_data['task_results']]
+            self.task_results = [TaskResult.model_validate(x) for x in checkpoint_data['task_results']]
 
     def update_task_result(self, task_result):
         # Append or replace the task result

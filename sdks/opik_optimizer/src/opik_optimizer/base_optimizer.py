@@ -1,6 +1,7 @@
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from abc import abstractmethod
+from typing import Any, Callable, Dict, List, Optional
 
 import litellm
 import opik
@@ -10,7 +11,6 @@ from pydantic import BaseModel
 from . import _throttle, optimization_result
 from .cache_config import initialize_cache
 from .optimization_config import chat_prompt
-from .optimization_config.configs import MetricConfig
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -56,11 +56,12 @@ class BaseOptimizer:
         # Initialize shared cache
         initialize_cache()
 
+    @abstractmethod
     def optimize_prompt(
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
-        metric_config: MetricConfig,
+        metrics: List[Callable],
         experiment_config: Optional[Dict] = None,
         **kwargs,
     ) -> optimization_result.OptimizationResult:
@@ -69,23 +70,22 @@ class BaseOptimizer:
 
         Args:
            dataset: Opik dataset name, or Opik dataset
-           metric_config: instance of a MetricConfig
+           metrics: A list of metric functions, these functions should have two arguments:
+               dataset_item and llm_output
            prompt: the prompt to optimize
            input_key: input field of dataset
            output_key: output field of dataset
            experiment_config: Optional configuration for the experiment
            **kwargs: Additional arguments for optimization
         """
-        self.dataset = dataset
-        self.metric_config = metric_config
-        self.prompt = prompt
-        self.experiment_config = experiment_config
+        pass
 
+    @abstractmethod
     def evaluate_prompt(
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
-        metric_config: MetricConfig,
+        metrics: List[Callable],
         n_samples: Optional[int] = None,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
@@ -97,7 +97,8 @@ class BaseOptimizer:
         Args:
            prompt: the prompt to evaluate
            dataset: Opik dataset name, or Opik dataset
-           metric_config: instance of a MetricConfig
+           metrics: A list of metric functions, these functions should have two arguments:
+               dataset_item and llm_output
            n_samples: number of items to test in the dataset
            dataset_item_ids: Optional list of dataset item IDs to evaluate
            experiment_config: Optional configuration for the experiment
@@ -106,11 +107,7 @@ class BaseOptimizer:
         Returns:
             float: The evaluation score
         """
-        self.dataset = dataset
-        self.metric_config = metric_config
-        self.prompt = prompt
-        self.experiment_config = experiment_config
-        return 0.0  # Base implementation returns 0
+        pass
 
     def get_history(self) -> List[Dict[str, Any]]:
         """

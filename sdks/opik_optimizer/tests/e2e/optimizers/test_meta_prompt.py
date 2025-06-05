@@ -2,10 +2,7 @@ from opik.evaluation.metrics import LevenshteinRatio
 
 from opik_optimizer import (
     MetaPromptOptimizer,
-    MetricConfig,
     datasets,
-    from_dataset_field,
-    from_llm_response_text,
 )
 from opik_optimizer.optimization_config import chat_prompt
 
@@ -15,13 +12,9 @@ def test_metaprompt_optimizer():
     dataset = datasets.hotpot_300()
 
     # Define metric and task configuration (see docs for more options)
-    metric_config = MetricConfig(
-        metric=LevenshteinRatio(),
-        inputs={
-            "output": from_llm_response_text(),  # Model's output
-            "reference": from_dataset_field(name="answer"),  # Ground truth
-        }
-    )
+    def levenshtein_ratio(dataset_item, llm_output):
+        return LevenshteinRatio().score(reference=dataset_item["answer"], output=llm_output)
+    
     prompt = chat_prompt.ChatPrompt(
         system="Provide an answer to the question.",
         prompt="{question}"
@@ -41,7 +34,7 @@ def test_metaprompt_optimizer():
     # Run optimization
     results = optimizer.optimize_prompt(
         dataset=dataset,
-        metric_config=metric_config,
+        metric=metric,
         prompt=prompt,
         n_samples=50
     )

@@ -92,3 +92,15 @@ class ChatPrompt:
             "messages": self.messages,
             "formatted_messages": self.formatted_messages
         }
+
+    @classmethod
+    def model_validate(cls, obj: Any, *, strict: bool | None = None, from_attributes: bool | None = None, 
+                      context: Any | None = None, by_alias: bool | None = None, by_name: bool | None = None) -> 'ChatPrompt':
+        """Custom validation method to handle nested objects during deserialization."""
+        return ChatPrompt(
+            system=obj.get('system', None),
+            prompt=obj.get('prompt', None),
+            messages=obj.get('messages', None),
+            
+        )
+        

@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, overload
 
 import litellm
 import opik
@@ -17,7 +17,6 @@ from opik_optimizer import task_evaluator
 from .. import _throttle
 from ..base_optimizer import BaseOptimizer, OptimizationRound
 from ..optimization_config import chat_prompt, mappers
-from ..optimization_config.configs import MetricConfig
 from ..optimization_result import OptimizationResult
 from . import reporting
 
@@ -34,7 +33,12 @@ _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 
 class MetaPromptOptimizer(BaseOptimizer):
-    """Optimizer that uses meta-prompting to improve prompts based on examples and performance."""
+    """
+    The Meta-Prompt Optimizer uses meta-prompting to improve prompts based on examples and performance.
+    
+    This algorithm is best used when you have a prompt and would like to make sure it follows best
+    practices.
+    """
     # --- Constants for Default Configuration ---
     DEFAULT_ROUNDS = 3
     DEFAULT_PROMPTS_PER_ROUND = 4
@@ -49,9 +53,17 @@ class MetaPromptOptimizer(BaseOptimizer):
         4. Removing ambiguity and unnecessary elements
         5. Maintaining conciseness while being complete
 
+        If there is a system prompt, prioritize adding instructions there if and only if it makes
+        sense.
+
         Return a JSON array of prompts with the following structure:
         {
             "prompts": [
+                {
+                    "prompt": [{"role": "<role>", "content": "<content>"}],
+                    "improvement_focus": "what aspect this prompt improves",
+                    "reasoning": "why this improvement should help"
+                },
                 {
                     "prompt": [{"role": "<role>", "content": "<content>"}],
                     "improvement_focus": "what aspect this prompt improves",
@@ -67,14 +79,12 @@ class MetaPromptOptimizer(BaseOptimizer):
         rounds: int = DEFAULT_ROUNDS,
         num_prompts_per_round: int = DEFAULT_PROMPTS_PER_ROUND,
         num_threads: int = 12,
-        project_name: Optional[str] = "Optimization",
+        project_name: str = "Optimization",
         verbose: int = 1,
         enable_context: bool = True,
         **model_kwargs,
     ):
         """
-        Initialize the MetaPromptOptimizer.
-
         Args:
             model: The model to use for evaluation
             reasoning_model: The model to use for reasoning and prompt generation
@@ -93,7 +103,6 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.num_threads = num_threads
         self.verbose = verbose
         self.dataset = None
-        self.task_config = None
         self._opik_client = opik_client.get_client_cached()
         self.llm_call_counter = 0
         self.enable_context = enable_context
@@ -190,17 +199,31 @@ class MetaPromptOptimizer(BaseOptimizer):
             )
             raise
 
+     # type: ignore
     def evaluate_prompt(
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
-        metric_config: MetricConfig,
+        metric: Callable,
         use_full_dataset: bool = True,
         experiment_config: Optional[Dict] = None,
         n_samples: Optional[int] = None,
         optimization_id: Optional[str] = None,
         verbose: int = 1,
     ) -> float:
+        """
+        Args:
+            prompt: The prompt to evaluate
+            dataset: Opik Dataset to evaluate the prompt on
+            metric: Metric functions
+            use_full_dataset: Whether to use the full dataset or a subset
+            experiment_config: Optional configuration for the experiment, useful to log additional metadata
+            n_samples: Optional number of items to test in the dataset
+            optimization_id: Optional ID of the optimization
+            verbose: Controls internal logging/progress bars (0=off, 1=on).
+        Returns:
+            float: The evaluation score
+        """
         # Calculate subset size for trials
         if not use_full_dataset:
             total_items = len(dataset.get_items())
@@ -228,7 +251,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             **experiment_config,
             **{
                 "optimizer": self.__class__.__name__,
-                "metric": metric_config.metric.name,
+                "metric": metric.__name__,
                 "dataset": dataset.name,
                 "configuration": {
                     "prompt": prompt.formatted_messages,
@@ -265,40 +288,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
             # --- Step 3: Clean the model's output before metric evaluation ---
             cleaned_model_output = raw_model_output.strip()
-            original_cleaned_output = cleaned_model_output  # For logging if changed
 
-            # # Dynamically generate prefixes based on the output field name
-            # output_field = task_config.output_dataset_field  # e.g., "answer" or "label"
-            # dynamic_prefixes = [
-            #     f"{output_field.capitalize()}:",
-            #     f"{output_field.capitalize()} :",
-            #     f"{output_field}:",  # Also check lowercase field name
-            #     f"{output_field} :",
-            # ]
-
-            # # Add common generic prefixes
-            # generic_prefixes = ["Answer:", "Answer :", "A:"]
-
-            # # Combine and remove duplicates (if any)
-            # prefixes_to_strip = list(set(dynamic_prefixes + generic_prefixes))
-            # logger.debug(f"Prefixes to strip: {prefixes_to_strip}")
-
-            # for prefix_to_check in prefixes_to_strip:
-            #     # Perform case-insensitive check for robustness
-            #     if cleaned_model_output.lower().startswith(prefix_to_check.lower()):
-            #         # Strip based on the actual length of the found prefix
-            #         cleaned_model_output = cleaned_model_output[
-            #             len(prefix_to_check) :
-            #         ].strip()
-            #         logger.debug(
-            #             f"Stripped prefix '{prefix_to_check}', new output for metric: {cleaned_model_output}"
-            #         )
-            #         break  # Stop after stripping the first found prefix
-
-            # if original_cleaned_output != cleaned_model_output:
-            #     logger.debug(
-            #         f"Raw model output: '{original_cleaned_output}' -> Cleaned for metric: '{cleaned_model_output}'"
-            #     )
             result = {
                 mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
             }
@@ -306,11 +296,11 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         # Use dataset's get_items with limit for sampling
         logger.debug(
-            f"Starting evaluation with {subset_size if subset_size else 'all'} samples for metric: {metric_config.metric.name}"
+            f"Starting evaluation with {subset_size if subset_size else 'all'} samples for metric: {metric.__name__}"
         )
         score = task_evaluator.evaluate(
             dataset=dataset,
-            metric_config=metric_config,
+            metric=metric,
             evaluated_task=llm_task,
             num_threads=self.num_threads,
             project_name=self.project_name,
@@ -322,11 +312,11 @@ class MetaPromptOptimizer(BaseOptimizer):
         logger.debug(f"Evaluation score: {score:.4f}")
         return score
 
-    def optimize_prompt(
+    def optimize_prompt( # type: ignore[override]
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
-        metric_config: MetricConfig,
+        metric: Callable,
         experiment_config: Optional[Dict] = None,
         n_samples: Optional[int] = None,
         auto_continue: bool = False,
@@ -338,7 +328,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         Args:
             prompt: The prompt to optimize
             dataset: The dataset to evaluate against
-            metric_config: The metric configuration to use for evaluation
+            metric: The metric to use for evaluation
             experiment_config: A dictionary to log with the experiments
             n_samples: The number of dataset items to use for evaluation
             auto_continue: If True, the algorithm may continue if goal not met
@@ -370,7 +360,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         try:
             optimization = self._opik_client.create_optimization(
                 dataset_name=dataset.name,
-                objective_name=metric_config.metric.name,
+                objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
             )
             logger.debug(f"Created optimization with ID: {optimization.id}")
@@ -385,7 +375,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 optimization_id=optimization.id if optimization is not None else None,
                 prompt=prompt,
                 dataset=dataset,
-                metric_config=metric_config,
+                metric=metric,
                 experiment_config=experiment_config,
                 n_samples=n_samples,
                 auto_continue=auto_continue,
@@ -407,7 +397,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         optimization_id: str,
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
-        metric_config: MetricConfig,
+        metric: Callable,
         experiment_config: Optional[Dict],
         n_samples: int,
         auto_continue: bool,
@@ -424,7 +414,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             **experiment_config,
             **{
                 "optimizer": self.__class__.__name__,
-                "metric": metric_config.metric.name,
+                "metric": metric.__name__,
                 "dataset": self.dataset.name,
                 "configuration": {
                     "prompt": current_prompt,
@@ -439,7 +429,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 prompt=prompt,
                 optimization_id=optimization_id,
                 dataset=dataset,
-                metric_config=metric_config,
+                metric=metric,
                 n_samples=n_samples,
                 experiment_config=experiment_config,
                 use_full_dataset=n_samples is None,
@@ -465,7 +455,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                         best_score=best_score,
                         round_num=round_num,
                         previous_rounds=rounds,
-                        metric_config=metric_config,
+                        metric=metric,
                         optimization_id=optimization_id,
                     )
                 except Exception as e:
@@ -483,7 +473,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                                 prompt=chat_prompt.ChatPrompt(messages=prompt),
                                 optimization_id=optimization_id,
                                 dataset=dataset,
-                                metric_config=metric_config,
+                                metric=metric,
                                 n_samples=n_samples,
                                 use_full_dataset=False,
                                 experiment_config=experiment_config,
@@ -532,7 +522,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         )
 
         return self._create_result(
-            metric_config,
+            metric,
             prompt,
             best_prompt,
             best_score,
@@ -586,7 +576,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
     def _create_result(
         self,
-        metric_config: MetricConfig,
+        metric: Callable,
         prompt: chat_prompt.ChatPrompt,
         best_prompt: str,
         best_score: float,
@@ -601,8 +591,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             "final_score": best_score,
             "rounds": rounds,
             "total_rounds": len(rounds),
-            "metric_name": metric_config.metric.name,
-            "metric_inputs": metric_config.inputs,
+            "metric_name": metric.__name__,
             "model": self.model,
             "temperature": self.model_kwargs.get("temperature"),
         }
@@ -611,63 +600,35 @@ class MetaPromptOptimizer(BaseOptimizer):
             optimizer=self.__class__.__name__,
             prompt=best_prompt,
             score=best_score,
-            metric_name=metric_config.metric.name,
+            metric_name=metric.__name__,
             details=details,
             llm_calls=self.llm_call_counter
         )
 
-    def _get_task_context(self, metric_config: MetricConfig) -> str:
+    def _get_task_context(self, metric: Callable) -> str:
         """Get task-specific context from the dataset and metric configuration."""
-        if self.dataset is None or self.task_config is None:
+        if self.dataset is None:
             return ""
-
-        input_fields = self.task_config.input_dataset_fields
-        output_field = self.task_config.output_dataset_field
-
-        # Describe Single Metric
-        metric_name = metric_config.metric.name
-        description = getattr(
-            metric_config.metric, "description", "No description available."
-        )
-        goal = (
-            "higher is better"
-            if getattr(metric_config.metric, "higher_is_better", True)
-            else "lower is better"
-        )
-        metrics_str = f"- {metric_name}: {description} ({goal})"
-
-        context = "\nTask Context:\n"
-        context += f"Input fields: {', '.join(input_fields)}\n"
-        context += f"Output field: {output_field}\n"
-        context += f"Evaluation Metric:\n{metrics_str}\n"
 
         try:
             # Try get_items() first as it's the preferred method
             items = self.dataset.get_items()
-            if items:
-                sample = items[0]  # Get first sample
-            else:
-                # Fallback to other methods if get_items() fails or returns empty
-                if hasattr(self.dataset, "samples") and self.dataset.samples:
-                    sample = self.dataset.samples[0]  # Get first sample
-                elif hasattr(self.dataset, "__iter__"):
-                    sample = next(iter(self.dataset))
-                else:
-                    logger.warning(
-                        "Dataset does not have a samples attribute or is not iterable"
-                    )
-                    return context
-
-            if sample is not None:
-                context += "\nExample:\n"
-                for field in input_fields:
-                    if field in sample:
-                        context += f"Input '{field}': {sample[field]}\n"
-                if output_field in sample:
-                    context += f"Output '{output_field}': {sample[output_field]}\n"
+            sample = items[0]  # Get first sample
         except Exception as e:
             logger.warning(f"Could not get sample from dataset: {e}")
 
+        # Describe Single Metric
+        if sample is not None:
+            metric_name = metric.__name__
+            description = metric.__doc__ or "No description available."
+
+            metrics_str = f"- {metric_name}: {description}"
+
+            context = "\nTask Context:\n"
+            context += f"Dataset fields (includes both input and optionally the expected output): {', '.join([x for x in sample.keys() if x != 'id'])}\n"
+            context += f"Evaluation Metric:\n{metrics_str}\n"
+            context += f"\nExample:\n{json.dumps(sample)}\n"
+        
         return context
 
     def _generate_candidate_prompts(
@@ -676,7 +637,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         best_score: float,
         round_num: int,
         previous_rounds: List[OptimizationRound],
-        metric_config: MetricConfig,
+        metric: Callable,
         optimization_id: Optional[str] = None,
     ) -> List[str]:
         """Generate candidate prompts using meta-prompting."""
@@ -688,7 +649,6 @@ class MetaPromptOptimizer(BaseOptimizer):
             logger.debug(f"Generating from prompt: {current_prompt}")
             logger.debug(f"Current best score: {best_score:.4f}")
 
-            # Pass single metric_config
             history_context = self._build_history_context(previous_rounds)
             task_context_str = ""
             analysis_instruction = ""
@@ -696,9 +656,9 @@ class MetaPromptOptimizer(BaseOptimizer):
             improvement_point_1 = ""
 
             if self.enable_context:
-                task_context_str = self._get_task_context(metric_config=metric_config)
+                task_context_str = self._get_task_context(metric=metric)
                 analysis_instruction = "Analyze the example provided (if any), the metric description (if any), and the history of scores."
-                metric_focus_instruction = f"Focus on improving the score for the metric: {metric_config.metric.name}."
+                metric_focus_instruction = f"Focus on improving the score for the metric: {metric.__name__}."
                 improvement_point_1 = "1. Be more specific and clear about expectations based on the metric and task."
                 logger.debug("Task context and metric-specific instructions enabled for reasoning prompt.")
             else:

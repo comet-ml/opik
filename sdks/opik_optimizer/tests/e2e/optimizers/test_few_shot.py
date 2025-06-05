@@ -1,12 +1,6 @@
 from opik.evaluation.metrics import LevenshteinRatio
 
-from opik_optimizer import (
-    FewShotBayesianOptimizer,
-    MetricConfig,
-    datasets,
-    from_dataset_field,
-    from_llm_response_text,
-)
+from opik_optimizer import FewShotBayesianOptimizer, datasets
 from opik_optimizer.optimization_config import chat_prompt
 
 
@@ -21,14 +15,10 @@ def test_few_shot_optimizer():
     # Prepare dataset
     dataset = datasets.hotpot_300()
 
-    # Define metric and task configuration (see docs for more options)
-    metric_config = MetricConfig(
-        metric=LevenshteinRatio(),
-        inputs={
-            "output": from_llm_response_text(),  # Model's output
-            "reference": from_dataset_field(name="answer"),  # Ground truth
-        }
-    )
+    # Define metric
+    def levenshtein_ratio(dataset_item, llm_output):
+        return LevenshteinRatio().score(reference=dataset_item["answer"], output=llm_output)
+    
 
     prompt = chat_prompt.ChatPrompt(
         messages=[
@@ -39,7 +29,7 @@ def test_few_shot_optimizer():
 
     results = optimizer.optimize_prompt(
         dataset=dataset,
-        metric_config=metric_config,
+        metric=levenshtein_ratio,
         prompt=prompt,
         n_trials=2
     )

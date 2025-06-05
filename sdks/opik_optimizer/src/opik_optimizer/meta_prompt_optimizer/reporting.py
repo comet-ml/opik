@@ -35,11 +35,14 @@ def display_round_progress(max_rounds: int, verbose: int = 1):
         def round_end(self, round_number, score, best_score, best_prompt):
             if verbose >= 1:
                 rich.print(Text(f"│    Completed optimization round {round_number + 1} of {max_rounds}"))
-                if score > best_score:
+                if best_score == 0 and score == 0:
+                    rich.print(Text("│    No improvement in this optimization round - score is 0", style="yellow"))
+                elif best_score == 0:
+                    rich.print(Text(f"│    Found a new best performing prompt: {score:.4f}", style="green"))
+                elif score > best_score:
                     perc_change = (score - best_score) / best_score
                     rich.print(Text(f"│    Found a new best performing prompt: {score:.4f} ({perc_change:.2%})", style="green"))
                 elif score <= best_score:
-                    perc_change = (score - best_score) / best_score
                     rich.print(Text("│    No improvement in this optimization round", style="red"))
                 
                 rich.print(Text("│"))
@@ -113,7 +116,11 @@ def display_prompt_candidate_scoring_report(candidate_count, prompt, verbose: in
         
         def set_final_score(self, best_score, score):
             if verbose >= 1:
-                if score > best_score:
+                if best_score == 0 and score > 0:
+                    rich.print(Text(f"│          Evaluation score: {score:.4f}", style="green"))
+                elif best_score == 0 and score == 0:
+                    rich.print(Text(f"│         Evaluation score: {score:.4f}", style="dim yellow"))
+                elif score > best_score:
                     perc_change = (score - best_score) / best_score
                     rich.print(Text(f"│          Evaluation score: {score:.4f} ({perc_change:.2%})", style="green"))
                 elif score < best_score:

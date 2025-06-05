@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import random
-from typing import Any, Dict, List, Literal, Optional, Set, Tuple, cast
+from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple, cast
 
 import Levenshtein
 import litellm
@@ -22,7 +22,6 @@ from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from opik_optimizer import _throttle, task_evaluator
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
 from opik_optimizer.optimization_config import chat_prompt, mappers
-from opik_optimizer.optimization_config.configs import MetricConfig
 from opik_optimizer.optimization_result import OptimizationResult
 
 from .. import utils
@@ -40,9 +39,19 @@ creator = cast(Any, _creator)  # type: ignore[assignment]
 
 class EvolutionaryOptimizer(BaseOptimizer):
     """
-    Optimizes prompts using a genetic algorithm approach.
-    Focuses on evolving the prompt text itself.
-    Can operate in single-objective or multi-objective mode.
+    The Evolutionary Optimizer can be used to optimize prompts using a 4 stage genetic algorithm
+    approach:
+
+    1. Generate a set of candidate prompts based on variations of the best prompts (exploitation) as
+    well as completely new prompts (exploration)
+    2. Evaluate the candidate prompts
+    3. Select the best prompts
+    4. Repeat until convergence
+    
+    This algorithm is best used if you have a first draft prompt and would like to find a better
+    prompt.
+    
+    Note: This algorithm is time consuming and can be expensive to run.
     """
 
     DEFAULT_POPULATION_SIZE = 30
@@ -101,6 +110,26 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
         verbose: int = 1,
         **model_kwargs,
     ):
+        """
+        Args:
+            model: The model to use for evaluation
+            project_name: Optional project name for tracking
+            population_size: Number of prompts in the population
+            num_generations: Number of generations to run
+            mutation_rate: Mutation rate for genetic operations
+            crossover_rate: Crossover rate for genetic operations
+            tournament_size: Tournament size for selection
+            num_threads: Number of threads for parallel evaluation
+            elitism_size: Number of elitism prompts
+            adaptive_mutation: Whether to use adaptive mutation
+            enable_moo: Whether to enable multi-objective optimization - When enable optimizes for both the supplied metric and the length of the prompt
+            enable_llm_crossover: Whether to enable LLM crossover
+            seed: Random seed for reproducibility
+            output_style_guidance: Output style guidance for prompts
+            infer_output_style: Whether to infer output style
+            verbose: Controls internal logging/progress bars (0=off, 1=on).
+            **model_kwargs: Additional model parameters
+        """
         # Initialize base class first
         super().__init__(model=model, project_name=project_name, **model_kwargs)
         self.population_size = population_size
@@ -520,7 +549,7 @@ Return only the new prompt list object.
         try:
             new_prompt_str = self._call_model(
                 messages=[
-                    {"role": "system", "content": self.get_radical_innovation_system_prompt()},
+                    {"role": "system", "content": self._get_radical_innovation_system_prompt()},
                     {"role": "user", "content": user_prompt_for_radical_innovation}
                 ],
                 is_reasoning=True
@@ -643,7 +672,7 @@ Return only the new prompt list object.
                 try:
                     response_content_variations = self._call_model(
                         messages=[
-                            {"role": "system", "content": self.get_reasoning_system_prompt_for_variation()},
+                            {"role": "system", "content": self._get_reasoning_system_prompt_for_variation()},
                             {"role": "user", "content": user_prompt_for_variation}
                         ],
                         is_reasoning=True
@@ -783,13 +812,22 @@ Return only the new prompt list object.
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
-        metric_config: MetricConfig,
+        metric: Callable,
         experiment_config: Optional[Dict] = None,
         n_samples: Optional[int] = None,
         auto_continue: bool = False,
         **kwargs,
     ) -> OptimizationResult:
-
+        """
+        Args:
+            prompt: The prompt to optimize
+            dataset: The dataset to use for evaluation
+            metric: Metric function to optimize with, should have the arguments `dataset_item` and `llm_output`
+            experiment_config: Optional experiment configuration
+            n_samples: Optional number of samples to use
+            auto_continue: Whether to automatically continue optimization
+            **kwargs: Additional keyword arguments
+        """
         reporting.display_header(self.__class__.__name__, verbose=self.verbose)
         reporting.display_configuration(
             prompt.formatted_messages,
@@ -821,7 +859,7 @@ Return only the new prompt list object.
                 primary_fitness_score: float = self.evaluate_prompt(
                     prompt=chat_prompt.ChatPrompt(messages=messages),
                     dataset=dataset,
-                    metric_config=metric_config,
+                    metric=metric,
                     n_samples=n_samples,
                     experiment_config=(experiment_config or {}).copy(),
                     optimization_id=self._current_optimization_id,
@@ -837,7 +875,7 @@ Return only the new prompt list object.
                 fitness_score: float = self.evaluate_prompt(
                     prompt=chat_prompt.ChatPrompt(messages=messages),
                     dataset=dataset,
-                    metric_config=metric_config,
+                    metric=metric,
                     n_samples=n_samples,
                     experiment_config=(experiment_config or {}).copy(),
                     optimization_id=self._current_optimization_id,
@@ -851,7 +889,7 @@ Return only the new prompt list object.
         try:
             opik_optimization_run: optimization.Optimization = self._opik_client.create_optimization(
                 dataset_name=dataset.name,
-                objective_name=metric_config.metric.name,
+                objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
             )
             self._current_optimization_id = opik_optimization_run.id
@@ -1016,7 +1054,7 @@ Return only the new prompt list object.
                 final_length = best_overall_solution.fitness.values[1]
                 logger.info(final_results_log)
                 logger.info(f"Representative best prompt (highest primary score from Pareto front): '{final_best_prompt}'")
-                logger.info(f"  Primary Score ({metric_config.metric.name}): {final_primary_score:.4f}")
+                logger.info(f"  Primary Score ({metric.__name__}): {final_primary_score:.4f}")
                 logger.info(f"  Length: {final_length:.0f}")
                 final_details.update({
                     "initial_primary_score": initial_primary_score,
@@ -1043,7 +1081,7 @@ Return only the new prompt list object.
             final_best_prompt = best_prompt_overall
             final_primary_score = best_primary_score_overall
             logger.info(f"Final best prompt from Hall of Fame: '{final_best_prompt}'")
-            logger.info(f"Final best score ({metric_config.metric.name}): {final_primary_score:.4f}")
+            logger.info(f"Final best score ({metric.__name__}): {final_primary_score:.4f}")
             final_details.update({
                 "initial_prompt": prompt.formatted_messages,
                 "initial_score": initial_primary_score,
@@ -1068,8 +1106,7 @@ Return only the new prompt list object.
             "crossover_probability": self.crossover_rate,
             "elitism_size": self.elitism_size if not self.enable_moo else "N/A (MOO uses NSGA-II)",
             "adaptive_mutation": self.adaptive_mutation,
-            "metric_name": metric_config.metric.name,
-            "metric_inputs": metric_config.inputs,
+            "metric_name": metric.__name__,
             "model": self.model,
             "moo_enabled": self.enable_moo,
             "llm_crossover_enabled": self.enable_llm_crossover,
@@ -1096,7 +1133,7 @@ Return only the new prompt list object.
             optimizer=self.__class__.__name__,
             prompt=final_best_prompt.formatted_messages, 
             score=final_primary_score, 
-            metric_name=metric_config.metric.name,
+            metric_name=metric.__name__,
             details=final_details,
             history=self.get_history(),
             llm_calls=self.llm_call_counter
@@ -1169,7 +1206,7 @@ Return only the new prompt list object.
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
-        metric_config: MetricConfig,
+        metric: Callable,
         n_samples: Optional[int] = None,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
@@ -1178,7 +1215,19 @@ Return only the new prompt list object.
     ) -> float:
         """
         Evaluate a single prompt (individual) against the dataset.
-        Adapted from MetaPromptOptimizer._evaluate_prompt.
+        
+        Args:
+            prompt: The prompt to evaluate
+            dataset: The dataset to use for evaluation
+            metric: Metric function to evaluate on, should have the arguments `dataset_item` and `llm_output`
+            n_samples: Optional number of samples to use
+            dataset_item_ids: Optional list of dataset item IDs to use
+            experiment_config: Optional experiment configuration
+            optimization_id: Optional optimization ID
+            verbose: Controls internal logging/progress bars (0=off, 1=on).
+        
+        Returns:
+            float: The metric value
         """
         total_items = len(dataset.get_items())
         
@@ -1187,7 +1236,7 @@ Return only the new prompt list object.
             **current_experiment_config,
             **{
                 "optimizer": self.__class__.__name__,
-                "metric": metric_config.metric.name,
+                "metric": metric.__name__,
                 "dataset": dataset.name,
                 "configuration": {
                     "prompt": prompt.formatted_messages,
@@ -1220,7 +1269,7 @@ Return only the new prompt list object.
         score = task_evaluator.evaluate(
             dataset=dataset,
             dataset_item_ids=dataset_item_ids,
-            metric_config=metric_config,
+            metric=metric,
             evaluated_task=llm_task,
             num_threads=self.num_threads,
             project_name=self.project_name,
@@ -1294,7 +1343,7 @@ Follow the instructions provided in the system prompt regarding the JSON output 
         description += "The goal is to create an effective prompt that guides a language model to perform this task well."
         return description
 
-    def get_reasoning_system_prompt_for_variation(self) -> str:
+    def _get_reasoning_system_prompt_for_variation(self) -> str:
         return f"""You are an expert prompt engineer specializing in creating diverse and effective prompts. Given an initial prompt, your task is to generate a diverse set of alternative prompts.
 
 For each prompt variation, consider:
@@ -1347,7 +1396,7 @@ Return a JSON object that is a list of both child prompts. Each child prompt is 
 
 """
 
-    def get_radical_innovation_system_prompt(self) -> str:
+    def _get_radical_innovation_system_prompt(self) -> str:
         return f"""You are an expert prompt engineer and a creative problem solver. 
 Given a task description and an existing prompt for that task (which might be underperforming), your goal is to generate a new, significantly improved, and potentially very different prompt. 
 Do not just make minor edits. Think about alternative approaches, structures, and phrasings that could lead to better performance. 

@@ -109,17 +109,17 @@ DATASET_CONFIG = {
 }
 
 OPTIMIZER_CONFIGS: Dict[str, BenchmarkOptimizerConfig] = {
-    "few_shot": BenchmarkOptimizerConfig(
-        class_name="FewShotBayesianOptimizer",
-        params={
-            "min_examples": 2,
-            "max_examples": 7,
-            "n_threads": 4,
-            "n_trials": 10,
-            "n_samples": 100,
-            "seed": 42,
-        },
-    ),
+    # "few_shot": BenchmarkOptimizerConfig(
+    #     class_name="FewShotBayesianOptimizer",
+    #     params={
+    #         "min_examples": 2,
+    #         "max_examples": 7,
+    #         "n_threads": 4,
+    #         "n_trials": 10,
+    #         "n_samples": 100,
+    #         "seed": 42,
+    #     },
+    # ),
     "meta_prompt": BenchmarkOptimizerConfig(
         class_name="MetaPromptOptimizer",
         params={
@@ -131,32 +131,23 @@ OPTIMIZER_CONFIGS: Dict[str, BenchmarkOptimizerConfig] = {
             "seed": 42,
         },
     ),
-    # "mipro": BenchmarkOptimizerConfig(
-    #     class_name="MiproOptimizer",
+    # "evolutionary_optimizer": BenchmarkOptimizerConfig(
+    #     class_name="EvolutionaryOptimizer",
     #     params={
-    #         "temperature": 0.1,
-    #         "max_tokens": 5000,
-    #         "num_threads": 10,
+    #         "population_size": 10,
+    #         "num_generations": 4,
+    #         "mutation_rate": 0.2,
+    #         "crossover_rate": 0.8,
+    #         "tournament_size": 4,
+    #         "num_threads": 4,
+    #         "elitism_size": 2,
+    #         "adaptive_mutation": True,
+    #         "enable_moo": False,
+    #         "enable_llm_crossover": False,
     #         "seed": 42,
-    #     },
+    #         "infer_output_style": True
+    #     }
     # ),
-    "evolutionary_optimizer": BenchmarkOptimizerConfig(
-        class_name="EvolutionaryOptimizer",
-        params={
-            "population_size": 10,
-            "num_generations": 4,
-            "mutation_rate": 0.2,
-            "crossover_rate": 0.8,
-            "tournament_size": 4,
-            "num_threads": 4,
-            "elitism_size": 2,
-            "adaptive_mutation": True,
-            "enable_moo": False,
-            "enable_llm_crossover": False,
-            "seed": 42,
-            "infer_output_style": True
-        }
-    ),
 }
 
 MODELS = [
