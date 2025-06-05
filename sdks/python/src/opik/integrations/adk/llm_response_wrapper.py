@@ -71,6 +71,7 @@ def pop_llm_usage_data(result_dict: Dict[str, Any]) -> Optional[LLMUsageData]:
 
     return LLMUsageData(opik_usage=usage, model=model, provider=provider)
 
+
 def _handle_known_provider_conversions(provider: str) -> str:
     if provider == "gemini":
         return LLMProvider.GOOGLE_AI
@@ -78,6 +79,7 @@ def _handle_known_provider_conversions(provider: str) -> str:
         return LLMProvider.GOOGLE_VERTEXAI
 
     return provider
+
 
 def _wrap_llm_response_create(
     generate_content_response: genai_types.GenerateContentResponse,
