@@ -33,6 +33,9 @@ const UploadField: React.FC<UploadFieldProps> = ({
   const handleSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const f = e.target.files?.[0] ?? undefined;
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
       setFile(f);
       onFileSelect(f);
     },
