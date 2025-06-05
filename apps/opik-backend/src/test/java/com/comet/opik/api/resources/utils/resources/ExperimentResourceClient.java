@@ -61,22 +61,15 @@ public class ExperimentResourceClient {
                 .promptVersions(null)
                 .duration(null)
                 .totalEstimatedCost(null)
+                .totalEstimatedCostAvg(null)
                 .type(ExperimentType.REGULAR)
                 .optimizationId(null)
                 .usage(null);
     }
 
     public List<Experiment> generateExperimentList() {
-        return PodamFactoryUtils.manufacturePojoList(podamFactory, Experiment.class).stream()
-                .map(experiment -> experiment.toBuilder()
-                        .promptVersion(null)
-                        .promptVersions(null)
-                        .duration(null)
-                        .totalEstimatedCost(null)
-                        .usage(null)
-                        .type(ExperimentType.REGULAR)
-                        .optimizationId(null)
-                        .build())
+        return PodamFactoryUtils.manufacturePojoList(podamFactory, Integer.class).stream()
+                .map(i -> createPartialExperiment().build())
                 .toList();
     }
 
