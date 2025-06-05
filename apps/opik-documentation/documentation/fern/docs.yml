@@ -256,9 +256,9 @@ navigation:
           - page: Evaluate agents
             path: docs/evaluation/evaluate_agents.mdx
             slug: evaluate_agents
-          - page: Evaluate with REST API
-            path: docs/evaluation/evaluate_with_rest_api.mdx
-            slug: evaluate_with_rest_api
+          - page: Log experiments with REST API
+            path: docs/evaluation/log_experiments_with_rest_api.mdx
+            slug: log_experiments_with_rest_api
           - page: Update existing experiment
             path: docs/evaluation/update_existing_experiment.mdx
             slug: update_existing_experiment
