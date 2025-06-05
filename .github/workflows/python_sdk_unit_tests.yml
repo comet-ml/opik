@@ -33,10 +33,10 @@ jobs:
         ]
 
     steps:
-      - name: Check out code from ${{ github.event.pull_request.base.ref }}
+      - name: Check out code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.ref }}
+#        with:
+#          ref: ${{ github.event.pull_request.base.ref }}
 
       - name: Print environment variables
         run: env
