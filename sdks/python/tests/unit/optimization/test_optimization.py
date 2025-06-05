@@ -1,9 +1,7 @@
-import pytest
 from unittest.mock import patch
 import base64
 import io
 
-import opik
 from opik.url_helpers import get_optimization_run_url_by_id
 from opik.evaluation.report import display_optimization_run_link
 
@@ -31,7 +29,6 @@ def test_get_optimization_run_url_by_id():
 @patch("sys.stdout", new_callable=io.StringIO)
 def test_display_optimization_run_link(mock_stdout):
     URL_OVERRIDE = "https://URL/opik/api"
-    ENCODED_URL = base64.b64encode(URL_OVERRIDE.encode("utf-8")).decode("utf-8")
     OPTIMIZATION_ID = "OPTIMIZATION-ID"
     DATASET_ID = "DATASET-ID"
 
