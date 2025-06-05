@@ -15,31 +15,20 @@ const ExplainerDescription: React.FC<ExplainerDescriptionProps> = ({
   description,
   docLink,
   docHash,
-  size = "md",
   className,
 }) => {
   return (
     <div className={cn(className)}>
       {title && (
-        <h5
-          className={cn(
-            "mb-2 truncate text-foreground",
-            size === "md" ? "comet-body-accented" : "comet-body-s-accented",
-          )}
-        >
+        <h5 className="comet-body-s-accented mb-2 truncate text-foreground">
           {title}
         </h5>
       )}
-      <span
-        className={cn(
-          "whitespace-pre-wrap break-words text-muted-slate",
-          size === "md" ? "comet-body" : "comet-body-s",
-        )}
-      >
+      <span className="comet-body-s whitespace-pre-wrap break-words text-muted-slate">
         {description}
       </span>
       {docLink && (
-        <Button variant="link" className="px-1" asChild>
+        <Button variant="link" className="h-5 px-1" asChild>
           <a
             href={buildDocsUrl(docLink, docHash)}
             target="_blank"
