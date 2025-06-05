@@ -223,6 +223,7 @@ You can learn more about the `opik` python SDK in the following sections:
    Objects/ExperimentItemContent.rst
    Objects/ExperimentItemReferences.rst
    Objects/Prompt.rst
+   Objects/ScoreResult.rst
    Objects/OpikBaseModel.rst
    Objects/LiteLLMChatModel.rst
    Objects/DistributedTraceHeadersDict.rst
