@@ -80,12 +80,12 @@ export class EvaluationResultProcessor {
    * @param averageScores Map of average scores by metric name
    * @param totalTime Total execution time in seconds
    */
-  private static async generateResultTable(
+  private static generateResultTable(
     testResults: EvaluationTestResult[],
     experiment: Experiment,
     averageScores: Map<string, number>,
     totalTime: number
-  ): Promise<void> {
+  ) {
     if (testResults.length === 0) {
       logger.info("\nNo test results available to display.");
       return;
@@ -143,12 +143,7 @@ export class EvaluationResultProcessor {
   ): Promise<EvaluationResult> {
     const averageScores = this.calculateAverageScores(testResults);
 
-    await this.generateResultTable(
-      testResults,
-      experiment,
-      averageScores,
-      totalTime
-    );
+    this.generateResultTable(testResults, experiment, averageScores, totalTime);
 
     await this.displayExperimentLink(experiment);
 
