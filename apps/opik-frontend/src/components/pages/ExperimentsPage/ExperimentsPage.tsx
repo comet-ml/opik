@@ -71,6 +71,7 @@ import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackSc
 import { formatNumericData } from "@/lib/utils";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import CostCell from "@/components/shared/DataTableCells/CostCell";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -116,6 +117,18 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     id: "trace_count",
     label: "Trace count",
     type: COLUMN_TYPE.number,
+  },
+  {
+    id: "total_estimated_cost",
+    label: "Total Est. Cost",
+    type: COLUMN_TYPE.cost,
+    cell: CostCell as never,
+  },
+  {
+    id: "total_estimated_cost_avg",
+    label: "Avg. Cost per Trace",
+    type: COLUMN_TYPE.cost,
+    cell: CostCell as never,
   },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,

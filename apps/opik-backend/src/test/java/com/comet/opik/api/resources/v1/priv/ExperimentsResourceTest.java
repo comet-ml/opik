@@ -1419,6 +1419,7 @@ class ExperimentsResourceTest {
             var expectedExperiment = experiment.toBuilder()
                     .duration(new PercentageValues(quantiles.get(0), quantiles.get(1), quantiles.get(2)))
                     .totalEstimatedCost(getTotalEstimatedCost(spans))
+                    .totalEstimatedCostAvg(getTotalEstimatedCostAvg(spans))
                     .usage(getUsage(spans))
                     .build();
 
@@ -1434,7 +1435,7 @@ class ExperimentsResourceTest {
                     .collect(groupingBy(Map.Entry::getKey, Collectors.averagingLong(e -> e.getValue())));
         }
 
-        private BigDecimal getTotalEstimatedCost(List<Span> spans) {
+        private BigDecimal getTotalEstimatedCostAvg(List<Span> spans) {
 
             BigDecimal accumulated = spans.stream()
                     .map(Span::totalEstimatedCost)
@@ -1442,6 +1443,12 @@ class ExperimentsResourceTest {
                     .orElse(BigDecimal.ZERO);
 
             return accumulated.divide(BigDecimal.valueOf(spans.size()), ValidationUtils.SCALE, RoundingMode.HALF_UP);
+        }
+
+        private BigDecimal getTotalEstimatedCost(List<Span> spans) {
+            return spans.stream()
+                    .map(Span::totalEstimatedCost)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
 
         @ParameterizedTest

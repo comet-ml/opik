@@ -71,6 +71,8 @@ export interface Experiment {
   prompt_version?: ExperimentPromptVersion;
   prompt_versions?: ExperimentPromptVersion[];
   trace_count: number;
+  total_estimated_cost?: number;
+  total_estimated_cost_avg?: number;
   created_at: string;
   last_updated_at: string;
   comments?: CommentItems;
