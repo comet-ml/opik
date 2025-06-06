@@ -11,6 +11,7 @@ export enum EXPLAINER_ID {
   i_added_traces_to_a_dataset_now_what = "i_added_traces_to_a_dataset_now_what",
   why_would_i_want_to_add_traces_to_a_dataset = "why_would_i_want_to_add_traces_to_a_dataset",
   hows_the_cost_estimated = "hows_the_cost_estimated",
+  hows_the_thread_cost_estimated = "hows_the_thread_cost_estimated",
   whats_that_prompt_select = "whats_that_prompt_select",
   i_added_edited_a_new_online_evaluation_rule_now_what = "i_added_edited_a_new_online_evaluation_rule_now_what",
   what_are_these_elements_in_the_tree = "what_are_these_elements_in_the_tree",
@@ -111,6 +112,13 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.hows_the_cost_estimated,
     description:
       "Opik estimates the cost of each trace by calculating token usage across all LLM calls, using model-specific pricing.",
+    docLink: "/tracing/cost_tracking",
+    type: "help",
+  },
+  [EXPLAINER_ID.hows_the_thread_cost_estimated]: {
+    id: EXPLAINER_ID.hows_the_thread_cost_estimated,
+    description:
+      "Opik estimates the cost of each thread by calculating token usage across all Traces and associated LLM calls, applying model-specific pricing.",
     docLink: "/tracing/cost_tracking",
     type: "help",
   },
