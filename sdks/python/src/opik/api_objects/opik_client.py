@@ -89,7 +89,7 @@ class OptimizationContextManager:
         self.objective_name = objective_name
         self.name = name
         self.metadata = metadata
-        self.optimization: Optimization = None
+        self.optimization: Union[Optimization, None] = None
 
     def __enter__(self) -> Union[str, None]:
         """Create and return the optimization ID."""
