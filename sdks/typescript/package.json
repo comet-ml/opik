@@ -100,6 +100,7 @@
     "fast-json-stable-stringify": "^2.1.0",
     "ini": "^5.0.0",
     "node-fetch": "^3.3.2",
+    "ora": "^8.2.0",
     "qs": "^6.13.1",
     "readable-stream": "^4.7.0",
     "tslog": "^4.9.3",

@@ -1,4 +1,4 @@
-import { logger } from "@/utils/logger";
+import { createLink, logger } from "@/utils/logger";
 import { Experiment } from "../../experiment/Experiment";
 import { EvaluationResult, EvaluationTestResult } from "../types";
 import chalk from "chalk";
@@ -132,7 +132,7 @@ export class EvaluationResultProcessor {
   ): Promise<void> {
     const experimentUrl = await experiment.getUrl();
     logger.info(
-      `View the results \u001B]8;;${experimentUrl}\u0007${chalk.blue.underline("in your Opik dashboard")}\u001B]8;;\u0007`
+      `View the results ${createLink(experimentUrl, "in your Opik dashboard")}`
     );
   }
 

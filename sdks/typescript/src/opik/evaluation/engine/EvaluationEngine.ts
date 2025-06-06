@@ -20,6 +20,7 @@ import { DatasetItemData } from "../../dataset/DatasetItem";
 import { ExperimentItemReferences } from "@/experiment";
 import { SpanType } from "@/rest_api/api";
 import { getSourceObjValue } from "@/utils/common";
+import ora from "ora";
 
 /**
  * Core class that handles the evaluation process
@@ -70,10 +71,18 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     const experimentItemReferences: ExperimentItemReferences[] = [];
 
     const datasetItems = await this.dataset.getItems(this.nbSamples);
+    const totalItems = datasetItems.length;
+
+    const loggerLevel = logger.settings.minLevel;
+    logger.settings.minLevel = 6;
+    const spinner = ora({
+      text: `Evaluating dataset (0/${totalItems} items)`,
+    }).start();
 
     const testResults: EvaluationTestResult[] = [];
 
-    for (const datasetItem of datasetItems) {
+    for (let i = 0; i < datasetItems.length; i++) {
+      const datasetItem = datasetItems[i];
       try {
         this.rootTrace = this.client.trace({
           projectName: this.projectName,
@@ -109,14 +118,23 @@ export class EvaluationEngine<T = Record<string, unknown>> {
           traceId: this.rootTrace.data.id,
         })
       );
+
+      // Update spinner text with current progress
+      spinner.text = `Evaluating dataset (${i + 1}/${totalItems} items, ${Math.round(((i + 1) / totalItems) * 100)}%)`;
     }
 
     const endTime = performance.now();
+    const totalTimeSeconds = (endTime - startTime) / 1000;
+
+    // Complete the spinner with success message
+    spinner.succeed(
+      `Evaluation complete: ${totalItems} items processed in ${totalTimeSeconds.toFixed(2)}s`
+    );
+    logger.settings.minLevel = loggerLevel;
+
     this.experiment.insert(experimentItemReferences);
 
     await this.client.flush();
-
-    const totalTimeSeconds = (endTime - startTime) / 1000;
 
     return EvaluationResultProcessor.processResults(
       testResults,
