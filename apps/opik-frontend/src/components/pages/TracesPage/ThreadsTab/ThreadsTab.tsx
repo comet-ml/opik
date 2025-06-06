@@ -7,7 +7,11 @@ import {
 } from "use-query-params";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
-import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
+import {
+  ColumnPinningState,
+  ColumnSort,
+  RowSelectionState,
+} from "@tanstack/react-table";
 import { RotateCw } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isNumber from "lodash/isNumber";
@@ -17,11 +21,16 @@ import {
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
+  COLUMN_USAGE_ID,
   ColumnData,
   ROW_HEIGHT,
 } from "@/types/shared";
 import { Thread } from "@/types/traces";
-import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
+import {
+  convertColumnDataToColumn,
+  isColumnSortable,
+  mapColumnDataFields,
+} from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
@@ -83,7 +92,7 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
       isNumber(row.number_of_messages) ? `${row.number_of_messages}` : "-",
   },
   {
-    id: "usage.total_tokens",
+    id: `${COLUMN_USAGE_ID}.total_tokens`,
     label: "Total tokens",
     type: COLUMN_TYPE.number,
     accessorFn: (row) =>
@@ -97,6 +106,7 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_thread_cost_estimated],
+    size: 160,
   },
   {
     id: "created_at",
@@ -166,6 +176,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 const SELECTED_COLUMNS_KEY = "threads-selected-columns";
 const COLUMNS_WIDTH_KEY = "threads-columns-width";
 const COLUMNS_ORDER_KEY = "threads-columns-order";
+const COLUMNS_SORT_KEY = "threads-columns-sort";
 const PAGINATION_SIZE_KEY = "threads-pagination-size";
 const ROW_HEIGHT_KEY = "threads-row-height";
 
@@ -230,11 +241,21 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     },
   );
 
+  const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
+    ColumnSort[]
+  >({
+    localStorageKey: COLUMNS_SORT_KEY,
+    queryKey: `threads_sorting`,
+    defaultValue: [],
+    queryParamConfig: JsonParam,
+  });
+
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const { data, isPending, refetch } = useThreadList(
     {
       projectId,
+      sorting: sortedColumns,
       filters,
       page: page as number,
       size: size as number,
@@ -251,6 +272,11 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   const noDataText = noData ? `There are no threads yet` : "No search results";
 
   const rows: Thread[] = useMemo(() => data?.content ?? [], [data]);
+
+  const sortableBy: string[] = useMemo(
+    () => data?.sortable_by ?? [],
+    [data?.sortable_by],
+  );
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -296,13 +322,15 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           callback: handleRowClick,
           asId: true,
         },
+        sortable: isColumnSortable(COLUMN_ID_ID, sortableBy),
       }),
       ...convertColumnDataToColumn<Thread, Thread>(DEFAULT_COLUMNS, {
         columnsOrder,
         selectedColumns,
+        sortableColumns: sortableBy,
       }),
     ];
-  }, [handleRowClick, columnsOrder, selectedColumns]);
+  }, [handleRowClick, sortableBy, columnsOrder, selectedColumns]);
 
   const columnsToExport = useMemo(() => {
     return columns
@@ -331,6 +359,15 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     setTraceId("");
     setSpanId("");
   }, [setSpanId, setTraceId, setThreadId]);
+
+  const sortConfig = useMemo(
+    () => ({
+      enabled: true,
+      sorting: sortedColumns,
+      setSorting: setSortedColumns,
+    }),
+    [setSortedColumns, sortedColumns],
+  );
 
   const resizeConfig = useMemo(
     () => ({
@@ -414,6 +451,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         data={rows}
         onRowClick={handleRowClick}
         activeRowId={activeRowId ?? ""}
+        sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{
           rowSelection,
