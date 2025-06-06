@@ -19,7 +19,7 @@ LOGGER = logging.getLogger(__name__)
 SpanOrTraceData = Union[span.SpanData, trace.TraceData]
 
 
-def get_info_from_adk_session(
+def _get_info_from_adk_session(
     callback_context: CallbackContext,
 ) -> Tuple[Optional[str], Dict[str, Any]]:
     try:
@@ -93,7 +93,7 @@ class OpikTracer:
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
     ) -> None:
         try:
-            thread_id, session_metadata = get_info_from_adk_session(callback_context)
+            thread_id, session_metadata = _get_info_from_adk_session(callback_context)
 
             trace_metadata = self.metadata.copy()
             trace_metadata["adk_invocation_id"] = callback_context.invocation_id
