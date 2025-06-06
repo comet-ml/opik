@@ -1,10 +1,12 @@
 import logging
-from typing import Optional, Literal, Union, Dict, Any, Type
+from typing import Optional, Literal, Union, Dict, Any, Type, TYPE_CHECKING
 from types import TracebackType
+
+if TYPE_CHECKING:
+    from opik.api_objects.opik_client import Opik
 
 from opik.rest_api import client as rest_api_client
 from opik.rest_api import types as rest_api_types
-from opik.api_objects.opik_client import Opik
 
 LOGGER = logging.getLogger(__name__)
 
