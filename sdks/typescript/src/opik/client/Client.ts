@@ -1,6 +1,6 @@
 import { ConstructorOpikConfig, loadConfig, OpikConfig } from "@/config/Config";
-import { OpikApiError } from "@/rest_api";
-import type { Trace as ITrace } from "@/rest_api/api";
+import { OpikApiError, serialization } from "@/rest_api";
+import type { ExperimentPublic, Trace as ITrace } from "@/rest_api/api";
 import { Trace } from "@/tracer/Trace";
 import { generateId } from "@/utils/generateId";
 import { createLink, logger } from "@/utils/logger";
@@ -15,6 +15,10 @@ import {
 } from "@/client/OpikApiClientTemp";
 import { DatasetBatchQueue } from "./DatasetBatchQueue";
 import { Dataset, DatasetItemData, DatasetNotFoundError } from "@/dataset";
+import { Experiment } from "@/experiment/Experiment";
+import { ExperimentType } from "@/rest_api/api/types";
+import { ExperimentNotFoundError } from "@/errors/experiment/errors";
+import { parseNdjsonStreamToArray } from "@/utils/stream";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
@@ -46,7 +50,7 @@ export class OpikClient {
     if (explicitConfig?.headers) {
       logger.debug(
         "Initializing OpikClient with additional headers:",
-        explicitConfig?.headers,
+        explicitConfig?.headers
       );
 
       apiConfig.requestOptions = {
@@ -59,10 +63,10 @@ export class OpikClient {
     this.spanBatchQueue = new SpanBatchQueue(this.api);
     this.traceBatchQueue = new TraceBatchQueue(this.api);
     this.spanFeedbackScoresBatchQueue = new SpanFeedbackScoresBatchQueue(
-      this.api,
+      this.api
     );
     this.traceFeedbackScoresBatchQueue = new TraceFeedbackScoresBatchQueue(
-      this.api,
+      this.api
     );
     this.datasetBatchQueue = new DatasetBatchQueue(this.api);
 
@@ -81,7 +85,7 @@ export class OpikClient {
     });
 
     logger.info(
-      `Started logging traces to the "${projectName}" project at ${createLink(projectUrl)}`,
+      `Started logging traces to the "${projectName}" project at ${createLink(projectUrl)}`
     );
 
     this.lastProjectNameLogged = projectName;
@@ -97,7 +101,7 @@ export class OpikClient {
         ...traceData,
         projectName,
       },
-      this,
+      this
     );
 
     this.traceBatchQueue.create(trace.data);
@@ -115,7 +119,7 @@ export class OpikClient {
    * @throws Error if the dataset doesn't exist
    */
   public getDataset = async <T extends DatasetItemData = DatasetItemData>(
-    name: string,
+    name: string
   ): Promise<Dataset<T>> => {
     logger.debug(`Getting dataset with name "${name}"`);
     try {
@@ -144,7 +148,7 @@ export class OpikClient {
    */
   public createDataset = async <T extends DatasetItemData = DatasetItemData>(
     name: string,
-    description?: string,
+    description?: string
   ): Promise<Dataset<T>> => {
     logger.debug(`Creating dataset with name "${name}"`);
 
@@ -177,10 +181,10 @@ export class OpikClient {
     T extends DatasetItemData = DatasetItemData,
   >(
     name: string,
-    description?: string,
+    description?: string
   ): Promise<Dataset<T>> => {
     logger.debug(
-      `Attempting to retrieve or create dataset with name: "${name}"`,
+      `Attempting to retrieve or create dataset with name: "${name}"`
     );
 
     try {
@@ -188,7 +192,7 @@ export class OpikClient {
     } catch (error) {
       if (error instanceof DatasetNotFoundError) {
         logger.info(
-          `Dataset "${name}" not found. Proceeding to create a new one.`,
+          `Dataset "${name}" not found. Proceeding to create a new one.`
         );
         return this.createDataset(name, description);
       }
@@ -204,7 +208,7 @@ export class OpikClient {
    * @returns List of Dataset objects
    */
   public getDatasets = async <T extends DatasetItemData = DatasetItemData>(
-    maxResults: number = 100,
+    maxResults: number = 100
   ): Promise<Dataset<T>[]> => {
     logger.debug(`Getting all datasets (limit: ${maxResults})`);
 
@@ -248,6 +252,225 @@ export class OpikClient {
     } catch (error) {
       logger.error(`Failed to delete dataset "${name}"`, { error });
       throw new Error(`Failed to delete dataset "${name}": ${error}`);
+    }
+  };
+
+  /**
+   * Creates a new experiment with the given dataset name and optional parameters
+   *
+   * @param datasetName The name of the dataset to associate with the experiment
+   * @param name Optional name for the experiment (if not provided, a generated name will be used)
+   * @param experimentConfig Optional experiment configuration parameters
+   * @param type Optional experiment type (defaults to "regular")
+   * @param optimizationId Optional ID of an optimization associated with the experiment
+   * @returns The created Experiment object
+   */
+  public createExperiment = async ({
+    datasetName,
+    name,
+    experimentConfig,
+    type = ExperimentType.Regular,
+    optimizationId,
+  }: {
+    datasetName: string;
+    name?: string;
+    experimentConfig?: Record<string, unknown>;
+    type?: ExperimentType;
+    optimizationId?: string;
+  }): Promise<Experiment> => {
+    logger.debug(`Creating experiment for dataset "${datasetName}"`);
+
+    if (!datasetName) {
+      throw new Error("Dataset name is required to create an experiment");
+    }
+
+    const id = generateId();
+    const experiment = new Experiment({ id, name, datasetName }, this);
+
+    try {
+      this.api.experiments.createExperiment({
+        id,
+        datasetName,
+        name,
+        metadata: experimentConfig,
+        type,
+        optimizationId,
+      });
+
+      logger.debug("Experiment added to the queue with id:", id);
+      return experiment;
+    } catch (error) {
+      logger.error(`Failed to create experiment for dataset "${datasetName}"`, {
+        error,
+      });
+      throw new Error(`Error creating experiment: ${error}`);
+    }
+  };
+
+  /**
+   * Gets an experiment by its unique ID
+   *
+   * @param id The unique identifier of the experiment
+   * @returns The Experiment object
+   */
+  public getExperimentById = async (id: string): Promise<Experiment> => {
+    logger.debug(`Getting experiment with ID "${id}"`);
+
+    try {
+      const experimentData = await this.api.experiments.getExperimentById(id);
+
+      return new Experiment(
+        {
+          id: experimentData.id,
+          name: experimentData.name,
+          datasetName: experimentData.datasetName,
+        },
+        this
+      );
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        throw new ExperimentNotFoundError(
+          `No experiment found with ID '${id}'`
+        );
+      }
+      logger.error(`Failed to get experiment with ID "${id}"`, { error });
+      throw error;
+    }
+  };
+
+  /**
+   * Gets experiments by name (can return multiple experiments with the same name)
+   *
+   * @param name The name of the experiments to retrieve
+   * @returns A list of Experiment objects with the given name
+   */
+  public getExperimentsByName = async (name: string): Promise<Experiment[]> => {
+    logger.debug(`Getting experiments with name "${name}"`);
+
+    try {
+      const streamResponse = await this.api.experiments.streamExperiments({
+        name,
+      });
+
+      const rawItems = await parseNdjsonStreamToArray<ExperimentPublic>(
+        streamResponse,
+        serialization.ExperimentPublic
+      );
+
+      return rawItems.map(
+        (exp) =>
+          new Experiment(
+            {
+              id: exp.id,
+              name: exp.name,
+              datasetName: exp.datasetName,
+            },
+            this
+          )
+      );
+    } catch (error) {
+      logger.error(`Failed to get experiments with name "${name}"`, { error });
+      throw error;
+    }
+  };
+
+  /**
+   * Gets a single experiment by name (returns the first match if multiple exist)
+   *
+   * @param name The name of the experiment to retrieve
+   * @returns The Experiment object
+   */
+  public getExperiment = async (name: string): Promise<Experiment> => {
+    logger.debug(`Getting experiment with name "${name}"`);
+
+    const experiments = await this.getExperimentsByName(name);
+
+    if (experiments.length === 0) {
+      throw new ExperimentNotFoundError(name);
+    }
+
+    return experiments[0];
+  };
+
+  /**
+   * Gets all experiments associated with a dataset
+   *
+   * @param datasetName The name of the dataset
+   * @param maxResults Maximum number of experiments to return (default: 100)
+   * @returns A list of Experiment objects associated with the dataset
+   * @throws {DatasetNotFoundError} If the dataset doesn't exist
+   */
+  public getDatasetExperiments = async (
+    datasetName: string,
+    maxResults: number = 100
+  ): Promise<Experiment[]> => {
+    logger.debug(`Getting experiments for dataset "${datasetName}"`);
+
+    const dataset = await this.getDataset(datasetName);
+
+    const pageSize = Math.min(100, maxResults);
+    const experiments: Experiment[] = [];
+
+    try {
+      let page = 1;
+      while (experiments.length < maxResults) {
+        const pageExperiments = await this.api.experiments.findExperiments({
+          page,
+          size: pageSize,
+          datasetId: dataset.id,
+        });
+
+        const content = pageExperiments?.content ?? [];
+
+        if (content.length === 0) {
+          break;
+        }
+        const remainingItems = maxResults - experiments.length;
+        const itemsToProcess = Math.min(content.length, remainingItems);
+
+        for (let i = 0; i < itemsToProcess; i++) {
+          const exp = content[i];
+          experiments.push(
+            new Experiment(
+              {
+                id: exp.id,
+                name: exp.name,
+                datasetName: exp.datasetName,
+              },
+              this
+            )
+          );
+        }
+
+        if (itemsToProcess < content.length) {
+          break;
+        }
+
+        page += 1;
+      }
+
+      return experiments;
+    } catch (error) {
+      logger.error(`Failed to get experiments for dataset "${datasetName}"`, {
+        error,
+      });
+      throw error;
+    }
+  };
+
+  /**
+   * Deletes an experiment by ID
+   *
+   * @param id The ID of the experiment to delete
+   */
+  public deleteExperiment = async (id: string): Promise<void> => {
+    logger.debug(`Deleting experiment with ID "${id}"`);
+
+    try {
+      await this.api.experiments.deleteExperimentsById({ ids: [id] });
+    } catch (error) {
+      logger.error(`Failed to delete experiment with ID "${id}"`, { error });
+      throw error;
     }
   };
 

@@ -2,6 +2,7 @@ import { logger } from "@/utils/logger";
 import fs from "fs";
 import ini from "ini";
 import { RequestOptions } from "@/types/request";
+import "dotenv/config";
 
 export interface OpikConfig {
   apiKey: string;
@@ -18,17 +19,16 @@ export interface ConstructorOpikConfig extends OpikConfig {
 
 const CONFIG_FILE_PATH_DEFAULT = "~/.opik.config";
 
-const DEFAULT_CONFIG: OpikConfig = {
+export const DEFAULT_CONFIG: Required<Omit<OpikConfig, "requestOptions">> = {
   apiKey: "",
   apiUrl: "http://localhost:5173/api",
   projectName: "Default Project",
   workspaceName: "default",
-  requestOptions: undefined,
 };
 
 function filterUndefined<T extends object>(obj: Partial<T>): Partial<T> {
   return Object.fromEntries(
-    Object.entries(obj).filter(([, value]) => value !== undefined),
+    Object.entries(obj).filter(([, value]) => value !== undefined)
   ) as Partial<T>;
 }
 
@@ -74,7 +74,7 @@ function loadFromConfigFile(): Partial<OpikConfig> {
 }
 
 export function loadConfig(
-  explicit?: Partial<ConstructorOpikConfig>,
+  explicit?: Partial<ConstructorOpikConfig>
 ): OpikConfig {
   const envConfig = loadFromEnv();
   const fileConfig = loadFromConfigFile();
