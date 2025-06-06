@@ -30,6 +30,10 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
         duration: PercentageValues.optional(),
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
+        totalEstimatedCostAvg: core.serialization.property(
+            "total_estimated_cost_avg",
+            core.serialization.number().optional(),
+        ),
         usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -56,6 +60,7 @@ export declare namespace Experiment {
         created_at?: string | null;
         duration?: PercentageValues.Raw | null;
         total_estimated_cost?: number | null;
+        total_estimated_cost_avg?: number | null;
         usage?: Record<string, number> | null;
         last_updated_at?: string | null;
         created_by?: string | null;

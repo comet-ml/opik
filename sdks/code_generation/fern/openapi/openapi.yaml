@@ -5480,6 +5480,9 @@ components:
         total_estimated_cost:
           type: number
           readOnly: true
+        total_estimated_cost_avg:
+          type: number
+          readOnly: true
         usage:
           type: object
           additionalProperties:
@@ -6178,6 +6181,9 @@ components:
         duration:
           $ref: "#/components/schemas/PercentageValues_Public"
         total_estimated_cost:
+          type: number
+          readOnly: true
+        total_estimated_cost_avg:
           type: number
           readOnly: true
         usage:
