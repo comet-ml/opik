@@ -1,5 +1,6 @@
 package com.comet.opik.domain.filter;
 
+import com.comet.opik.api.filter.ExperimentField;
 import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.FieldType;
@@ -176,6 +177,11 @@ public class FilterQueryBuilder {
                     .put(SpanField.DURATION, DURATION_ANALYTICS_DB)
                     .build());
 
+    private static final Map<ExperimentField, String> EXPERIMENT_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<ExperimentField, String>builder()
+                    .put(ExperimentField.METADATA, METADATA_ANALYTICS_DB)
+                    .build());
+
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<ExperimentsComparisonValidKnownField, String>builder()
                     .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
@@ -228,6 +234,9 @@ public class FilterQueryBuilder {
             FilterStrategy.EXPERIMENT_ITEM, EnumSet.copyOf(ImmutableSet.<ExperimentsComparisonValidKnownField>builder()
                     .add(ExperimentsComparisonValidKnownField.OUTPUT)
                     .build()),
+            FilterStrategy.EXPERIMENT, ImmutableSet.<Field>builder()
+                    .add(ExperimentField.METADATA)
+                    .build(),
             FilterStrategy.TRACE_THREAD, EnumSet.copyOf(ImmutableSet.<TraceThreadField>builder()
                     .add(TraceThreadField.ID)
                     .add(TraceThreadField.NUMBER_OF_MESSAGES)
@@ -305,6 +314,7 @@ public class FilterQueryBuilder {
         return switch (field) {
             case TraceField traceField -> TRACE_FIELDS_MAP.get(traceField);
             case SpanField spanField -> SPAN_FIELDS_MAP.get(spanField);
+            case ExperimentField experimentField -> EXPERIMENT_FIELDS_MAP.get(experimentField);
             case ExperimentsComparisonValidKnownField experimentsComparisonValidKnownField ->
                 EXPERIMENTS_COMPARISON_FIELDS_MAP.get(experimentsComparisonValidKnownField);
             case TraceThreadField traceThreadField -> TRACE_THREAD_FIELDS_MAP.get(traceThreadField);
