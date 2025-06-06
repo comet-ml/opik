@@ -6,6 +6,7 @@ from .heuristics.levenshtein_ratio import LevenshteinRatio
 from .heuristics.regex_match import RegexMatch
 from .heuristics.bleu import SentenceBLEU, CorpusBLEU
 from .heuristics.rouge import ROUGE
+from .heuristics.sentiment import Sentiment
 from .llm_judges.answer_relevance.metric import AnswerRelevance
 from .llm_judges.context_precision.metric import ContextPrecision
 from .llm_judges.context_recall.metric import ContextRecall
@@ -38,4 +39,5 @@ __all__ = [
     "SentenceBLEU",
     "CorpusBLEU",
     "ROUGE",
+    "Sentiment",
 ]
