@@ -216,6 +216,12 @@ class OpikConfig(pydantic_settings.BaseSettings):
     For shorter traces, it is recommended to keep this setting disabled to minimize data logging overhead.
     """
 
+    log_start_span: bool = False
+    """
+    If set to True, both the start and end of the span will be logged. This is useful for spans that span long durations.
+    For shorter spans, it is recommended to keep this setting disabled to minimize data logging overhead.
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)

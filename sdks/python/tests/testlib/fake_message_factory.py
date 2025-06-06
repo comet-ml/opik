@@ -167,11 +167,12 @@ def fake_span_create_message_batch(
 
         # Randomly decide if the span has ended
         has_ended = random.choice([True, False])
-        end_time = (
-            start_time + timedelta(seconds=random.randint(1, 3600))
-            if has_ended
-            else None
-        )
+        if has_ended:
+            end_time = start_time + timedelta(seconds=random.randint(1, 3600))
+            last_updated_at = end_time
+        else:
+            end_time = None
+            last_updated_at = start_time
 
         # Generate dummy input data
         input_data = {
@@ -246,6 +247,7 @@ def fake_span_create_message_batch(
             model=metadata["model"],
             provider=None,
             total_cost=random.random() * 0.01,
+            last_updated_at=last_updated_at,
         )
 
         dummy_spans.append(span_message)

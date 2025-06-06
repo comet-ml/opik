@@ -157,6 +157,7 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                 provider=message.provider,
                 error_info=message.error_info,
                 total_cost=message.total_cost,
+                last_updated_at=message.last_updated_at,
             )
 
             self._span_to_parent_span[span.id] = message.parent_span_id
@@ -183,6 +184,7 @@ class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
                 model=message.model,
                 provider=message.provider,
                 total_cost=message.total_estimated_cost,
+                last_updated_at=message.last_updated_at,
             )
 
             if message.error_info is not None:

@@ -2,12 +2,10 @@ import datetime
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-
-from opik import datetime_helpers, id_helpers, llm_usage, Attachment
+from opik import datetime_helpers, llm_usage, Attachment
 from opik.message_processing import messages, streamer
 from opik.types import ErrorInfoDict, SpanType, LLMProvider
-from .. import constants, span, validation_helpers, helpers
-from ..attachment import converters as attachment_converters
+from .. import constants, span
 
 LOGGER = logging.getLogger(__name__)
 
@@ -133,7 +131,7 @@ class Trace:
         Create a new span within the trace.
 
         Args:
-            id: The ID of the span, should be in UUIDv7 format. If not provided, a new ID will be generated.
+            id: The ID of the span should be in UUIDv7 format. If not provided, a new ID will be generated.
             parent_span_id: The ID of the parent span, if any.
             name: The name of the span.
             type: The type of the span. Defaults to "general".
@@ -158,58 +156,27 @@ class Trace:
         Returns:
             span.Span: The created span object.
         """
-        span_id = id if id is not None else id_helpers.generate_id()
-        start_time = (
-            start_time if start_time is not None else datetime_helpers.local_timestamp()
-        )
-        backend_compatible_usage = validation_helpers.validate_and_parse_usage(
-            usage=usage,
-            logger=LOGGER,
-            provider=provider,
-        )
-
-        if backend_compatible_usage is not None:
-            metadata = helpers.add_usage_to_metadata(usage=usage, metadata=metadata)
-
-        create_span_message = messages.CreateSpanMessage(
-            span_id=span_id,
+        return span.span_client.create_span(
             trace_id=self.id,
             project_name=self._project_name,
+            url_override=self._url_override,
+            message_streamer=self._streamer,
+            span_id=id,
             parent_span_id=parent_span_id,
             name=name,
             type=type,
             start_time=start_time,
             end_time=end_time,
+            metadata=metadata,
             input=input,
             output=output,
-            metadata=metadata,
             tags=tags,
-            usage=backend_compatible_usage,
+            usage=usage,
             model=model,
             provider=provider,
             error_info=error_info,
             total_cost=total_cost,
-        )
-        self._streamer.put(create_span_message)
-
-        if attachments is not None:
-            for attachment_data in attachments:
-                self._streamer.put(
-                    attachment_converters.attachment_to_message(
-                        attachment_data=attachment_data,
-                        entity_type="span",
-                        entity_id=span_id,
-                        project_name=self._project_name,
-                        url_override=self._url_override,
-                    )
-                )
-
-        return span.Span(
-            id=span_id,
-            parent_span_id=parent_span_id,
-            trace_id=self.id,
-            message_streamer=self._streamer,
-            project_name=self._project_name,
+            attachments=attachments,
         )
 
     def log_feedback_score(
