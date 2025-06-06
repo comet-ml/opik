@@ -24,9 +24,6 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 from pydantic import BaseModel, Field
 
-import litellm
-from litellm.integrations.opik.opik import OpikLogger
-
 # --- 1. Define Constants ---
 APP_NAME = "agent_comparison_app"
 USER_ID = "test_user_456"
@@ -81,25 +78,10 @@ task_config = TaskConfig(
 
 
 class ADKAgent(OpikAgent):
-    def __init__(self, optimizer, agent_config):
-        self.optimizer = optimizer
+    def reconfig(self, agent_config):
         prompt = agent_config["system-prompt"]["value"]
 
-        # agent_tools = []
-        # for key in agent_config:
-        #    item = agent_config[key]
-        #    if item["type"] == "tool":
-        #        agent_tools.append(
-        #            adk_tool(name=key, description=item["value"])(item["function"])
-        #        )
-
-        # --- 4. Configure Agents ---
-
-        # Litellm bug requires this:
-        os.environ["OPIK_PROJECT_NAME"] = project_name
         self.opik_tracer = OpikTracer(project_name)
-        self.opik_logger = OpikLogger(project_name=project_name)
-        litellm.callbacks = [self.opik_logger]
 
         # Agent 1: Uses a tool and output_key
         self.agent = LlmAgent(
@@ -118,24 +100,10 @@ class ADKAgent(OpikAgent):
             after_tool_callback=self.opik_tracer.after_tool_callback,
         )
 
-    def llm_invoke(self, prompt):
-        response = litellm.completion(
-            model="gpt-4o-mini", messages=[{"role": "user", "content": prompt}]
-        )
-        new_prompt = response.choices[0].message.content
-
-        ## Make sure it contains necessary fields:
-        # if "{input}" not in new_prompt:
-        #     new_prompt += "\nQuestion: {input}"
-        # if "{agent_scratchpad}" not in new_prompt:
-        #     new_prompt += "\nThought: {agent_scratchpad}"
-        # if "[{tool_names}]" not in new_prompt:
-        #     new_prompt += "\nTool names: [{tool_names}]"
-        # if "{tools}" not in new_prompt:
-        #    new_prompt += "\nTools: {tools}"
-        return new_prompt
-
-    def invoke(self, query_json: Dict[str, Any]) -> Dict[str, Any]:
+    def invoke(
+        self, query_json: Dict[str, Any], input_dataset_field: str = None
+    ) -> Dict[str, Any]:
+        query_json = {input_dataset_field: query_json[input_dataset_field]}
         query_json = json.dumps(query_json)
         session_service = InMemorySessionService()
         # Create separate sessions for clarity, though not strictly necessary if context is managed
@@ -182,13 +150,6 @@ class ADKAgent(OpikAgent):
         return asyncio.run(_invoke())
 
 
-optimizer = OpikAgentOptimizer(
-    agent_class=ADKAgent,
-    project_name=project_name,
-    tags=["adk-agent"],
-    task_config=task_config,
-)
-
 agent_config = {
     "chat-prompt": {"type": "chat", "value": []},
     "Wikipedia Search": {
@@ -199,9 +160,11 @@ agent_config = {
     "system-prompt": {"type": "prompt", "value": prompt_template, "template": True},
 }
 
-agent = ADKAgent(optimizer, agent_config)
+agent = ADKAgent(agent_config, project_name)
+
 result = agent.invoke(
-    {"question": "Which is heavier: a newborn elephant, or a motor boat?"}
+    {"question": "Which is heavier: a newborn elephant, or a motor boat?"},
+    "question",
 )
 print(result)
 
@@ -212,16 +175,15 @@ Here is the prompt:
 %r
 """
 
-optimizer.optimize_prompt(
-    agent_config=agent_config,
+optimizer = OpikAgentOptimizer(
+    task_config=task_config,
+)
+
+optimizer.optimize_agent(
+    agent=agent,
     dataset=dataset,
     metric_config=metric_config,
     n_samples=10,
     num_threads=16,
     metaprompt=metaprompt,
 )
-
-# TODO: get the optimizer out of Agent
-# 1. self.optimizer.project_name
-# 2. self.optimizer.tags
-# 3. self.optimizer.task_config.input_dataset_fields

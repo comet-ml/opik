@@ -85,8 +85,10 @@ task_config = TaskConfig(
 
 
 class LangGraphAgent(OpikAgent):
-    def __init__(self, optimizer, agent_config):
-        self.optimizer = optimizer
+    def init_llm(self):
+        self.llm = ChatOpenAI(model="gpt-4o", temperature=0, stream_usage=True)
+
+    def reconfig(self, agent_config):
         if agent_config["system-prompt"]["template"]:
             prompt_template = agent_config["system-prompt"]["value"]
             prompt = PromptTemplate.from_template(prompt_template)
@@ -104,8 +106,6 @@ class LangGraphAgent(OpikAgent):
                         description=item["value"],
                     )
                 )
-        self.llm = ChatOpenAI(model="gpt-4o", temperature=0, stream_usage=True)
-
         agent = create_react_agent(self.llm, tools=agent_tools, prompt=prompt)
         agent_executor = AgentExecutor(
             agent=agent,
@@ -132,13 +132,12 @@ class LangGraphAgent(OpikAgent):
 
         # Setup the Opik tracker:
         self.opik_tracer = OpikTracer(
-            project_name=self.optimizer.project_name,
-            tags=self.optimizer.tags,
+            project_name=self.project_name,
             graph=self.graph.get_graph(xray=True),
         )
 
     def llm_invoke(self, prompt):
-        new_prompt = self.llm.invoke(prompt).content
+        new_prompt = super().llm_invoke(prompt)
         # Make sure it contains necessary fields:
         if "{input}" not in new_prompt:
             new_prompt += "\nQuestion: {input}"
@@ -150,26 +149,16 @@ class LangGraphAgent(OpikAgent):
             new_prompt += "\nTools: {tools}"
         return new_prompt
 
-    def invoke(self, item: Dict[str, Any]) -> Dict[str, Any]:
+    def invoke(self, item: Dict[str, Any], input_dataset_field: str) -> Dict[str, Any]:
         # "input" and "output" are Agent State fields
         # FIXME: need to map input_dataset_fields to correct state fields:
         messages = agent_config["chat-prompt"]["value"]
-        state = {
-            "input": item[key]
-            for key in self.optimizer.task_config.input_dataset_fields
-        }
+        state = {"input": item[input_dataset_field]}
         messages.append(state)
         # FIXME: allow messages
         result = self.graph.invoke(state)
         return {"output": result["output"]}
 
-
-optimizer = OpikAgentOptimizer(
-    agent_class=LangGraphAgent,
-    project_name=project_name,
-    tags=["langchain-agent"],
-    task_config=task_config,
-)
 
 agent_config = {
     "chat-prompt": {"type": "chat", "value": []},
@@ -181,9 +170,11 @@ agent_config = {
     "system-prompt": {"type": "prompt", "value": prompt_template, "template": True},
 }
 
-agent = LangGraphAgent(optimizer, agent_config)
+agent = LangGraphAgent(agent_config, project_name)
+
 result = agent.invoke(
-    {"question": "Which is heavier: a newborn elephant, or a motor boat?"}
+    {"question": "Which is heavier: a newborn elephant, or a motor boat?"},
+    "question",
 )
 print(result)
 
@@ -199,16 +190,15 @@ Here is the prompt:
 %r
 """
 
-optimizer.optimize_prompt(
-    agent_config=agent_config,
+optimizer = OpikAgentOptimizer(
+    task_config=task_config,
+)
+
+optimizer.optimize_agent(
+    agent=agent,
     dataset=dataset,
     metric_config=metric_config,
     n_samples=10,
     num_threads=16,
     metaprompt=metaprompt,
 )
-
-# TODO: get the optimizer out of Agent
-# 1. self.optimizer.project_name
-# 2. self.optimizer.tags
-# 3. self.optimizer.task_config.input_dataset_fields
