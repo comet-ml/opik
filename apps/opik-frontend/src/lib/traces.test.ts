@@ -144,4 +144,44 @@ describe("prettifyMessage", () => {
     const result = prettifyMessage(message, { type: "output" });
     expect(result).toEqual({ message: "Nested response", prettified: true });
   });
+
+  it("handles OpenAI Agents input message with multiple user messages", () => {
+    const message = {
+      input: [
+        { role: "system", content: "System message" },
+        { role: "user", content: "User message 1" },
+        { role: "assistant", content: "Assistant message" },
+        { role: "user", content: "User message 2" },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "User message 1\n\n  ----------------- \n\nUser message 2",
+      prettified: true,
+    });
+  });
+
+  it("handles OpenAI Agents output message with multiple assistant outputs", () => {
+    const message = {
+      output: [
+        {
+          role: "assistant",
+          type: "message",
+          content: [{ type: "output_text", text: "Assistant response 1" }],
+        },
+        { role: "user", content: "User message" },
+        {
+          role: "assistant",
+          type: "message",
+          content: [{ type: "output_text", text: "Assistant response 2" }],
+        },
+      ],
+    };
+    const result = prettifyMessage(message, { type: "output" });
+    expect(result).toEqual({
+      message:
+        "Assistant response 1\n\n  ----------------- \n\nAssistant response 2",
+      prettified: true,
+    });
+  });
 });
