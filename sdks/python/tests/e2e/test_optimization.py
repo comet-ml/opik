@@ -4,7 +4,9 @@ from opik.rest_api import core as rest_api_core
 from . import verifiers
 
 
-def test_optimization_lifecycle__happyflow(opik_client: opik.Opik, dataset_name: str):
+def test_optimization_lifecycle__happyflow(
+    opik_client: opik.Opik, dataset_name: str
+) -> None:
     dataset = opik_client.create_dataset(dataset_name)
 
     # Create optimization
@@ -42,10 +44,10 @@ def test_optimization_lifecycle__happyflow(opik_client: opik.Opik, dataset_name:
 
 def test_optimization_context_lifecycle__happyflow(
     opik_client: opik.Opik, dataset_name: str
-):
+) -> None:
     dataset = opik_client.create_dataset(dataset_name)
 
-    with opik_client.optimization_context(
+    with opik_client.optimization_id(
         objective_name="some-objective-name",
         dataset_name=dataset.name,
         name="some-optimization-name",

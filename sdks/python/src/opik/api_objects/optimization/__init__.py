@@ -1,3 +1,3 @@
-from .optimization import Optimization
+from .optimization import Optimization, OptimizationContextManager
 
-__all__ = ["Optimization"]
+__all__ = ["Optimization", "OptimizationContextManager"]
