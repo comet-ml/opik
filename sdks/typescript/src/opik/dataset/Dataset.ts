@@ -1,7 +1,7 @@
 import { generateId } from "@/utils/generateId";
 import { DatasetItem, DatasetItemData } from "./DatasetItem";
 import { OpikClient } from "@/client/Client";
-import { DatasetItemWrite } from "@/rest_api/api";
+import { DatasetItemPublic, DatasetItemWrite } from "@/rest_api/api";
 import { parseNdjsonStreamToArray, splitIntoBatches } from "@/utils/stream";
 import { logger } from "@/utils/logger";
 import { DatasetItemMissingIdError } from "@/errors";
@@ -10,6 +10,8 @@ import {
   JsonNotArrayError,
   JsonParseError,
 } from "@/errors/common/errors";
+import { serialization } from "@/rest_api";
+import stringify from "fast-json-stable-stringify";
 
 export interface DatasetData {
   name: string;
@@ -52,10 +54,26 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
 
     const reqItems = await this.getDeduplicatedItems(items);
 
-    await this.opik.api.datasets.createOrUpdateDatasetItems({
-      datasetId: this.id,
-      items: reqItems,
-    });
+    const batches = splitIntoBatches(reqItems, { maxBatchSize: 1000 });
+
+    try {
+      let totalInserted = 0;
+      for (const batch of batches) {
+        await this.opik.api.datasets.createOrUpdateDatasetItems({
+          datasetId: this.id,
+          items: batch,
+        });
+        totalInserted += batch.length;
+        logger.info(
+          `Inserted ${Math.min(totalInserted, reqItems.length)} of ${reqItems.length} items into dataset ${this.id}`
+        );
+      }
+    } catch (error) {
+      logger.error(
+        `Error inserting items into dataset: ${error instanceof Error ? error.message : String(error)}`
+      );
+      throw error;
+    }
   }
 
   /**
@@ -150,8 +168,9 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
       steamLimit: streamLimit,
     });
 
-    const rawItems = await parseNdjsonStreamToArray<DatasetItemWrite>(
+    const rawItems = await parseNdjsonStreamToArray<DatasetItemPublic>(
       streamResponse,
+      serialization.DatasetItemPublic,
       nbSamples
     );
 
@@ -239,7 +258,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
       return itemCopy;
     });
 
-    return JSON.stringify(mappedItems);
+    return stringify(mappedItems);
   }
 
   /**
@@ -250,7 +269,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
   private async getDeduplicatedItems(items: T[]): Promise<DatasetItemWrite[]> {
     const deduplicatedItems: DatasetItemWrite[] = [];
 
-    for await (const item of items) {
+    for (const item of items) {
       const datasetItem = new DatasetItem<T>(item);
       const contentHash = await datasetItem.contentHash();
 
