@@ -39,6 +39,7 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
+import CostCell from "@/components/shared/DataTableCells/CostCell";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
@@ -80,6 +81,22 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     type: COLUMN_TYPE.number,
     accessorFn: (row) =>
       isNumber(row.number_of_messages) ? `${row.number_of_messages}` : "-",
+  },
+  {
+    id: "usage.total_tokens",
+    label: "Total tokens",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) =>
+      row.usage && isNumber(row.usage.total_tokens)
+        ? `${row.usage.total_tokens}`
+        : "-",
+  },
+  {
+    id: "total_estimated_cost",
+    label: "Estimated cost",
+    type: COLUMN_TYPE.cost,
+    cell: CostCell as never,
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_thread_cost_estimated],
   },
   {
     id: "created_at",
