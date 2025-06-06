@@ -12,6 +12,7 @@ from opik_optimizer import (
 )
 from opik_optimizer.agent_optimizer import OpikAgentOptimizer, OpikAgent
 from opik_optimizer.demo import get_or_create_dataset
+from opik.integrations.adk import OpikTracer
 
 import json
 import asyncio
@@ -24,6 +25,7 @@ from google.genai import types
 from pydantic import BaseModel, Field
 
 import litellm
+from litellm.integrations.opik.opik import OpikLogger
 
 # --- 1. Define Constants ---
 APP_NAME = "agent_comparison_app"
@@ -93,6 +95,12 @@ class ADKAgent(OpikAgent):
 
         # --- 4. Configure Agents ---
 
+        # Litellm bug requires this:
+        os.environ["OPIK_PROJECT_NAME"] = project_name
+        self.opik_tracer = OpikTracer(project_name)
+        self.opik_logger = OpikLogger(project_name=project_name)
+        litellm.callbacks = [self.opik_logger]
+
         # Agent 1: Uses a tool and output_key
         self.agent = LlmAgent(
             model=MODEL,
@@ -102,6 +110,12 @@ class ADKAgent(OpikAgent):
             tools=[search_wikipedia],
             input_schema=SearchInput,
             output_key="wikipedia_tool_result",  # Store final text response
+            before_agent_callback=self.opik_tracer.before_agent_callback,
+            after_agent_callback=self.opik_tracer.after_agent_callback,
+            before_model_callback=self.opik_tracer.before_model_callback,
+            after_model_callback=self.opik_tracer.after_model_callback,
+            before_tool_callback=self.opik_tracer.before_tool_callback,
+            after_tool_callback=self.opik_tracer.after_tool_callback,
         )
 
     def llm_invoke(self, prompt):
