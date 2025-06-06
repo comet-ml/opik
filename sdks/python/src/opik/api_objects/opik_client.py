@@ -53,13 +53,14 @@ from .experiment import rest_operations as experiment_rest_operations
 from .prompt import Prompt, PromptType
 from .prompt.client import PromptClient
 from .trace import migration as trace_migration
+from .optimization import Optimization
 
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
 
-class OptimizationContext:
+class OptimizationContextManager:
     """
     Context manager for handling optimization lifecycle.
     Automatically updates optimization status to "completed" or "cancelled" based on context exit.
@@ -88,7 +89,7 @@ class OptimizationContext:
         self.objective_name = objective_name
         self.name = name
         self.metadata = metadata
-        self.optimization = None
+        self.optimization: Optimization = None
 
     def __enter__(self) -> Union[str, None]:
         """Create and return the optimization ID."""
@@ -1210,7 +1211,7 @@ class Opik:
         objective_name: str,
         name: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> OptimizationContext:
+    ) -> OptimizationContextManager:
         """
         Create a context manager for handling optimization lifecycle.
         Automatically updates optimization status to "completed" or "cancelled" based on context exit.
@@ -1222,9 +1223,9 @@ class Opik:
             metadata: Optional metadata for the optimization
 
         Returns:
-            OptimizationContext: A context manager that handles optimization lifecycle
+            OptimizationContextManager: A context manager that handles optimization lifecycle
         """
-        return OptimizationContext(
+        return OptimizationContextManager(
             client=self,
             dataset_name=dataset_name,
             objective_name=objective_name,
