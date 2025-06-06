@@ -10,6 +10,8 @@ import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
@@ -138,6 +140,7 @@ class ExperimentDAO {
                 <if(id)> AND id = :id <endif>
                 <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
+                <if(filters)> AND <filters> <endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), experiment_items_final AS (
@@ -298,6 +301,7 @@ class ExperimentDAO {
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
+                <if(filters)> AND <filters> <endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) as latest_rows
@@ -386,6 +390,7 @@ class ExperimentDAO {
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull ExperimentSortingFactory sortingFactory;
+    private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
     @WithSpan
     Mono<Void> insert(@NonNull Experiment experiment) {
@@ -648,6 +653,9 @@ class ExperimentDAO {
         Optional.ofNullable(criteria.types())
                 .filter(CollectionUtils::isNotEmpty)
                 .ifPresent(types -> template.add("types", types));
+        Optional.ofNullable(criteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT))
+                .ifPresent(experimentFilters -> template.add("filters", experimentFilters));
         return template;
     }
 
@@ -665,6 +673,10 @@ class ExperimentDAO {
         Optional.ofNullable(criteria.types())
                 .filter(CollectionUtils::isNotEmpty)
                 .ifPresent(types -> statement.bind("types", types));
+        Optional.ofNullable(criteria.filters())
+                .ifPresent(filters -> {
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT);
+                });
         if (!isCount) {
             statement.bind("entity_type", criteria.entityType().getType());
         }
