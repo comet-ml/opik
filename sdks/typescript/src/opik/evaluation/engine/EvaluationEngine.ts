@@ -67,6 +67,8 @@ export class EvaluationEngine<T = Record<string, unknown>> {
   public async execute(): Promise<EvaluationResult> {
     const startTime = performance.now();
 
+    const experimentItemReferences: ExperimentItemReferences[] = [];
+
     const datasetItems = await this.dataset.getItems(this.nbSamples);
 
     const testResults: EvaluationTestResult[] = [];
@@ -86,9 +88,8 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         this.rootTrace.update({
           output: testResult.testCase.taskOutput,
         });
-        this.rootTrace.end();
       } catch (error) {
-        logger.error(`Error processing dataset item: ${datasetItem.id}`, error);
+        logger.error(`Error processing dataset item: ${datasetItem.id}`);
 
         if (error instanceof Error) {
           this.rootTrace.update({
@@ -99,19 +100,18 @@ export class EvaluationEngine<T = Record<string, unknown>> {
             },
           });
         }
-        this.rootTrace.end();
       }
+
+      this.rootTrace.end();
+      experimentItemReferences.push(
+        new ExperimentItemReferences({
+          datasetItemId: datasetItem.id,
+          traceId: this.rootTrace.data.id,
+        })
+      );
     }
 
     const endTime = performance.now();
-
-    const experimentItemReferences = testResults.map(
-      (testResult) =>
-        new ExperimentItemReferences({
-          datasetItemId: testResult.testCase.datasetItemId,
-          traceId: testResult.testCase.traceId,
-        })
-    );
     this.experiment.insert(experimentItemReferences);
 
     await this.client.flush();

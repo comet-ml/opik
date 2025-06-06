@@ -59,5 +59,5 @@ export function getMissingArgumentsMessage(
   const availableArgs = Object.keys(args);
   const missingArgs = missedArgs.filter((arg) => !(arg in args));
 
-  return `Metric '${metric.name}' is missing required arguments: ${missingArgs.join(", ")}. Available arguments: ${availableArgs.join(", ")}.`;
+  return `Metric '${metric.name}' is skipped, missing required arguments: ${missingArgs.join(", ")}. Available arguments: ${availableArgs.join(", ")}.`;
 }
