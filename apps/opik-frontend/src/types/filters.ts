@@ -1,4 +1,5 @@
-import { COLUMN_TYPE } from "@/types/shared";
+import { COLUMN_TYPE, DropdownOption } from "@/types/shared";
+import React from "react";
 
 export type FilterOperator =
   | "contains"
@@ -21,5 +22,15 @@ export interface Filter {
   key?: string;
   value: string | number;
 }
+export type FilterRowConfig = {
+  keyComponent: React.FC<unknown> & {
+    placeholder: string;
+    value: string;
+    onValueChange: (value: string) => void;
+  };
+  keyComponentProps: unknown;
+  defaultOperator?: FilterOperator;
+  operators?: DropdownOption<FilterOperator>[];
+};
 
 export type Filters = Filter[];
