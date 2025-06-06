@@ -18,6 +18,7 @@ export interface Experiment {
     createdAt?: Date;
     duration?: OpikApi.PercentageValues;
     totalEstimatedCost?: number;
+    totalEstimatedCostAvg?: number;
     usage?: Record<string, number>;
     lastUpdatedAt?: Date;
     createdBy?: string;
