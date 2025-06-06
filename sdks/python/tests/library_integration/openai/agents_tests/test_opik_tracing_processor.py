@@ -48,6 +48,7 @@ def test_opik_tracing_processor__happy_flow(fake_backend):
         name="Agent workflow",
         project_name=project_name,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "openai-agents",
             "agents-trace-id": ANY_STRING(startswith="trace"),
@@ -129,6 +130,7 @@ def test_opik_tracing_processor__happy_flow_conversation(fake_backend):
         name=workflow_name,
         project_name=project_name,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "openai-agents",
             "agents-trace-id": ANY_STRING(startswith="trace"),
@@ -215,6 +217,7 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
         input={"input": [{"content": input_message, "role": "user"}]},
         output={"output": ANY_BUT_NONE},
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "openai-agents",
             "agents-trace-id": ANY_STRING(startswith="trace"),
@@ -330,6 +333,7 @@ async def test_opik_tracing_processor__functions(fake_backend):
         name="Agent workflow",
         project_name=project_name,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "openai-agents",
             "agents-trace-id": ANY_STRING(startswith="trace"),
@@ -444,6 +448,7 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
         name="Agent workflow",
         project_name=project_name,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "openai-agents",
             "agents-trace-id": ANY_STRING(startswith="trace"),
@@ -527,6 +532,8 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
     assert len(fake_backend.trace_trees) == 1
     trace_tree = fake_backend.trace_trees[0]
 
+    print(trace_tree)
+
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_tree)
 
 
@@ -560,6 +567,7 @@ def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent
         name="outer_f",
         project_name=parent_decorator_project_name,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,

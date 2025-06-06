@@ -30,6 +30,8 @@ def get(
         if check_tls_certificate is True and "SSL_CERT_FILE" in os.environ
         else check_tls_certificate
     )
+    # we need this to enable proxy server to analyze the request/response session during debugging
+    proxy = os.environ.get("_OPIK_HTTP_PROXY")
 
     timeout = httpx.Timeout(
         connect=CONNECT_TIMEOUT_SECONDS,
@@ -44,6 +46,7 @@ def get(
         verify=verify,
         timeout=timeout,
         follow_redirects=True,
+        proxy=proxy,
     )
 
     headers = _prepare_headers(workspace=workspace, api_key=api_key)

@@ -68,6 +68,7 @@ def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -184,6 +185,7 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,

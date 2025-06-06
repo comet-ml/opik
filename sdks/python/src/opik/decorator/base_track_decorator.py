@@ -418,6 +418,10 @@ class BaseTrackDecorator(abc.ABC):
             context_storage.set_trace_data(created_trace_data)
             TRACES_CREATED_BY_DECORATOR.add(created_trace_data.id)
 
+            client = opik_client.get_client_cached()
+            if client.config.log_start_trace:
+                client.trace(**created_trace_data.as_start_parameters)
+
         context_storage.add_span_data(created_span_data)
 
     def _after_call(
@@ -479,7 +483,7 @@ class BaseTrackDecorator(abc.ABC):
                     ),
                 )
 
-                client.trace(**trace_data_to_end.__dict__)
+                client.trace(**trace_data_to_end.as_parameters)
 
             if flush:
                 client.flush()

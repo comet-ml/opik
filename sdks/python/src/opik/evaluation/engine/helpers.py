@@ -16,8 +16,8 @@ def evaluate_llm_task_context(
     trace_data: trace.TraceData,
     client: opik_client.Opik,
 ) -> Iterator[None]:
+    error_info: Optional[ErrorInfoDict] = None
     try:
-        error_info: Optional[ErrorInfoDict] = None
         context_storage.set_trace_data(trace_data)
         yield
     except Exception as exception:
@@ -34,7 +34,7 @@ def evaluate_llm_task_context(
         trace_data.init_end_time()
 
         client = client if client is not None else opik_client.get_client_cached()
-        client.trace(**trace_data.__dict__)
+        client.trace(**trace_data.as_parameters)
 
         experiment_item_ = experiment_item.ExperimentItemReferences(
             dataset_item_id=dataset_item_id,
