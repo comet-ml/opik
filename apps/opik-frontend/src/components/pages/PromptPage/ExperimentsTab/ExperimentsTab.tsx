@@ -8,6 +8,7 @@ import {
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
 import get from "lodash/get";
+import isObject from "lodash/isObject";
 
 import Loader from "@/components/shared/Loader/Loader";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -22,6 +23,7 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
+import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import useAppStore from "@/store/AppStore";
 import useGroupedExperimentsList, {
   GroupedExperiment,
@@ -82,6 +84,16 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
   },
   {
+    id: COLUMN_METADATA_ID,
+    label: "Configuration",
+    type: COLUMN_TYPE.dictionary,
+    accessorFn: (row) =>
+      isObject(row.metadata)
+        ? JSON.stringify(row.metadata, null, 2)
+        : row.metadata,
+    cell: CodeCell as never,
+  },
+  {
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
@@ -103,7 +115,7 @@ export const FILTER_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
   {
     id: COLUMN_METADATA_ID,
-    label: "Experiment config",
+    label: "Configuration",
     type: COLUMN_TYPE.dictionary,
   },
 ];
@@ -161,12 +173,14 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
           keyComponentProps: {
             placeholder: "key",
             excludeRoot: true,
-            promptId: promptId,
+            datasetId,
+            promptId,
+            sorting: sortedColumns,
           },
         },
       },
     }),
-    [promptId],
+    [datasetId, promptId, sortedColumns],
   );
 
   const { checkboxClickHandler } = useMemo(() => {

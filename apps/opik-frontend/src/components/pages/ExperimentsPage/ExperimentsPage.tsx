@@ -26,6 +26,7 @@ import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
+import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
@@ -77,6 +78,7 @@ import ExplainerDescription from "@/components/shared/ExplainerDescription/Expla
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import ExperimentsPathsAutocomplete from "@/components/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
 import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
+import isObject from "lodash/isObject";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -157,6 +159,16 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     type: COLUMN_TYPE.string,
     cell: CommentsCell as never,
   },
+  {
+    id: COLUMN_METADATA_ID,
+    label: "Configuration",
+    type: COLUMN_TYPE.dictionary,
+    accessorFn: (row) =>
+      isObject(row.metadata)
+        ? JSON.stringify(row.metadata, null, 2)
+        : row.metadata,
+    cell: CodeCell as never,
+  },
 ];
 
 export const FILTER_COLUMNS: ColumnData<GroupedExperiment>[] = [
@@ -168,7 +180,7 @@ export const FILTER_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
   {
     id: COLUMN_METADATA_ID,
-    label: "Experiment config",
+    label: "Configuration",
     type: COLUMN_TYPE.dictionary,
   },
 ];
@@ -255,11 +267,13 @@ const ExperimentsPage: React.FunctionComponent = () => {
           keyComponentProps: {
             placeholder: "key",
             excludeRoot: true,
+            datasetId,
+            sorting: sortedColumns,
           },
         },
       },
     }),
-    [],
+    [datasetId, sortedColumns],
   );
 
   const { data, isPending, refetch, datasetsData } = useGroupedExperimentsList({
