@@ -19,14 +19,6 @@ export function validateRequiredArguments(
   // Handle the schema based on its type
   const validationSchema = metric.validationSchema;
 
-  // Ensure we're working with an object schema
-  if (!(validationSchema instanceof z.ZodObject)) {
-    // If the schema is not an object schema, wrap it as one to apply our validations
-    throw new Error(
-      `Metric '${metric.name}' validation schema must be a ZodObject, got ${validationSchema.constructor.name}`
-    );
-  }
-
   const enhancedSchema = validationSchema.extend(
     Object.fromEntries(
       Object.entries(validationSchema.shape).map(([key, schema]) => [

@@ -3,7 +3,7 @@ import { EvaluationScoreResult } from "../types";
 import { SpanType } from "@/rest_api/api";
 import { z } from "zod";
 
-export abstract class BaseMetric {
+export abstract class BaseMetric<T extends z.AnyZodObject = z.AnyZodObject> {
   /**
    * The name of the metric
    */
@@ -17,7 +17,7 @@ export abstract class BaseMetric {
   /**
    * Zod schema for validating input parameters to the score method
    */
-  public abstract readonly validationSchema: z.ZodTypeAny;
+  public abstract readonly validationSchema: T;
 
   protected constructor(name: string, trackMetric = true) {
     this.name = name;
@@ -28,7 +28,7 @@ export abstract class BaseMetric {
       this.score = track(
         { name: this.name, type: SpanType.General },
         originalScore
-      ) as this["score"];
+      );
     }
   }
 
