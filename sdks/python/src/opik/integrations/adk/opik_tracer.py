@@ -1,8 +1,7 @@
 import contextvars
 import functools
 import logging
-import uuid
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set, Union, Tuple
 
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models import LlmRequest, LlmResponse, lite_llm
@@ -18,6 +17,19 @@ from . import helpers as adk_helpers, litellm_wrappers, llm_response_wrapper
 LOGGER = logging.getLogger(__name__)
 
 SpanOrTraceData = Union[span.SpanData, trace.TraceData]
+
+
+def _get_info_from_adk_session(
+    callback_context: CallbackContext,
+) -> Tuple[Optional[str], Dict[str, Any]]:
+    try:
+        session = callback_context._invocation_context.session
+        return session.id, {"user_id": session.user_id, "app_name": session.app_name}
+    except Exception:
+        LOGGER.error(
+            "Failed to get session information from ADK callback context", exc_info=True
+        )
+        return None, {}
 
 
 class OpikTracer:
@@ -81,14 +93,11 @@ class OpikTracer:
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
     ) -> None:
         try:
-            if "opik_thread_id" in callback_context.state:
-                thread_id = callback_context.state["opik_thread_id"]
-            else:
-                thread_id = str(uuid.uuid4())
-                callback_context.state["opik_thread_id"] = thread_id
+            thread_id, session_metadata = _get_info_from_adk_session(callback_context)
 
             trace_metadata = self.metadata.copy()
             trace_metadata["adk_invocation_id"] = callback_context.invocation_id
+            trace_metadata.update(session_metadata)
 
             user_input = adk_helpers.convert_adk_base_model_to_dict(
                 callback_context.user_content
