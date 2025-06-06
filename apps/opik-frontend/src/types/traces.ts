@@ -94,6 +94,8 @@ export interface Thread {
   first_message: object;
   last_message: object;
   number_of_messages: number;
+  usage?: UsageData;
+  total_estimated_cost?: number;
   last_updated_at: string;
   created_by: string;
   created_at: string;
