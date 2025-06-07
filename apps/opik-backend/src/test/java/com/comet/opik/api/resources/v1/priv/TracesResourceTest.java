@@ -6,9 +6,8 @@ import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatchContainer;
-import com.comet.opik.api.FeedbackScoreItem;
-import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem.FeedbackScoreBatchItemBuilder;
+import com.comet.opik.api.FeedbackScoreBatch;
+import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Project;
@@ -18,10 +17,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
-import com.comet.opik.api.TraceThread.TraceThreadPage;
 import com.comet.opik.api.TraceThreadIdentifier;
-import com.comet.opik.api.TraceThreadStatus;
-import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.VisibilityMode;
@@ -40,18 +36,16 @@ import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
-import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
-import com.comet.opik.api.resources.utils.resources.ThreadCommentResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
-import com.comet.opik.api.resources.utils.traces.TraceDBUtils;
 import com.comet.opik.api.resources.utils.traces.TracePageTestAssertion;
 import com.comet.opik.api.resources.utils.traces.TraceStatsAssertion;
 import com.comet.opik.api.resources.utils.traces.TraceStreamTestAssertion;
@@ -68,7 +62,6 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.InRangeStrategy;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -87,10 +80,9 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.commons.lang3.RandomUtils;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
-import org.jetbrains.annotations.NotNull;
+import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -110,7 +102,6 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.com.google.common.collect.Lists;
 import org.testcontainers.shaded.org.apache.commons.lang3.tuple.Pair;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -121,6 +112,7 @@ import uk.co.jemos.podam.api.PodamUtils;
 import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -130,30 +122,26 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
-import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
-import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
+import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComment;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
+import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertTraceComment;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertUpdatedComment;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
+import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
@@ -161,10 +149,11 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NAM
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_THREADS;
 import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
-import static com.comet.opik.api.validation.InRangeValidator.MAX_ANALYTICS_DB;
-import static com.comet.opik.api.validation.InRangeValidator.MAX_ANALYTICS_DB_PRECISION_9;
-import static com.comet.opik.api.validation.InRangeValidator.MIN_ANALYTICS_DB;
+import static com.comet.opik.api.validate.InRangeValidator.MAX_ANALYTICS_DB;
+import static com.comet.opik.api.validate.InRangeValidator.MAX_ANALYTICS_DB_PRECISION_9;
+import static com.comet.opik.api.validate.InRangeValidator.MIN_ANALYTICS_DB;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -176,7 +165,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.UUID.randomUUID;
 import static java.util.function.Predicate.not;
-import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -242,9 +230,6 @@ class TracesResourceTest {
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICK_HOUSE_CONTAINER, DATABASE_NAME);
 
-        MigrationUtils.runMysqlDbMigration(MYSQL_CONTAINER);
-        MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
-
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MYSQL_CONTAINER.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
@@ -260,12 +245,18 @@ class TracesResourceTest {
     private SpanResourceClient spanResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
     private GuardrailsGenerator guardrailsGenerator;
-    private ThreadCommentResourceClient threadCommentResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
 
-        this.baseURI = TestUtils.getBaseUrl(client);
+        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
+
+        try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
+            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
+                    ClickHouseContainerUtils.migrationParameters());
+        }
+
+        this.baseURI = "http://localhost:%d".formatted(client.getPort());
         this.client = client;
 
         ClientSupportUtils.config(client);
@@ -276,7 +267,6 @@ class TracesResourceTest {
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
         this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
-        this.threadCommentResourceClient = new ThreadCommentResourceClient(client, baseURI);
         this.guardrailsGenerator = new GuardrailsGenerator();
     }
 
@@ -716,7 +706,7 @@ class TracesResourceTest {
 
             var id = create(trace, okApikey, workspaceName);
 
-            List<FeedbackScoreBatchItem> scores = IntStream.range(0, 5)
+            var scores = IntStream.range(0, 5)
                     .mapToObj(i -> FeedbackScoreBatchItem.builder()
                             .name("name" + i)
                             .id(id)
@@ -724,7 +714,7 @@ class TracesResourceTest {
                             .source(ScoreSource.SDK)
                             .projectName(trace.projectName())
                             .build())
-                    .collect(Collectors.toList());
+                    .toList();
 
             var batch = FeedbackScoreBatch.builder()
                     .scores(scores)
@@ -1162,7 +1152,7 @@ class TracesResourceTest {
 
             var id = create(trace, API_KEY, TEST_WORKSPACE);
 
-            List<FeedbackScoreBatchItem> scores = IntStream.range(0, 5)
+            var scores = IntStream.range(0, 5)
                     .mapToObj(i -> FeedbackScoreBatchItem.builder()
                             .name("name" + i)
                             .id(id)
@@ -1170,7 +1160,7 @@ class TracesResourceTest {
                             .source(ScoreSource.SDK)
                             .projectName(trace.projectName())
                             .build())
-                    .collect(Collectors.toList());
+                    .toList();
 
             var batch = FeedbackScoreBatch.builder()
                     .scores(scores)
@@ -1427,7 +1417,6 @@ class TracesResourceTest {
                                                         : getKey(filter.getKey()))
                                                 .value(getInvalidValue(filter.getKey()))
                                                 .build());
-                                case ERROR_CONTAINER -> Stream.of();
                                 default -> Stream.of(TraceFilter.builder()
                                         .field(filter.getKey())
                                         .operator(operator)
@@ -1536,16 +1525,24 @@ class TracesResourceTest {
                     .toList();
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-            var spans = traces.stream()
-                    .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
-                            .map(span -> span.toBuilder()
-                                    .projectName(projectName)
-                                    .traceId(trace.id())
-                                    .startTime(trace.startTime())
-                                    .usage(null)
-                                    .totalEstimatedCost(null)
-                                    .build()))
-                    .toList();
+            // create spans to populate usage and total cost statistics
+            List<Span> spans = new ArrayList<>();
+            for (Trace trace : traces) {
+                for (int i = 0; i < trace.spanCount(); i++) {
+                    spans.add(factory.manufacturePojo(Span.class).toBuilder()
+                            .traceId(trace.id())
+                            .projectName(projectName)
+                            .startTime(trace.startTime()) // Add this line
+                            .usage(Map.of("prompt_tokens", randomNumber(1, 50)))
+                            .totalEstimatedCost(new BigDecimal(randomNumber(1, 10)))
+                            .build());
+                }
+            }
+
+            if (!spans.isEmpty()) {
+                spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+            }
+
             batchCreateSpansAndAssert(spans, apiKey, workspaceName);
 
             var values = testAssertion.transformTestParams(traces, traces.reversed(), List.of());
@@ -2194,7 +2191,7 @@ class TracesResourceTest {
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
-                    .startTime(Instant.now())
+                    .startTime(Instant.now().plusSeconds(60 * 5))
                     .build());
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -4332,102 +4329,6 @@ class TracesResourceTest {
             testAssertion.assertTest(projectName, null, apiKey, workspaceName, valuesPassed.expected(),
                     valuesPassed.unexpected(), valuesPassed.all(), filtersPassed, Map.of());
         }
-
-        @ParameterizedTest
-        @MethodSource("getFilterTestArguments")
-        void whenFilterErrorIsNotEmpty__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
-                    .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
-                            .projectName(projectName)
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .errorInfo(null)
-                            .build())
-                    .collect(Collectors.toCollection(ArrayList::new));
-
-            traces.set(0, traces.getFirst().toBuilder()
-                    .errorInfo(factory.manufacturePojo(ErrorInfo.class))
-                    .build());
-
-            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
-            var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(createTrace().toBuilder()
-                    .projectId(null)
-                    .build());
-            traceResourceClient.batchCreateTraces(unexpectedTraces, apiKey, workspaceName);
-
-            var filters = List.of(TraceFilter.builder()
-                    .field(TraceField.ERROR_INFO)
-                    .operator(Operator.IS_NOT_EMPTY)
-                    .value("")
-                    .build());
-
-            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
-
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
-                    values.all(),
-                    filters, Map.of());
-        }
-
-        @ParameterizedTest
-        @MethodSource("getFilterTestArguments")
-        void whenFilterErrorIsEmpty__thenReturnTracesFiltered(String endpoint, TracePageTestAssertion testAssertion) {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
-                    .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
-                            .projectName(projectName)
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .build())
-                    .collect(Collectors.toCollection(ArrayList::new));
-
-            traces.set(0, traces.getFirst().toBuilder()
-                    .errorInfo(null)
-                    .build());
-
-            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
-            var expectedTraces = List.of(traces.getFirst());
-            var unexpectedTraces = List.of(createTrace().toBuilder()
-                    .projectId(null)
-                    .build());
-            traceResourceClient.batchCreateTraces(unexpectedTraces, apiKey, workspaceName);
-
-            var filters = List.of(TraceFilter.builder()
-                    .field(TraceField.ERROR_INFO)
-                    .operator(Operator.IS_EMPTY)
-                    .value("")
-                    .build());
-
-            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
-
-            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
-                    values.all(),
-                    filters, Map.of());
-        }
     }
 
     private BigDecimal calculateEstimatedCost(List<Span> spans) {
@@ -4436,23 +4337,47 @@ class TracesResourceTest {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    private void assertThreadPage(String projectName, UUID projectId, List<TraceThread> expectedThreads,
+    private void assertThreadPage(String projectName, UUID projectId, List<? extends TraceThread> expectedThreads,
             List<TraceThreadFilter> filters, Map<String, String> queryParams, String apiKey, String workspaceName) {
-        assertThreadPage(projectName, projectId, expectedThreads, filters, queryParams, apiKey, workspaceName,
-                List.of());
-    }
+        WebTarget target = client.target(URL_TEMPLATE.formatted(baseURI))
+                .path("threads");
 
-    private void assertThreadPage(String projectName, UUID projectId, List<TraceThread> expectedThreads,
-            List<TraceThreadFilter> filters, Map<String, String> queryParams, String apiKey, String workspaceName,
-            List<SortingField> sortingFields) {
-        var actualPage = traceResourceClient.getTraceThreads(projectId, projectName, apiKey, workspaceName, filters,
-                sortingFields, queryParams);
+        target = queryParams.entrySet()
+                .stream()
+                .reduce(target, (acc, entry) -> acc.queryParam(entry.getKey(), entry.getValue()), (a, b) -> b);
+
+        if (projectId != null) {
+            target = target.queryParam("project_id", projectId);
+        }
+
+        if (projectName != null) {
+            target = target.queryParam("project_name", projectName);
+        }
+
+        if (CollectionUtils.isNotEmpty(filters)) {
+            target = target.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
+        var actualResponse = target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+        var actualPage = actualResponse.readEntity(TraceThreadPage.class);
         var actualTraces = actualPage.content();
 
         assertThat(actualTraces).hasSize(expectedThreads.size());
         assertThat(actualPage.total()).isEqualTo(expectedThreads.size());
 
-        TraceAssertions.assertThreads(expectedThreads, actualTraces);
+        assertThat(actualTraces)
+                .usingRecursiveComparison()
+                .ignoringFields(IGNORED_FIELDS_THREADS)
+                .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                .isEqualTo(expectedThreads);
 
         for (int i = 0; i < expectedThreads.size(); i++) {
             var expectedThread = expectedThreads.get(i);
@@ -4470,20 +4395,19 @@ class TracesResourceTest {
             case STRING, LIST, DICTIONARY, ENUM -> RandomStringUtils.secure().nextAlphanumeric(10);
             case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
             case DATE_TIME -> Instant.now().toString();
-            case ERROR_CONTAINER -> "";
         };
     }
 
     private String getKey(Field field) {
         return switch (field.getType()) {
-            case STRING, NUMBER, DATE_TIME, LIST, ENUM, ERROR_CONTAINER -> null;
+            case STRING, NUMBER, DATE_TIME, LIST, ENUM -> null;
             case FEEDBACK_SCORES_NUMBER, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
         };
     }
 
     private String getInvalidValue(Field field) {
         return switch (field.getType()) {
-            case STRING, DICTIONARY, LIST, ENUM, ERROR_CONTAINER -> " ";
+            case STRING, DICTIONARY, LIST, ENUM -> " ";
             case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
         };
     }
@@ -4499,12 +4423,10 @@ class TracesResourceTest {
                     .stream()
                     .flatMap(filter -> filter.getValue()
                             .stream()
-                            .flatMap(operator -> Stream.of(
-                                    Arguments.of(true, filter.getKey(), operator, getValidValue(filter.getKey())),
-                                    Arguments.of(false, filter.getKey(), operator, getValidValue(filter.getKey())))));
+                            .map(operator -> Arguments.of(filter.getKey(), operator, getValidValue(filter.getKey()))));
         }
 
-        private Stream<Arguments> getFilterInvalidValueOrKeyForFieldTypeArgs() {
+        private Stream<TraceThreadFilter> getFilterInvalidValueOrKeyForFieldTypeArgs() {
             return filterQueryBuilder.getSupportedOperators(TraceThreadField.values())
                     .entrySet()
                     .stream()
@@ -4521,10 +4443,7 @@ class TracesResourceTest {
                                         TraceThreadFilter.builder()
                                                 .field(filter.getKey())
                                                 .operator(operator)
-                                                // if no value is expected, create an invalid filter by an empty key
-                                                .key(Operator.NO_VALUE_OPERATORS.contains(operator)
-                                                        ? ""
-                                                        : getKey(filter.getKey()))
+                                                .key(getKey(filter.getKey()))
                                                 .value(getInvalidValue(filter.getKey()))
                                                 .build());
                                 default -> Stream.of(TraceThreadFilter.builder()
@@ -4532,10 +4451,7 @@ class TracesResourceTest {
                                         .operator(operator)
                                         .value(getInvalidValue(filter.getKey()))
                                         .build());
-                            }))
-                    .flatMap(operator -> Stream.of(
-                            Arguments.of(true, operator),
-                            Arguments.of(false, operator)));
+                            }));
         }
 
         private Stream<Arguments> getValidFilters() {
@@ -4567,6 +4483,17 @@ class TracesResourceTest {
                                     .operator(Operator.CONTAINS)
                                     .value(traces.stream().max(Comparator.comparing(Trace::endTime)).orElseThrow()
                                             .output().toString().substring(0, 20))
+                                    .build(),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces,
+                            (Function<List<Trace>, List<Trace>>) traces -> traces),
+                    Arguments.of(
+                            (Function<List<Trace>, TraceThreadFilter>) traces -> TraceThreadFilter.builder()
+                                    .field(TraceThreadField.CREATED_AT)
+                                    .operator(Operator.EQUAL)
+                                    .key(null)
+                                    .value(traces.stream().min(Comparator.comparing(Trace::createdAt))
+                                            .orElseThrow().createdAt()
+                                            .toString())
                                     .build(),
                             (Function<List<Trace>, List<Trace>>) traces -> traces,
                             (Function<List<Trace>, List<Trace>>) traces -> traces),
@@ -4609,10 +4536,7 @@ class TracesResourceTest {
                                     .map(trace -> trace.toBuilder()
                                             .threadId(UUID.randomUUID().toString())
                                             .build())
-                                    .toList()))
-                    .flatMap(args -> Stream.of(
-                            Arguments.of(true, args.get()[0], args.get()[1], args.get()[2]),
-                            Arguments.of(false, args.get()[0], args.get()[1], args.get()[2])));
+                                    .toList()));
         }
 
         @ParameterizedTest
@@ -4665,7 +4589,6 @@ class TracesResourceTest {
                     .usage(aggregateSpansUsage(spans))
                     .createdAt(trace.createdAt())
                     .lastUpdatedAt(trace.lastUpdatedAt())
-                    .status(TraceThreadStatus.ACTIVE)
                     .build());
 
             Map<String, String> queryParams = Map.of("page", "1", "size", "5", "truncate", String.valueOf(truncate));
@@ -4676,8 +4599,7 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @MethodSource("getUnsupportedOperations")
-        void whenFilterUnsupportedOperation__thenReturn400(boolean stream, TraceThreadField field, Operator operator,
-                String value) {
+        void whenFilterUnsupportedOperation__thenReturn400(TraceThreadField field, Operator operator, String value) {
             var filter = TraceThreadFilter.builder()
                     .field(field)
                     .operator(operator)
@@ -4695,25 +4617,24 @@ class TracesResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var filters = List.of(filter);
 
-            try (var actualResponse = !stream
-                    ? findThreads(projectName, filters, API_KEY, TEST_WORKSPACE)
-                    : streamThreadSearch(projectName, null, filters, API_KEY, TEST_WORKSPACE)) {
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("threads")
+                    .queryParam("project_name", projectName)
+                    .queryParam("filters", toURLEncodedQueryParam(filters))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
 
-                var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(actualError).isEqualTo(expectedError);
-            }
-        }
-
-        private Response findThreads(String projectName, List<@NotNull TraceThreadFilter> filters, String apiKey,
-                String testWorkspace) {
-            return traceResourceClient.getTraceThreads(projectName, apiKey, testWorkspace, filters);
+            var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+            assertThat(actualError).isEqualTo(expectedError);
         }
 
         @ParameterizedTest
         @MethodSource("getFilterInvalidValueOrKeyForFieldTypeArgs")
-        void whenFilterInvalidValueOrKeyForFieldType__thenReturn400(boolean stream, TraceThreadFilter filter) {
+        void whenFilterInvalidValueOrKeyForFieldType__thenReturn400(TraceThreadFilter filter) {
             var expectedError = new io.dropwizard.jersey.errors.ErrorMessage(
                     400,
                     "Invalid value '%s' or key '%s' for field '%s' of type '%s'".formatted(
@@ -4724,28 +4645,24 @@ class TracesResourceTest {
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var filters = List.of(filter);
+            var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("threads")
+                    .queryParam("project_name", projectName)
+                    .queryParam("filters", toURLEncodedQueryParam(filters))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get();
 
-            try (var actualResponse = !stream
-                    ? findThreads(projectName, filters, API_KEY, TEST_WORKSPACE)
-                    : streamThreadSearch(projectName, null, filters, API_KEY, TEST_WORKSPACE)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-
-                var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(actualError).isEqualTo(expectedError);
-            }
-        }
-
-        private Response streamThreadSearch(String projectName, UUID projectId,
-                List<@NotNull TraceThreadFilter> filters, String apiKey, String testWorkspace) {
-            return traceResourceClient.callSearchTraceThreadStream(projectName, projectId, apiKey, testWorkspace,
-                    filters);
+            var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+            assertThat(actualError).isEqualTo(expectedError);
         }
 
         @ParameterizedTest
         @MethodSource("getValidFilters")
         void whenFilterThreads__thenReturnThreadsFiltered(
-                boolean stream,
                 Function<List<Trace>, TraceThreadFilter> getFilter,
                 Function<List<Trace>, List<Trace>> getExpectedThreads,
                 Function<List<Trace>, List<Trace>> getUnexpectedThreads) {
@@ -4785,504 +4702,17 @@ class TracesResourceTest {
 
             var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
 
-            List<TraceThread> expectedThreads = getExpectedThreads(expectedTraces, projectId, threadId, List.of(),
-                    TraceThreadStatus.ACTIVE);
+            List<TraceThread> expectedThreads = getExpectedThreads(expectedTraces, projectId, threadId, List.of());
 
             var filter = getFilter.apply(expectedTraces);
 
-            if (!stream) {
-                assertThreadPage(projectName, null, expectedThreads, List.of(filter), Map.of(), API_KEY,
-                        TEST_WORKSPACE);
-            } else {
-                assertTheadStream(projectName, null, API_KEY, TEST_WORKSPACE, expectedThreads, List.of(filter));
-            }
+            assertThreadPage(projectName, null, expectedThreads, List.of(filter), Map.of(), API_KEY, TEST_WORKSPACE);
         }
 
-        private Stream<Arguments> getStatusFilterTestArguments() {
-            return Stream.of(
-                    Arguments.of(true, TraceThreadStatus.ACTIVE, false),
-                    Arguments.of(true, TraceThreadStatus.INACTIVE, true),
-                    Arguments.of(false, TraceThreadStatus.ACTIVE, false),
-                    Arguments.of(false, TraceThreadStatus.INACTIVE, true));
-        }
-
-        @ParameterizedTest
-        @MethodSource("getStatusFilterTestArguments")
-        @DisplayName("When filtering by thread status, should return only threads with matching status")
-        void whenFilterByStatus__thenReturnThreadsWithMatchingStatus(boolean stream, TraceThreadStatus filterStatus,
-                boolean shouldCloseThread) {
-
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var threadId = UUID.randomUUID().toString();
-
-            // Create traces
-            var traces = IntStream.range(0, 3)
-                    .mapToObj(it -> {
-                        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
-                        return createTrace().toBuilder()
-                                .projectName(projectName)
-                                .usage(null)
-                                .threadId(threadId)
-                                .endTime(now.plus(it, ChronoUnit.MILLIS))
-                                .startTime(now)
-                                .build();
-                    })
-                    .collect(Collectors.toList());
-
-            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
-
-            // Close the thread if needed to set its status to INACTIVE
-            if (shouldCloseThread) {
-                Mono.delay(Duration.ofMillis(500)).block();
-                traceResourceClient.closeTraceThread(threadId, null, projectName, apiKey, workspaceName);
-            }
-
-            var projectId = getProjectId(projectName, workspaceName, apiKey);
-
-            // Create expected threads with the appropriate status
-            TraceThreadStatus expectedStatus = shouldCloseThread
-                    ? TraceThreadStatus.INACTIVE
-                    : TraceThreadStatus.ACTIVE;
-
-            List<TraceThread> expectedThreads = getExpectedThreads(traces, projectId, threadId, List.of(),
-                    expectedStatus);
-
-            // Create filter for the specified status
-            var statusFilter = TraceThreadFilter.builder()
-                    .field(TraceThreadField.STATUS)
-                    .operator(Operator.EQUAL)
-                    .value(filterStatus.getValue())
-                    .build();
-
-            if (!stream) {
-                // When not streaming, assert the thread page with the status filter
-                assertThreadPage(null, projectId, expectedThreads, List.of(statusFilter), Map.of(), apiKey,
-                        workspaceName);
-            } else {
-                // When streaming, assert the threads with the status filter
-                assertTheadStream(null, projectId, apiKey, workspaceName, expectedThreads, List.of(statusFilter));
-            }
-        }
-
-        @Test
-        @DisplayName("When filtering by thread tag, should return only threads with matching tags")
-        void whenFilterByTags__thenReturnThreadsWithMatchingTags() {
-
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var threadId = UUID.randomUUID().toString();
-
-            // Create traces
-            var traces = IntStream.range(0, 3)
-                    .mapToObj(it -> {
-                        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
-                        return createTrace().toBuilder()
-                                .projectName(projectName)
-                                .usage(null)
-                                .threadId(threadId)
-                                .endTime(now.plus(it, ChronoUnit.MILLIS))
-                                .startTime(now)
-                                .build();
-                    })
-                    .collect(Collectors.toList());
-
-            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
-
-            var projectId = getProjectId(projectName, workspaceName, apiKey);
-
-            var createdThread = traceResourceClient.getTraceThread(threadId, projectId, apiKey, workspaceName);
-
-            // Add tags to the thread
-            var update = factory.manufacturePojo(TraceThreadUpdate.class);
-            traceResourceClient.updateThread(update, createdThread.threadModelId(), apiKey, workspaceName, 204);
-
-            List<TraceThread> expectedThreads = List.of(createdThread.toBuilder().tags(update.tags()).build());
-
-            // Create filter for the specified status
-            var statusFilter = TraceThreadFilter.builder()
-                    .field(TraceThreadField.TAGS)
-                    .operator(Operator.CONTAINS)
-                    .value(update.tags().iterator().next())
-                    .build();
-
-            assertThreadPage(null, projectId, expectedThreads, List.of(statusFilter), Map.of(), apiKey,
-                    workspaceName);
-            assertTheadStream(null, projectId, apiKey, workspaceName, expectedThreads, List.of(statusFilter));
-        }
-
-        private void assertTheadStream(String projectName, UUID projectId, String apiKey, String workspaceName,
-                List<TraceThread> expectedThreads, List<TraceThreadFilter> filters) {
-            var actualThreads = traceResourceClient.searchTraceThreadsStream(projectName, projectId, apiKey,
-                    workspaceName, filters);
-            TraceAssertions.assertThreads(expectedThreads, actualThreads);
-        }
-
-        @ParameterizedTest
-        @EnumSource(Direction.class)
-        @DisplayName("When sorting threads by feedback score, then threads are returned in correct order")
-        void sortThreadsByFeedbackScore_withDirection_thenThreadsReturnedInCorrectOrder(Direction direction) {
-            // Given
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var project = factory.manufacturePojo(Project.class).toBuilder()
-                    .name(projectName)
-                    .build();
-
-            UUID projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
-
-            // Create threads with different feedback scores
-            var threadId1 = UUID.randomUUID().toString();
-            var threadId2 = UUID.randomUUID().toString();
-            var threadId3 = UUID.randomUUID().toString();
-
-            // Create traces for threads
-            Trace trace1 = createTrace().toBuilder()
-                    .threadId(threadId1)
-                    .projectId(projectId)
-                    .projectName(projectName)
-                    .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
-                    .build();
-
-            Trace trace2 = createTrace().toBuilder()
-                    .threadId(threadId2)
-                    .projectId(projectId)
-                    .projectName(projectName)
-                    .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
-                    .build();
-
-            Trace trace3 = createTrace().toBuilder()
-                    .threadId(threadId3)
-                    .projectId(projectId)
-                    .projectName(projectName)
-                    .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
-                    .build();
-
-            traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), apiKey, workspaceName);
-
-            // Ensure traces are created with a delay
-            Mono.delay(Duration.ofMillis(500)).block();
-
-            // Close the threads to set their status to INACTIVE
-            traceResourceClient.closeTraceThread(threadId1, null, projectName, apiKey, workspaceName);
-            traceResourceClient.closeTraceThread(threadId2, null, projectName, apiKey, workspaceName);
-            traceResourceClient.closeTraceThread(threadId3, null, projectName, apiKey, workspaceName);
-
-            // Add feedback scores with different values
-            String scoreName = RandomStringUtils.secure().nextAlphanumeric(10);
-
-            List<FeedbackScoreBatchItemThread> scoreItems = Stream.of(threadId1, threadId2, threadId3)
-                    .map(threadId -> factory.manufacturePojo(FeedbackScoreBatchItemThread.class).toBuilder()
-                            .threadId(threadId)
-                            .projectName(projectName)
-                            .name(scoreName)
-                            .build())
-                    .collect(toList());
-
-            Instant now = Instant.now();
-            traceResourceClient.threadFeedbackScores(scoreItems, apiKey, workspaceName);
-
-            // Create feedback scores for expected threads
-            var feedbackScores = scoreItems.stream()
-                    .collect(Collectors.toMap(
-                            FeedbackScoreItem::threadId,
-                            item -> List.of(createExpectedFeedbackScore(item, now))));
-
-            // Create expected threads in the correct order based on direction
-            List<TraceThread> expectedThreads = Stream.of(
-                    getExpectedThreads(List.of(trace1), projectId, threadId1, List.of(), TraceThreadStatus.INACTIVE,
-                            feedbackScores.get(threadId1)).getFirst(),
-                    getExpectedThreads(List.of(trace2), projectId, threadId2, List.of(), TraceThreadStatus.INACTIVE,
-                            feedbackScores.get(threadId2)).getFirst(),
-                    getExpectedThreads(List.of(trace3), projectId, threadId3, List.of(), TraceThreadStatus.INACTIVE,
-                            feedbackScores.get(threadId3)).getFirst())
-                    .sorted(Comparator.comparing(thread -> {
-                        var score = feedbackScores.get(thread.id()).stream()
-                                .filter(fs -> fs.name().equals(scoreName))
-                                .findFirst()
-                                .orElseThrow();
-                        return direction == Direction.ASC ? score.value() : score.value().negate();
-                    }))
-                    .toList();
-
-            // When & Then - Sort by feedback scores and verify using assertThreadPage
-            var sortingFields = List.of(
-                    SortingField.builder()
-                            .field("feedback_scores." + scoreName)
-                            .direction(direction)
-                            .build());
-
-            assertThreadPage(projectName, null, expectedThreads, List.of(), Map.of(), apiKey, workspaceName,
-                    sortingFields);
-        }
-
-        private Stream<Arguments> getFeedbackScoreFilterTestArguments() {
-            return Stream.of(
-                    Arguments.of(
-                            true,
-                            Operator.EQUAL,
-                            generateExpectedIndices(),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) this::generateExpectedEqualsMatch,
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) this::generateUnexpectedEqualsMatch,
-                            (Function<BigDecimal, String>) BigDecimal::toString), // Filter value function for EQUAL
-                    Arguments.of(
-                            false,
-                            Operator.EQUAL,
-                            generateExpectedIndices(),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) this::generateExpectedEqualsMatch,
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) this::generateUnexpectedEqualsMatch,
-                            (Function<BigDecimal, String>) BigDecimal::toString),
-                    Arguments.of(
-                            true,
-                            Operator.IS_NOT_EMPTY,
-                            generateExpectedIndices(),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) (name,
-                                    value) -> generateNotEmptyMatch(name),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) (name,
-                                    value) -> generateUnexpectedNotEmptyMatch(name),
-                            (Function<BigDecimal, String>) value -> ""), // Empty value for IS_NOT_EMPTY
-                    Arguments.of(
-                            false,
-                            Operator.IS_NOT_EMPTY,
-                            generateExpectedIndices(),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) (name,
-                                    value) -> generateNotEmptyMatch(name),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) (name,
-                                    value) -> generateUnexpectedNotEmptyMatch(name),
-                            (Function<BigDecimal, String>) value -> ""),
-                    Arguments.of(
-                            true,
-                            Operator.IS_EMPTY,
-                            generateExpectedIndices(),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) (name,
-                                    value) -> generateIsEmptyMatch(name),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) (name,
-                                    value) -> generateNotEmptyMatch(name),
-                            (Function<BigDecimal, String>) value -> ""), // Empty value for IS_EMPTY
-                    Arguments.of(
-                            false,
-                            Operator.IS_EMPTY,
-                            generateExpectedIndices(),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) (name,
-                                    value) -> generateIsEmptyMatch(name),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) (name,
-                                    value) -> generateNotEmptyMatch(name),
-                            (Function<BigDecimal, String>) value -> "")
-
-            );
-        }
-
-        private Set<Integer> generateExpectedIndices() {
-            return new HashSet<>(List.of(RandomUtils.secure().randomInt(0, 5), RandomUtils.secure().randomInt(0, 5)));
-        }
-
-        private List<FeedbackScoreBatchItemThread> generateIsEmptyMatch(String name) {
-            return PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItemThread.class)
-                    .stream()
-                    .filter(score -> !score.name().equals(name))
-                    .toList();
-        }
-
-        private List<FeedbackScoreBatchItemThread> generateNotEmptyMatch(String name) {
-            List<FeedbackScoreBatchItemThread> scores = PodamFactoryUtils.manufacturePojoList(factory,
-                    FeedbackScoreBatchItemThread.class);
-
-            scores.set(0, scores.getFirst().toBuilder()
-                    .name(name)
-                    .build());
-
-            return scores;
-        }
-
-        private List<FeedbackScoreBatchItemThread> generateUnexpectedNotEmptyMatch(String name) {
-            return PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItemThread.class)
-                    .stream()
-                    .filter(score -> !score.name().equals(name))
-                    .toList();
-        }
-
-        private List<FeedbackScoreBatchItemThread> generateExpectedEqualsMatch(String name, BigDecimal value) {
-            List<FeedbackScoreBatchItemThread> scores = PodamFactoryUtils.manufacturePojoList(factory,
-                    FeedbackScoreBatchItemThread.class);
-
-            scores.set(0, scores.getFirst().toBuilder()
-                    .name(name)
-                    .value(value)
-                    .build());
-
-            return scores;
-        }
-
-        private List<FeedbackScoreBatchItemThread> generateUnexpectedEqualsMatch(String name, BigDecimal value) {
-            List<FeedbackScoreBatchItemThread> scores = PodamFactoryUtils.manufacturePojoList(factory,
-                    FeedbackScoreBatchItemThread.class);
-
-            scores.set(0, scores.getFirst().toBuilder()
-                    .name(name)
-                    .build());
-
-            return scores;
-        }
-
-        @ParameterizedTest
-        @MethodSource("getFeedbackScoreFilterTestArguments")
-        @DisplayName("When filtering by feedback score with different operators, should return matching threads")
-        void whenFilterByFeedbackScore__thenReturnThreadsWithMatchingFeedbackScore(
-                boolean stream,
-                Operator operator,
-                Set<Integer> expectedThreadIndices,
-                BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>> matchingScoreFunction,
-                BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>> unmatchingScoreFunction,
-                Function<BigDecimal, String> filterValueFunction) {
-
-            // Given
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var project = factory.manufacturePojo(Project.class).toBuilder()
-                    .name(projectName)
-                    .build();
-
-            UUID projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
-
-            // Create threads with different feedback scores
-            var allThreadIds = PodamFactoryUtils.manufacturePojoList(factory, UUID.class);
-
-            // Create traces for threads
-            var allTraces = allThreadIds
-                    .stream()
-                    .map(threadId -> createTrace().toBuilder()
-                            .threadId(threadId.toString())
-                            .projectId(null)
-                            .projectName(projectName)
-                            .startTime(Instant.now().minusSeconds(3).truncatedTo(ChronoUnit.MICROS))
-                            .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
-                            .build())
-                    .toList();
-
-            allTraces.forEach(trace -> traceResourceClient.createTrace(trace, apiKey, workspaceName));
-
-            // Add feedback scores with different values
-            Map<String, Instant> threadIdAndLastUpdateAts = new HashMap<>();
-
-            Mono.delay(Duration.ofMillis(500)).block();
-            allThreadIds.forEach(threadId -> {
-                threadIdAndLastUpdateAts.put(threadId.toString(), Instant.now());
-                traceResourceClient.closeTraceThread(threadId.toString(), null, projectName, apiKey, workspaceName);
-            });
-
-            String targetScoreName = RandomStringUtils.secure().nextAlphanumeric(30);
-            BigDecimal targetScoreValue = factory.manufacturePojo(BigDecimal.class);
-
-            // Create feedback scores based on the provided map
-            List<FeedbackScoreBatchItemThread> expectedScores = allThreadIds
-                    .stream()
-                    .filter(threadId -> isExpected(expectedThreadIndices, threadId, allThreadIds))
-                    .flatMap(threadId -> {
-                        return matchingScoreFunction.apply(targetScoreName, targetScoreValue).stream()
-                                .map(item -> item.toBuilder()
-                                        .threadId(threadId.toString())
-                                        .projectName(projectName)
-                                        .build());
-                    }).collect(Collectors.toList());
-
-            List<FeedbackScoreBatchItemThread> unexpectedScores = allThreadIds.stream()
-                    .filter(threadId -> !isExpected(expectedThreadIndices, threadId, allThreadIds))
-                    .flatMap(threadId -> {
-                        return unmatchingScoreFunction.apply(targetScoreName, targetScoreValue).stream()
-                                .map(item -> item.toBuilder()
-                                        .threadId(threadId.toString())
-                                        .projectName(projectName)
-                                        .build());
-                    }).collect(Collectors.toList());
-
-            List<FeedbackScoreBatchItemThread> scoreItems = Stream
-                    .concat(expectedScores.stream(), unexpectedScores.stream())
-                    .toList();
-
-            // Create feedback scores for threads
-            Instant feedbackScoreCreationTime = Instant.now();
-            traceResourceClient.threadFeedbackScores(scoreItems, apiKey, workspaceName);
-
-            // Determine expected threads based on indices
-            var expectedThreadIds = allThreadIds.reversed()
-                    .stream()
-                    .filter(threadId -> isExpected(expectedThreadIndices, threadId, allThreadIds))
-                    .map(UUID::toString)
-                    .toList();
-
-            // Create expected threads with ALL feedback scores from matching threads
-            Comparator<TraceThread> comparing = Comparator
-                    .comparing((TraceThread traceThread) -> threadIdAndLastUpdateAts.get(traceThread.id())).reversed();
-
-            List<TraceThread> expectedThreads = expectedThreadIds.stream()
-                    .map(threadId -> {
-                        // Get ALL feedback scores for this thread (both expected and unexpected)
-                        var allFeedbackScoresForThread = scoreItems.stream()
-                                .filter(item -> item.threadId().equals(threadId))
-                                .map(item -> createExpectedFeedbackScore(item, feedbackScoreCreationTime))
-                                .toList();
-
-                        var traces = allTraces.stream()
-                                .filter(trace -> trace.threadId().equals(threadId))
-                                .toList();
-
-                        return getExpectedThreads(traces, projectId, threadId, List.of(),
-                                TraceThreadStatus.INACTIVE, allFeedbackScoresForThread).getFirst();
-                    })
-                    .sorted(comparing)
-                    .toList();
-
-            // Create filter for the specific feedback score
-            var feedbackScoreFilter = TraceThreadFilter.builder()
-                    .field(TraceThreadField.FEEDBACK_SCORES)
-                    .operator(operator)
-                    .key(targetScoreName)
-                    .value(filterValueFunction.apply(targetScoreValue))
-                    .build();
-
-            // When & Then
-            if (!stream) {
-                assertThreadPage(null, projectId, expectedThreads, List.of(feedbackScoreFilter), Map.of(), apiKey,
-                        workspaceName);
-            } else {
-                assertTheadStream(null, projectId, apiKey, workspaceName, expectedThreads,
-                        List.of(feedbackScoreFilter));
-            }
-        }
-
-        private static boolean isExpected(Set<Integer> expectedThreadIndices, UUID threadId, List<UUID> allThreadIds) {
-            return expectedThreadIndices.stream()
-                    .anyMatch(index -> allThreadIds.get(index).toString().equals(threadId.toString()));
-        }
     }
 
     private List<TraceThread> getExpectedThreads(List<Trace> expectedTraces, UUID projectId, String threadId,
-            List<Span> spans, TraceThreadStatus status) {
-        return getExpectedThreads(expectedTraces, projectId, threadId, spans, status, null);
-    }
-
-    private List<TraceThread> getExpectedThreads(List<Trace> expectedTraces, UUID projectId, String threadId,
-            List<Span> spans, TraceThreadStatus status, List<FeedbackScore> feedbackScores) {
+            List<Span> spans) {
 
         return expectedTraces.isEmpty()
                 ? List.of()
@@ -5304,12 +4734,8 @@ class TracesResourceTest {
                                 .endTime())
                         .numberOfMessages(expectedTraces.size() * 2L)
                         .id(threadId)
-                        .totalEstimatedCost(Optional.ofNullable(getTotalEstimatedCost(spans))
-                                .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
-                                .orElse(null))
+                        .totalEstimatedCost(getTotalEstimatedCost(spans))
                         .usage(getUsage(spans))
-                        .status(status)
-                        .feedbackScores(feedbackScores)
                         .createdAt(expectedTraces.stream().min(Comparator.comparing(Trace::createdAt)).orElseThrow()
                                 .createdAt())
                         .lastUpdatedAt(
@@ -5568,37 +4994,19 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
-                            .usage(null)
+                            .spanCount((int) randomNumber(1, 5))
+                            .usage(Map.of("prompt_tokens", (long) randomNumber(1, 50)))
+                            .totalEstimatedCost(new BigDecimal(randomNumber(1, 10)))
                             .feedbackScores(null)
                             .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
                             .comments(null)
-                            .spanCount(RandomUtils.secure().randomInt(1, 11))
                             .build())
                     .map(trace -> trace.toBuilder()
                             .duration(trace.startTime().until(trace.endTime(), ChronoUnit.MICROS) / 1000.0)
                             .build())
-                    .toList();
+                    .collect(Collectors.toCollection(ArrayList::new));
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
-
-            var spans = traces.stream()
-                    .flatMap(trace -> IntStream.range(0, trace.spanCount())
-                            .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
-                                    .usage(Map.of("completion_tokens", RandomUtils.secure().randomInt()))
-                                    .projectName(projectName)
-                                    .traceId(trace.id())
-                                    .type(SpanType.general)
-                                    .build()))
-                    .toList();
-
-            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
-
-            var spansByTrace = spans.stream().collect(Collectors.groupingBy(Span::traceId));
-            traces = traces.stream()
-                    .map(t -> t.toBuilder()
-                            .usage(aggregateSpansUsage(spansByTrace.get(t.id())))
-                            .build())
-                    .toList();
 
             var expectedTraces = traces.stream()
                     .sorted(comparator)
@@ -5702,7 +5110,6 @@ class TracesResourceTest {
             Comparator<Trace> metadataComparator = Comparator.comparing(trace -> trace.metadata().toString());
             Comparator<Trace> tagsComparator = Comparator.comparing(trace -> trace.tags().toString());
             Comparator<Trace> errorInfoComparator = Comparator.comparing(trace -> trace.errorInfo().toString());
-            Comparator<Trace> usageComparator = Comparator.comparing(trace -> trace.usage().get("completion_tokens"));
 
             return Stream.of(
                     Arguments.of(Comparator.comparing(Trace::name),
@@ -5753,16 +5160,38 @@ class TracesResourceTest {
                             .field(SortableFields.THREAD_ID).direction(Direction.ASC).build()),
                     Arguments.of(Comparator.comparing(Trace::threadId).reversed(), SortingField.builder()
                             .field(SortableFields.THREAD_ID).direction(Direction.DESC).build()),
-                    Arguments.of(Comparator.comparing(Trace::spanCount)
-                            .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                    Arguments.of(
+                            Comparator.comparing(Trace::spanCount)
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
                             SortingField.builder().field(SortableFields.SPAN_COUNT).direction(Direction.ASC).build()),
-                    Arguments.of(Comparator.comparing(Trace::spanCount).reversed()
-                            .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                    Arguments.of(
+                            Comparator.comparing(Trace::spanCount).reversed()
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
                             SortingField.builder().field(SortableFields.SPAN_COUNT).direction(Direction.DESC).build()),
-                    Arguments.of(usageComparator,
-                            SortingField.builder().field("usage.completion_tokens").direction(Direction.ASC).build()),
-                    Arguments.of(usageComparator.reversed(),
-                            SortingField.builder().field("usage.completion_tokens").direction(Direction.DESC).build()));
+                    Arguments.of(
+                            Comparator
+                                    .comparing(Trace::totalEstimatedCost,
+                                            Comparator.nullsFirst(Comparator.naturalOrder()))
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field(SortableFields.TOTAL_ESTIMATED_COST).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(
+                            Comparator
+                                    .comparing(Trace::totalEstimatedCost,
+                                            Comparator.nullsLast(Comparator.reverseOrder()))
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field(SortableFields.TOTAL_ESTIMATED_COST).direction(Direction.DESC)
+                                    .build()),
+                    Arguments.of(
+                            Comparator.comparing((Trace t) -> t.usage() == null ? null : t.usage().get("prompt_tokens"),
+                                    Comparator.nullsFirst(Comparator.naturalOrder()))
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field("usage.prompt_tokens").direction(Direction.ASC).build()),
+                    Arguments.of(
+                            Comparator.comparing((Trace t) -> t.usage() == null ? null : t.usage().get("prompt_tokens"),
+                                    Comparator.nullsLast(Comparator.reverseOrder()))
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field("usage.prompt_tokens").direction(Direction.DESC).build()));
         }
 
         @Test
@@ -5938,11 +5367,11 @@ class TracesResourceTest {
 
             List<Trace> finalTraces = traces;
             List<FeedbackScoreBatchItem> scoreForSpan = IntStream.range(0, traces.size())
-                    .mapToObj(i -> initFeedbackScoreItem()
+                    .mapToObj(i -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                             .projectName(finalTraces.get(i).projectName())
                             .id(finalTraces.get(i).id())
                             .build())
-                    .collect(Collectors.toList());
+                    .toList();
 
             traceResourceClient.feedbackScores(scoreForSpan, apiKey, workspaceName);
 
@@ -6160,487 +5589,6 @@ class TracesResourceTest {
     }
 
     @Nested
-    @DisplayName("Thread Feedback Scores Creation:")
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class ThreadFeedbackScoresCreation {
-
-        @Test
-        @DisplayName("When scoring batch of threads with valid data, then scores are persisted")
-        void scoreBatchOfThreads_withValidData_thenScoresArePersisted() {
-            // Given
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var project = factory.manufacturePojo(Project.class).toBuilder()
-                    .name(projectName)
-                    .build();
-
-            UUID projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
-
-            var threadId1 = UUID.randomUUID().toString();
-            var threadId2 = UUID.randomUUID().toString();
-
-            // Create traces with threads first (threads need traces to exist)
-            Trace trace1 = createTrace().toBuilder()
-                    .threadId(threadId1)
-                    .projectId(null)
-                    .projectName(projectName)
-                    .startTime(Instant.now().minusSeconds(5))
-                    .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
-                    .build();
-
-            Trace trace2 = createTrace().toBuilder()
-                    .threadId(threadId2)
-                    .projectId(null)
-                    .projectName(projectName)
-                    .startTime(Instant.now().minusSeconds(2))
-                    .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
-                    .build();
-
-            traceResourceClient.batchCreateTraces(List.of(trace1, trace2), apiKey, workspaceName);
-
-            // Close thread
-            Mono.delay(Duration.ofMillis(500)).block();
-            traceResourceClient.closeTraceThread(threadId1, null, projectName, apiKey, workspaceName);
-            traceResourceClient.closeTraceThread(threadId2, null, projectName, apiKey, workspaceName);
-
-            List<FeedbackScoreBatchItemThread> scoreItems = PodamFactoryUtils
-                    .manufacturePojoList(factory, FeedbackScoreBatchItemThread.class).stream()
-                    .map(item -> item.toBuilder()
-                            .threadId(threadId1)
-                            .projectName(projectName)
-                            .projectId(null) // Project ID is not required for thread scores
-                            .build())
-                    .collect(Collectors.toList());
-
-            String score1 = RandomStringUtils.secure().nextAlphanumeric(10);
-            String score2 = RandomStringUtils.secure().nextAlphanumeric(10);
-            String score3 = RandomStringUtils.secure().nextAlphanumeric(10);
-            String score4 = RandomStringUtils.secure().nextAlphanumeric(10);
-
-            scoreItems.set(0, scoreItems.get(0).toBuilder()
-                    .name(score1)
-                    .build());
-
-            scoreItems.set(1, scoreItems.get(1).toBuilder()
-                    .name(score2)
-                    .build());
-
-            // Update only relevant fields for thread 2 scores
-            scoreItems.set(2, scoreItems.get(2).toBuilder()
-                    .threadId(threadId2)
-                    .name(score1)
-                    .build());
-
-            scoreItems.set(3, scoreItems.get(3).toBuilder()
-                    .threadId(threadId2)
-                    .name(score3)
-                    .build());
-
-            scoreItems.set(4, scoreItems.get(4).toBuilder()
-                    .name(score4)
-                    .build());
-
-            // Create expected feedback scores for thread 1
-            Instant now = Instant.now();
-            var expectedScores1 = List.of(
-                    createExpectedFeedbackScore(scoreItems.get(0), now),
-                    createExpectedFeedbackScore(scoreItems.get(1), now),
-                    createExpectedFeedbackScore(scoreItems.get(4), now));
-
-            // Create expected feedback scores for thread 2
-            var expectedScores2 = List.of(
-                    createExpectedFeedbackScore(scoreItems.get(2), now),
-                    createExpectedFeedbackScore(scoreItems.get(3), now));
-
-            // When
-            traceResourceClient.threadFeedbackScores(scoreItems, apiKey, workspaceName);
-
-            // Then - Get threads using getTraceThreads API
-            var traceThreadPage = traceResourceClient.getTraceThreads(projectId, null, apiKey, workspaceName,
-                    List.of(), List.of(), Map.of());
-
-            // Create expected threads using helper method with actual traces
-            var expectedThread1 = getExpectedThreads(List.of(trace1), projectId, threadId1, List.of(),
-                    TraceThreadStatus.INACTIVE, expectedScores1).getFirst();
-            var expectedThread2 = getExpectedThreads(List.of(trace2), projectId, threadId2, List.of(),
-                    TraceThreadStatus.INACTIVE, expectedScores2).getFirst();
-
-            var expectedThreads = List.of(expectedThread2, expectedThread1);
-
-            // Use TraceAssertions to verify threads and their feedback scores
-            TraceAssertions.assertThreads(expectedThreads, traceThreadPage.content());
-        }
-
-        @ParameterizedTest
-        @MethodSource("threadFeedbackScoreTestCases")
-        @DisplayName("Thread feedback scores contract test")
-        void threadFeedbackScores_contractTest(List<FeedbackScoreBatchItemThread> scores, int expectedStatus,
-                String expectedError) {
-            // Given
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            // When
-            try (var response = traceResourceClient.callThreadFeedbackScores(scores, apiKey, workspaceName)) {
-
-                // Then
-                assertThat(response.getStatus()).isEqualTo(expectedStatus);
-                assertThat(response.readEntity(ErrorMessage.class).errors()).contains(expectedError);
-            }
-        }
-
-        @Test
-        @DisplayName("When scoring batch of threads with threads that are open, then return 409")
-        void scoreBatchOfThreads_withThreadsAreOpen_thenReturns409() {
-            // Given
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            projectResourceClient.createProject(projectName, apiKey, workspaceName);
-
-            List<FeedbackScoreBatchItemThread> scores = PodamFactoryUtils
-                    .manufacturePojoList(factory, FeedbackScoreBatchItemThread.class).stream()
-                    .map(item -> item.toBuilder()
-                            .threadId(UUID.randomUUID().toString())
-                            .projectName(projectName)
-                            .projectId(null) // Project ID is not required for thread scores
-                            .source(ScoreSource.SDK)
-                            .build())
-                    .collect(Collectors.toList());
-
-            List<Trace> traces = scores.stream()
-                    .map(item -> createTrace().toBuilder()
-                            .threadId(item.threadId())
-                            .projectId(null)
-                            .projectName(projectName)
-                            .build())
-                    .toList();
-
-            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
-
-            // When
-            try (var response = traceResourceClient.callThreadFeedbackScores(scores, apiKey, workspaceName)) {
-
-                // Then
-                assertOpenThreadScoreConflict(scores, response);
-            }
-        }
-
-        @Test
-        @DisplayName("When scoring batch of threads with threads that dont exist, then return 409")
-        void scoreBatchOfThreads_withThreadsDontExist_thenReturns409() {
-            // Given
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            projectResourceClient.createProject(projectName, apiKey, workspaceName);
-
-            List<FeedbackScoreBatchItemThread> scores = PodamFactoryUtils
-                    .manufacturePojoList(factory, FeedbackScoreBatchItemThread.class).stream()
-                    .map(item -> item.toBuilder()
-                            .threadId(UUID.randomUUID().toString())
-                            .projectName(projectName)
-                            .projectId(null) // Project ID is not required for thread scores
-                            .source(ScoreSource.SDK)
-                            .build())
-                    .collect(Collectors.toList());
-
-            // When
-            try (var response = traceResourceClient.callThreadFeedbackScores(scores, apiKey, workspaceName)) {
-
-                // Then
-                assertOpenThreadScoreConflict(scores, response);
-            }
-        }
-
-        private static void assertOpenThreadScoreConflict(List<FeedbackScoreBatchItemThread> scores,
-                Response response) {
-            String threadIds = scores.stream()
-                    .map(FeedbackScoreItem::threadId)
-                    .sorted()
-                    .collect(Collectors.joining(", "));
-
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
-            assertThat(response.hasEntity()).isTrue();
-
-            var errorMessage = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-            assertThat(errorMessage.getCode()).isEqualTo(HttpStatus.SC_CONFLICT);
-            assertThat(errorMessage.getMessage())
-                    .isEqualTo("Threads must be closed before scoring. Thread IDs are active: '[%s]'"
-                            .formatted(threadIds));
-        }
-
-        Stream<Arguments> threadFeedbackScoreTestCases() {
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var threadId = UUID.randomUUID().toString();
-
-            // Valid case
-            String score1 = RandomStringUtils.secure().nextAlphanumeric(10);
-
-            var validScore = initThreadFeedbackItem()
-                    .threadId(threadId)
-                    .projectName(projectName)
-                    .projectId(null)
-                    .name(score1)
-                    .build();
-
-            // Missing thread ID case
-            var missingThreadIdScore = initThreadFeedbackItem()
-                    .threadId(null)
-                    .projectName(projectName)
-                    .projectId(null)
-                    .name(score1)
-                    .build();
-
-            // Missing thread ID
-            var blankThreadId = initThreadFeedbackItem()
-                    .threadId("")
-                    .projectName(projectName)
-                    .projectId(null)
-                    .name(score1)
-                    .build();
-
-            // Missing value
-            var missingValueCase = initThreadFeedbackItem()
-                    .threadId(threadId)
-                    .projectName(projectName)
-                    .projectId(null)
-                    .name(score1)
-                    .value(null)
-                    .build();
-
-            var missingNameCase = initThreadFeedbackItem()
-                    .threadId(threadId)
-                    .projectName(projectName)
-                    .projectId(null)
-                    .name(null)
-                    .build();
-
-            var blankNameCase = initThreadFeedbackItem()
-                    .threadId(threadId)
-                    .projectName(projectName)
-                    .projectId(null)
-                    .name("")
-                    .build();
-
-            var missingSourceCase = initThreadFeedbackItem()
-                    .threadId(threadId)
-                    .projectName(projectName)
-                    .projectId(null)
-                    .source(null)
-                    .build();
-
-            return Stream.of(
-                    // Missing thread ID - 422 Unprocessable Entity
-                    arguments(List.of(missingThreadIdScore), HttpStatus.SC_UNPROCESSABLE_ENTITY,
-                            "scores[0].threadId must not be blank"),
-
-                    // Blank thread ID - 422 Unprocessable Entity
-                    arguments(List.of(blankThreadId), HttpStatus.SC_UNPROCESSABLE_ENTITY,
-                            "scores[0].threadId must not be blank"),
-
-                    // Missing value - 422 Unprocessable Entity
-                    arguments(List.of(missingValueCase), HttpStatus.SC_UNPROCESSABLE_ENTITY,
-                            "scores[0].value must not be null"),
-
-                    // Missing name - 422 Unprocessable Entity
-                    arguments(List.of(missingNameCase), HttpStatus.SC_UNPROCESSABLE_ENTITY,
-                            "scores[0].name must not be blank"),
-
-                    // Blank name - 422 Unprocessable Entity
-                    arguments(List.of(blankNameCase), HttpStatus.SC_UNPROCESSABLE_ENTITY,
-                            "scores[0].name must not be blank"),
-
-                    // Missing source - 422 Unprocessable Entity
-                    arguments(List.of(missingSourceCase), HttpStatus.SC_UNPROCESSABLE_ENTITY,
-                            "scores[0].source must not be null"));
-        }
-    }
-
-    private FeedbackScoreBatchItemThread.FeedbackScoreBatchItemThreadBuilder<?, ?> initThreadFeedbackItem() {
-        return factory.manufacturePojo(FeedbackScoreBatchItemThread.class).toBuilder();
-    }
-
-    private FeedbackScore createExpectedFeedbackScore(FeedbackScoreItem item, Instant now) {
-        return FeedbackScore.builder()
-                .name(item.name())
-                .value(item.value())
-                .categoryName(item.categoryName())
-                .source(item.source())
-                .reason(item.reason())
-                .lastUpdatedAt(now)
-                .createdAt(now)
-                .createdBy(USER)
-                .lastUpdatedBy(USER)
-                .build();
-    }
-
-    @Nested
-    @DisplayName("Thread Feedback Scores Deletion:")
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class ThreadFeedbackScoresDeletion {
-
-        @Test
-        @DisplayName("When deleting thread feedback scores with valid data, then scores are deleted")
-        void deleteThreadFeedbackScores_withValidData_thenScoresAreDeleted() {
-            // Given
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var project = factory.manufacturePojo(Project.class).toBuilder()
-                    .name(projectName)
-                    .build();
-
-            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
-
-            var threadId = UUID.randomUUID().toString();
-
-            // Create trace with thread first (threads need traces to exist)
-            Trace trace = createTrace().toBuilder()
-                    .threadId(threadId)
-                    .projectId(projectId)
-                    .projectName(projectName)
-                    .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
-                    .build();
-
-            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
-
-            // Close thread
-            Mono.delay(Duration.ofMillis(500)).block();
-            traceResourceClient.closeTraceThread(threadId, null, projectName, apiKey, workspaceName);
-
-            List<FeedbackScoreBatchItemThread> scoreItems = PodamFactoryUtils
-                    .manufacturePojoList(factory, FeedbackScoreBatchItemThread.class)
-                    .stream()
-                    .map(item -> item.toBuilder()
-                            .threadId(threadId)
-                            .projectName(projectName)
-                            .projectId(null)
-                            .build())
-                    .collect(Collectors.toList());
-
-            // Create expected thread with initial scores
-            Instant now = Instant.now();
-            var expectedInitialScores = List.of(
-                    createExpectedFeedbackScore(scoreItems.get(0), now),
-                    createExpectedFeedbackScore(scoreItems.get(1), now),
-                    createExpectedFeedbackScore(scoreItems.get(2), now),
-                    createExpectedFeedbackScore(scoreItems.get(3), now),
-                    createExpectedFeedbackScore(scoreItems.get(4), now));
-
-            // When
-            traceResourceClient.threadFeedbackScores(scoreItems, apiKey, workspaceName);
-
-            // Then - Verify initial scores using getTraceThreads API
-            var initialThreadPage = traceResourceClient.getTraceThreads(projectId, projectName, apiKey, workspaceName,
-                    List.of(), List.of(), Map.of());
-
-            var expectedInitialThread = getExpectedThreads(List.of(trace), projectId, threadId, List.of(),
-                    TraceThreadStatus.INACTIVE, expectedInitialScores).getFirst();
-
-            TraceAssertions.assertThreads(List.of(expectedInitialThread), initialThreadPage.content());
-
-            Set<String> scoresToDelete = Set.of(scoreItems.getFirst().name(), scoreItems.get(1).name(),
-                    scoreItems.get(3).name(), scoreItems.getLast().name());
-
-            // And When
-            traceResourceClient.deleteThreadFeedbackScores(projectName, threadId, scoresToDelete, apiKey,
-                    workspaceName);
-
-            // Then - Verify remaining scores using getTraceThreads API
-            var remainingThreadPage = traceResourceClient.getTraceThreads(projectId, projectName, apiKey, workspaceName,
-                    List.of(), List.of(), Map.of());
-
-            // Create expected thread with remaining scores
-            var expectedRemainingScores = List.of(
-                    createExpectedFeedbackScore(scoreItems.get(2), now));
-
-            var expectedRemainingThread = getExpectedThreads(List.of(trace), projectId, threadId, List.of(),
-                    TraceThreadStatus.INACTIVE, expectedRemainingScores).getFirst();
-
-            TraceAssertions.assertThreads(List.of(expectedRemainingThread), remainingThreadPage.content());
-        }
-
-        @ParameterizedTest
-        @MethodSource("deleteThreadFeedbackScoreTestCases")
-        @DisplayName("Delete thread feedback scores contract test")
-        void deleteThreadFeedbackScores_contractTest(String projectName, String threadId, Set<String> scoreNames,
-                int expectedStatus, String expectedError) {
-            // Given
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            // When
-            try (var response = traceResourceClient.callDeleteThreadFeedbackScores(projectName, threadId, scoreNames,
-                    apiKey, workspaceName)) {
-                // Then
-                assertThat(response.getStatus()).isEqualTo(expectedStatus);
-
-                if (expectedStatus == HttpStatus.SC_NO_CONTENT) {
-                    assertThat(response.hasEntity()).isFalse();
-                } else {
-                    var actualError = response.readEntity(ErrorMessage.class);
-                    assertThat(actualError.errors()).contains(expectedError);
-                }
-            }
-        }
-
-        static Stream<Arguments> deleteThreadFeedbackScoreTestCases() {
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var threadId = UUID.randomUUID().toString();
-
-            return Stream.of(
-                    // Valid case - 204 No Content
-                    arguments(projectName, threadId, Set.of("accuracy"), HttpStatus.SC_NO_CONTENT, null),
-
-                    // Non-existent project - 204 No Content (idempotent)
-                    arguments("non-existent-project", threadId, Set.of("accuracy"), HttpStatus.SC_NO_CONTENT, null),
-
-                    // Non-existent thread ID - 204 No Content (idempotent)
-                    arguments(projectName, "non-existent-thread", Set.of("accuracy"), HttpStatus.SC_NO_CONTENT, null),
-
-                    // Missing project name - 422 Unprocessable Entity
-                    arguments(null, threadId, Set.of("accuracy"), HttpStatus.SC_UNPROCESSABLE_ENTITY,
-                            "projectName must not be blank"),
-
-                    // Missing thread ID - 422 Unprocessable Entity
-                    arguments(projectName, null, Set.of("accuracy"), HttpStatus.SC_UNPROCESSABLE_ENTITY,
-                            "threadId must not be blank"),
-
-                    // Empty set of score names - 422 Unprocessable Entity
-                    arguments(projectName, threadId, Set.of(), HttpStatus.SC_UNPROCESSABLE_ENTITY,
-                            "names size must be between 1 and 1000"),
-
-                    // Empty score name - 422 Unprocessable Entity
-                    arguments(projectName, threadId, Set.of(""), HttpStatus.SC_UNPROCESSABLE_ENTITY,
-                            "names[].<iterable element> must not be blank"));
-        }
-    }
-
-    @Nested
     @DisplayName("Get trace:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetTrace {
@@ -6781,17 +5729,12 @@ class TracesResourceTest {
     }
 
     private Trace createTrace() {
-        return fromBuilder(factory.manufacturePojo(Trace.class).toBuilder());
-    }
-
-    private Trace fromBuilder(Trace.TraceBuilder builder) {
-        return builder
+        return factory.manufacturePojo(Trace.class).toBuilder()
                 .feedbackScores(null)
                 .threadId(null)
                 .comments(null)
                 .totalEstimatedCost(null)
                 .usage(null)
-                .errorInfo(null)
                 .build();
     }
 
@@ -7254,8 +6197,7 @@ class TracesResourceTest {
                             .map(item -> FeedbackScoreMapper.INSTANCE.toFeedbackScoreBatchItem(
                                     span.id(), projectName, item)))
                     .toList();
-            createAndAssertForSpan(FeedbackScoreBatch.builder().scores(spanScores).build(), workspaceName,
-                    apiKey);
+            createAndAssertForSpan(FeedbackScoreBatch.builder().scores(spanScores).build(), workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, traces.reversed(), List.of(), apiKey);
             getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, spans.reversed(), List.of(), apiKey);
@@ -7434,8 +6376,7 @@ class TracesResourceTest {
                             .map(item -> FeedbackScoreMapper.INSTANCE.toFeedbackScoreBatchItem(
                                     span.id(), projectName, item)))
                     .toList();
-            createAndAssertForSpan(FeedbackScoreBatch.builder().scores(spanScores).build(), workspaceName,
-                    apiKey);
+            createAndAssertForSpan(FeedbackScoreBatch.builder().scores(spanScores).build(), workspaceName, apiKey);
 
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, traces.reversed(), List.of(), apiKey);
             getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, spans.reversed(), List.of(), apiKey);
@@ -7978,7 +6919,7 @@ class TracesResourceTest {
             // Get created comment by id and assert
             Comment actualComment = traceResourceClient.getCommentById(expectedComment.id(), traceId, API_KEY,
                     TEST_WORKSPACE, 200);
-            assertComment(expectedComment, actualComment);
+            assertTraceComment(expectedComment, actualComment);
         }
 
         @Test
@@ -8373,31 +7314,31 @@ class TracesResourceTest {
                             "scores size must be between 1 and 1000"),
                     arguments(FeedbackScoreBatch.builder().scores(
                             IntStream.range(0, 1001)
-                                    .mapToObj(__ -> initFeedbackScoreItem()
+                                    .mapToObj(__ -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                                             .projectName(DEFAULT_PROJECT).build())
-                                    .collect(toList()))
+                                    .toList())
                             .build(), "scores size must be between 1 and 1000"),
                     arguments(
                             FeedbackScoreBatch.builder()
-                                    .scores(List.of(initFeedbackScoreItem()
+                                    .scores(List.of(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                                             .projectName(DEFAULT_PROJECT).name(null).build()))
                                     .build(),
                             "scores[0].name must not be blank"),
                     arguments(
                             FeedbackScoreBatch.builder()
-                                    .scores(List.of(initFeedbackScoreItem()
+                                    .scores(List.of(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                                             .projectName(DEFAULT_PROJECT).name("").build()))
                                     .build(),
                             "scores[0].name must not be blank"),
                     arguments(
                             FeedbackScoreBatch.builder()
-                                    .scores(List.of(initFeedbackScoreItem()
+                                    .scores(List.of(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                                             .projectName(DEFAULT_PROJECT).value(null).build()))
                                     .build(),
                             "scores[0].value must not be null"),
                     arguments(
                             FeedbackScoreBatch.builder()
-                                    .scores(List.of(initFeedbackScoreItem()
+                                    .scores(List.of(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                                             .projectName(DEFAULT_PROJECT)
                                             .value(BigDecimal.valueOf(-999999999.9999999991))
                                             .build()))
@@ -8405,7 +7346,7 @@ class TracesResourceTest {
                             "scores[0].value must be greater than or equal to -999999999.999999999"),
                     arguments(
                             FeedbackScoreBatch.builder()
-                                    .scores(List.of(initFeedbackScoreItem()
+                                    .scores(List.of(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                                             .projectName(DEFAULT_PROJECT)
                                             .value(BigDecimal.valueOf(999999999.9999999991))
                                             .build()))
@@ -8438,18 +7379,18 @@ class TracesResourceTest {
                     .build();
             var id2 = create(trace2, API_KEY, TEST_WORKSPACE);
 
-            var score1 = initFeedbackScoreItem()
+            var score1 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(id1)
                     .projectName(trace1.projectName())
                     .value(factory.manufacturePojo(BigDecimal.class))
                     .build();
-            var score2 = initFeedbackScoreItem()
+            var score2 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(id2)
                     .name("hallucination")
                     .projectName(trace2.projectName())
                     .value(factory.manufacturePojo(BigDecimal.class))
                     .build();
-            var score3 = initFeedbackScoreItem()
+            var score3 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(id1)
                     .name("hallucination")
                     .projectName(trace1.projectName())
@@ -8496,13 +7437,13 @@ class TracesResourceTest {
                     .projectName(expectedTrace1.projectName())
                     .value(factory.manufacturePojo(BigDecimal.class))
                     .build();
-            var score2 = initFeedbackScoreItem()
+            var score2 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(id2)
                     .name("hallucination")
                     .projectName(expectedTrace2.projectName())
                     .value(factory.manufacturePojo(BigDecimal.class))
                     .build();
-            var score3 = initFeedbackScoreItem()
+            var score3 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(id1)
                     .name("hallucination")
                     .projectName(expectedTrace1.projectName())
@@ -8525,8 +7466,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("invalidRequestBodyParams")
         @DisplayName("when batch request is invalid, then return bad request")
-        void feedback__whenBatchRequestIsInvalid__thenReturnBadRequest(FeedbackScoreBatchContainer batch,
-                String errorMessage) {
+        void feedback__whenBatchRequestIsInvalid__thenReturnBadRequest(FeedbackScoreBatch batch, String errorMessage) {
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("feedback-scores")
                     .request()
@@ -8554,7 +7494,7 @@ class TracesResourceTest {
                     .build();
             var id = create(trace, API_KEY, TEST_WORKSPACE);
 
-            var score = initFeedbackScoreItem()
+            var score = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(id)
                     .projectName(trace.projectName())
                     .categoryName(null)
@@ -8587,7 +7527,7 @@ class TracesResourceTest {
                     .build();
             var id = create(expectedTrace, API_KEY, TEST_WORKSPACE);
 
-            var score = initFeedbackScoreItem()
+            var score = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(id)
                     .projectName(expectedTrace.projectName())
                     .value(factory.manufacturePojo(BigDecimal.class))
@@ -8620,7 +7560,7 @@ class TracesResourceTest {
                     .build();
             var id = create(trace, API_KEY, TEST_WORKSPACE);
 
-            var score = initFeedbackScoreItem()
+            var score = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(id)
                     .projectName(trace.projectName())
                     .build();
@@ -8640,7 +7580,7 @@ class TracesResourceTest {
         @DisplayName("when trace does not exist, then return no content and create score")
         void feedback__whenTraceDoesNotExist__thenReturnNoContentAndCreateScore() {
             var id = generator.generate();
-            var score = initFeedbackScoreItem()
+            var score = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(id)
                     .projectName(DEFAULT_PROJECT)
                     .build();
@@ -8656,19 +7596,19 @@ class TracesResourceTest {
                     .build();
             var id = create(expectedTrace, API_KEY, TEST_WORKSPACE);
 
-            List<FeedbackScoreBatchItem> scores = IntStream.range(0, 1000)
-                    .mapToObj(__ -> initFeedbackScoreItem()
+            var scores = IntStream.range(0, 1000)
+                    .mapToObj(__ -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                             .projectName(DEFAULT_PROJECT)
                             .id(id)
                             .build())
-                    .collect(Collectors.toList());
+                    .toList();
             traceResourceClient.feedbackScores(scores, API_KEY, TEST_WORKSPACE);
         }
 
         @Test
         @DisplayName("when feedback trace id is not valid, then return 400")
         void feedback__whenFeedbackTraceIdIsNotValid__thenReturn400() {
-            var score = initFeedbackScoreItem()
+            var score = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(UUID.randomUUID())
                     .projectName(DEFAULT_PROJECT)
                     .build();
@@ -8678,7 +7618,7 @@ class TracesResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(FeedbackScoreBatch.builder().scores(List.of(score)).build()))) {
+                    .put(Entity.json(new FeedbackScoreBatch(List.of(score))))) {
 
                 assertErrorResponse(actualResponse, "trace id must be a version 7 UUID", 400);
             }
@@ -8701,18 +7641,18 @@ class TracesResourceTest {
 
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
-            List<FeedbackScoreBatchItem> scores = traces.stream()
-                    .map(trace -> initFeedbackScoreItem()
+            var scores = traces.stream()
+                    .map(trace -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                             .id(trace.id())
                             .projectName(projectNameModifier.apply(projectName))
                             .build())
-                    .collect(Collectors.toList());
+                    .toList();
 
             traceResourceClient.feedbackScores(scores, API_KEY, TEST_WORKSPACE);
 
             var expectedTracesWithScores = traces.stream()
                     .map(trace -> {
-                        FeedbackScoreItem feedbackScoreBatchItem = scores.stream()
+                        FeedbackScoreBatchItem feedbackScoreBatchItem = scores.stream()
                                 .filter(score -> score.id().equals(trace.id()))
                                 .findFirst()
                                 .orElseThrow();
@@ -8732,11 +7672,7 @@ class TracesResourceTest {
         }
     }
 
-    private FeedbackScoreBatchItemBuilder<?, ?> initFeedbackScoreItem() {
-        return factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder();
-    }
-
-    private FeedbackScore mapFeedbackScore(FeedbackScoreItem feedbackScoreBatchItem) {
+    private FeedbackScore mapFeedbackScore(FeedbackScoreBatchItem feedbackScoreBatchItem) {
         return FeedbackScore.builder()
                 .name(feedbackScoreBatchItem.name())
                 .value(feedbackScoreBatchItem.value())
@@ -8784,54 +7720,6 @@ class TracesResourceTest {
             traceResourceClient.createMultiValueScores(otherNames, unexpectedProject, apiKey, workspaceName);
 
             fetchAndAssertResponse(names, projectId, apiKey, workspaceName);
-        }
-    }
-
-    @Nested
-    @DisplayName("Get Trace Threads Feedback Score names")
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class GetTraceThreadsFeedbackScoreNames {
-
-        @Test
-        @DisplayName("when get trace threads feedback score names, then return feedback score names")
-        void getTraceThreadsFeedbackScoreNames__whenGetTraceThreadsFeedbackScoreNames__thenReturnFeedbackScoreNames() {
-
-            // given
-            var apiKey = UUID.randomUUID().toString();
-            var workspaceId = UUID.randomUUID().toString();
-            var workspaceName = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            String projectName = UUID.randomUUID().toString();
-
-            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-            Project project = projectResourceClient.getProject(projectId, apiKey, workspaceName);
-
-            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
-            List<String> otherNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
-
-            // Create multiple values feedback scores for trace threads
-            List<String> multipleValuesFeedbackScores = names.subList(0, names.size() - 1);
-
-            createMultiValueTraceThreadScores(multipleValuesFeedbackScores, project, apiKey, workspaceName);
-
-            createMultiValueTraceThreadScores(List.of(names.getLast()), project, apiKey, workspaceName);
-
-            // Create unexpected feedback scores for a different project
-            String unexpectedProjectName = RandomStringUtils.secure().nextAlphanumeric(20);
-            UUID unexpectedProjectId = projectResourceClient.createProject(unexpectedProjectName, apiKey,
-                    workspaceName);
-            Project unexpectedProject = projectResourceClient.getProject(unexpectedProjectId, apiKey, workspaceName);
-
-            createMultiValueTraceThreadScores(otherNames, unexpectedProject, apiKey, workspaceName);
-
-            // when
-            FeedbackScoreNames actualNames = traceResourceClient.getTraceThreadsFeedbackScoreNames(projectId, apiKey,
-                    workspaceName);
-
-            // then
-            assertFeedbackScoreNames(actualNames, names);
         }
     }
 
@@ -8983,14 +7871,12 @@ class TracesResourceTest {
 
             List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
                     .map(span -> span.toBuilder()
-                            .usage(null)
-                            .model(null)
-                            .provider(null)
+                            .usage(spanResourceClient.getTokenUsage())
+                            .model(spanResourceClient.randomModel().toString())
+                            .provider(spanResourceClient.provider())
                             .traceId(traces.getFirst().id())
                             .projectName(projectName)
                             .totalEstimatedCost(null)
-                            .comments(null)
-                            .feedbackScores(null)
                             .build())
                     .toList();
 
@@ -8998,11 +7884,13 @@ class TracesResourceTest {
 
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
+            var expectedTraces = traceResourceClient.getByProjectName(projectName, API_KEY, TEST_WORKSPACE);
+
             var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
 
             var actualThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
 
-            var expectedThreads = getExpectedThreads(traces, projectId, threadId, spans, TraceThreadStatus.ACTIVE);
+            var expectedThreads = getExpectedThreads(expectedTraces, projectId, threadId, spans);
 
             TraceAssertions.assertThreads(expectedThreads, List.of(actualThread));
         }
@@ -9050,11 +7938,6 @@ class TracesResourceTest {
             // Create multiple threads with different values
             List<String> threadIds = PodamFactoryUtils.manufacturePojoList(factory, String.class);
 
-            Map<String, TraceThreadUpdate> updates = threadIds.stream()
-                    .collect(Collectors.toMap(
-                            threadId -> threadId,
-                            threadId -> factory.manufacturePojo(TraceThreadUpdate.class)));
-
             // Create traces for each thread with varying number of messages
             List<Trace> allTraces = new ArrayList<>();
             Map<String, List<Trace>> tracesByThread = new HashMap<>();
@@ -9070,28 +7953,15 @@ class TracesResourceTest {
                                 .build())
                         .toList();
 
-                traceResourceClient.batchCreateTraces(threadTraces, apiKey, workspaceName);
-
                 threadTraces.forEach(trace -> {
-                    List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
-                            .map(span -> span.toBuilder()
-                                    .projectName(projectName)
-                                    .traceId(trace.id())
-                                    .usage(spanResourceClient.getTokenUsage())
-                                    .totalEstimatedCost(null)
-                                    .model(spanResourceClient.randomModel().toString())
-                                    .provider(spanResourceClient.provider())
-                                    .feedbackScores(null)
-                                    .comments(null)
-                                    .errorInfo(null)
-                                    .build())
-                            .toList();
+                    List<Span> spans = createSpans(trace, projectName, null, null);
 
                     spansByThread.computeIfAbsent(threadId, k -> new ArrayList<>()).addAll(spans);
                 });
 
                 // Create spans for each trace
                 batchCreateSpansAndAssert(spansByThread.get(threadId), apiKey, workspaceName);
+                traceResourceClient.batchCreateTraces(threadTraces, apiKey, workspaceName);
 
                 allTraces.addAll(threadTraces);
                 tracesByThread.put(threadId, threadTraces);
@@ -9101,45 +7971,16 @@ class TracesResourceTest {
             UUID projectId = getProjectId(projectName, workspaceName, apiKey);
 
             // Build expected threads from our created traces
-            List<TraceThread> threads = threadIds.stream()
-                    .map(threadId -> {
-
-                        List<Span> spansWithTotalEstimatedCost = spansByThread.get(threadId).stream()
-                                .map(span -> span.toBuilder()
-                                        .totalEstimatedCost(calculateEstimatedCost(List.of(span)))
-                                        .build())
-                                .toList();
-
-                        // Update thread to add tags
-                        var createdThread = traceResourceClient.getTraceThread(threadId, projectId, apiKey,
-                                workspaceName);
-                        traceResourceClient.updateThread(updates.get(threadId), createdThread.threadModelId(), apiKey,
-                                workspaceName, 204);
-
-                        return getExpectedThreads(tracesByThread.get(threadId), projectId, threadId,
-                                spansWithTotalEstimatedCost, TraceThreadStatus.ACTIVE)
-                                .stream()
-                                .map(thread -> thread.toBuilder()
-                                        .tags(updates.get(threadId).tags())
-                                        .build())
-                                .toList();
-                    })
+            List<TraceThread> expectedThreads = threadIds.stream()
+                    .map(threadId -> getExpectedThreads(tracesByThread.get(threadId), projectId, threadId,
+                            spansByThread.get(threadId)))
                     .flatMap(List::stream)
-                    .toList();
-
-            List<TraceThread> expectedThreads = threads
-                    .stream()
                     .sorted(comparator)
                     .toList();
 
-            // mark threads are opened
-            threads.forEach(thread -> {
-                traceResourceClient.openTraceThread(thread.id(), thread.projectId(), null, apiKey, workspaceName);
-            });
-
             // Get trace threads with sorting
-            TraceThreadPage traceThreadPage = traceResourceClient.getTraceThreads(projectId, null,
-                    apiKey, workspaceName, null, List.of(sorting), null);
+            TraceThreadPage traceThreadPage = traceResourceClient.getTraceThreads(projectId,
+                    apiKey, workspaceName, List.of(sorting));
 
             // Verify that the sortableBy field contains the expected values
             assertSortableFields(traceThreadPage);
@@ -9149,7 +7990,6 @@ class TracesResourceTest {
         }
 
         private Stream<Arguments> getTraceThreads__whenSortingByValidFields__thenReturnTraceThreadsSorted() {
-            Comparator<TraceThread> tagsComparator = Comparator.comparing(thread -> thread.tags().toString());
             return Stream.of(
                     Arguments.of(
                             Comparator.comparing(TraceThread::totalEstimatedCost)
@@ -9218,13 +8058,7 @@ class TracesResourceTest {
                     Arguments.of(
                             Comparator.comparing(TraceThread::createdAt).reversed()
                                     .thenComparing(Comparator.comparing(TraceThread::lastUpdatedAt).reversed()),
-                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC).build()),
-                    Arguments.of(
-                            tagsComparator,
-                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC).build()),
-                    Arguments.of(
-                            tagsComparator.reversed(),
-                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()));
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC).build()));
         }
 
         @ParameterizedTest
@@ -9276,11 +8110,11 @@ class TracesResourceTest {
                         .toList();
 
                 batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+                traceResourceClient.batchCreateTraces(threadTraces, apiKey, workspaceName);
+
                 allTraces.addAll(threadTraces);
                 tracesByThread.put(threadId, threadTraces);
             }
-
-            traceResourceClient.batchCreateTraces(allTraces, apiKey, workspaceName);
 
             // Get project ID
             UUID projectId = getProjectId(projectName, workspaceName, apiKey);
@@ -9302,14 +8136,14 @@ class TracesResourceTest {
             // Build expected threads from our created traces
             List<TraceThread> expectedThreads = threadIds.stream()
                     .map(threadId -> getExpectedThreads(tracesByThread.get(threadId), projectId, threadId,
-                            spansByThread.get(threadId), TraceThreadStatus.ACTIVE))
+                            spansByThread.get(threadId)))
                     .flatMap(List::stream)
                     .sorted(comparator)
                     .toList();
 
             // Get trace threads
-            TraceThreadPage traceThreadPage = traceResourceClient.getTraceThreads(projectId, null, apiKey,
-                    workspaceName, null, List.of(sortingField), null);
+            TraceThreadPage traceThreadPage = traceResourceClient.getTraceThreads(
+                    projectId, apiKey, workspaceName, List.of(sortingField));
 
             // Verify that the sortableBy field contains the expected values
             assertSortableFields(traceThreadPage);
@@ -9391,391 +8225,6 @@ class TracesResourceTest {
 
     }
 
-    /**
-     * This class is testing the creation of trace threads. The feature is not completely implemented yet,
-     * so some tests are using services to check the database state. In the future, this should be do via the APIs
-     * */
-    @Nested
-    @DisplayName("Trace Threads Creation")
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class TraceThreadCreation {
-
-        @Test
-        @DisplayName("when trace threads are created, then create trace thread id async")
-        void createTraceThreads() {
-            // Given
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-
-            var threadId = randomUUID().toString();
-
-            // Create multiple trace within same thread
-            List<Trace> traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
-                    .stream()
-                    .map(trace -> fromBuilder(trace.toBuilder()).toBuilder()
-                            .projectId(projectId)
-                            .projectName(projectName)
-                            .threadId(threadId)
-                            .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
-                            .build())
-                    .toList();
-
-            // When: Creating trace threads
-            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
-
-            // Then: Assert that trace thread is created using getTraceThreads API
-            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                var traceThreadPage = traceResourceClient.getTraceThreads(projectId, projectName, apiKey, workspaceName,
-                        List.of(), List.of(), Map.of());
-
-                var expectedThreads = getExpectedThreads(traces, projectId, threadId, List.of(),
-                        TraceThreadStatus.ACTIVE);
-
-                TraceAssertions.assertThreads(expectedThreads, traceThreadPage.content());
-            });
-        }
-
-        @Test
-        @DisplayName("when trace threads receive concurrent requests, then create trace thread only once")
-        void createTraceThreads__whenConcurrentRequests__thenCreateTraceThreadOnlyOnce() {
-            //Given
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-
-            String threadId1 = randomUUID().toString();
-            String threadId2 = randomUUID().toString();
-
-            // Create multiple trace within same thread
-            List<List<Trace>> traces = IntStream.range(0, 5)
-                    .mapToObj(i -> PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
-                            .stream()
-                            .map(trace -> fromBuilder(trace.toBuilder()).toBuilder()
-                                    .projectId(projectId)
-                                    .projectName(projectName)
-                                    .threadId(PodamUtils.getIntegerInRange(0, 1) % 2 == 0 ? threadId1 : threadId2)
-                                    .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
-                                    .build())
-                            .toList())
-                    .toList();
-
-            // When: Creating trace thread concurrently
-            traces.parallelStream()
-                    .forEach(traceList -> traceResourceClient.batchCreateTraces(traceList, apiKey, workspaceName));
-
-            // Then: Assert that trace threads are created only once using getTraceThreads API
-            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                var traceThreadPage = traceResourceClient.getTraceThreads(null, projectName, apiKey, workspaceName,
-                        List.of(), List.of(), Map.of());
-
-                // Get traces for each thread
-                var tracesForThread1 = traces.stream()
-                        .flatMap(List::stream)
-                        .filter(trace -> threadId1.equals(trace.threadId()))
-                        .toList();
-
-                var tracesForThread2 = traces.stream()
-                        .flatMap(List::stream)
-                        .filter(trace -> threadId2.equals(trace.threadId()))
-                        .toList();
-
-                var expectedThread1 = getExpectedThreads(tracesForThread1, projectId, threadId1, List.of(),
-                        TraceThreadStatus.ACTIVE).get(0);
-                var expectedThread2 = getExpectedThreads(tracesForThread2, projectId, threadId2, List.of(),
-                        TraceThreadStatus.ACTIVE).get(0);
-
-                var expectedThreads = Stream.of(expectedThread1, expectedThread2)
-                        .sorted(Comparator.comparing(TraceThread::lastUpdatedAt).reversed())
-                        .toList();
-
-                TraceAssertions.assertThreads(expectedThreads, traceThreadPage.content());
-            });
-        }
-    }
-
-    @Nested
-    @DisplayName("Trace Thread Manual Open/Close")
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class TraceThreadManualOpenClose {
-
-        @Test
-        @DisplayName("when trace thread is manually closed then opened, then reopen the thread")
-        void manualCloseAndReopeningTraceThread() {
-            // Given: Ingestion of a trace with a thread
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-
-            String threadId = randomUUID().toString();
-
-            // Create a trace with the thread
-            Trace trace = createTrace().toBuilder()
-                    .threadId(threadId)
-                    .projectId(projectId)
-                    .projectName(projectName)
-                    .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
-                    .build();
-
-            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
-
-            // Assert that the thread is created and open using getTraceThreads API
-            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                var traceThreadPage = traceResourceClient.getTraceThreads(projectId, projectName, apiKey, workspaceName,
-                        List.of(), List.of(), Map.of());
-
-                var expectedActiveThreads = getExpectedThreads(List.of(trace), projectId, threadId, List.of(),
-                        TraceThreadStatus.ACTIVE);
-
-                TraceAssertions.assertThreads(expectedActiveThreads, traceThreadPage.content());
-            });
-
-            // When: Manually close the thread
-            Mono.delay(Duration.ofMillis(500)).block();
-            traceResourceClient.closeTraceThread(threadId, projectId, null, apiKey, workspaceName);
-
-            // Then: Assert that the thread is closed using getTraceThreads API
-            var closedThreadPage = traceResourceClient.getTraceThreads(projectId, projectName, apiKey, workspaceName,
-                    List.of(), List.of(), Map.of());
-
-            var expectedClosedThreads = getExpectedThreads(List.of(trace), projectId, threadId, List.of(),
-                    TraceThreadStatus.INACTIVE);
-
-            TraceAssertions.assertThreads(expectedClosedThreads, closedThreadPage.content());
-
-            // When: Manually reopen the thread
-            traceResourceClient.openTraceThread(threadId, null, projectName, apiKey, workspaceName);
-
-            // Then: Assert that the thread is reopened using getTraceThreads API
-            var reopenedThreadPage = traceResourceClient.getTraceThreads(projectId, projectName, apiKey, workspaceName,
-                    List.of(), List.of(), Map.of());
-
-            var expectedReopenedThreads = getExpectedThreads(List.of(trace), projectId, threadId, List.of(),
-                    TraceThreadStatus.ACTIVE);
-
-            TraceAssertions.assertThreads(expectedReopenedThreads, reopenedThreadPage.content());
-        }
-
-        @Test
-        @DisplayName("when trace thread was created before the entity was introduced, then it should be created as inactive")
-        void manualCloseAndReopeningTraceThread__whenThreadCreatedBeforeEntityIntroduced__thenInactive(
-                TransactionTemplateAsync templateAsync) {
-
-            // Given: Ingestion of a trace with a thread
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-
-            String threadId = randomUUID().toString();
-
-            // Create a trace with the thread
-            Trace trace = createTrace().toBuilder()
-                    .threadId(threadId)
-                    .projectId(projectId)
-                    .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
-                    .createdBy(USER)
-                    .lastUpdatedBy(USER)
-                    .build();
-
-            // Create the trace via DB to simulate the scenario where the thread was created before the entity was introduced
-            TraceDBUtils.createTraceViaDB(trace, workspaceId, templateAsync);
-
-            // When: Manually close the thread
-            traceResourceClient.closeTraceThread(threadId, projectId, null, apiKey, workspaceName);
-
-            // Then: Assert that the thread is closed using getTraceThreads API
-            var closedThreadPage = traceResourceClient.getTraceThreads(projectId, projectName, apiKey, workspaceName,
-                    List.of(), List.of(), Map.of());
-
-            var expectedClosedThreads = getExpectedThreads(List.of(trace), projectId, threadId, List.of(),
-                    TraceThreadStatus.INACTIVE);
-
-            TraceAssertions.assertThreads(expectedClosedThreads, closedThreadPage.content());
-        }
-    }
-
-    @Nested
-    @DisplayName("Thread Comment:")
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class ThreadComment {
-
-        @Test
-        void createCommentForNonExistingThreadFail() {
-            threadCommentResourceClient.generateAndCreateComment(generator.generate(), API_KEY, TEST_WORKSPACE, 404);
-        }
-
-        @Test
-        void createAndGetComment() {
-            // Create comment for existing thread
-            var thread = createThread();
-            Comment expectedComment = threadCommentResourceClient.generateAndCreateComment(thread.threadModelId(),
-                    API_KEY, TEST_WORKSPACE,
-                    201);
-
-            // Get created comment by id and assert
-            Comment actualComment = threadCommentResourceClient.getCommentById(expectedComment.id(),
-                    thread.threadModelId(), API_KEY,
-                    TEST_WORKSPACE, 200);
-            assertComment(expectedComment, actualComment);
-        }
-
-        @Test
-        void createAndUpdateComment() {
-            // Create comment for existing thread
-            var thread = createThread();
-            Comment expectedComment = threadCommentResourceClient.generateAndCreateComment(thread.threadModelId(),
-                    API_KEY, TEST_WORKSPACE,
-                    201);
-
-            // Get created comment by id and assert
-            Comment actualComment = threadCommentResourceClient.getCommentById(expectedComment.id(),
-                    thread.threadModelId(), API_KEY,
-                    TEST_WORKSPACE, 200);
-
-            // Update existing comment
-            String updatedText = factory.manufacturePojo(String.class);
-            threadCommentResourceClient.updateComment(updatedText, expectedComment.id(), API_KEY,
-                    TEST_WORKSPACE, 204);
-
-            // Get comment by id and assert it was updated
-            Comment updatedComment = threadCommentResourceClient.getCommentById(expectedComment.id(),
-                    thread.threadModelId(), API_KEY,
-                    TEST_WORKSPACE, 200);
-            assertUpdatedComment(actualComment, updatedComment, updatedText);
-        }
-
-        @Test
-        void deleteComments() {
-            // Create comments for existing thread
-            var thread = createThread();
-
-            List<Comment> expectedComments = IntStream.range(0, 5)
-                    .mapToObj(i -> threadCommentResourceClient.generateAndCreateComment(thread.threadModelId(), API_KEY,
-                            TEST_WORKSPACE, 201))
-                    .toList().reversed();
-
-            // Check it was created
-            expectedComments.forEach(
-                    comment -> threadCommentResourceClient.getCommentById(comment.id(), thread.threadModelId(), API_KEY,
-                            TEST_WORKSPACE, 200));
-
-            // Delete comment
-            BatchDelete request = BatchDelete.builder()
-                    .ids(expectedComments.stream().map(Comment::id).collect(Collectors.toSet())).build();
-            threadCommentResourceClient.deleteComments(request, API_KEY, TEST_WORKSPACE);
-
-            // Verify comments were actually deleted via get and update endpoints
-            expectedComments.forEach(
-                    comment -> threadCommentResourceClient.getCommentById(comment.id(), thread.threadModelId(), API_KEY,
-                            TEST_WORKSPACE, 404));
-            expectedComments
-                    .forEach(comment -> threadCommentResourceClient.updateComment(factory.manufacturePojo(String.class),
-                            comment.id(), API_KEY, TEST_WORKSPACE, 404));
-        }
-
-        @Test
-        void getThreadWithComments() {
-            // Create comments for existing thread
-            var thread = createThread();
-
-            List<Comment> expectedComments = IntStream.range(0, 5)
-                    .mapToObj(i -> threadCommentResourceClient.generateAndCreateComment(thread.threadModelId(), API_KEY,
-                            TEST_WORKSPACE, 201))
-                    .toList().reversed();
-
-            TraceThread actualThread = traceResourceClient.getTraceThread(thread.id(), thread.projectId(), API_KEY,
-                    TEST_WORKSPACE);
-
-            assertComments(expectedComments, actualThread.comments().reversed());
-        }
-
-        @Test
-        void getThreadsWithComments() {
-            // Create comments for existing thread
-            var thread = createThread();
-
-            List<Comment> expectedComments = IntStream.range(0, 5)
-                    .mapToObj(i -> threadCommentResourceClient.generateAndCreateComment(thread.threadModelId(), API_KEY,
-                            TEST_WORKSPACE, 201))
-                    .toList().reversed();
-
-            var threadsPage = traceResourceClient.getTraceThreads(thread.projectId(), null, API_KEY, TEST_WORKSPACE,
-                    null, null, null);
-
-            assertComments(expectedComments, threadsPage.content().getFirst().comments().reversed());
-        }
-    }
-
-    @Nested
-    @DisplayName("Thread Update:")
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class ThreadUpdate {
-
-        @Test
-        void updateNonExistingThreadFail() {
-            traceResourceClient.updateThread(factory.manufacturePojo(TraceThreadUpdate.class), generator.generate(),
-                    API_KEY, TEST_WORKSPACE, 404);
-        }
-
-        @Test
-        void createAndUpdateThread() {
-            // Create comment for existing thread
-            var thread = createThread();
-
-            // Check that it doesn't have tags
-            assertThat(thread.tags()).isNull();
-
-            // Update thread
-            var update = factory.manufacturePojo(TraceThreadUpdate.class);
-            traceResourceClient.updateThread(update, thread.threadModelId(), API_KEY, TEST_WORKSPACE, 204);
-
-            // Check that update was applied
-            var actualThread = traceResourceClient.getTraceThread(thread.id(), thread.projectId(), API_KEY,
-                    TEST_WORKSPACE);
-            TraceAssertions.assertThreads(List.of(thread.toBuilder()
-                    .tags(update.tags())
-                    .build()), List.of(actualThread));
-
-        }
-    }
-
-    private TraceThread createThread() {
-        var threadId = UUID.randomUUID().toString();
-        var projectName = UUID.randomUUID().toString();
-
-        var traces = IntStream.range(0, 5)
-                .mapToObj(i -> createTrace().toBuilder()
-                        .threadId(threadId)
-                        .projectName(projectName)
-                        .build())
-                .toList();
-
-        traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
-        var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
-
-        return traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
-    }
-
     private void assertErrorResponse(Response actualResponse, String message, int expected) {
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expected);
         assertThat(actualResponse.hasEntity()).isTrue();
@@ -9805,7 +8254,7 @@ class TracesResourceTest {
         }
     }
 
-    private void createAndAssertForSpan(FeedbackScoreBatchContainer request, String workspaceName, String apiKey) {
+    private void createAndAssertForSpan(FeedbackScoreBatch request, String workspaceName, String apiKey) {
         try (var actualResponse = client.target(URL_TEMPLATE_SPANS.formatted(baseURI))
                 .path("feedback-scores")
                 .request()
@@ -9847,208 +8296,4 @@ class TracesResourceTest {
     private void mockGetWorkspaceIdByName(String workspaceName, String workspaceId) {
         AuthTestUtils.mockGetWorkspaceIdByName(wireMock.server(), workspaceName, workspaceId);
     }
-
-    private List<List<FeedbackScoreBatchItemThread>> createMultiValueTraceThreadScores(
-            List<String> multipleValuesFeedbackScores,
-            Project project, String apiKey, String workspaceName) {
-        return IntStream.range(0, multipleValuesFeedbackScores.size())
-                .mapToObj(i -> {
-
-                    String threadId = UUID.randomUUID().toString();
-
-                    Trace trace1 = createTrace().toBuilder()
-                            .projectName(project.name())
-                            .threadId(threadId)
-                            .build();
-
-                    Trace trace2 = createTrace().toBuilder()
-                            .projectName(project.name())
-                            .threadId(threadId)
-                            .build();
-
-                    traceResourceClient.batchCreateTraces(List.of(trace1, trace2), apiKey, workspaceName);
-
-                    // Close thread
-                    Mono.delay(Duration.ofMillis(500)).block();
-                    traceResourceClient.closeTraceThread(threadId, project.id(), null, apiKey, workspaceName);
-
-                    List<FeedbackScoreBatchItemThread> scores = multipleValuesFeedbackScores.stream()
-                            .map(name -> factory.manufacturePojo(FeedbackScoreBatchItemThread.class).toBuilder()
-                                    .name(name)
-                                    .projectName(project.name())
-                                    .threadId(threadId)
-                                    .build())
-                            .collect(Collectors.toList());
-
-                    traceResourceClient.threadFeedbackScores(scores, apiKey, workspaceName);
-
-                    return scores;
-                }).toList();
-    }
-
-    @Nested
-    @DisplayName("Thread Reopening and Manual Score Deletion")
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class ThreadReopeningManualScoreDeletion {
-
-        @Test
-        @DisplayName("When thread is closed, manually scored, and reopened, then manual scores are deleted")
-        void whenThreadIsClosedManuallyScored_andReopened_thenManualScoresAreDeleted() {
-            // Given
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-
-            var threadId = UUID.randomUUID().toString();
-
-            // Create initial traces for the thread
-            List<Trace> initialTraces = IntStream.range(0, 3)
-                    .mapToObj(i -> createTrace().toBuilder()
-                            .projectName(projectName)
-                            .threadId(threadId)
-                            .build())
-                    .toList();
-
-            traceResourceClient.batchCreateTraces(initialTraces, apiKey, workspaceName);
-
-            // Wait for thread processing
-            Mono.delay(Duration.ofMillis(500)).block();
-
-            // Close the thread
-            traceResourceClient.closeTraceThread(threadId, projectId, null, apiKey, workspaceName);
-
-            // Wait for thread to be closed
-
-            // Add manual scores to the closed thread
-            List<FeedbackScoreBatchItemThread> manualScores = PodamFactoryUtils
-                    .manufacturePojoList(factory, FeedbackScoreBatchItemThread.class)
-                    .stream()
-                    .map(item -> item.toBuilder()
-                            .threadId(threadId)
-                            .projectName(projectName)
-                            .source(ScoreSource.UI)
-                            .build())
-                    .collect(Collectors.toList());
-
-            manualScores.set(0, manualScores.get(0)
-                    .toBuilder()
-                    .source(ScoreSource.SDK)
-                    .build());
-
-            traceResourceClient.threadFeedbackScores(manualScores, apiKey, workspaceName);
-
-            // Create new traces to reopen the thread
-            List<Trace> newTraces = IntStream.range(0, 2)
-                    .mapToObj(i -> createTrace().toBuilder()
-                            .projectName(projectName)
-                            .threadId(threadId)
-                            .build())
-                    .toList();
-
-            traceResourceClient.batchCreateTraces(newTraces, apiKey, workspaceName);
-
-            // Wait for thread to be reopened and manual scores to be deleted
-            Awaitility.await()
-                    .atMost(10, TimeUnit.SECONDS)
-                    .untilAsserted(() -> {
-                        var actualThreads = traceResourceClient.getTraceThreads(projectId, null, apiKey, workspaceName,
-                                null, null, null);
-
-                        List<Trace> allTraces = Stream.concat(initialTraces.stream(), newTraces.stream()).toList();
-
-                        var expectedReopenedThreads = getExpectedThreads(allTraces, projectId, threadId, List.of(),
-                                TraceThreadStatus.ACTIVE);
-
-                        // Verify manual scores have been deleted
-                        TraceAssertions.assertThreads(expectedReopenedThreads, actualThreads.content());
-                    });
-        }
-
-        @Test
-        @DisplayName("When thread is closed, manually scored, and reopened, then only manual scores are deleted (not automatic scores)")
-        void whenThreadIsClosedWithMixedScores_andReopened_thenOnlyManualScoresAreDeleted() {
-            // Given
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-
-            var threadId = UUID.randomUUID().toString();
-
-            // Create initial traces for the thread
-            List<Trace> initialTraces = IntStream.range(0, 2)
-                    .mapToObj(i -> createTrace().toBuilder()
-                            .projectName(projectName)
-                            .threadId(threadId)
-                            .build())
-                    .toList();
-
-            traceResourceClient.batchCreateTraces(initialTraces, apiKey, workspaceName);
-
-            // Wait for thread processing
-            Mono.delay(Duration.ofMillis(500)).block();
-
-            // Close the thread
-            traceResourceClient.closeTraceThread(threadId, projectId, null, apiKey, workspaceName);
-
-            // Wait for thread to be closed
-
-            // Add mixed scores to the closed thread (manual and automatic)
-            List<FeedbackScoreBatchItemThread> mixedScores = PodamFactoryUtils
-                    .manufacturePojoList(factory, FeedbackScoreBatchItemThread.class)
-                    .stream()
-                    .map(item -> item.toBuilder()
-                            .threadId(threadId)
-                            .projectName(projectName)
-                            .source(ScoreSource.SDK)
-                            .build())
-                    .collect(Collectors.toList());
-
-            mixedScores.set(0, mixedScores.getFirst()
-                    .toBuilder()
-                    .source(ScoreSource.ONLINE_SCORING)
-                    .build());
-
-            Instant createdAt = Instant.now();
-            traceResourceClient.threadFeedbackScores(mixedScores, apiKey, workspaceName);
-
-            // Create new traces to reopen the thread
-            List<Trace> newTraces = IntStream.range(0, 2)
-                    .mapToObj(i -> createTrace().toBuilder()
-                            .projectName(projectName)
-                            .threadId(threadId)
-                            .build())
-                    .toList();
-
-            traceResourceClient.batchCreateTraces(newTraces, apiKey, workspaceName);
-
-            // Wait for thread to be reopened and manual scores to be deleted
-            Awaitility.await()
-                    .atMost(10, TimeUnit.SECONDS)
-                    .untilAsserted(() -> {
-
-                        var actualThreads = traceResourceClient.getTraceThreads(projectId, null, apiKey, workspaceName,
-                                null, null, null);
-
-                        List<Trace> allTraces = Stream.concat(initialTraces.stream(), newTraces.stream()).toList();
-
-                        var expectedReopenedThreads = getExpectedThreads(allTraces, projectId, threadId, List.of(),
-                                TraceThreadStatus.ACTIVE,
-                                List.of(createExpectedFeedbackScore(mixedScores.getFirst(), createdAt)));
-
-                        // Verify manual scores have been deleted, but automatic scores remain
-                        TraceAssertions.assertThreads(expectedReopenedThreads, actualThreads.content());
-                    });
-        }
-    }
-
 }
