@@ -1,15 +1,12 @@
-import logging
 import random
 import textwrap
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
+import dspy
 import numpy as np
 import opik
 import optuna
-from optuna.distributions import CategoricalDistribution
-
-import dspy
 from dspy.evaluate.evaluate import Evaluate
 from dspy.propose import GroundedProposer
 from dspy.teleprompt.teleprompt import Teleprompter
@@ -23,6 +20,9 @@ from dspy.teleprompt.utils import (
     save_candidate_program,
     set_signature,
 )
+from optuna.distributions import CategoricalDistribution
+
+from ..optimization_config.configs import TaskConfig
 
 
 class Logger():
@@ -51,7 +51,7 @@ ENDC = "\033[0m"  # Resets the color to default
 
 import opik
 from opik_optimizer import task_evaluator
-from opik_optimizer.optimization_config.configs import MetricConfig, TaskConfig
+from opik_optimizer.optimization_config.configs import TaskConfig
 from opik_optimizer.optimization_config import mappers
 
 def get_prompt(program):
@@ -85,7 +85,7 @@ class MIPROv2(Teleprompter):
         log_dir: Optional[str] = None,
         metric_threshold: Optional[float] = None,
         opik_dataset: Optional[opik.Dataset] = None,
-        opik_metric_config: Optional[MetricConfig] = None,
+        opik_metric: Optional[Callable] = None,
         opik_prompt_task_config: Optional[TaskConfig] = None,
         opik_project_name: Optional[str] = None,
         opik_optimization_id: Optional[str] = None,
@@ -119,7 +119,7 @@ class MIPROv2(Teleprompter):
         self.rng = None
 
         self.opik_dataset = opik_dataset
-        self.opik_metric_config = opik_metric_config
+        self.opik_metric = opik_metric
         self.opik_prompt_task_config = opik_prompt_task_config
         self.opik_project_name = opik_project_name
         self.opik_optimization_id = opik_optimization_id
@@ -572,7 +572,7 @@ class MIPROv2(Teleprompter):
             opik_dataset=self.opik_dataset,
             trainset=valset,
             candidate_program=program,
-            metric_config=self.opik_metric_config,
+            metric=self.opik_metric,
             prompt_task_config=self.opik_prompt_task_config,
             project_name=self.opik_project_name,
             num_threads=self.num_threads,
@@ -643,15 +643,7 @@ class MIPROv2(Teleprompter):
             score = eval_candidate_program(
                 batch_size, valset, candidate_program, evaluate, self.rng
             )
-            # score = eval_candidate_program_with_opik(
-            #     opik_dataset=self.opik_dataset,
-            #     trainset=valset,
-            #     candidate_program=candidate_program,
-            #     metric_config=self.opik_metric_config,
-            #     prompt_task_config=self.opik_prompt_task_config,
-            #     project_name=self.opik_project_name,
-            #     experiment_config=experiment_config,
-            # )
+
             total_eval_calls += batch_size
 
             # Update best score and program
@@ -953,7 +945,7 @@ class MIPROv2(Teleprompter):
             opik_dataset=self.opik_dataset,
             trainset=valset,
             candidate_program=highest_mean_program,
-            metric_config=self.opik_metric_config,
+            metric=self.opik_metric,
             prompt_task_config=self.opik_prompt_task_config,
             project_name=self.opik_project_name,
             num_threads=self.num_threads,
@@ -1029,7 +1021,7 @@ def eval_candidate_program_with_opik(
     trainset: List,
     candidate_program: Any,
     project_name: str,
-    metric_config: MetricConfig,
+    metric: Callable,
     prompt_task_config: TaskConfig,
     num_threads: int,
     experiment_config: Optional[Dict[str, Any]] = None,
@@ -1057,7 +1049,7 @@ def eval_candidate_program_with_opik(
     score = task_evaluator.evaluate(
         dataset=opik_dataset,
         evaluated_task=program_task,
-        metric_config=metric_config,
+        metric=metric,
         dataset_item_ids=dataset_item_ids,
         project_name=project_name,
         num_threads=num_threads,

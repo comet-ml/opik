@@ -5,13 +5,13 @@ from typing import List, Dict, Any, Optional, Callable, TYPE_CHECKING, Final
 import opik
 from opik.api_objects.opik_client import Opik
 
+import json
 import logging
 import random
 import string
 import base64
 import urllib.parse
 from rich import console
-
 
 # Type hint for OptimizationResult without circular import
 if TYPE_CHECKING:
@@ -85,6 +85,46 @@ def get_random_seed() -> int:
 
 def random_chars(n: int) -> str:
     return "".join(random.choice(string.ascii_letters) for _ in range(n))
+
+
+def disable_experiment_reporting():
+    import opik.evaluation.report
+    
+    opik.evaluation.report._patch_display_experiment_results = opik.evaluation.report.display_experiment_results
+    opik.evaluation.report._patch_display_experiment_link = opik.evaluation.report.display_experiment_link
+    opik.evaluation.report.display_experiment_results = lambda *args, **kwargs: None
+    opik.evaluation.report.display_experiment_link = lambda *args, **kwargs: None
+
+def enable_experiment_reporting():
+    import opik.evaluation.report
+
+    try:
+        opik.evaluation.report.display_experiment_results = opik.evaluation.report._patch_display_experiment_results
+        opik.evaluation.report.display_experiment_link = opik.evaluation.report._patch_display_experiment_link
+    except AttributeError:
+        pass
+    
+def json_to_dict(json_str: str) -> Any:
+    cleaned_json_string = json_str.strip()
+
+    try:
+        return json.loads(cleaned_json_string)
+    except json.JSONDecodeError:
+        if cleaned_json_string.startswith("```json"):
+            cleaned_json_string = cleaned_json_string[7:] 
+            if cleaned_json_string.endswith("```"):
+                cleaned_json_string = cleaned_json_string[:-3]
+        elif cleaned_json_string.startswith("```"):
+            cleaned_json_string = cleaned_json_string[3:]
+            if cleaned_json_string.endswith("```"):
+                cleaned_json_string = cleaned_json_string[:-3]
+
+        try:
+            return json.loads(cleaned_json_string)
+        except json.JSONDecodeError as e:
+            print(f"Failed to parse JSON string: {json_str}")
+            logger.debug(f"Failed to parse JSON string: {json_str}")
+            raise e
 
 
 def ensure_ending_slash(url: str) -> str:

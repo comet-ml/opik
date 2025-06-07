@@ -1,30 +1,27 @@
-from typing import Any, Dict, List, Tuple, Union, Optional, Literal
 import os
 import random
 from datetime import datetime
-
-import opik
-
-from opik.integrations.dspy.callback import OpikCallback
-from opik.opik_context import get_current_span_data
-from opik.evaluation import evaluate
-from opik import Dataset
+from typing import Callable, Dict, List, Literal, Optional, Union
 
 import dspy
-
 import litellm
+import opik
 from litellm.caching import Cache
+from opik import Dataset
+from opik.evaluation import evaluate
+from opik.integrations.dspy.callback import OpikCallback
+from opik.opik_context import get_current_span_data
 
-from ..optimization_result import OptimizationResult
 from ..base_optimizer import BaseOptimizer
-from ._mipro_optimizer_v2 import MIPROv2
+from ..optimization_config.configs import TaskConfig
+from ..optimization_result import OptimizationResult
 from ._lm import LM
-from ..optimization_config.configs import MetricConfig, TaskConfig
+from ._mipro_optimizer_v2 import MIPROv2
 from .utils import (
     create_dspy_signature,
-    opik_metric_to_dspy,
     create_dspy_training_set,
     get_tool_prompts,
+    opik_metric_to_dspy,
 )
 
 # Using disk cache for LLM calls
@@ -53,7 +50,7 @@ class MiproOptimizer(BaseOptimizer):
     def evaluate_prompt(
         self,
         dataset: Union[str, Dataset],
-        metric_config: MetricConfig,
+        metric: Callable,
         task_config: TaskConfig,
         prompt: Union[str, dspy.Module, OptimizationResult] = None,
         n_samples: int = 10,
@@ -67,7 +64,7 @@ class MiproOptimizer(BaseOptimizer):
 
         Args:
             dataset: Opik dataset name or dataset
-            metric_config: A MetricConfig instance
+            metric: Metric function to optimize
             task_config: A TaskConfig instance
             prompt: The prompt to evaluate
             n_samples: number of items to test in the dataset
@@ -82,7 +79,6 @@ class MiproOptimizer(BaseOptimizer):
         # FIMXE: call super when it is ready
         # FIXME: Intermediate values:
         self.llm_call_counter += 1
-        metric = metric_config.metric
         input_key = task_config.input_dataset_fields[0]  # FIXME: allow all inputs
         output_key = task_config.output_dataset_field
 
@@ -188,7 +184,7 @@ class MiproOptimizer(BaseOptimizer):
                 "tools": (
                     [f.__name__ for f in task_config.tools] if task_config.tools else []
                 ),
-                "metric": metric_config.metric.name,
+                "metric": metric.__name__,
                 "dataset": dataset.name,
             },
         }
@@ -222,7 +218,7 @@ class MiproOptimizer(BaseOptimizer):
     def optimize_prompt(
         self,
         dataset: Union[str, Dataset],
-        metric_config: MetricConfig,
+        metric: Callable,
         task_config: TaskConfig,
         num_candidates: int = 10,
         experiment_config: Optional[Dict] = None,
@@ -236,7 +232,7 @@ class MiproOptimizer(BaseOptimizer):
         try:
             optimization = self._opik_client.create_optimization(
                 dataset_name=dataset.name,
-                objective_name=metric_config.metric.name,
+                objective_name=metric.name,
                 metadata={"optimizer": self.__class__.__name__},
             )
         except Exception:
@@ -251,7 +247,7 @@ class MiproOptimizer(BaseOptimizer):
         try:
             result = self._optimize_prompt(
                 dataset=dataset,
-                metric_config=metric_config,
+                metric=metric,
                 task_config=task_config,
                 num_candidates=num_candidates,
                 experiment_config=experiment_config,
@@ -273,7 +269,7 @@ class MiproOptimizer(BaseOptimizer):
     def _optimize_prompt(
         self,
         dataset: Union[str, Dataset],
-        metric_config: MetricConfig,
+        metric: Callable,
         task_config: TaskConfig,
         num_candidates: int = 10,
         experiment_config: Optional[Dict] = None,
@@ -286,7 +282,7 @@ class MiproOptimizer(BaseOptimizer):
         logger.info("Preparing MIPRO optimization...")
         self.prepare_optimize_prompt(
             dataset=dataset,
-            metric_config=metric_config,
+            metric=metric,
             task_config=task_config,
             num_candidates=num_candidates,
             experiment_config=experiment_config,
@@ -304,7 +300,7 @@ class MiproOptimizer(BaseOptimizer):
     def prepare_optimize_prompt(
         self,
         dataset,
-        metric_config,
+        metric,
         task_config,
         num_candidates: int = 10,
         experiment_config: Optional[Dict] = None,
@@ -316,7 +312,6 @@ class MiproOptimizer(BaseOptimizer):
     ) -> None:
         # FIXME: Intermediate values:
         self.llm_call_counter = 0
-        metric = metric_config.metric
         prompt = task_config.instruction_prompt
         input_key = task_config.input_dataset_fields[0]  # FIXME: allow all
         output_key = task_config.output_dataset_field
@@ -366,7 +361,7 @@ class MiproOptimizer(BaseOptimizer):
             **{
                 "optimizer": self.__class__.__name__,
                 "tools": [f.__name__ for f in self.tools],
-                "metric": metric.name,
+                "metric": metric.__name__,
                 "num_threads": self.num_threads,
                 "num_candidates": self.num_candidates,
                 "num_trials": self.num_trials,
@@ -385,7 +380,7 @@ class MiproOptimizer(BaseOptimizer):
             opik_prompt_task_config=task_config,
             opik_dataset=dataset,
             opik_project_name=self.project_name,
-            opik_metric_config=metric_config,
+            opik_metric=metric,
             opik_optimization_id=optimization_id,
             log_dir=log_dir,
             experiment_config=experiment_config,

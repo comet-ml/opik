@@ -1,6 +1,6 @@
 from typing import Dict, Callable, Optional, Any, Union
 
-EVALUATED_LLM_TASK_OUTPUT = "_llm_task_output"
+EVALUATED_LLM_TASK_OUTPUT = "llm_output"
 
 class Mapper:
     """Base class for mapping functions that transform data between different formats."""

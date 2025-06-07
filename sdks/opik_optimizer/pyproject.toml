@@ -1,0 +1,3 @@
+[tool.ruff]
+line-length = 100
+extend-select = ["I"]
