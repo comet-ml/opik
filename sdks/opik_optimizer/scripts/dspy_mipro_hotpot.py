@@ -13,6 +13,7 @@ import opik
 from opik.evaluation.metrics import Equals
 from opik_optimizer.datasets import hotpot_300
 from opik.integrations.dspy.callback import OpikCallback
+from opik_optimizer.utils import optimization_context
 from opik_optimizer import (
     MetricConfig,
     TaskConfig,
@@ -91,36 +92,35 @@ experiment_config = {
 }
 
 opik_client = opik.Opik()
-optimization = opik_client.create_optimization(
+
+with optimization_context(
+    client=opik_client,
     dataset_name=dataset.name,
     objective_name=metric_config.metric.name,
     metadata={"optimizer": "DSPy-MIPROv2"},
-)
+) as optimization:
+    optimizer = MIPROv2(
+        metric=metric_function,
+        auto=None,
+        num_candidates=experiment_config["num_candidates"],
+        num_threads=10,
+        verbose=False,
+        seed=42,
+        # Add these if using Opik's MIPROv2:
+        opik_dataset=dataset,
+        opik_metric_config=metric_config,
+        opik_prompt_task_config=task_config,
+        opik_project_name=project_name,
+        opik_optimization_id=optimization.id,
+        experiment_config=experiment_config,
+    )
 
-optimizer = MIPROv2(
-    metric=metric_function,
-    auto=None,
-    num_candidates=experiment_config["num_candidates"],
-    num_threads=10,
-    verbose=False,
-    seed=42,
-    # Add these if using Opik's MIPROv2:
-    opik_dataset=dataset,
-    opik_metric_config=metric_config,
-    opik_prompt_task_config=task_config,
-    opik_project_name=project_name,
-    opik_optimization_id=optimization.id,
-    experiment_config=experiment_config,
-)
+    program = dspy.ReAct("question -> answer", [search_wikipedia])
 
-program = dspy.ReAct("question -> answer", [search_wikipedia])
-
-results = optimizer.compile(
-    student=program,
-    trainset=trainset,
-    provide_traceback=True,
-    requires_permission_to_run=False,
-    num_trials=experiment_config["num_trials"],
-)
-
-optimization.update(status="completed")
+    results = optimizer.compile(
+        student=program,
+        trainset=trainset,
+        provide_traceback=True,
+        requires_permission_to_run=False,
+        num_trials=experiment_config["num_trials"],
+    )

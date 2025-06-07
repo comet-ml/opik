@@ -16,6 +16,7 @@ import litellm
 from litellm.caching import Cache
 
 from ..optimization_result import OptimizationResult
+from ..utils import optimization_context
 from ..base_optimizer import BaseOptimizer
 from ._mipro_optimizer_v2 import MIPROv2
 from ._lm import LM
@@ -232,23 +233,12 @@ class MiproOptimizer(BaseOptimizer):
         **kwargs,
     ) -> OptimizationResult:
         self._opik_client = opik.Opik()
-        optimization = None
-        try:
-            optimization = self._opik_client.create_optimization(
+        with optimization_context(
+                client=self._opik_client,
                 dataset_name=dataset.name,
                 objective_name=metric_config.metric.name,
                 metadata={"optimizer": self.__class__.__name__},
-            )
-        except Exception:
-            logger.warning(
-                "Opik server does not support optimizations. Please upgrade opik."
-            )
-            optimization = None
-
-        if not optimization:
-            logger.warning("Continuing without Opik optimization tracking.")
-
-        try:
+        ) as optimization:
             result = self._optimize_prompt(
                 dataset=dataset,
                 metric_config=metric_config,
@@ -261,14 +251,7 @@ class MiproOptimizer(BaseOptimizer):
                 auto=auto,
                 **kwargs,
             )
-            if optimization:
-                self.update_optimization(optimization, status="completed")
             return result
-        except Exception as e:
-            logger.error(f"Mipro optimization failed: {e}", exc_info=True)
-            if optimization:
-                self.update_optimization(optimization, status="cancelled")
-            raise e
 
     def _optimize_prompt(
         self,

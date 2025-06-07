@@ -1,9 +1,11 @@
 """Utility functions and constants for the optimizer package."""
 
-from typing import List, Dict, Any, Optional, Callable, TYPE_CHECKING, Final
+from typing import Dict, Any, Optional, TYPE_CHECKING, Type, Literal, Final
+from types import TracebackType
 
 import opik
 from opik.api_objects.opik_client import Opik
+from opik.api_objects.optimization import Optimization
 
 import logging
 import random
@@ -12,13 +14,84 @@ import base64
 import urllib.parse
 from rich import console
 
-
 # Type hint for OptimizationResult without circular import
 if TYPE_CHECKING:
     from .optimization_result import OptimizationResult
 
-logger = logging.getLogger(__name__)
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
+logger = logging.getLogger(__name__)
+
+
+class OptimizationContextManager:
+    """
+    Context manager for handling optimization lifecycle.
+    Automatically updates optimization status to "completed" or "cancelled" based on context exit.
+    """
+
+    def __init__(
+        self,
+        client: Opik,
+        dataset_name: str,
+        objective_name: str,
+        name: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ):
+        """
+        Initialize the optimization context.
+
+        Args:
+            client: The Opik client instance
+            dataset_name: Name of the dataset for optimization
+            objective_name: Name of the optimization objective
+            name: Optional name for the optimization
+            metadata: Optional metadata for the optimization
+        """
+        self.client = client
+        self.dataset_name = dataset_name
+        self.objective_name = objective_name
+        self.name = name
+        self.metadata = metadata
+        self.optimization: Optional[Optimization] = None
+
+    def __enter__(self) -> Optional[Optimization]:
+        """Create and return the optimization."""
+        try:
+            self.optimization = self.client.create_optimization(
+                dataset_name=self.dataset_name,
+                objective_name=self.objective_name,
+                name=self.name,
+                metadata=self.metadata,
+            )
+            if self.optimization:
+                return self.optimization
+            else:
+                return None
+        except Exception:
+            logger.warning(
+                "Opik server does not support optimizations. Please upgrade opik."
+            )
+            logger.warning("Continuing without Opik optimization tracking.")
+            return None
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> Literal[False]:
+        """Update optimization status based on context exit."""
+        if self.optimization is None:
+            return False
+
+        try:
+            if exc_type is None:
+                self.optimization.update(status="completed")
+            else:
+                self.optimization.update(status="cancelled")
+        except Exception as e:
+            logger.error(f"Failed to update optimization status: {e}")
+
+        return False
 
 
 def format_prompt(prompt: str, **kwargs: Any) -> str:
@@ -85,6 +158,36 @@ def get_random_seed() -> int:
 
 def random_chars(n: int) -> str:
     return "".join(random.choice(string.ascii_letters) for _ in range(n))
+
+
+def optimization_context(
+    client: Opik,
+    dataset_name: str,
+    objective_name: str,
+    name: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> OptimizationContextManager:
+    """
+    Create a context manager for handling optimization lifecycle.
+    Automatically updates optimization status to "completed" or "cancelled" based on context exit.
+
+    Args:
+        client: The Opik client instance
+        dataset_name: Name of the dataset for optimization
+        objective_name: Name of the optimization objective
+        name: Optional name for the optimization
+        metadata: Optional metadata for the optimization
+
+    Returns:
+        OptimizationContextManager: A context manager that handles optimization lifecycle
+    """
+    return OptimizationContextManager(
+        client=client,
+        dataset_name=dataset_name,
+        objective_name=objective_name,
+        name=name,
+        metadata=metadata,
+    )
 
 
 def ensure_ending_slash(url: str) -> str:
