@@ -13,6 +13,7 @@ public enum FilterStrategy {
     FEEDBACK_SCORES,
     TRACE_THREAD,
     FEEDBACK_SCORES_IS_EMPTY,
+    EXPERIMENT,
     ;
 
     public static final String DYNAMIC_FIELD = ":dynamicField%1$d";
