@@ -16,6 +16,11 @@ import { Textarea } from "@/components/ui/textarea";
 import useProjectUpdateMutation from "@/api/projects/useProjectUpdateMutation";
 import { useNavigate } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import { useToast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
+import { buildDocsUrl } from "@/lib/utils";
 
 type AddEditProjectDialogProps = {
   project?: Project;
@@ -30,6 +35,7 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
 }) => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { toast } = useToast();
 
   const { mutate: createMutate } = useProjectCreateMutation();
   const { mutate: updateMutate } = useProjectUpdateMutation();
@@ -42,6 +48,46 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
   const isValid = Boolean(name.length);
   const title = isEdit ? "Edit project" : "Create a new project";
   const buttonText = isEdit ? "Update project" : "Create project";
+
+  const onProjectCreated = useCallback(
+    (projectData?: { id?: string }) => {
+      const explainer =
+        EXPLAINERS_MAP[EXPLAINER_ID.i_created_a_project_now_what];
+
+      toast({
+        title: explainer.title,
+        description: explainer.description,
+        actions: [
+          <ToastAction
+            variant="link"
+            size="sm"
+            className="px-0"
+            altText="Log traces to your project"
+            key="Log traces to your project"
+          >
+            <a
+              href={buildDocsUrl(explainer.docLink)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Log traces to your project
+            </a>
+          </ToastAction>,
+        ],
+      });
+
+      if (projectData?.id) {
+        navigate({
+          to: "/$workspaceName/projects/$projectId/traces",
+          params: {
+            projectId: projectData.id,
+            workspaceName,
+          },
+        });
+      }
+    },
+    [navigate, toast, workspaceName],
+  );
 
   const submitHandler = useCallback(() => {
     if (isEdit) {
@@ -60,17 +106,7 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
           },
         },
         {
-          onSuccess(projectData) {
-            if (!projectData.id) return;
-
-            navigate({
-              to: "/$workspaceName/projects/$projectId/traces",
-              params: {
-                projectId: projectData.id,
-                workspaceName,
-              },
-            });
-          },
+          onSuccess: onProjectCreated,
         },
       );
     }
@@ -79,10 +115,9 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
     description,
     isEdit,
     name,
-    navigate,
+    onProjectCreated,
     project,
     updateMutate,
-    workspaceName,
   ]);
 
   return (
@@ -91,6 +126,14 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
+        {!isEdit && (
+          <ExplainerDescription
+            className="mb-4"
+            {...EXPLAINERS_MAP[
+              EXPLAINER_ID.why_would_i_want_to_create_a_new_project
+            ]}
+          />
+        )}
         <div className="flex flex-col gap-2 pb-4">
           <Label htmlFor="projectName">Name</Label>
           <Input

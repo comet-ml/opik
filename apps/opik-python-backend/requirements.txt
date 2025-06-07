@@ -22,3 +22,4 @@ opentelemetry-exporter-otlp-proto-http==1.31.1
 opentelemetry-exporter-prometheus==0.52b1
 opentelemetry-instrumentation-flask==0.52b1
 prometheus-client==0.21.1
+schedule==1.2.1

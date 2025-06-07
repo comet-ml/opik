@@ -15,6 +15,8 @@ import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.filter.ExperimentFilter;
+import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.resources.v1.priv.validate.ExperimentItemBulkValidator;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
@@ -93,6 +95,7 @@ public class ExperimentsResource {
     private final @NonNull ExperimentSortingFactory sortingFactory;
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull ExperimentItemBulkIngestionService experimentItemBulkIngestionService;
+    private final @NonNull FiltersFactory filtersFactory;
 
     @GET
     @Operation(operationId = "findExperiments", summary = "Find experiments", description = "Find experiments", responses = {
@@ -109,7 +112,8 @@ public class ExperimentsResource {
             @QueryParam("name") String name,
             @QueryParam("dataset_deleted") boolean datasetDeleted,
             @QueryParam("prompt_id") UUID promptId,
-            @QueryParam("sorting") String sorting) {
+            @QueryParam("sorting") String sorting,
+            @QueryParam("filters") String filters) {
 
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
 
@@ -121,6 +125,8 @@ public class ExperimentsResource {
         if (!sortingFields.isEmpty() && !metadata.canUseDynamicSorting()) {
             sortingFields = List.of();
         }
+
+        var experimentFilters = filtersFactory.newFilters(filters, ExperimentFilter.LIST_TYPE_REFERENCE);
 
         var types = Optional.ofNullable(typesQueryParam)
                 .map(queryParam -> ParamsValidator.get(queryParam, ExperimentType.class, "types"))
@@ -135,6 +141,7 @@ public class ExperimentsResource {
                 .sortingFields(sortingFields)
                 .optimizationId(optimizationId)
                 .types(types)
+                .filters(experimentFilters)
                 .build();
 
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
@@ -333,8 +340,7 @@ public class ExperimentsResource {
     @RateLimited
     @UsageLimited
     public Response experimentItemsBulk(
-            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentItemBulkUpload.class))) @JsonView({
-                    ExperimentItemBulkUpload.View.Write.class}) @NotNull @Valid ExperimentItemBulkUpload request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentItemBulkUpload.class))) @NotNull @Valid @JsonView(ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class) ExperimentItemBulkUpload request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();

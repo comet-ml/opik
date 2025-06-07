@@ -1,1 +1,1 @@
-from .mipro_optimizer import MiproOptimizer
+from .mipro_optimizer import MiproOptimizer, MIPROv2

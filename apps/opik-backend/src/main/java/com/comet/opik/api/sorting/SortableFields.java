@@ -1,6 +1,10 @@
 package com.comet.opik.api.sorting;
 
+import lombok.experimental.UtilityClass;
+
+@UtilityClass
 public class SortableFields {
+
     public static final String ID = "id";
     public static final String NAME = "name";
     public static final String CREATED_AT = "created_at";
@@ -23,9 +27,12 @@ public class SortableFields {
     public static final String MODEL = "model";
     public static final String PROVIDER = "provider";
     public static final String TOTAL_ESTIMATED_COST = "total_estimated_cost";
+    public static final String TOTAL_ESTIMATED_COST_AVG = "total_estimated_cost_avg";
     public static final String ERROR_INFO = "error_info";
     public static final String CREATED_BY = "created_by";
     public static final String LAST_UPDATED_BY = "last_updated_by";
     public static final String TRACE_COUNT = "trace_count";
     public static final String FEEDBACK_SCORES = "feedback_scores.*";
+    public static final String NUMBER_OF_MESSAGES = "number_of_messages";
+    public static final String DYNAMIC_USAGE = "usage.*";
 }

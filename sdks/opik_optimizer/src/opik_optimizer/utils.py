@@ -1,12 +1,24 @@
 """Utility functions and constants for the optimizer package."""
 
+from typing import List, Dict, Any, Optional, Callable, TYPE_CHECKING, Final
+
+import opik
+from opik.api_objects.opik_client import Opik
+
 import json
 import logging
 import random
 import string
-from typing import Any
+import base64
+import urllib.parse
+from rich import console
+
+# Type hint for OptimizationResult without circular import
+if TYPE_CHECKING:
+    from .optimization_result import OptimizationResult
 
 logger = logging.getLogger(__name__)
+ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 
 
 def format_prompt(prompt: str, **kwargs: Any) -> str:
@@ -113,3 +125,34 @@ def json_to_dict(json_str: str) -> Any:
             print(f"Failed to parse JSON string: {json_str}")
             logger.debug(f"Failed to parse JSON string: {json_str}")
             raise e
+
+
+def ensure_ending_slash(url: str) -> str:
+    return url.rstrip("/") + "/"
+
+
+def get_optimization_run_url_by_id(
+    dataset_id: str, optimization_id: str, url_override: str
+) -> str:
+    encoded_opik_url = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
+
+    run_path = urllib.parse.quote(
+        f"v1/session/redirect/optimizations/?optimization_id={optimization_id}&dataset_id={dataset_id}&path={encoded_opik_url}",
+        safe=ALLOWED_URL_CHARACTERS,
+    )
+    return urllib.parse.urljoin(ensure_ending_slash(url_override), run_path)
+
+
+def display_optimization_run_link(
+    optimization_id: str, dataset_id: str, url_override: str
+) -> None:
+    console_container = console.Console()
+
+    optimization_url = get_optimization_run_url_by_id(
+        optimization_id=optimization_id,
+        dataset_id=dataset_id,
+        url_override=url_override,
+    )
+    console_container.print(
+        f"View the optimization run [link={optimization_url}]in your Opik dashboard[/link]."
+    )
