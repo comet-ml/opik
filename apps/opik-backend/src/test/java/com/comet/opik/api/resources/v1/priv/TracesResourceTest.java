@@ -1525,16 +1525,24 @@ class TracesResourceTest {
                     .toList();
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-            var spans = traces.stream()
-                    .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
-                            .map(span -> span.toBuilder()
-                                    .projectName(projectName)
-                                    .traceId(trace.id())
-                                    .startTime(trace.startTime())
-                                    .usage(null)
-                                    .totalEstimatedCost(null)
-                                    .build()))
-                    .toList();
+            // create spans to populate usage and total cost statistics
+            List<Span> spans = new ArrayList<>();
+            for (Trace trace : traces) {
+                for (int i = 0; i < trace.spanCount(); i++) {
+                    spans.add(factory.manufacturePojo(Span.class).toBuilder()
+                            .traceId(trace.id())
+                            .projectName(projectName)
+                            .startTime(trace.startTime()) // Add this line
+                            .usage(Map.of("prompt_tokens", randomNumber(1, 50)))
+                            .totalEstimatedCost(new BigDecimal(randomNumber(1, 10)))
+                            .build());
+                }
+            }
+
+            if (!spans.isEmpty()) {
+                spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+            }
+
             batchCreateSpansAndAssert(spans, apiKey, workspaceName);
 
             var values = testAssertion.transformTestParams(traces, traces.reversed(), List.of());
@@ -4986,7 +4994,9 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
-                            .usage(null)
+                            .spanCount((int) randomNumber(1, 5))
+                            .usage(Map.of("prompt_tokens", (long) randomNumber(1, 50)))
+                            .totalEstimatedCost(new BigDecimal(randomNumber(1, 10)))
                             .feedbackScores(null)
                             .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
                             .comments(null)
@@ -5149,7 +5159,39 @@ class TracesResourceTest {
                     Arguments.of(Comparator.comparing(Trace::threadId), SortingField.builder()
                             .field(SortableFields.THREAD_ID).direction(Direction.ASC).build()),
                     Arguments.of(Comparator.comparing(Trace::threadId).reversed(), SortingField.builder()
-                            .field(SortableFields.THREAD_ID).direction(Direction.DESC).build()));
+                            .field(SortableFields.THREAD_ID).direction(Direction.DESC).build()),
+                    Arguments.of(
+                            Comparator.comparing(Trace::spanCount)
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field(SortableFields.SPAN_COUNT).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            Comparator.comparing(Trace::spanCount).reversed()
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field(SortableFields.SPAN_COUNT).direction(Direction.DESC).build()),
+                    Arguments.of(
+                            Comparator
+                                    .comparing(Trace::totalEstimatedCost,
+                                            Comparator.nullsFirst(Comparator.naturalOrder()))
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field(SortableFields.TOTAL_ESTIMATED_COST).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(
+                            Comparator
+                                    .comparing(Trace::totalEstimatedCost,
+                                            Comparator.nullsLast(Comparator.reverseOrder()))
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field(SortableFields.TOTAL_ESTIMATED_COST).direction(Direction.DESC)
+                                    .build()),
+                    Arguments.of(
+                            Comparator.comparing((Trace t) -> t.usage() == null ? null : t.usage().get("prompt_tokens"),
+                                    Comparator.nullsFirst(Comparator.naturalOrder()))
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field("usage.prompt_tokens").direction(Direction.ASC).build()),
+                    Arguments.of(
+                            Comparator.comparing((Trace t) -> t.usage() == null ? null : t.usage().get("prompt_tokens"),
+                                    Comparator.nullsLast(Comparator.reverseOrder()))
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field("usage.prompt_tokens").direction(Direction.DESC).build()));
         }
 
         @Test

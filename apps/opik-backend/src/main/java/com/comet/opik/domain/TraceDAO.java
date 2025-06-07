@@ -495,9 +495,14 @@ class TraceDAOImpl implements TraceDAO {
                     sum(total_estimated_cost) as total_estimated_cost,
                     COUNT(DISTINCT id) as span_count,
                     countIf(type = 'llm') as llm_span_count
-                FROM spans final
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
+                FROM (
+                    SELECT *
+                    FROM spans
+                    WHERE workspace_id = :workspace_id
+                      AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
                 GROUP BY workspace_id, project_id, trace_id
             ), comments_agg AS (
                 SELECT
@@ -903,9 +908,14 @@ class TraceDAOImpl implements TraceDAO {
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost
-                FROM spans final
-                WHERE workspace_id = :workspace_id
-                AND project_id IN :project_ids
+                FROM (
+                    SELECT *
+                    FROM spans
+                    WHERE workspace_id = :workspace_id
+                      AND project_id IN :project_ids
+                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
                 GROUP BY workspace_id, project_id, trace_id
             ), feedback_scores_agg AS (
                 SELECT
