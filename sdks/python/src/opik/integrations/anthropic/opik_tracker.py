@@ -2,6 +2,7 @@ from typing import Optional
 import logging
 
 import anthropic
+from opik.config import is_tracing_active
 from . import messages_create_decorator
 from . import messages_batch_decorator
 from typing import TypeVar, Dict, Any
@@ -47,6 +48,9 @@ def track_anthropic(
     Returns:
         Anthropic client with integrated Opik tracking logic.
     """
+    # Check if tracing is active
+    if not is_tracing_active():
+        return anthropic_client
 
     if hasattr(anthropic_client, "opik_tracked"):
         return anthropic_client
