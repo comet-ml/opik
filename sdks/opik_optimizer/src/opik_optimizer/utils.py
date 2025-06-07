@@ -1,6 +1,7 @@
 """Utility functions and constants for the optimizer package."""
 
-from typing import List, Dict, Any, Optional, Callable, TYPE_CHECKING, Final
+from typing import Dict, Any, Optional, TYPE_CHECKING, Type, Literal
+from types import TracebackType
 
 import opik
 from opik.api_objects.opik_client import Opik
@@ -13,16 +14,12 @@ import base64
 import urllib.parse
 from rich import console
 
-from typing import List, Dict, Any, Optional, Callable, TYPE_CHECKING, Type, Literal
-from types import TracebackType
-
-
 # Type hint for OptimizationResult without circular import
 if TYPE_CHECKING:
     from .optimization_result import OptimizationResult
 
-logger = logging.getLogger(__name__)
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
+LOGGER = logging.getLogger(__name__)
 
 
 class OptimizationContextManager:
@@ -70,10 +67,10 @@ class OptimizationContextManager:
             else:
                 return None
         except Exception:
-            logger.warning(
+            LOGGER.warning(
                 "Opik server does not support optimizations. Please upgrade opik."
             )
-            logger.warning("Continuing without Opik optimization tracking.")
+            LOGGER.warning("Continuing without Opik optimization tracking.")
             return None
 
     def __exit__(
@@ -92,7 +89,7 @@ class OptimizationContextManager:
             else:
                 self.optimization.update(status="cancelled")
         except Exception as e:
-            logger.error(f"Failed to update optimization status: {e}")
+            LOGGER.error(f"Failed to update optimization status: {e}")
 
         return False
 
@@ -175,6 +172,7 @@ def optimization_context(
     Automatically updates optimization status to "completed" or "cancelled" based on context exit.
 
     Args:
+        client: The Opik client instance
         dataset_name: Name of the dataset for optimization
         objective_name: Name of the optimization objective
         name: Optional name for the optimization
