@@ -1590,8 +1590,11 @@ class TraceDAOImpl implements TraceDAO {
                         finalTemplate.add("sort_has_feedback_scores", true);
                     }
 
-                    if (sortFields.contains("usage") || sortFields.contains("span_count")
-                            || sortFields.contains("total_estimated_cost")) {
+                    boolean hasSpanStatistics = sortFields.contains("usage")
+                            || sortFields.contains("span_count")
+                            || sortFields.contains("total_estimated_cost");
+
+                    if (hasSpanStatistics) {
                         finalTemplate.add("sort_has_span_statistics", true);
                     }
 

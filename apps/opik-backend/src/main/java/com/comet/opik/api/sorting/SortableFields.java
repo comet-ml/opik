@@ -18,8 +18,7 @@ public class SortableFields {
     public static final String END_TIME = "end_time";
     public static final String DURATION = "duration";
     public static final String METADATA = "metadata";
-    public static final String USAGE = "usage";
-    public static final String USAGE_DYNAMIC = "usage.*";
+    public static final String USAGE = "usage.*";
     public static final String TAGS = "tags";
     public static final String TRACE_ID = "trace_id";
     public static final String THREAD_ID = "thread_id";
@@ -36,5 +35,4 @@ public class SortableFields {
     public static final String TRACE_COUNT = "trace_count";
     public static final String FEEDBACK_SCORES = "feedback_scores.*";
     public static final String NUMBER_OF_MESSAGES = "number_of_messages";
-    public static final String DYNAMIC_USAGE = "usage.*";
 }

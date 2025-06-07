@@ -2,6 +2,20 @@ import { ColumnSort } from "@tanstack/react-table";
 import { SORT_DIRECTION, SortingField } from "@/types/sorting";
 import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
 
+/**
+ * Transforms column IDs prefixed with `usage_` into dot notation (`usage.`).
+ * This is used to ensure compatibility with downstream sorting logic.
+ */
+export const mapUsageColumn = (column: ColumnSort): ColumnSort => {
+  if (column.id.startsWith("usage_")) {
+    return {
+      ...column,
+      id: column.id.replace("usage_", "usage."),
+    };
+  }
+  return column;
+};
+
 export const processSorting = (sorting?: ColumnSort[]) => {
   const retVal: {
     sorting?: string;
@@ -34,16 +48,6 @@ export const mapFeedbackScoresColumn = (column: ColumnSort): ColumnSort => {
         `${COLUMN_FEEDBACK_SCORES_ID}_`,
         `${COLUMN_FEEDBACK_SCORES_ID}.`,
       ),
-    };
-  }
-  return column;
-};
-
-export const mapUsageColumn = (column: ColumnSort): ColumnSort => {
-  if (column.id.startsWith("usage_")) {
-    return {
-      ...column,
-      id: column.id.replace("usage_", "usage."),
     };
   }
   return column;

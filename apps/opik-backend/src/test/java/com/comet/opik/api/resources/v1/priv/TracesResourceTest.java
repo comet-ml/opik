@@ -8150,7 +8150,7 @@ class TracesResourceTest {
                     SortableFields.CREATED_BY,
                     SortableFields.CREATED_AT,
                     SortableFields.TOTAL_ESTIMATED_COST,
-                    SortableFields.DYNAMIC_USAGE);
+                    SortableFields.USAGE);
         }
 
         @Test
