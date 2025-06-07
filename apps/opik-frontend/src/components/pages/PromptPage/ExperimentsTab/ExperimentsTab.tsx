@@ -294,8 +294,17 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   });
 
   const renderCustomRowCallback = useCallback(
-    (row: Row<GroupedExperiment>, applyStickyWorkaround?: boolean) => {
-      return renderCustomRow(row, setGroupLimit, applyStickyWorkaround);
+    (
+      row: Row<GroupedExperiment>,
+      applyStickyWorkaround?: boolean,
+      withAutoColumn?: boolean,
+    ) => {
+      return renderCustomRow(
+        row,
+        setGroupLimit,
+        applyStickyWorkaround,
+        withAutoColumn,
+      );
     },
     [setGroupLimit],
   );

@@ -102,6 +102,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
         cell: DurationCell as never,
+        size: 150,
       },
       {
         id: "duration.p90",
@@ -122,6 +123,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         label: "Total cost",
         type: COLUMN_TYPE.cost,
         cell: CostCell as never,
+        size: 115,
       },
       {
         id: "trace_count",
@@ -210,6 +212,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         id: "description",
         label: "Description",
         type: COLUMN_TYPE.string,
+        size: 350,
       },
     ];
   }, [isGuardrailsEnabled]);
