@@ -1,6 +1,6 @@
 """Utility functions and constants for the optimizer package."""
 
-from typing import Dict, Any, Optional, TYPE_CHECKING, Type, Literal
+from typing import Dict, Any, Optional, TYPE_CHECKING, Type, Literal, Final
 from types import TracebackType
 
 import opik
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from .optimization_result import OptimizationResult
 
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
-LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class OptimizationContextManager:
@@ -67,10 +67,10 @@ class OptimizationContextManager:
             else:
                 return None
         except Exception:
-            LOGGER.warning(
+            logger.warning(
                 "Opik server does not support optimizations. Please upgrade opik."
             )
-            LOGGER.warning("Continuing without Opik optimization tracking.")
+            logger.warning("Continuing without Opik optimization tracking.")
             return None
 
     def __exit__(
@@ -89,7 +89,7 @@ class OptimizationContextManager:
             else:
                 self.optimization.update(status="cancelled")
         except Exception as e:
-            LOGGER.error(f"Failed to update optimization status: {e}")
+            logger.error(f"Failed to update optimization status: {e}")
 
         return False
 
