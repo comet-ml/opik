@@ -54,7 +54,7 @@ class OptimizationContextManager:
         self.optimization: Optional[Optimization] = None
 
     def __enter__(self) -> Optional[Optimization]:
-        """Create and return the optimization ID."""
+        """Create and return the optimization."""
         try:
             self.optimization = self.client.create_optimization(
                 dataset_name=self.dataset_name,
