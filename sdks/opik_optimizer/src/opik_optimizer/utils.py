@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional, Callable, TYPE_CHECKING, Final
 
 import opik
 from opik.api_objects.opik_client import Opik
+from opik.api_objects.optimization import Optimization
 
 import logging
 import random
@@ -188,7 +189,9 @@ def optimization_context(
         objective_name=objective_name,
         name=name,
         metadata=metadata,
-=======
+    )
+
+
 def ensure_ending_slash(url: str) -> str:
     return url.rstrip("/") + "/"
 
