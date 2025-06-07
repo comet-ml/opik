@@ -81,3 +81,10 @@ Each agent execution will now be logged to the Opik platform:
 <Frame>
   <img src="/img/cookbook/adk_trace_cookbook.png" />
 </Frame>
+
+## Logging threads
+
+The Opik integration automatically retrieves key information from [ADK Session](https://google.github.io/adk-docs/sessions/session/):
+
+* It uses the session ID as Opik Thread ID, allowing you to easily group traces from the same thread and review them at ease
+* It logs the app_name and userId as metadata
