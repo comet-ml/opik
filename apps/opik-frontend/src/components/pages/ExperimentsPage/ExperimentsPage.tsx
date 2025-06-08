@@ -400,7 +400,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
     scoresColumnsData,
     scoresColumnsOrder,
     metadataColumnsData,
-    metadataColumnsData,
+    metadataColumnsOrder,
   ]);
 
   const sortConfig = useMemo(
