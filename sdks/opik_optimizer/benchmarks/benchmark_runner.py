@@ -15,9 +15,6 @@ import opik_optimizer
 import opik_optimizer.datasets
 from opik_optimizer import (
     BaseOptimizer,
-    MetricConfig,
-    from_dataset_field,
-    from_llm_response_text,
     reporting_utils,
 )
 from opik_optimizer.optimization_config import chat_prompt
@@ -48,33 +45,20 @@ def run_optimization(
                 **optimizer_config.params
             )
 
-            metric_config: List[MetricConfig] = []
-            for metric in dataset_config.metrics:
-                metric_config.append(MetricConfig(
-                    metric=metric,
-                    inputs={
-                        "input": from_dataset_field(name=dataset_config.input_key),
-                        "output": from_llm_response_text(),
-                        "expected_output": from_dataset_field(name=dataset_config.output_key),
-                        "context": from_dataset_field(name=dataset_config.input_key),
-                        "reference": from_dataset_field(name=dataset_config.output_key),
-                    }
-                ))
-            
             messages=benchmark_config.INITIAL_PROMPTS[dataset_name]
             initial_prompt = chat_prompt.ChatPrompt(messages=messages) # type: ignore
 
             # Start by running a first evaluation
             start_time_initial_eval = time.time()
             initial_evaluation = []
-            for metric_ in metric_config:
+            for metric_ in dataset_config.metrics:
                 result=optimizer.evaluate_prompt(
                     prompt=initial_prompt,
                     dataset=dataset,
-                    metric_config=metric_
+                    metric=metric_
                 )
                 initial_evaluation.append({
-                    "metric_name": metric_.metric.name,
+                    "metric_name": metric_.__name__,
                     "score": result,
                     "timestamp": time.time()
                 })
@@ -84,21 +68,21 @@ def run_optimization(
             optimization_results = optimizer.optimize_prompt(
                 prompt=initial_prompt,
                 dataset=dataset,
-                metric_config=metric_config[0]
+                metric=dataset_config.metrics[0]
             )
             optimized_prompt = chat_prompt.ChatPrompt(messages=optimization_results.prompt)
 
             # Run final evaluation
             start_time_final_eval = time.time()
             optimized_evaluation = []
-            for metric_ in metric_config:
+            for metric_ in dataset_config.metrics:
                 result = optimizer.evaluate_prompt(
                     prompt=optimized_prompt,
                     dataset=dataset,
-                    metric_config=metric_
+                    metric=metric_
                 )
                 optimized_evaluation.append({
-                    "metric_name": metric_.metric.name,
+                    "metric_name": metric_.__name__,
                     "score": result,
                     "timestamp": time.time()
                 })

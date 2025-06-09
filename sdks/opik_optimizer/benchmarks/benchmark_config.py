@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 from opik.evaluation.metrics import (
     AnswerRelevance,
@@ -17,9 +17,7 @@ class BenchmarkDatasetConfig(BaseModel):
     
     name: str
     display_name: str
-    metrics: List[BaseMetric]
-    input_key: str
-    output_key: str
+    metrics: List[Callable]
 
 class BenchmarkProjectConfig(BaseModel):
     name: str
@@ -41,85 +39,81 @@ class BenchmarkExperimentConfig(BaseModel):
     parameters: Dict[str, Any]
     metrics: List[str]
 
+def levenshtein_ratio(dataset_item, llm_output):
+    return LevenshteinRatio().score(reference=dataset_item['answer'], output=llm_output)
+
+def equals(dataset_item, llm_output):
+    return Equals().score(reference=dataset_item['answer'], output=llm_output)
+
+def create_answer_relevance_metric(name_input_col):
+    def answer_relevance(dataset_item, llm_output):
+        return AnswerRelevance(require_context=False).score(input=dataset_item[name_input_col], output=llm_output)
+    return answer_relevance
+
+def hallucination(dataset_item, llm_output):
+    return Hallucination().score(input=dataset_item["question"], output=llm_output)
+
 
 DATASET_CONFIG = {
     "gsm8k": BenchmarkDatasetConfig(
         name="gsm8k",
         display_name="GSM8K",
-        metrics=[LevenshteinRatio()],
-        input_key="question",
-        output_key="answer",
+        metrics=[levenshtein_ratio]
     ),
     "ragbench_sentence_relevance": BenchmarkDatasetConfig(
         name="ragbench_sentence_relevance",
         display_name="RAGBench Sentence Relevance",
-        metrics=[AnswerRelevance(require_context=False)],
-        input_key="question",
-        output_key="sentence",
+        metrics=[create_answer_relevance_metric("question")]
     ),
     # "election_questions": BenchmarkDatasetConfig(
     #     name="election_questions",
     #     display_name="Election Questions",
-    #     metrics=[Hallucination()],
-    #     input_key="question",
-    #     output_key="label"
+    #     metrics=[Hallucination()]
     # ),
     "medhallu": BenchmarkDatasetConfig(
         name="MedHallu",
         display_name="MedHallu",
-        metrics=[Hallucination(), AnswerRelevance(require_context=False)],
-        input_key="question",
-        output_key="ground_truth",
+        metrics=[hallucination, create_answer_relevance_metric("question")]
     ),
     # "rag_hallucinations": BenchmarkDatasetConfig(
     #     name="rag_hallucinations",
     #     display_name="RAG Hallucinations",
-    #     metrics=[Hallucination(), ContextPrecision()],
-    #     input_key="question",
-    #     output_key="answer",
+    #     metrics=[Hallucination(), ContextPrecision()]
     # ),
     # "hotpot_300": BenchmarkDatasetConfig(
     #     name="hotpot_300",
     #     display_name="HotpotQA",
-    #     metrics=[AnswerRelevance(), ContextPrecision()],
-    #     input_key="question",
-    #     output_key="answer",
+    #     metrics=[AnswerRelevance(), ContextPrecision()]
     # ),
     "ai2_arc": BenchmarkDatasetConfig(
         name="ai2_arc",
         display_name="ARC",
-        metrics=[Equals()],
-        input_key="question",
-        output_key="answer",
+        metrics=[equals]
     ),
     # "truthful_qa": BenchmarkDatasetConfig(
     #     name="TruthfulQA",
     #     display_name="TruthfulQA",
-    #     metrics=[Hallucination(), AnswerRelevance()],
-    #     input_key="question",
-    #     output_key="answer",
+    #     metrics=[Hallucination(), AnswerRelevance()]
     # ),
     # "cnn_dailymail": BenchmarkDatasetConfig(
     #     name="cnn_dailymail",
     #     display_name="CNN/Daily Mail",
-    #     metrics=[LevenshteinRatio(), ContextRecall()],
-    #     input_key="article",
-    #     output_key="highlights",
+    #     metrics=[LevenshteinRatio(), ContextRecall()]
     # ),
 }
 
 OPTIMIZER_CONFIGS: Dict[str, BenchmarkOptimizerConfig] = {
-    # "few_shot": BenchmarkOptimizerConfig(
-    #     class_name="FewShotBayesianOptimizer",
-    #     params={
-    #         "min_examples": 2,
-    #         "max_examples": 7,
-    #         "n_threads": 4,
-    #         "n_trials": 10,
-    #         "n_samples": 100,
-    #         "seed": 42,
-    #     },
-    # ),
+    "few_shot": BenchmarkOptimizerConfig(
+        class_name="FewShotBayesianOptimizer",
+        params={
+            "min_examples": 2,
+            "max_examples": 7,
+            "n_threads": 4,
+            "n_trials": 10,
+            "n_samples": 100,
+            "seed": 42,
+        },
+    ),
     "meta_prompt": BenchmarkOptimizerConfig(
         class_name="MetaPromptOptimizer",
         params={
@@ -131,23 +125,23 @@ OPTIMIZER_CONFIGS: Dict[str, BenchmarkOptimizerConfig] = {
             "seed": 42,
         },
     ),
-    # "evolutionary_optimizer": BenchmarkOptimizerConfig(
-    #     class_name="EvolutionaryOptimizer",
-    #     params={
-    #         "population_size": 10,
-    #         "num_generations": 4,
-    #         "mutation_rate": 0.2,
-    #         "crossover_rate": 0.8,
-    #         "tournament_size": 4,
-    #         "num_threads": 4,
-    #         "elitism_size": 2,
-    #         "adaptive_mutation": True,
-    #         "enable_moo": False,
-    #         "enable_llm_crossover": False,
-    #         "seed": 42,
-    #         "infer_output_style": True
-    #     }
-    # ),
+    "evolutionary_optimizer": BenchmarkOptimizerConfig(
+        class_name="EvolutionaryOptimizer",
+        params={
+            "population_size": 10,
+            "num_generations": 4,
+            "mutation_rate": 0.2,
+            "crossover_rate": 0.8,
+            "tournament_size": 4,
+            "num_threads": 4,
+            "elitism_size": 2,
+             "adaptive_mutation": True,
+            "enable_moo": False,
+            "enable_llm_crossover": False,
+            "seed": 42,
+            "infer_output_style": True
+        }
+    ),
 }
 
 MODELS = [
