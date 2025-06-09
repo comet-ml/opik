@@ -279,7 +279,9 @@ const UserMenu = () => {
                         toast({ description: "Successfully copied API Key" });
                       }}
                     >
-                      <span>{maskAPIKey(user.apiKeys[0])}</span>
+                      <span className="truncate">
+                        {maskAPIKey(user.apiKeys[0])}
+                      </span>
                       <Copy className="ml-2 size-3 shrink-0" />
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
