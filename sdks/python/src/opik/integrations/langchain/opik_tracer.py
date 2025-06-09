@@ -310,7 +310,12 @@ class OpikTracer(BaseTracer):
             new_trace_data, new_span_data = self._track_root_run(run_dict)
             if new_trace_data is not None:
                 self._opik_context_storage.set_trace_data(new_trace_data)
+                if self._opik_client.config.log_start_trace_span:
+                    self._opik_client.trace(**new_trace_data.as_start_parameters)
+
             self._opik_context_storage.add_span_data(new_span_data)
+            if self._opik_client.config.log_start_trace_span:
+                self._opik_client.span(**new_span_data.as_start_parameters)
             return
 
         parent_span_data = self._span_data_map[run.parent_run_id]
@@ -339,6 +344,8 @@ class OpikTracer(BaseTracer):
             ]
 
         self._opik_context_storage.add_span_data(new_span_data)
+        if self._opik_client.config.log_start_trace_span:
+            self._opik_client.span(**new_span_data.as_start_parameters)
 
     def _process_end_span(self, run: "Run") -> None:
         try:
@@ -368,7 +375,7 @@ class OpikTracer(BaseTracer):
                 model=usage_info.model,
             )
 
-            self._opik_client.span(**span_data.__dict__)
+            self._opik_client.span(**span_data.as_parameters)
         except Exception as e:
             LOGGER.debug(f"Failed during _process_end_span: {e}")
         finally:
@@ -390,7 +397,7 @@ class OpikTracer(BaseTracer):
                 output=None,
                 error_info=error_info,
             )
-            self._opik_client.span(**span_data.__dict__)
+            self._opik_client.span(**span_data.as_parameters)
         except Exception as e:
             LOGGER.debug(f"Failed during _process_end_span_with_error: {e}")
         finally:
