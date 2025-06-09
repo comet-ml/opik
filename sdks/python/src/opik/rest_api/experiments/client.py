@@ -47,6 +47,7 @@ class ExperimentsClient:
         dataset_deleted: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentPagePublic:
         """
@@ -72,6 +73,8 @@ class ExperimentsClient:
 
         sorting : typing.Optional[str]
 
+        filters : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -96,6 +99,7 @@ class ExperimentsClient:
             dataset_deleted=dataset_deleted,
             prompt_id=prompt_id,
             sorting=sorting,
+            filters=filters,
             request_options=request_options,
         )
         return _response.data
@@ -465,6 +469,7 @@ class AsyncExperimentsClient:
         dataset_deleted: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentPagePublic:
         """
@@ -489,6 +494,8 @@ class AsyncExperimentsClient:
         prompt_id : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -517,6 +524,7 @@ class AsyncExperimentsClient:
             dataset_deleted=dataset_deleted,
             prompt_id=prompt_id,
             sorting=sorting,
+            filters=filters,
             request_options=request_options,
         )
         return _response.data

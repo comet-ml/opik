@@ -45,6 +45,7 @@ class RawExperimentsClient:
         dataset_deleted: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ExperimentPagePublic]:
         """
@@ -70,6 +71,8 @@ class RawExperimentsClient:
 
         sorting : typing.Optional[str]
 
+        filters : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -91,6 +94,7 @@ class RawExperimentsClient:
                 "dataset_deleted": dataset_deleted,
                 "prompt_id": prompt_id,
                 "sorting": sorting,
+                "filters": filters,
             },
             request_options=request_options,
         )
@@ -663,6 +667,7 @@ class AsyncRawExperimentsClient:
         dataset_deleted: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ExperimentPagePublic]:
         """
@@ -688,6 +693,8 @@ class AsyncRawExperimentsClient:
 
         sorting : typing.Optional[str]
 
+        filters : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -709,6 +716,7 @@ class AsyncRawExperimentsClient:
                 "dataset_deleted": dataset_deleted,
                 "prompt_id": prompt_id,
                 "sorting": sorting,
+                "filters": filters,
             },
             request_options=request_options,
         )
