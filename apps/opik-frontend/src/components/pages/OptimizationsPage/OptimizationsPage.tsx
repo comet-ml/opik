@@ -30,16 +30,19 @@ import { toString } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
 import { getFeedbackScore } from "@/lib/feedback-scores";
 import {
+  COLUMN_DATASET_ID,
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
+import { Filter } from "@/types/filters";
 import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddOptimizationDialog from "@/components/pages/OptimizationsPage/AddOptimizationDialog/AddOptimizationDialog";
 import OptimizationsActionsPanel from "@/components/pages/OptimizationsPage/OptimizationsActionsPanel/OptimizationsActionsPanel";
-import ExperimentsFiltersButton from "@/components/pages-shared/experiments/ExperimentsFiltersButton/ExperimentsFiltersButton";
+import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
+import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import OptimizationRowActionsCell from "@/components/pages/OptimizationsPage/OptimizationRowActionsCell";
 import FeedbackScoresChartsWrapper from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartsWrapper";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -122,6 +125,15 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
   },
 ];
 
+export const FILTER_COLUMNS: ColumnData<GroupedOptimization>[] = [
+  {
+    id: COLUMN_DATASET_ID,
+    label: "Dataset",
+    type: COLUMN_TYPE.string,
+    disposable: true,
+  },
+];
+
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_NAME_ID, GROUPING_COLUMN],
   right: [],
@@ -145,11 +157,11 @@ const OptimizationsPage: React.FunctionComponent = () => {
     updateType: "replaceIn",
   });
 
-  const [page = 1, setPage] = useQueryParam("page", NumberParam, {
+  const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
     updateType: "replaceIn",
   });
 
-  const [datasetId = "", setDatasetId] = useQueryParam("dataset", StringParam, {
+  const [page = 1, setPage] = useQueryParam("page", NumberParam, {
     updateType: "replaceIn",
   });
 
@@ -169,22 +181,43 @@ const OptimizationsPage: React.FunctionComponent = () => {
     };
   }, []);
 
-  const { data, isPending, refetch, datasetsData } =
-    useGroupedOptimizationsList({
-      workspaceName,
-      groupLimit,
-      datasetId: datasetId!,
-      search: search!,
-      page: page!,
-      size: DEFAULT_GROUPS_PER_PAGE,
-      polling: true,
-    });
+  const datasetId = useMemo(
+    () =>
+      filters.find((f: Filter) => f.field === COLUMN_DATASET_ID)?.value || "",
+    [filters],
+  );
+
+  const filtersConfig = useMemo(
+    () => ({
+      rowsMap: {
+        [COLUMN_DATASET_ID]: {
+          keyComponent: DatasetSelectBox,
+          keyComponentProps: {
+            className: "w-full min-w-72",
+          },
+          defaultOperator: "=",
+          operators: [{ label: "=", value: "=" }],
+        },
+      },
+    }),
+    [],
+  );
+
+  const { data, isPending, refetch } = useGroupedOptimizationsList({
+    workspaceName,
+    groupLimit,
+    datasetId: datasetId!,
+    search: search!,
+    page: page!,
+    size: DEFAULT_GROUPS_PER_PAGE,
+    polling: true,
+  });
 
   const optimizations = useMemo(() => data?.content ?? [], [data?.content]);
 
   const groupIds = useMemo(() => data?.groupIds ?? [], [data?.groupIds]);
   const total = data?.total ?? 0;
-  const noData = !search && !datasetId;
+  const noData = !search && filters.length === 0;
   const noDataText = noData
     ? "There are no optimizations yet\n" +
       "Optimizations help improve your LLM application's performance, accuracy, and overall user experience"
@@ -316,9 +349,11 @@ const OptimizationsPage: React.FunctionComponent = () => {
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
-          <ExperimentsFiltersButton
-            datasetId={datasetId!}
-            onChangeDatasetId={setDatasetId}
+          <FiltersButton
+            columns={FILTER_COLUMNS}
+            config={filtersConfig as never}
+            filters={filters}
+            onChange={setFilters}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -352,10 +387,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
         </div>
       </div>
       {Boolean(optimizations.length) && (
-        <FeedbackScoresChartsWrapper
-          entities={optimizations}
-          datasetsData={datasetsData}
-        />
+        <FeedbackScoresChartsWrapper entities={optimizations} />
       )}
       <DataTable
         columns={columns}
