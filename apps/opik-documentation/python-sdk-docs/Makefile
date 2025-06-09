@@ -4,6 +4,6 @@ build:
 
 dev:
 	rm -rf build
-	sphinx-autobuild source build/html --fail-on-warning
+	sphinx-autobuild source build/html
 
 .PHONY: generate-python-sdk-documentation python-sdk-docs-dev
