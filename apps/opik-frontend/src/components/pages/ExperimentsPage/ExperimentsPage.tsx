@@ -276,7 +276,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
     [datasetId, sortedColumns],
   );
 
-  const { data, isPending, refetch, datasetsData } = useGroupedExperimentsList({
+  const { data, isPending, refetch } = useGroupedExperimentsList({
     workspaceName,
     groupLimit,
     datasetId,
@@ -541,11 +541,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
         </div>
       </div>
       {Boolean(experiments.length) && (
-        <FeedbackScoresChartsWrapper
-          entities={experiments}
-          datasetsData={datasetsData}
-          isAverageScores
-        />
+        <FeedbackScoresChartsWrapper entities={experiments} isAverageScores />
       )}
       <DataTable
         columns={columns}

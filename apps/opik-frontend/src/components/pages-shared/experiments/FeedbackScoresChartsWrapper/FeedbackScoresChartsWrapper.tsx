@@ -11,7 +11,6 @@ import { AggregatedFeedbackScore } from "@/types/shared";
 
 type FeedbackScoresChartsWrapperProps<TEntity> = {
   entities: TEntity[];
-  datasetsData: Dataset[];
   isAverageScores?: boolean;
 };
 
@@ -26,11 +25,11 @@ const FeedbackScoresChartsWrapper = <
   },
 >({
   entities,
-  datasetsData,
   isAverageScores = false,
 }: FeedbackScoresChartsWrapperProps<TEntity>) => {
   const chartsData = useMemo(() => {
     const groupsMap: Record<string, ChartData> = {};
+    let index = 0;
 
     entities.forEach((entity) => {
       if (entity.virtual_dataset_id !== DELETED_DATASET_ID) {
@@ -39,7 +38,9 @@ const FeedbackScoresChartsWrapper = <
             dataset: entity.dataset,
             data: [],
             lines: [],
+            index,
           };
+          index += 1;
         }
 
         groupsMap[entity.virtual_dataset_id].data.unshift({
@@ -62,13 +63,13 @@ const FeedbackScoresChartsWrapper = <
       }
     });
 
-    return groupsMap;
+    return Object.values(groupsMap).sort((g1, g2) => g1.index - g2.index);
   }, [entities]);
 
   const chartClassName =
-    datasetsData.length === 1
+    chartsData.length === 1
       ? "w-full"
-      : datasetsData.length === 2
+      : chartsData.length === 2
         ? "basis-1/2"
         : "basis-[520px]";
 
@@ -76,15 +77,15 @@ const FeedbackScoresChartsWrapper = <
     <div
       className={cn(
         "flex items-center gap-4 overflow-y-auto",
-        datasetsData.length > 0 && "mb-4",
+        chartsData.length > 0 && "mb-4",
       )}
     >
-      {datasetsData.map((dataset) => (
+      {chartsData.map((data, index) => (
         <FeedbackScoresChartContainer
-          key={dataset.id}
-          chartId={dataset.id}
-          chartData={chartsData[dataset.id]}
-          dataset={dataset}
+          key={data.dataset.id}
+          chartId={data.dataset.id}
+          chartData={chartsData[index]}
+          dataset={data.dataset}
           className={chartClassName}
           isAverageScores={isAverageScores}
         />

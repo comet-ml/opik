@@ -47,7 +47,6 @@ type UseGroupedOptimizationsListResponse = {
     groupIds: string[];
     total: number;
   };
-  datasetsData: Dataset[];
   isPending: boolean;
   refetch: (options?: RefetchOptions) => Promise<unknown>;
 };
@@ -291,13 +290,11 @@ export default function useGroupedOptimizationsList(
   const isPending =
     (isFilteredByDataset ? isDatasetPending : isDatasetsPending) ||
     (optimizationsResponse.length > 0 &&
-      optimizationsResponse.every((r) => r.isPending) &&
-      data.content.length === 0);
+      optimizationsResponse.some((r) => r.isPending));
 
   return {
     data,
     isPending,
     refetch,
-    datasetsData,
   } as UseGroupedOptimizationsListResponse;
 }
