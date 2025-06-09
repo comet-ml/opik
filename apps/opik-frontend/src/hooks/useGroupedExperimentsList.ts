@@ -49,7 +49,6 @@ type UseGroupedExperimentsListResponse = {
     sortable_by: string[];
     total: number;
   };
-  datasetsData: Dataset[];
   isPending: boolean;
   refetch: (options?: RefetchOptions) => Promise<unknown>;
 };
@@ -307,13 +306,11 @@ export default function useGroupedExperimentsList(
   const isPending =
     (isFilteredByDataset ? isDatasetPending : isDatasetsPending) ||
     (experimentsResponse.length > 0 &&
-      experimentsResponse.every((r) => r.isPending) &&
-      data.content.length === 0);
+      experimentsResponse.some((r) => r.isPending));
 
   return {
     data,
     isPending,
     refetch,
-    datasetsData,
   } as UseGroupedExperimentsListResponse;
 }
