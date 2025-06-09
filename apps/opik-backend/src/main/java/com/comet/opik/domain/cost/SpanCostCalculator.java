@@ -62,9 +62,12 @@ class SpanCostCalculator {
             String inputTokensKey, String outputTokensKey, String cacheReadInputTokensKey,
             String cacheCreationInputTokensKey) {
 
-        return modelPrice.inputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault(inputTokensKey, 0)))
+        return modelPrice.inputPrice()
+                .multiply(
+                        BigDecimal.valueOf(usage.getOrDefault(inputTokensKey, usage.getOrDefault("prompt_tokens", 0))))
                 .add(modelPrice.outputPrice()
-                        .multiply(BigDecimal.valueOf(usage.getOrDefault(outputTokensKey, 0))))
+                        .multiply(BigDecimal.valueOf(
+                                usage.getOrDefault(outputTokensKey, usage.getOrDefault("completion_tokens", 0)))))
                 .add(modelPrice.cacheCreationInputTokenPrice()
                         .multiply(BigDecimal.valueOf(usage.getOrDefault(cacheCreationInputTokensKey, 0))))
                 .add(modelPrice.cacheReadInputTokenPrice()
