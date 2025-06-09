@@ -256,6 +256,9 @@ navigation:
           - page: Evaluate agents
             path: docs/evaluation/evaluate_agents.mdx
             slug: evaluate_agents
+          - page: Log experiments with REST API
+            path: docs/evaluation/log_experiments_with_rest_api.mdx
+            slug: log_experiments_with_rest_api
           - page: Update existing experiment
             path: docs/evaluation/update_existing_experiment.mdx
             slug: update_existing_experiment
@@ -595,10 +598,10 @@ navigation:
       - section: Developer Programs
         slug: /developer-programs
         contents:
-        - page: Bounty Program
-          path: docs/contributing/bounties.mdx
-          slug: bounties
-          icon: fa-regular fa-gem
+          - page: Bounty Program
+            path: docs/contributing/bounties.mdx
+            slug: bounties
+            icon: fa-regular fa-gem
 redirects:
   - source: "/docs/opik/playground"
     destination: "/docs/opik/prompt_engineering/playground"
@@ -619,11 +622,17 @@ redirects:
     destination: "/docs/opik/prompt_engineering/prompt_management"
     permanent: true
   - source: "/docs/opik/prompt_engineering/prompt_optimization"
-    destination: "/docs/opik/agent_optimization/best-practices/prompt_engineering"
+    destination: "/docs/opik/agent_optimization/best_practices/prompt_engineering"
     permanent: true
   - source: "/docs/opik/prompt_engineering/agent_optimization"
     destination: "/docs/opik/agent_optimization/overview"
     permanent: true
-  - source: "docs/prompt_engineering/agent_optimization"
-    destination: "docs/agent_optimization/overview"
+  - source: "/docs/opik/prompt_engineering/agent_optimization"
+    destination: "/docs/opik/agent_optimization/overview"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/best-practices/prompt_engineering"
+    destination: "/docs/opik/agent_optimization/best_practices/prompt_engineering"
+    permanent: true
+  - source: "docs/agent_optimization/best-practices/prompt_engineering"
+    destination: "/docs/agent_optimization/best_practices/prompt_engineering"
     permanent: true

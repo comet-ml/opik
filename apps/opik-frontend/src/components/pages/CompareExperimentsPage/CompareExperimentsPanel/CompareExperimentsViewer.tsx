@@ -12,7 +12,7 @@ import { TraceFeedbackScore } from "@/types/traces";
 import { ExperimentItem } from "@/types/datasets";
 import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/components/ui/button";
-import { traceExist } from "@/lib/traces";
+import { traceExist, traceVisible } from "@/lib/traces";
 import ExperimentCommentsViewer from "./DataTab/ExperimentCommentsViewer";
 import { CommentItems } from "@/types/comment";
 
@@ -26,6 +26,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
   CompareExperimentsViewerProps
 > = ({ experimentItem, openTrace, sectionIdx }) => {
   const isTraceExist = traceExist(experimentItem);
+  const isTraceVisible = traceVisible(experimentItem);
   const experimentId = experimentItem.experiment_id;
 
   const { data } = useExperimentById(
@@ -91,7 +92,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
             <h2 className="comet-body-accented truncate">{name}</h2>
           </div>
         </TooltipWrapper>
-        {isTraceExist && (
+        {isTraceExist && isTraceVisible && (
           <TooltipWrapper content="Click to open original trace">
             <Button
               size="sm"

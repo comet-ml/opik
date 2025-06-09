@@ -1634,3 +1634,144 @@ def test_track__function_called_with_mutable_input_which_changed_afterward__chec
     trace_tree = fake_backend.trace_trees[0]
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+
+def test_track__using_distributed_headers__spans_are_created_correctly(fake_backend):
+    @tracker.track
+    def inner_function_in_thread(x):
+        return "inner_function_in_thread-output"
+
+    @tracker.track
+    def top_function_in_thread(x):
+        inner_function_in_thread(x)
+        return "top_function_in_thread-output"
+
+    @tracker.track
+    def do_distributed_trace(x):
+        headers = opik_context.get_distributed_trace_headers()
+
+        t = threading.Thread(
+            target=top_function_in_thread,
+            kwargs={
+                "x": "inner_function_in_thread-input",
+                "opik_distributed_trace_headers": headers,
+            },
+        )
+        t.start()
+        t.join()
+
+        return "do_distributed_trace-output"
+
+    do_distributed_trace("do_distributed_trace-input")
+
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        start_time=ANY_BUT_NONE,
+        name="do_distributed_trace",
+        input={"x": "do_distributed_trace-input"},
+        output={"output": "do_distributed_trace-output"},
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name="do_distributed_trace",
+                input={"x": "do_distributed_trace-input"},
+                output={"output": "do_distributed_trace-output"},
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        start_time=ANY_BUT_NONE,
+                        name="top_function_in_thread",
+                        input={"x": "inner_function_in_thread-input"},
+                        output={"output": "top_function_in_thread-output"},
+                        end_time=ANY_BUT_NONE,
+                        spans=[
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                start_time=ANY_BUT_NONE,
+                                name="inner_function_in_thread",
+                                input={"x": "inner_function_in_thread-input"},
+                                output={"output": "inner_function_in_thread-output"},
+                                end_time=ANY_BUT_NONE,
+                            )
+                        ],
+                    )
+                ],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+
+def test_track__using_distributed_headers__through_node__spans_are_created_correctly(
+    fake_backend,
+):
+    @tracker.track
+    def inner_function_in_thread(x):
+        return "inner_function_in_thread-output"
+
+    def node(x, opik_headers):
+        inner_function_in_thread(x, opik_distributed_trace_headers=opik_headers)
+        return "node-output"
+
+    @tracker.track
+    def do_distributed_trace(x):
+        headers = opik_context.get_distributed_trace_headers()
+
+        t = threading.Thread(
+            target=node,
+            kwargs={
+                "x": "inner_function_in_thread-input",
+                "opik_headers": headers,
+            },
+        )
+        t.start()
+        t.join()
+
+        return "do_distributed_trace-output"
+
+    do_distributed_trace("do_distributed_trace-input")
+
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        start_time=ANY_BUT_NONE,
+        name="do_distributed_trace",
+        input={"x": "do_distributed_trace-input"},
+        output={"output": "do_distributed_trace-output"},
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name="do_distributed_trace",
+                input={"x": "do_distributed_trace-input"},
+                output={"output": "do_distributed_trace-output"},
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        start_time=ANY_BUT_NONE,
+                        name="inner_function_in_thread",
+                        input={"x": "inner_function_in_thread-input"},
+                        output={"output": "inner_function_in_thread-output"},
+                        end_time=ANY_BUT_NONE,
+                    )
+                ],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    trace_tree = fake_backend.trace_trees[0]
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)

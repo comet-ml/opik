@@ -24,6 +24,10 @@ import { cn } from "@/lib/utils";
 import { isObjectSpan } from "@/lib/traces";
 import { useToast } from "@/components/ui/use-toast";
 import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { ToastAction } from "@/components/ui/toast";
+import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
 
 const DEFAULT_SIZE = 5;
 
@@ -44,8 +48,9 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const [size, setSize] = useState(DEFAULT_SIZE);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
   const { toast } = useToast();
+  const { navigate } = useNavigateToExperiment();
 
-  const datasetItemBatchMutation = useDatasetItemBatchMutation();
+  const { mutate } = useDatasetItemBatchMutation();
 
   const { data, isPending } = useDatasetsList(
     {
@@ -69,10 +74,37 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const noValidRows = validRows.length === 0;
   const partialValid = validRows.length !== rows.length;
 
+  const onItemsAdded = useCallback(
+    (dataset: Dataset) => {
+      const explainer =
+        EXPLAINERS_MAP[EXPLAINER_ID.i_added_traces_to_a_dataset_now_what];
+
+      toast({
+        title: explainer.title,
+        description: explainer.description,
+        actions: [
+          <ToastAction
+            variant="link"
+            size="sm"
+            className="px-0"
+            altText="Run an experiment"
+            key="Run an experiment"
+            onClick={() =>
+              navigate({ newExperiment: true, datasetName: dataset.name })
+            }
+          >
+            Run an experiment
+          </ToastAction>,
+        ],
+      });
+    },
+    [navigate, toast],
+  );
+
   const addToDatasetHandler = useCallback(
     (dataset: Dataset) => {
       setOpen(false);
-      datasetItemBatchMutation.mutate(
+      mutate(
         {
           workspaceName,
           datasetId: dataset.id,
@@ -95,17 +127,11 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
           }),
         },
         {
-          onSuccess: () => {
-            toast({
-              title: `Dataset items successfully added`,
-              description: `${validRows.length} dataset items where added to ${dataset.name} dataset.`,
-            });
-          },
+          onSuccess: () => onItemsAdded(dataset),
         },
       );
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [setOpen, workspaceName, validRows, toast],
+    [setOpen, mutate, workspaceName, validRows, onItemsAdded],
   );
 
   const renderListItems = () => {
@@ -170,7 +196,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     if (noValidRows || partialValid) {
       return (
         <Alert className="mt-4">
-          <MessageCircleWarning className="size-4" />
+          <MessageCircleWarning />
           <AlertDescription>{text}</AlertDescription>
         </Alert>
       );
@@ -187,6 +213,12 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
             <DialogTitle>Add to dataset</DialogTitle>
           </DialogHeader>
           <div className="w-full overflow-hidden">
+            <ExplainerDescription
+              className="mb-4"
+              {...EXPLAINERS_MAP[
+                EXPLAINER_ID.why_would_i_want_to_add_traces_to_a_dataset
+              ]}
+            />
             <div className="flex gap-2.5">
               <SearchInput
                 searchText={search}

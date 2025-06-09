@@ -1,13 +1,13 @@
 import dataclasses
 import logging
-from typing import Callable, Optional, Dict, Any
+from typing import Any, Callable, Dict, Optional
 
 from google.adk import models as adk_models
 from google.genai import types as genai_types
 
-from ... import llm_usage, LLMProvider
-from ...llm_usage import opik_usage
 from . import helpers as adk_helpers
+from ... import LLMProvider, llm_usage
+from ...llm_usage import opik_usage
 
 LOGGER = logging.Logger(__name__)
 
@@ -48,12 +48,23 @@ def pop_llm_usage_data(result_dict: Dict[str, Any]) -> Optional[LLMUsageData]:
 
     model = custom_metadata.pop("model_version", None)
     provider = custom_metadata.pop("provider", None)
-    usage = llm_usage.try_build_opik_usage_or_log_error(
-        provider=LLMProvider(provider),
-        usage=opik_usage_metadata,
-        logger=LOGGER,
-        error_message="Failed to log token usage from ADK Gemini call",
-    )
+
+    if provider in [LLMProvider.GOOGLE_AI, LLMProvider.GOOGLE_VERTEXAI]:
+        usage = llm_usage.try_build_opik_usage_or_log_error(
+            provider=LLMProvider(provider),
+            usage=opik_usage_metadata,
+            logger=LOGGER,
+            error_message="Failed to log token usage from ADK Gemini call",
+        )
+    # if not google provider was used - usage data will be in OpenAI format
+    else:
+        usage = llm_usage.try_build_opik_usage_or_log_error(
+            provider=LLMProvider.OPENAI,
+            usage=opik_usage_metadata,
+            logger=LOGGER,
+            error_message=f"Failed to log token usage from ADK {provider} call",
+        )
+
     if usage is None:
         return None
 

@@ -13,4 +13,5 @@ export interface GetTraceThreadsRequest {
     projectId?: string;
     truncate?: boolean;
     filters?: string;
+    sorting?: string;
 }

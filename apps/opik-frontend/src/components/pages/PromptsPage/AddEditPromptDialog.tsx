@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Description } from "@/components/ui/description";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import {
@@ -31,6 +32,8 @@ import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import useAppStore from "@/store/AppStore";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 
 type AddPromptDialogProps = {
   open: boolean;
@@ -128,6 +131,12 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <DialogAutoScrollBody>
+          {!isEdit && (
+            <ExplainerDescription
+              className="mb-4"
+              {...EXPLAINERS_MAP[EXPLAINER_ID.how_do_i_write_my_prompt]}
+            />
+          )}
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="promptName">Name</Label>
             <Input
@@ -147,10 +156,12 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
                 value={template}
                 onChange={(event) => setTemplate(event.target.value)}
               />
-              <p className="comet-body-xs text-light-slate">
-                You can specify variables using the &quot;mustache&quot; syntax:{" "}
-                {"{{variable}}"}.
-              </p>
+              <Description>
+                {
+                  EXPLAINERS_MAP[EXPLAINER_ID.what_format_should_the_prompt_be]
+                    .description
+                }
+              </Description>
             </div>
           )}
           <div className="flex flex-col gap-2 border-t border-border pb-4">
@@ -172,9 +183,13 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
                         extensions={[jsonLanguage, EditorView.lineWrapping]}
                       />
                     </div>
-                    <p className="comet-body-xs mt-2 text-light-slate">
-                      {`Enter a valid JSON object using key-value pairs inside curly braces (e.g. {"key": "value"}).`}
-                    </p>
+                    <Description className="mt-2 block">
+                      {
+                        EXPLAINERS_MAP[
+                          EXPLAINER_ID.what_format_should_the_metadata_be
+                        ].description
+                      }
+                    </Description>
                   </AccordionContent>
                 </AccordionItem>
               )}

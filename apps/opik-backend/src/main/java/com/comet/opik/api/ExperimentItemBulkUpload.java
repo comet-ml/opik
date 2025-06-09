@@ -25,15 +25,16 @@ import java.util.List;
 @MaxRequestSize // 4MB limit
 public record ExperimentItemBulkUpload(
         @JsonView( {
-                ExperimentItemBulkUpload.View.Write.class}) @NotBlank String experimentName,
-        @JsonView({ExperimentItemBulkUpload.View.Write.class}) @NotBlank String datasetName,
+                View.ExperimentItemBulkWriteView.class}) @NotBlank String experimentName,
+        @JsonView({View.ExperimentItemBulkWriteView.class}) @NotBlank String datasetName,
         @JsonView({
-                ExperimentItemBulkUpload.View.Write.class}) @NotNull @Size(min = 1, max = 250) @Valid List<ExperimentItemBulkRecord> items)
+                View.ExperimentItemBulkWriteView.class}) @NotNull @Size(min = 1, max = 250) @Valid List<ExperimentItemBulkRecord> items)
         implements
             RateEventContainer{
 
     public static class View {
-        public static class Write extends Trace.View.Write {
+        // Renaming this due to conflict with other views. OpenAPI only uses the last class name to qualify the view
+        public static class ExperimentItemBulkWriteView extends Trace.View.Write {
         }
     }
 

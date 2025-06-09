@@ -3,7 +3,9 @@
 import typing
 
 import pydantic
+import typing_extensions
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from ..core.serialization import FieldMetadata
 from .trace_thread import TraceThread
 
 
@@ -12,6 +14,9 @@ class TraceThreadPage(UniversalBaseModel):
     size: typing.Optional[int] = None
     total: typing.Optional[int] = None
     content: typing.Optional[typing.List[TraceThread]] = None
+    sortable_by: typing_extensions.Annotated[typing.Optional[typing.List[str]], FieldMetadata(alias="sortableBy")] = (
+        None
+    )
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

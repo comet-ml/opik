@@ -69,6 +69,9 @@ import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { formatNumericData } from "@/lib/utils";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import CostCell from "@/components/shared/DataTableCells/CostCell";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -108,6 +111,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
         activeVersionId: get(data, "id", null),
       }),
     },
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
   },
   {
     id: "trace_count",
@@ -115,8 +119,20 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     type: COLUMN_TYPE.number,
   },
   {
+    id: "total_estimated_cost",
+    label: "Total Est. Cost",
+    type: COLUMN_TYPE.cost,
+    cell: CostCell as never,
+  },
+  {
+    id: "total_estimated_cost_avg",
+    label: "Avg. Cost per Trace",
+    type: COLUMN_TYPE.cost,
+    cell: CostCell as never,
+  },
+  {
     id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores",
+    label: "Feedback scores (avg.)",
     type: COLUMN_TYPE.numberDictionary,
     accessorFn: (row) =>
       get(row, "feedback_scores", []).map((score) => ({
@@ -128,6 +144,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
       getHoverCardName: (row: GroupedExperiment) => row.name,
       isAverageScores: true,
     },
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
   },
   {
     id: COLUMN_COMMENTS_ID,
@@ -152,7 +169,11 @@ const ExperimentsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
-  const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const [query] = useQueryParam("new", JsonParam);
+
+  const [openDialog, setOpenDialog] = useState<boolean>(
+    Boolean(query ? query.experiment : false),
+  );
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
@@ -398,9 +419,13 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
   return (
     <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-1 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">Experiments</h1>
       </div>
+      <ExplainerDescription
+        className="mb-4"
+        {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_experiment]}
+      />
       <div className="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
@@ -417,7 +442,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
         </div>
         <div className="flex items-center gap-2">
           <ExperimentsActionsPanel experiments={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <TooltipWrapper content="Refresh experiments list">
             <Button
               variant="outline"
@@ -491,6 +516,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
+        datasetName={query?.datasetName}
       />
     </div>
   );

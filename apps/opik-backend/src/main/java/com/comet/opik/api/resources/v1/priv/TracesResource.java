@@ -23,6 +23,7 @@ import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.TraceSortingFactory;
+import com.comet.opik.api.sorting.TraceThreadSortingFactory;
 import com.comet.opik.domain.CommentDAO;
 import com.comet.opik.domain.CommentService;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -51,7 +52,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.BadRequestException;
-import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -75,7 +75,6 @@ import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
@@ -96,6 +95,7 @@ public class TracesResource {
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull TraceSortingFactory traceSortingFactory;
+    private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull Streamer streamer;
     private final @NonNull ProjectService projectService;
@@ -214,21 +214,12 @@ public class TracesResource {
     @UsageLimited
     public Response createTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceBatch.class))) @JsonView(Trace.View.Write.class) @NotNull @Valid TraceBatch traces) {
-
-        traces.traces()
-                .stream()
-                .filter(trace -> trace.id() != null) // Filter out spans with null IDs
-                .collect(Collectors.groupingBy(Trace::id))
-                .forEach((id, traceGroup) -> {
-                    if (traceGroup.size() > 1) {
-                        throw new ClientErrorException("Duplicate trace id '%s'".formatted(id), 422);
-                    }
-                });
-
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Creating traces batch with size '{}' on workspaceId '{}'", traces.traces().size(), workspaceId);
         service.create(traces)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-
+        log.info("Created traces batch with size '{}' on workspaceId '{}'", traces.traces().size(), workspaceId);
         return Response.noContent().build();
     }
 
@@ -398,17 +389,12 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     public Response deleteTraceFeedbackScore(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = DeleteFeedbackScore.class))) @NotNull @Valid DeleteFeedbackScore score) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        log.info("Delete span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
-
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Delete trace feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
         feedbackScoreService.deleteTraceScore(id, score.name())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-
-        log.info("Deleted span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
-
+        log.info("Deleted trace feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
         return Response.noContent().build();
     }
 
@@ -502,16 +488,27 @@ public class TracesResource {
             @QueryParam("project_name") String projectName,
             @QueryParam("project_id") UUID projectId,
             @QueryParam("truncate") @Schema(description = "Truncate image included in the messages") boolean truncate,
-            @QueryParam("filters") String filters) {
+            @QueryParam("filters") String filters,
+            @QueryParam("sorting") String sorting) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         var traceFilters = filtersFactory.newFilters(filters, TraceThreadFilter.LIST_TYPE_REFERENCE);
+        var sortingFields = traceThreadSortingFactory.newSorting(sorting);
+
+        WorkspaceMetadata workspaceMetadata = workspaceMetadataService
+                .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
+                .block();
+
+        if (!sortingFields.isEmpty() && !workspaceMetadata.canUseDynamicSorting()) {
+            sortingFields = List.of();
+        }
 
         var searchCriteria = TraceSearchCriteria.builder()
                 .projectName(projectName)
                 .projectId(projectId)
                 .filters(traceFilters)
                 .truncate(truncate)
+                .sortingFields(sortingFields)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -519,6 +516,13 @@ public class TracesResource {
         log.info("Get trace threads by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
 
         TraceThreadPage traceThreadPage = service.getTraceThreads(page, size, searchCriteria)
+                .map(it -> {
+                    // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
+                    if (!workspaceMetadata.canUseDynamicSorting()) {
+                        return it.toBuilder().sortableBy(List.of()).build();
+                    }
+                    return it;
+                })
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 

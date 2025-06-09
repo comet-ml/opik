@@ -47,7 +47,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.BadRequestException;
-import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -70,7 +69,6 @@ import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Span.SpanField;
 import static com.comet.opik.api.Span.SpanPage;
@@ -205,27 +203,12 @@ public class SpansResource {
     @UsageLimited
     public Response createSpans(
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanBatch.class))) @JsonView(View.Write.class) @NotNull @Valid SpanBatch spans) {
-
-        spans.spans()
-                .stream()
-                .filter(span -> span.id() != null) // Filter out spans with null IDs
-                .collect(Collectors.groupingBy(Span::id))
-                .forEach((id, spanGroup) -> {
-                    if (spanGroup.size() > 1) {
-                        throw new ClientErrorException("Duplicate span id '%s'".formatted(id), 422);
-                    }
-                });
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
+        var workspaceId = requestContext.get().getWorkspaceId();
         log.info("Creating spans batch with size '{}' on workspaceId '{}'", spans.spans().size(), workspaceId);
-
         spanService.create(spans)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-
         log.info("Created spans batch with size '{}' on workspaceId '{}'", spans.spans().size(), workspaceId);
-
         return Response.noContent().build();
     }
 
