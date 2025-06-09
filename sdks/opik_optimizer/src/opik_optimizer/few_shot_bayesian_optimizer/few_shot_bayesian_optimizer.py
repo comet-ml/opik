@@ -257,16 +257,19 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     raise
             few_shot_examples = "\n\n".join(processed_demo_examples)
             
-            messages = [{
-                "role": x["role"],
-                "content": x["content"].replace(FEW_SHOT_EXAMPLE_PLACEHOLDER, few_shot_examples)
-            } for x in fewshot_prompt_template.message_list_with_placeholder]
-            
-            llm_task = self._build_task_from_messages(messages)
+            llm_task = self._build_task_from_messages(
+                messages=fewshot_prompt_template.message_list_with_placeholder,
+                few_shot_examples=few_shot_examples
+            )
+
+            messages_for_reporting = [{
+                "role": item["role"],
+                "content": item["content"].replace(FEW_SHOT_EXAMPLE_PLACEHOLDER, few_shot_examples)
+            } for item in fewshot_prompt_template.message_list_with_placeholder]
 
             # Log trial config
             trial_config = base_experiment_config.copy()
-            trial_config["configuration"]["prompt"] = messages  # Base instruction
+            trial_config["configuration"]["prompt"] = messages_for_reporting  # Base instruction
             trial_config["configuration"][
                 "examples"
             ] = processed_demo_examples  # Log stringified examples
@@ -279,7 +282,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             logger.debug(f"Evaluating trial {trial.number}...")
 
             with reporting.start_optimization_trial(trial.number, n_trials, verbose=self.verbose) as trial_reporter:
-                trial_reporter.start_trial(messages)
+                trial_reporter.start_trial(messages_for_reporting)
                 score = task_evaluator.evaluate(
                     dataset=dataset,
                     dataset_item_ids=eval_dataset_item_ids,
@@ -556,7 +559,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
 
     def _build_task_from_messages(
-        self, messages: List[Dict[str, str]]
+        self, messages: List[Dict[str, str]], few_shot_examples: Optional[str] = None
     ):
         def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, Any]:
             prompt_ = [{
@@ -564,6 +567,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "content": item["content"].format(**dataset_item)
             } for item in messages]
 
+            if few_shot_examples:
+                prompt_ = [{
+                    "role": item["role"],
+                    "content": item["content"].replace(FEW_SHOT_EXAMPLE_PLACEHOLDER, few_shot_examples)
+                } for item in prompt_]
+                
             response = self._call_model(
                 model=self.model,
                 messages=prompt_,
@@ -575,4 +584,4 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 mappers.EVALUATED_LLM_TASK_OUTPUT: response.choices[0].message.content
             }
 
-        return llm_task
+        return llm_task, messages

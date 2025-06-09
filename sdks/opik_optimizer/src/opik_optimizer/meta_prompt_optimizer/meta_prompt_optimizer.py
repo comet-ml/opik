@@ -58,7 +58,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         2. DO NOT add any variables or parameters to the prompt you are editing.
         3. You can reuse variables that already exist in the prompt.
 
-        Return a JSON array of prompts with the following structure:
+        Return a JSON array of prompts with the following structure. Make sure to return a valid
+        JSON object with correct use of double quotes and single quotes. JSON keys should be
+        double-quoted:
         {
             "prompts": [
                 {
