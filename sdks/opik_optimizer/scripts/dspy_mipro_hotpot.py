@@ -21,6 +21,7 @@ from opik_optimizer import (
     TaskConfig,
 )
 from opik_optimizer.datasets import hotpot_300
+from opik_optimizer.mipro_optimizer import MIPROv2  # Or from dspy.teleprompt import MIPROv2
 from opik_optimizer.mipro_optimizer.utils import (
     create_dspy_training_set,
     opik_metric_to_dspy,
@@ -31,10 +32,6 @@ from opik_optimizer.utils import optimization_context
 disk_cache_dir = os.path.expanduser("~/.litellm_cache")
 litellm.cache = Cache(type="disk", disk_cache_dir=disk_cache_dir)
 
-# To log all data, use this:
-from opik_optimizer.mipro_optimizer import MIPROv2
-# Else:
-# from dspy.teleprompt import MIPROv2
 
 # First, we set the Opik callback for all dspy calls:
 project_name = "DSPy-MIPROv2"

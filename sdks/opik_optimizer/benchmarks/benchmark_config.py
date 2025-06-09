@@ -2,9 +2,8 @@ from typing import Any, Callable, Dict, List
 
 from opik.evaluation.metrics import (
     AnswerRelevance,
-    BaseMetric,
-#    ContextPrecision,
-#    ContextRecall,
+    ContextPrecision,
+    ContextRecall,
     Equals,
     Hallucination,
     LevenshteinRatio,
@@ -50,6 +49,16 @@ def create_answer_relevance_metric(name_input_col):
         return AnswerRelevance(require_context=False).score(input=dataset_item[name_input_col], output=llm_output)
     return answer_relevance
 
+def create_context_precision(name_input_col):
+    def context_precision(dataset_item, llm_output):
+        return ContextPrecision().score(input=dataset_item[name_input_col], output=llm_output)
+    return context_precision
+
+def create_context_recall(name_input_col):
+    def context_recall(dataset_item, llm_output):
+        return ContextRecall().score(input=dataset_item[name_input_col], output=llm_output)
+    return context_recall
+
 def hallucination(dataset_item, llm_output):
     return Hallucination().score(input=dataset_item["question"], output=llm_output)
 
@@ -65,41 +74,41 @@ DATASET_CONFIG = {
         display_name="RAGBench Sentence Relevance",
         metrics=[create_answer_relevance_metric("question")]
     ),
-    # "election_questions": BenchmarkDatasetConfig(
-    #     name="election_questions",
-    #     display_name="Election Questions",
-    #     metrics=[Hallucination()]
-    # ),
+    "election_questions": BenchmarkDatasetConfig(
+        name="election_questions",
+        display_name="Election Questions",
+        metrics=[hallucination]
+    ),
     "medhallu": BenchmarkDatasetConfig(
         name="MedHallu",
         display_name="MedHallu",
         metrics=[hallucination, create_answer_relevance_metric("question")]
     ),
-    # "rag_hallucinations": BenchmarkDatasetConfig(
-    #     name="rag_hallucinations",
-    #     display_name="RAG Hallucinations",
-    #     metrics=[Hallucination(), ContextPrecision()]
-    # ),
-    # "hotpot_300": BenchmarkDatasetConfig(
-    #     name="hotpot_300",
-    #     display_name="HotpotQA",
-    #     metrics=[AnswerRelevance(), ContextPrecision()]
-    # ),
+    "rag_hallucinations": BenchmarkDatasetConfig(
+        name="rag_hallucinations",
+        display_name="RAG Hallucinations",
+        metrics=[hallucination, create_context_precision("question")]
+    ),
+    "hotpot_300": BenchmarkDatasetConfig(
+        name="hotpot_300",
+        display_name="HotpotQA",
+        metrics=[create_answer_relevance_metric("question"), create_context_precision("question")]
+    ),
     "ai2_arc": BenchmarkDatasetConfig(
         name="ai2_arc",
         display_name="ARC",
         metrics=[equals]
     ),
-    # "truthful_qa": BenchmarkDatasetConfig(
-    #     name="TruthfulQA",
-    #     display_name="TruthfulQA",
-    #     metrics=[Hallucination(), AnswerRelevance()]
-    # ),
-    # "cnn_dailymail": BenchmarkDatasetConfig(
-    #     name="cnn_dailymail",
-    #     display_name="CNN/Daily Mail",
-    #     metrics=[LevenshteinRatio(), ContextRecall()]
-    # ),
+    "truthful_qa": BenchmarkDatasetConfig(
+        name="TruthfulQA",
+        display_name="TruthfulQA",
+        metrics=[hallucination, create_answer_relevance_metric("question")]
+    ),
+    "cnn_dailymail": BenchmarkDatasetConfig(
+        name="cnn_dailymail",
+        display_name="CNN/Daily Mail",
+        metrics=[levenshtein_ratio, create_context_recall("article")]
+    ),
 }
 
 OPTIMIZER_CONFIGS: Dict[str, BenchmarkOptimizerConfig] = {
@@ -162,8 +171,8 @@ INITIAL_PROMPTS = {
     "election_questions": [{"role": "system", "content": "Classify whether the following question about US elections is harmful or harmless."}, {"role": "user", "content": "{question}"}],
     "medhallu": [{"role": "system", "content": "Answer the medical question accurately based on the given knowledge, avoiding any hallucinations."}, {"role": "user", "content": "{question}"}],
     "rag_hallucinations": [{"role": "system", "content": "Answer the question based on the given context, ensuring all information is supported by the context."}, {"role": "user", "content": "{question}"}],
-    "hotpotqa": [{"role": "system", "content": "Answer the question based on the given context."}, {"role": "user", "content": "{question}"}],
+    "hotpot_300": [{"role": "system", "content": "Answer the question based on the given context."}, {"role": "user", "content": "{question}"}],
     "ai2_arc": [{"role": "system", "content": "Select the correct answer from the given options."}, {"role": "user", "content": "Question: {question}\nChoices: {choices}"}],
-    "truthfulqa": [{"role": "system", "content": "Provide a truthful and accurate answer to the question."}, {"role": "user", "content": "{question}"}],
+    "truthful_qa": [{"role": "system", "content": "Provide a truthful and accurate answer to the question."}, {"role": "user", "content": "{question}"}],
     "cnn_dailymail": [{"role": "system", "content": "Summarize the following article concisely."}, {"role": "user", "content": "{article}"}],
 }

@@ -39,7 +39,8 @@ Your task:
     - Add a section title in XML or markdown format. The examples will be provided as `example_1\nexample_2\n...` with each example following the example template.
 - Analyze the examples to infer a consistent structure, and create a single string few_shot_example_template using the Python .format() style. Make sure to follow the following instructions:
     - Unless absolutely relevant, do not return an object but instead a string that can be inserted as part of {FEW_SHOT_EXAMPLE_PLACEHOLDER}
-    - Make sure to include the variables as part of this string so we can before string formatting with actual examples. Only variables available in the examples can be used. Do not use anything else, do not apply any transformations to the variables either.
+    - Make sure to include the variables as part of this string so we can before string formatting with actual examples. Only variables available in the examples can be used.
+    - Do not apply any transformations to the variables either, only the variable name should be included in the format `{{<variable_name>}}`
     - The few shot examples should include the expected response as the goal is to provide examples of the response.
     - Ensure the format of the few shot examples are consistent with how the model will be called
 
@@ -252,7 +253,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     processed_demo_examples.append(
                         fewshot_prompt_template.example_template.format(**processed_example)
                     )
-                except Exception as e:
+                except Exception:
                     logger.error(f"Failed to format fewshot prompt template {fewshot_prompt_template} with example: {processed_example} ")
                     raise
             few_shot_examples = "\n\n".join(processed_demo_examples)
