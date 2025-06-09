@@ -495,14 +495,9 @@ class TraceDAOImpl implements TraceDAO {
                     sum(total_estimated_cost) as total_estimated_cost,
                     COUNT(DISTINCT id) as span_count,
                     countIf(type = 'llm') as llm_span_count
-                FROM (
-                    SELECT *
-                    FROM spans
-                    WHERE workspace_id = :workspace_id
-                      AND project_id = :project_id
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                )
+                FROM spans final
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
                 GROUP BY workspace_id, project_id, trace_id
             ), comments_agg AS (
                 SELECT
@@ -908,14 +903,7 @@ class TraceDAOImpl implements TraceDAO {
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost
-                FROM (
-                    SELECT *
-                    FROM spans
-                    WHERE workspace_id = :workspace_id
-                      AND project_id IN :project_ids
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                )
+                FROM spans final
                 GROUP BY workspace_id, project_id, trace_id
             ), feedback_scores_agg AS (
                 SELECT
@@ -1581,6 +1569,15 @@ class TraceDAOImpl implements TraceDAO {
                 .then();
     }
 
+    private boolean hasSpanStatistics(String sortFields) {
+        if (sortFields == null) {
+            return false;
+        }
+        return sortFields.contains("usage")
+                || sortFields.contains("span_count")
+                || sortFields.contains("total_estimated_cost");
+    }
+
     private Mono<? extends Result> getTracesByProjectId(
             int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection) {
 
@@ -1600,11 +1597,7 @@ class TraceDAOImpl implements TraceDAO {
                         finalTemplate.add("sort_has_feedback_scores", true);
                     }
 
-                    boolean hasSpanStatistics = sortFields.contains("usage")
-                            || sortFields.contains("span_count")
-                            || sortFields.contains("total_estimated_cost");
-
-                    if (hasSpanStatistics) {
+                    if (hasSpanStatistics(sortFields)) {
                         finalTemplate.add("sort_has_span_statistics", true);
                     }
 
