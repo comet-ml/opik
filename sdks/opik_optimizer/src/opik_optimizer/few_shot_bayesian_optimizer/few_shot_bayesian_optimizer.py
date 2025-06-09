@@ -301,7 +301,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             trial_config = {
                 "demo_examples": demo_examples,
                 "message_list_with_placeholder": fewshot_prompt_template.message_list_with_placeholder,
-                "message_list": messages
+                "message_list": messages_for_reporting
             }
             trial.set_user_attr("score", score)
             trial.set_user_attr("config", trial_config)
@@ -584,4 +584,4 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 mappers.EVALUATED_LLM_TASK_OUTPUT: response.choices[0].message.content
             }
 
-        return llm_task, messages
+        return llm_task

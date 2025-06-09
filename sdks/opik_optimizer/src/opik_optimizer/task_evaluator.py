@@ -11,16 +11,23 @@ def _create_metric_class(metric: Callable):
     class MetricClass(base_metric.BaseMetric):
         def __init__(self):
             self.name = metric.__name__
-        
+
         def score(self, llm_output, **kwargs) -> score_result.ScoreResult:
             try:
                 metric_val = metric(dataset_item=kwargs, llm_output=llm_output)
                 if isinstance(metric_val , score_result.ScoreResult):
-                    return metric_val
+                    return score_result.ScoreResult(
+                        name = self.name,
+                        value = metric_val.value,
+                        scoring_failed=metric_val.scoring_failed,
+                        metadata=metric_val.metadata,
+                        reason=metric_val.reason
+                    )
                 else:
                     return score_result.ScoreResult(
                         name = self.name,
-                        value = metric_val
+                        value = metric_val,
+                        scoring_failed=False
                     )
             except Exception:
                 return score_result.ScoreResult(
@@ -71,7 +78,7 @@ def evaluate(
         items = [item for item in items if item.get("id") in dataset_item_ids]
 
     eval_metrics = [_create_metric_class(metric)]
-
+    
     if optimization_id is not None:
         result = opik_evaluator.evaluate_optimization_trial(
             optimization_id=optimization_id,
