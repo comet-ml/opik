@@ -310,11 +310,11 @@ class OpikTracer(BaseTracer):
             new_trace_data, new_span_data = self._track_root_run(run_dict)
             if new_trace_data is not None:
                 self._opik_context_storage.set_trace_data(new_trace_data)
-                if self._opik_client.config.log_start_trace:
+                if self._opik_client.config.log_start_trace_span:
                     self._opik_client.trace(**new_trace_data.as_start_parameters)
 
             self._opik_context_storage.add_span_data(new_span_data)
-            if self._opik_client.config.log_start_span:
+            if self._opik_client.config.log_start_trace_span:
                 self._opik_client.span(**new_span_data.as_start_parameters)
             return
 
@@ -344,7 +344,7 @@ class OpikTracer(BaseTracer):
             ]
 
         self._opik_context_storage.add_span_data(new_span_data)
-        if self._opik_client.config.log_start_span:
+        if self._opik_client.config.log_start_trace_span:
             self._opik_client.span(**new_span_data.as_start_parameters)
 
     def _process_end_span(self, run: "Run") -> None:

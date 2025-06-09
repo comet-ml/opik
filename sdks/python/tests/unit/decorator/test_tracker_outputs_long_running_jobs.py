@@ -13,7 +13,7 @@ from ...testlib import (
 
 @pytest.mark.parametrize(
     "fake_backend_with_patched_environment",
-    [{"OPIK_LOG_START_TRACE": "True"}],
+    [{"OPIK_LOG_START_TRACE_SPAN": "True"}],
     indirect=True,
 )
 def test_track__trace_logged_at_start_and_end(fake_backend_with_patched_environment):

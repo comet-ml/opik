@@ -438,14 +438,14 @@ class BaseTrackDecorator(abc.ABC):
         )
         client = opik_client.get_client_cached()
 
-        if client.config.log_start_span:
+        if client.config.log_start_trace_span:
             client.span(**created_span_data.as_start_parameters)
 
         if created_trace_data is not None:
             context_storage.set_trace_data(created_trace_data)
             TRACES_CREATED_BY_DECORATOR.add(created_trace_data.id)
 
-            if client.config.log_start_trace:
+            if client.config.log_start_trace_span:
                 client.trace(**created_trace_data.as_start_parameters)
 
         context_storage.add_span_data(created_span_data)

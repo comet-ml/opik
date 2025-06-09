@@ -138,7 +138,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         self._map_call_id_to_span_data[call_id] = span_data
         self._set_current_context_data(span_data)
 
-        if self._opik_client.config.log_start_span:
+        if self._opik_client.config.log_start_trace_span:
             self._opik_client.span(**span_data.as_start_parameters)
 
     def _start_trace(
@@ -156,7 +156,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         self._map_call_id_to_trace_data[call_id] = trace_data
         self._set_current_context_data(trace_data)
 
-        if self._opik_client.config.log_start_trace:
+        if self._opik_client.config.log_start_trace_span:
             self._opik_client.trace(**trace_data.as_start_parameters)
 
     def on_module_end(
