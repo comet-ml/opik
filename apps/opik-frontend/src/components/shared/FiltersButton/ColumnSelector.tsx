@@ -7,19 +7,22 @@ export type ColumnSelectorProps<TColumnData> = {
   field: string;
   columns: ColumnData<TColumnData>[];
   onSelect: (column: ColumnData<TColumnData>) => void;
+  disabledColumns?: string[];
 };
 
 const ColumnSelector = <TColumnData,>({
   field,
   columns,
   onSelect,
+  disabledColumns,
 }: ColumnSelectorProps<TColumnData>) => {
   const options = useMemo(() => {
     return columns.map<DropdownOption<string>>((c) => ({
       value: c.id,
       label: c.label,
+      disabled: disabledColumns?.includes(c.id) && field !== c.id,
     }));
-  }, [columns]);
+  }, [columns, disabledColumns, field]);
 
   const handleChange = useCallback(
     (id: string) => {

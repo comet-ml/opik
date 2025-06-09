@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 import isUndefined from "lodash/isUndefined";
 import { Dataset, Experiment } from "@/types/datasets";
+import { Filters } from "@/types/filters";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useExperimentsList, {
   getExperimentsList,
@@ -30,6 +31,7 @@ export type GroupedExperiment = {
 
 type UseGroupedExperimentsListParams = {
   workspaceName: string;
+  filters?: Filters;
   sorting?: Sorting;
   datasetId?: string;
   promptId?: string;
@@ -97,6 +99,7 @@ export default function useGroupedExperimentsList(
   } = useExperimentsList(
     {
       workspaceName: params.workspaceName,
+      filters: params.filters,
       sorting: params.sorting,
       search: params.search,
       datasetDeleted: true,
@@ -173,6 +176,7 @@ export default function useGroupedExperimentsList(
     queries: datasetsIds.map((datasetId) => {
       const p: UseExperimentsListParams = {
         workspaceName: params.workspaceName,
+        filters: params.filters,
         sorting: params.sorting,
         search: params.search,
         datasetId,

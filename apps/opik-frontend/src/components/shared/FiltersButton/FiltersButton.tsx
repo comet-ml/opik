@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import filter from "lodash/filter";
+import uniq from "lodash/uniq";
 import { Filter as FilterIcon, Plus } from "lucide-react";
 import {
   Popover,
@@ -7,14 +8,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { Filter, Filters } from "@/types/filters";
+import { Separator } from "@/components/ui/separator";
+import { Filter, FilterRowConfig, Filters } from "@/types/filters";
 import { ColumnData } from "@/types/shared";
 import { createEmptyFilter, isFilterValid } from "@/lib/filters";
-import FilterRow, {
-  FilterRowConfig,
-} from "@/components/shared/FiltersButton/FilterRow";
+import FilterRow from "@/components/shared/FiltersButton/FilterRow";
 import useDeepMemo from "@/hooks/useDeepMemo";
-import { Separator } from "@/components/ui/separator";
 
 type FilterButtonConfig = {
   rowsMap: Record<string, FilterRowConfig>;
@@ -72,6 +71,25 @@ const FiltersButton = <TColumnData,>({
     );
   }, []);
 
+  const disabledColumns = useMemo(() => {
+    const disposableColumns = columns
+      .filter((c) => c.disposable)
+      .map((c) => c.id);
+
+    if (!disposableColumns.length) {
+      return undefined;
+    }
+
+    const columnsWIthFilters = uniq(filters.map((f) => f.field));
+
+    return disposableColumns.filter((c) => columnsWIthFilters.includes(c));
+  }, [filters, columns]);
+
+  const getConfig = useCallback(
+    (field: string) => config?.rowsMap[field],
+    [config],
+  );
+
   const renderFilters = () => {
     return filters.map((filter, index) => {
       const prefix = index === 0 ? "Where" : "And";
@@ -80,7 +98,8 @@ const FiltersButton = <TColumnData,>({
         <FilterRow
           key={filter.id}
           columns={columns}
-          config={config?.rowsMap[filter.field]}
+          getConfig={getConfig}
+          disabledColumns={disabledColumns}
           filter={filter}
           prefix={prefix}
           onRemove={onRemoveRow}
@@ -94,10 +113,7 @@ const FiltersButton = <TColumnData,>({
     <Popover onOpenChange={setOpen} open={open}>
       <PopoverTrigger asChild>
         <Button variant="secondary" size="sm">
-          <FilterIcon
-            className="mr-2 size-3.5
-          "
-          />
+          <FilterIcon className="mr-2 size-3.5" />
           Filters
           {` (${validFilters.length})`}
         </Button>
