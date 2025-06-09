@@ -56,7 +56,7 @@ Here's a step-by-step guide to get you up and running with Opik Agent Optimizer:
     ```
   </Step>
   <Step title="4. Configure the evaluation metric">
-    `MetricConfig` tells the optimizer how to score the LLM's outputs. Here, `LevenshteinRatio` measures the similarity between the model's response and a "label" field in the dataset.
+    `metric` tells the optimizer how to score the LLM's outputs. Here, `LevenshteinRatio` measures the similarity between the model's response and a "label" field in the dataset.
     ```python
     # This example uses Levenshtein distance to measure output quality
     def levenshtein_ratio(dataset_item, llm_output):

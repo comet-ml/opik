@@ -34,7 +34,7 @@ def test_metaprompt_optimizer():
     # Run optimization
     results = optimizer.optimize_prompt(
         dataset=dataset,
-        metric=metric,
+        metric=levenshtein_ratio,
         prompt=prompt,
         n_samples=50
     )

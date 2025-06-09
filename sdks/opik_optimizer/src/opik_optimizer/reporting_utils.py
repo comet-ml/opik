@@ -12,7 +12,9 @@ from rich.text import Text
 PANEL_WIDTH = 70
 
 def get_console(*args, **kwargs):
-    return Console(*args, force_jupyter=False, **kwargs)
+    console = Console(*args, **kwargs)
+    console.is_jupyter = False
+    return console
 
 @contextmanager
 def convert_tqdm_to_rich(description: Optional[str] = None, verbose: int = 1):
@@ -105,15 +107,17 @@ def display_header(algorithm: str, verbose: int = 1):
         width=PANEL_WIDTH
     )
 
-    rich.print(panel)
-    rich.print("\n")
+    console = get_console()
+    console.print(panel)
+    console.print("\n")
 
 
 def display_result(initial_score, best_score, best_prompt, verbose: int = 1):
     if verbose < 1:
         return
 
-    rich.print(Text("\n> Optimization complete\n"))
+    console = get_console()
+    console.print(Text("\n> Optimization complete\n"))
     
     if best_score > initial_score:
         if initial_score == 0:
@@ -137,7 +141,7 @@ def display_result(initial_score, best_score, best_prompt, verbose: int = 1):
             )
         )
 
-    rich.print(
+    console.print(
         Panel(
             Group(*content),
             title="Optimization results",
@@ -156,12 +160,13 @@ def display_configuration(messages: List[Dict[str, str]], optimizer_config: Dict
         return
 
     # Panel for Optimizer configuration
-    rich.print(Text("> Let's optimize the prompt:\n"))
+    console = get_console()
+    console.print(Text("> Let's optimize the prompt:\n"))
 
     display_messages(messages)
 
     # Panel for configuration
-    rich.print(Text(f"\nUsing {optimizer_config['optimizer']} with the parameters: "))
+    console.print(Text(f"\nUsing {optimizer_config['optimizer']} with the parameters: "))
     
     for key, value in optimizer_config.items():
         if key == "optimizer":  # Already displayed in the introductory text
@@ -170,6 +175,6 @@ def display_configuration(messages: List[Dict[str, str]], optimizer_config: Dict
             Text(f"  - {key}: ", style="dim"), 
             Text(str(value), style="cyan")      
         )
-        rich.print(parameter_text)
+        console.print(parameter_text)
     
-    rich.print("\n")
+    console.print("\n")

@@ -1,9 +1,11 @@
 """Module containing the OptimizationResult class."""
 
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional
 
 import pydantic
 import rich
+
+from .reporting_utils import get_console
 
 
 class OptimizationResult(pydantic.BaseModel):
@@ -21,6 +23,7 @@ class OptimizationResult(pydantic.BaseModel):
 
     # MIPRO specific
     demonstrations: Optional[List[Dict[str, Any]]] = None
+    mipro_prompt: Optional[str] = None
     tool_prompts: Optional[Dict[str, str]] = None
     
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
@@ -143,10 +146,8 @@ class OptimizationResult(pydantic.BaseModel):
         # Display Chat Structure if available
         panel_title = "[bold]Final Optimized Prompt[/bold]"
         try:
-            chat_group_items = [
-                f"[dim]Instruction:[/dim] [i]{self.prompt}[/i]\n---"
-            ]
-            for msg in self.details["chat_messages"]:
+            chat_group_items = []
+            for msg in self.prompt:
                 role = msg.get("role", "unknown")
                 content = str(msg.get("content", ""))
                 role_style = (
@@ -189,4 +190,5 @@ class OptimizationResult(pydantic.BaseModel):
         """
         Displays the OptimizationResult using rich formatting
         """
-        rich.print(self)
+        console = get_console()
+        console.print(self)

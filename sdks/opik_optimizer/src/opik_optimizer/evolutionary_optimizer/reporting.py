@@ -27,13 +27,13 @@ def infer_output_style(verbose: int = 1):
     class Reporter:
         def start_style_inference(self, output_style_prompt):
             if verbose >= 1:
-                rich.print("> Infering the output style using the prompt:")
-                rich.print("│")
+                console.print("> Infering the output style using the prompt:")
+                console.print("│")
             
         def error(self, error_message):
             if verbose >= 1:
-                rich.print(Text("│    ").append(Text(f"Failed to infer output style: {error_message}", style="red")))
-                rich.print(Text("│    ").append(Text("Continuing with default style", style="dim")))
+                console.print(Text("│    ").append(Text(f"Failed to infer output style: {error_message}", style="red")))
+                console.print(Text("│    ").append(Text("Continuing with default style", style="dim")))
         
         def display_style_inference_prompt(self, output_style_prompt):
             if verbose >= 1:
@@ -57,7 +57,7 @@ def infer_output_style(verbose: int = 1):
 
                 # Print the final result
                 console.print(prefixed)
-                rich.print(Text("│"))
+                console.print(Text("│"))
 
         def success(self, output_style_prompt):
             if verbose >= 1:
@@ -82,7 +82,7 @@ def infer_output_style(verbose: int = 1):
 
                 # Print the prefixed output (will include colors)
                 console.print(prefixed_output, highlight=False)
-                rich.print(Text(""))
+                console.print(Text(""))
     
     try:
         yield Reporter()
@@ -94,41 +94,41 @@ def initializing_population(verbose: int = 1):
     class Reporter:
         def start(self, population_size):
             if verbose >= 1:
-                rich.print(f"> Creating {population_size - 1} variations of the initial prompt")
-                rich.print("│")
+                console.print(f"> Creating {population_size - 1} variations of the initial prompt")
+                console.print("│")
             
         def start_fresh_prompts(self, num_fresh_starts):
             if verbose >= 1:
-                rich.print(f"│    Generating {num_fresh_starts} fresh prompts based on the task description.")
+                console.print(f"│    Generating {num_fresh_starts} fresh prompts based on the task description.")
         
         def success_fresh_prompts(self, num_fresh_starts):
             if verbose >= 1:
-                rich.print(Text("│       ").append(Text(f"Successfully generated {num_fresh_starts} fresh prompts based on the task description.", style="dim green")))
-                rich.print("│")
+                console.print(Text("│       ").append(Text(f"Successfully generated {num_fresh_starts} fresh prompts based on the task description.", style="dim green")))
+                console.print("│")
             
         def failed_fresh_prompts(self, num_fresh_starts, error):
             if verbose >= 1:
-                rich.print(Text("│       ").append(Text(f"Failed to generate fresh prompts from LLM: {error}", style="dim red")))
-                rich.print("│")
+                console.print(Text("│       ").append(Text(f"Failed to generate fresh prompts from LLM: {error}", style="dim red")))
+                console.print("│")
 
         def start_variations(self, num_variations):
             if verbose >= 1:
-                rich.print(f"│    Generating {num_variations} variations of the initial prompt.")
+                console.print(f"│    Generating {num_variations} variations of the initial prompt.")
         
         def success_variations(self, num_variations):
             if verbose >= 1:
-                rich.print(Text(f"│       Successfully generated {num_variations - 1} variations of the initial prompt).", style="dim green"))
-                rich.print("│")
+                console.print(Text(f"│       Successfully generated {num_variations - 1} variations of the initial prompt).", style="dim green"))
+                console.print("│")
             
         def failed_variations(self, num_variations, error):
             if verbose >= 1:
-                rich.print(Text(f"│       Failed to generate {num_variations - 1} variations of the initial prompt: {error}", style="dim red"))
-                rich.print("│")
+                console.print(Text(f"│       Failed to generate {num_variations - 1} variations of the initial prompt: {error}", style="dim red"))
+                console.print("│")
             
         def end(self, population_prompts: List[chat_prompt.ChatPrompt]):
             if verbose >= 1:
-                rich.print(f"│ Successfully initialized population with {len(population_prompts)} prompts.")
-                rich.print("")
+                console.print(f"│ Successfully initialized population with {len(population_prompts)} prompts.")
+                console.print("")
                 
     
     try:
@@ -141,13 +141,13 @@ def baseline_performance(verbose: int = 1):
     """Context manager to display messages during an evaluation phase."""
     # Entry point
     if verbose >= 1:
-        rich.print(Text("> First we will establish the baseline performance."))
+        console.print(Text("> First we will establish the baseline performance."))
     
     # Create a simple object with a method to set the score
     class Reporter:
         def set_score(self, s):
             if verbose >= 1:
-                rich.print(Text(f"\r  Baseline score was: {s:.4f}.\n", style="green"))
+                console.print(Text(f"\r  Baseline score was: {s:.4f}.\n", style="green"))
     
     # Use our log suppression context manager and yield the reporter
     with suppress_opik_logs():
@@ -162,16 +162,16 @@ def evaluate_initial_population(verbose: int = 1):
     """Context manager to display messages during an evaluation phase."""
     # Entry point
     if verbose >= 1:
-        rich.print(Text("> Let's now evaluate the initial population"))
+        console.print(Text("> Let's now evaluate the initial population"))
     
     # Create a simple object with a method to set the score
     class Reporter:
         def set_score(self, index, score, baseline_score):
             if verbose >= 1:
                 if score >= baseline_score:
-                    rich.print(Text(f"\r  Prompt {index+1} score was: {score}.", style="green"))
+                    console.print(Text(f"\r  Prompt {index+1} score was: {score}.", style="green"))
                 else:
-                    rich.print(Text(f"\r  Prompt {index+1} score was: {score}.", style="dim"))
+                    console.print(Text(f"\r  Prompt {index+1} score was: {score}.", style="dim"))
         
     # Use our log suppression context manager and yield the reporter
     with suppress_opik_logs():
@@ -180,40 +180,40 @@ def evaluate_initial_population(verbose: int = 1):
                 yield Reporter()
             finally:
                 if verbose >= 1:
-                    rich.print("")
+                    console.print("")
 
 @contextmanager
 def start_evolutionary_algo(verbose: int = 1):
     """Context manager to display messages during an evolutionary algorithm phase."""
     # Entry point
     if verbose >= 1:
-        rich.print(Text("> Starting evolutionary algorithm optimization"))
+        console.print(Text("> Starting evolutionary algorithm optimization"))
     
     # Create a simple object with a method to set the score
     class Reporter:
         def start_gen(self, gen, num_gens):
             if verbose >= 1:
-                rich.print(Text(f"│   Starting generation {gen} of {num_gens}"))
+                console.print(Text(f"│   Starting generation {gen} of {num_gens}"))
 
         def restart_population(self, restart_generation_nb):
             if verbose >= 1:
-                rich.print(Text(f"│      Re-creating the population as we have not made progress in {restart_generation_nb} generations."))
+                console.print(Text(f"│      Re-creating the population as we have not made progress in {restart_generation_nb} generations."))
         
         def performing_crossover(self):
             if verbose >= 1:
-                rich.print(Text("│      Performing crossover - Combining multiple prompts into a new one."))
+                console.print(Text("│      Performing crossover - Combining multiple prompts into a new one."))
         
         def performing_mutation(self):
             if verbose >= 1:
-                rich.print(Text("│      Performing mutation - Altering prompts to improve their performance."))
+                console.print(Text("│      Performing mutation - Altering prompts to improve their performance."))
         
         def performing_evaluation(self, num_prompts: int):
             if verbose >= 1:
-                rich.print(Text(f"│      Performing evaluation - Assessing {num_prompts} prompts' performance."))
+                console.print(Text(f"│      Performing evaluation - Assessing {num_prompts} prompts' performance."))
         
         def performed_evaluation(self, prompt_idx: int, score: float):
             if verbose >= 1:
-                rich.print(Text(f"│      Performed evaluation for prompt {prompt_idx} - Score: {score:.4f}.", style="dim"))
+                console.print(Text(f"│      Performed evaluation for prompt {prompt_idx} - Score: {score:.4f}.", style="dim"))
 
     # Use our log suppression context manager and yield the reporter
     with suppress_opik_logs():
@@ -222,25 +222,25 @@ def start_evolutionary_algo(verbose: int = 1):
                 yield Reporter()
             finally:
                 if verbose >= 1:
-                    rich.print("")
+                    console.print("")
 
 def display_error(error_message, verbose: int = 1):
     if verbose >= 1:
-        rich.print(Text("│   ").append(Text(error_message, style="dim red")))
+        console.print(Text("│   ").append(Text(error_message, style="dim red")))
 
 def display_success(message, verbose: int = 1):
     if verbose >= 1:
-        rich.print(Text("│   ").append(Text(message, style="dim green")))
+        console.print(Text("│   ").append(Text(message, style="dim green")))
 
 def display_message(message, verbose: int = 1):
     if verbose >= 1:
-        rich.print(Text("│   ").append(Text(message, style="dim")))
+        console.print(Text("│   ").append(Text(message, style="dim")))
 
 def end_gen(generation_idx, best_gen_score, initial_primary_score, verbose: int = 1):
     if verbose >= 1:
         if best_gen_score >= initial_primary_score:
-            rich.print(Text(f"│   Generation {generation_idx} completed. Found a new prompt with a score of {best_gen_score:.4f}.", style="green"))
+            console.print(Text(f"│   Generation {generation_idx} completed. Found a new prompt with a score of {best_gen_score:.4f}.", style="green"))
         else:
-            rich.print(Text(f"│   Generation {generation_idx} completed. No improvement in this generation."))
+            console.print(Text(f"│   Generation {generation_idx} completed. No improvement in this generation."))
 
-        rich.print("│")
+        console.print("│")

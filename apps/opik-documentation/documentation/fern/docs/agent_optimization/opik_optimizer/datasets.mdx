@@ -155,7 +155,7 @@ candidate prompts, a robust testing methodology often involves more.
         ```
 
 3.  **Metrics**: Use a comprehensive set of metrics relevant to your task. While one metric might be
-    used for optimization (`MetricConfig`), evaluating the final prompt with multiple metrics can
+    used for optimization (`metric`), evaluating the final prompt with multiple metrics can
     provide a fuller picture.
 
 4.  **Baseline Comparison**: Always compare the performance of the optimized prompt against your
@@ -193,8 +193,8 @@ separate test set as described above).
   </Accordion>
   <Accordion title="Does the optimizer use both input and output data from my dataset?">
     Yes. The **input fields** are used to generate the actual prompts that are sent to the LLM. The **output fields**
-    (ground truth) are used by the evaluation metric (defined in `MetricConfig`) to score the LLM's responses, and this
-    score is what the optimizer tries to maximize.
+    (ground truth) are used by the evaluation metric (defined in `metric`) to score the LLM's responses, and this score
+    is what the optimizer tries to maximize.
   </Accordion>
   <Accordion title="Can I use a different dataset for final testing than the one used for optimization?">
     Yes, and this is highly recommended for a more objective assessment of the prompt's generalization ability. First,
@@ -207,5 +207,5 @@ separate test set as described above).
 
 - Review the [Manage Datasets](/evaluation/manage_datasets) guide for creating and managing your own custom datasets in Opik.
 - Check the [FAQ](/agent_optimization/opik_optimizer/faq) for more questions and troubleshooting tips.
-- Explore the [API Reference](/agent_optimization/opik_optimizer/reference) for technical details on `TaskConfig`, `MetricConfig`, and optimizer methods.
+- Explore the [API Reference](/agent_optimization/opik_optimizer/reference) for technical details on `ChatPrompt` and and optimizer methods.
 - See [Example Projects & Cookbooks](/agent_optimization/cookbook) for runnable Colab notebooks demonstrating dataset usage in optimization workflows.

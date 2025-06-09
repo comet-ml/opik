@@ -88,8 +88,8 @@ the tool.
 <AccordionGroup>
   <Accordion title="Q: Does the algorithm use input and output data to optimize the prompt?">
     A: Yes, both input and output data from your dataset are used. Input data forms the basis of the queries sent to the
-    LLM, and output data (ground truth) is used by the `MetricConfig` to score how well the LLM's responses match the
-    desired outcome. This score then guides the optimization process.
+    LLM, and output data (ground truth) is used by the `metric` to score how well the LLM's responses match the desired
+    outcome. This score then guides the optimization process.
   </Accordion>
 </AccordionGroup>
 
@@ -171,11 +171,11 @@ the tool.
 <AccordionGroup>
   <Accordion title="Q: What's the difference between `model` and `reasoning_model` in `MetaPromptOptimizer`?">
     A: - `model`: This is the LLM used to *evaluate* the candidate prompts. It runs the prompts against your dataset and
-    its responses are scored by the `MetricConfig`. - `reasoning_model`: (Optional) This is the LLM used by the
-    optimizer to *generate new candidate prompts* and provide the reasoning behind them. If not specified, the `model`
-    is used for both evaluation and reasoning. You might use a more powerful (and potentially more expensive) model as
-    the `reasoning_model` to get higher quality prompt suggestions, while using a cheaper/faster model for the more
-    frequent evaluations.
+    its responses are scored by the `metric`. - `reasoning_model`: (Optional) This is the LLM used by the optimizer to
+    *generate new candidate prompts* and provide the reasoning behind them. If not specified, the `model` is used for
+    both evaluation and reasoning. You might use a more powerful (and potentially more expensive) model as the
+    `reasoning_model` to get higher quality prompt suggestions, while using a cheaper/faster model for the more frequent
+    evaluations.
   </Accordion>
 </AccordionGroup>
 

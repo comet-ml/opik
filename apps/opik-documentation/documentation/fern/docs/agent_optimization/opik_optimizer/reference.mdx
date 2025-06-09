@@ -55,7 +55,7 @@ FewShotBayesianOptimizer(
 evaluate_prompt(
     prompt: ChatPrompt,
     dataset: Dataset,
-    metric_config: MetricConfig,
+    metric: Callable,
     dataset_item_ids: Optional = None,
     experiment_config: Optional = None,
     optimization_id: Optional = None,
@@ -71,8 +71,8 @@ evaluate_prompt(
 <ParamField path="dataset" type="Dataset">
   Opik Dataset to evaluate the prompt on
 </ParamField>
-<ParamField path="metric_config" type="MetricConfig">
-  Instance of a MetricConfig
+<ParamField path="metric" type="Callable">
+  Metric function to evaluate on, should have the arguments `dataset_item` and `llm_output`
 </ParamField>
 <ParamField path="dataset_item_ids" type="Optional" optional={true}>
   Optional list of dataset item IDs to evaluate
@@ -99,7 +99,7 @@ get_history()
 optimize_prompt(
     prompt: ChatPrompt,
     dataset: Dataset,
-    metric_config: MetricConfig,
+    metric: Callable,
     n_trials: int = 10,
     experiment_config: Optional = None,
     n_samples: Optional = None
@@ -114,8 +114,8 @@ optimize_prompt(
 <ParamField path="dataset" type="Dataset">
   Opik Dataset to optimize on
 </ParamField>
-<ParamField path="metric_config" type="MetricConfig">
-  Instance of a MetricConfig
+<ParamField path="metric" type="Callable">
+  Metric function to evaluate on
 </ParamField>
 <ParamField path="n_trials" type="int" optional={true} defaultValue="10">
   Number of trials for Bayesian Optimization
@@ -193,7 +193,7 @@ MetaPromptOptimizer(
 evaluate_prompt(
     prompt: ChatPrompt,
     dataset: Dataset,
-    metric_config: MetricConfig,
+    metric: Callable,
     use_full_dataset: bool = True,
     experiment_config: Optional = None,
     n_samples: Optional = None,
@@ -210,8 +210,8 @@ evaluate_prompt(
 <ParamField path="dataset" type="Dataset">
   Opik Dataset to evaluate the prompt on
 </ParamField>
-<ParamField path="metric_config" type="MetricConfig">
-  Instance of a MetricConfig
+<ParamField path="metric" type="Callable">
+  Metric functions
 </ParamField>
 <ParamField path="use_full_dataset" type="bool" optional={true} defaultValue="True">
   Whether to use the full dataset or a subset
@@ -241,7 +241,7 @@ get_history()
 optimize_prompt(
     prompt: ChatPrompt,
     dataset: Dataset,
-    metric_config: MetricConfig,
+    metric: Callable,
     experiment_config: Optional = None,
     n_samples: Optional = None,
     auto_continue: bool = False,
@@ -257,8 +257,8 @@ optimize_prompt(
 <ParamField path="dataset" type="Dataset">
   The dataset to evaluate against
 </ParamField>
-<ParamField path="metric_config" type="MetricConfig">
-  The metric configuration to use for evaluation
+<ParamField path="metric" type="Callable">
+  The metric to use for evaluation
 </ParamField>
 <ParamField path="experiment_config" type="Optional" optional={true}>
   A dictionary to log with the experiments
@@ -370,7 +370,7 @@ EvolutionaryOptimizer(
 evaluate_prompt(
     prompt: ChatPrompt,
     dataset: Dataset,
-    metric_config: MetricConfig,
+    metric: Callable,
     n_samples: Optional = None,
     dataset_item_ids: Optional = None,
     experiment_config: Optional = None,
@@ -387,8 +387,8 @@ evaluate_prompt(
 <ParamField path="dataset" type="Dataset">
   The dataset to use for evaluation
 </ParamField>
-<ParamField path="metric_config" type="MetricConfig">
-  The metric configuration to use
+<ParamField path="metric" type="Callable">
+  Metric function to evaluate on, should have the arguments `dataset_item` and `llm_output`
 </ParamField>
 <ParamField path="n_samples" type="Optional" optional={true}>
   Optional number of samples to use
@@ -424,7 +424,7 @@ get_llm_crossover_system_prompt()
 optimize_prompt(
     prompt: ChatPrompt,
     dataset: Dataset,
-    metric_config: MetricConfig,
+    metric: Callable,
     experiment_config: Optional = None,
     n_samples: Optional = None,
     auto_continue: bool = False,
@@ -440,8 +440,8 @@ optimize_prompt(
 <ParamField path="dataset" type="Dataset">
   The dataset to use for evaluation
 </ParamField>
-<ParamField path="metric_config" type="MetricConfig">
-  The metric configuration to use
+<ParamField path="metric" type="Callable">
+  Metric function to optimize with, should have the arguments `dataset_item` and `llm_output`
 </ParamField>
 <ParamField path="experiment_config" type="Optional" optional={true}>
   Optional experiment configuration
@@ -468,6 +468,44 @@ update_optimization(
 <ParamField path="optimization" type="None" />
 <ParamField path="status" type="str" />
 
+## ChatPrompt
+
+```python
+ChatPrompt(
+    system: Optional = None,
+    prompt: Optional = None,
+    messages: Optional = None,
+    tools: Optional = None
+)
+```
+
+**Parameters:**
+
+<ParamField path="system" type="Optional" optional={true} />
+<ParamField path="prompt" type="Optional" optional={true} />
+<ParamField path="messages" type="Optional" optional={true} />
+<ParamField path="tools" type="Optional" optional={true} />
+
+### Methods
+
+#### format
+
+```python
+format(
+    kwargs: Any
+)
+```
+
+**Parameters:**
+
+<ParamField path="kwargs" type="Any" />
+
+#### to_dict
+
+```python
+to_dict()
+```
+
 ## OptimizationResult
 
 ```python
@@ -480,6 +518,7 @@ OptimizationResult(
     history: List[Dict[str, Any]] = [],
     llm_calls: Optional[int] = None,
     demonstrations: Optional[List[Dict[str, Any]]] = None,
+    mipro_prompt: Optional[str] = None,
     tool_prompts: Optional[Dict[str, str]] = None
 )
 ```
@@ -494,4 +533,5 @@ OptimizationResult(
 <ParamField path="history" type="List[Dict[str, Any]]" optional={true} defaultValue="[]" />
 <ParamField path="llm_calls" type="Optional[int]" optional={true} />
 <ParamField path="demonstrations" type="Optional[List[Dict[str, Any]]]" optional={true} />
+<ParamField path="mipro_prompt" type="Optional[str]" optional={true} />
 <ParamField path="tool_prompts" type="Optional[Dict[str, str]]" optional={true} />

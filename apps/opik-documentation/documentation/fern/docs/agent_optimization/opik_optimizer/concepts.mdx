@@ -104,10 +104,11 @@ At the core of every optimizer is a robust evaluation process. The optimizers do
 Here's how it generally works:
 
 1.  **Dataset as Ground Truth**: The `dataset` you provide, with its input samples and expected outputs (ground truth), serves as the benchmark.
-2.  **`MetricConfig` as Judge**: The `MetricConfig` defines _how_ a candidate prompt's performance is measured. It specifies the metric (e.g., `LevenshteinRatio`, `Accuracy`, or a custom metric) and how to map the LLM's output and dataset fields to that metric's inputs.
+2.  **`Metric` as Judge**: The `metric` defines _how_ a candidate prompt's performance is measured. It specifies the metric (e.g., `LevenshteinRatio`, `Accuracy`, or a custom metric) and how to map the LLM's output and dataset fields to that metric's inputs. It should be a
+    function that takes two arguments: `dataset_item` and `llm_output`.
 3.  **Iterative Evaluation**: As an optimizer generates or selects new candidate prompts (or prompt components), it internally runs evaluations. For each candidate, it typically:
     - Uses the candidate prompt to get responses from the specified LLM for a selection of samples from your dataset.
-    - Compares these LLM responses against the ground truth in the dataset using the logic defined in your `MetricConfig`.
+    - Compares these LLM responses against the ground truth in the dataset using the logic defined in your `Metric`.
     - Calculates a score based on this comparison.
 4.  **Guided Search**: The scores obtained from these internal evaluations guide the optimizer's search strategy. It learns which types of prompts perform better and focuses its efforts accordingly, whether it's refining wording, selecting different few-shot examples, or evolving prompt structures.
 
@@ -118,7 +119,8 @@ Here's how it generally works:
 - For details on evaluating individual prompts (similar to what optimizers do internally): **[Evaluate Prompts](/evaluation/evaluate_prompt)**
 - For evaluating more complex agentic systems (relevant if your optimization target is an agent): **[Evaluate Agents](/evaluation/evaluate_agents)**
 - To learn about available metrics: **[Metrics Overview](/evaluation/metrics/overview)**
-  </Info>
+
+</Info>
 
 ## Optimization Workflow
 
@@ -126,9 +128,9 @@ Here's how it generally works:
    - Select the [Optimizer](/agent_optimization/overview#optimization-algorithms) appropriate for your task.
    - Configure its parameters (e.g., `model`, `project_name`, algorithm-specific settings).
    - Prepare your [Dataset](/agent_optimization/opik_optimizer/datasets), ensuring it has relevant inputs and ground truth outputs.
-   - Define your `TaskConfig` and `MetricConfig`.
+   - Define your `prompt` and `metric`.
 2. **Trial Execution (`optimize_prompt`)**
-   - Run the optimization process by calling the optimizer's `optimize_prompt` method, passing in your dataset, task config, and metric config.
+   - Run the optimization process by calling the optimizer's `optimize_prompt` method, passing in your dataset, prompt, and metric.
    - The optimizer will iteratively generate/select, and evaluate candidate prompts or prompt configurations.
    - Results and progress are typically logged to the Opik platform.
 3. **Analysis & Results**

@@ -53,8 +53,10 @@ class MetaPromptOptimizer(BaseOptimizer):
         4. Removing ambiguity and unnecessary elements
         5. Maintaining conciseness while being complete
 
-        If there is a system prompt, prioritize adding instructions there if and only if it makes
-        sense.
+        Instructions:
+        1. If there is a system prompt, prioritize adding instructions there if and only if it makes sense.
+        2. DO NOT add any variables or parameters to the prompt you are editing.
+        3. You can reuse variables that already exist in the prompt.
 
         Return a JSON array of prompts with the following structure:
         {
