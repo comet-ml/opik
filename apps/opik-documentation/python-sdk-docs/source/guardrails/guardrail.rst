@@ -1,5 +1,5 @@
 Guardrail
-========
+=========
 
 .. automodule:: opik.guardrails.guardrail
     :members:

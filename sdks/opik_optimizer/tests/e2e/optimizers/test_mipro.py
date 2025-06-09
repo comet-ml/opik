@@ -1,12 +1,6 @@
-from opik_optimizer import (
-    MiproOptimizer,
-    TaskConfig,
-    MetricConfig,
-    from_llm_response_text,
-    from_dataset_field
-)
 from opik.evaluation.metrics import LevenshteinRatio
-from opik_optimizer import datasets
+
+from opik_optimizer import MiproOptimizer, TaskConfig, datasets
 
 
 def test_mipro_optimizer():
@@ -22,14 +16,9 @@ def test_mipro_optimizer():
     dataset = datasets.hotpot_300()
 
     # Define metric and task configuration
-    metric_config = MetricConfig(
-        metric=LevenshteinRatio(),
-        inputs={
-            "output": from_llm_response_text(),
-            "reference": from_dataset_field(name="answer"),
-        }
-    )
-
+    def levenshtein_ratio(dataset_item, llm_output):
+        return LevenshteinRatio().score(reference=dataset_item["answer"], output=llm_output)
+    
     # Define some tools
     def calculator(expression):
         """Perform mathematical calculations"""
@@ -52,7 +41,7 @@ def test_mipro_optimizer():
     # Run optimization
     results = optimizer.optimize_prompt(
         dataset=dataset,
-        metric_config=metric_config,
+        metric=levenshtein_ratio,
         task_config=task_config,
         num_candidates=1,
         num_trials=2,

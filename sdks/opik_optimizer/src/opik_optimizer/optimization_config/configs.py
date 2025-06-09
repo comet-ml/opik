@@ -1,17 +1,8 @@
 """Module containing configuration classes for optimization."""
 
+from typing import Any, Dict, List, Literal, Union
+
 import pydantic
-import opik
-from typing import Dict, Callable, Union, List, Literal, Any, Optional
-from opik.evaluation.metrics import BaseMetric
-
-
-class MetricConfig(pydantic.BaseModel):
-    """Configuration for a metric used in optimization."""
-    metric: BaseMetric
-    inputs: Dict[str, Union[str, Callable[[Any], Any]]]
-
-    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
 
 class TaskConfig(pydantic.BaseModel):
@@ -23,13 +14,3 @@ class TaskConfig(pydantic.BaseModel):
     input_dataset_fields: List[str]
     output_dataset_field: str
     tools: List[Any] = []
-
-
-class OptimizationConfig(pydantic.BaseModel):
-    """Configuration for optimization."""
-    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
-
-    dataset: opik.Dataset
-    objective: MetricConfig
-    optimization_direction: Literal["maximize", "minimize"] = "maximize"
-    task: TaskConfig
