@@ -21,6 +21,7 @@ export const COLUMN_USAGE_ID = "usage";
 export const COLUMN_COMMENTS_ID = "comments";
 export const COLUMN_GUARDRAILS_ID = "guardrails";
 export const COLUMN_CREATED_AT_ID = "created_at";
+export const COLUMN_DATASET_ID = "dataset";
 
 export const COLUMN_GUARDRAIL_STATISTIC_ID = "guardrails_failed_count";
 
@@ -76,6 +77,7 @@ export type ColumnData<T> = {
   statisticKey?: string;
   statisticDataFormater?: (value: number) => string;
   sortable?: boolean;
+  disposable?: boolean;
 };
 
 export type DynamicColumn = {
