@@ -12,8 +12,8 @@ from .logging_config import setup_logging
 from .meta_prompt_optimizer import MetaPromptOptimizer
 from .mipro_optimizer import MiproOptimizer
 from .optimization_config.chat_prompt import ChatPrompt
-from .optimization_result import OptimizationResult
 from .optimization_config.configs import TaskConfig
+from .optimization_result import OptimizationResult
 
 __version__ = importlib.metadata.version("opik_optimizer")
 

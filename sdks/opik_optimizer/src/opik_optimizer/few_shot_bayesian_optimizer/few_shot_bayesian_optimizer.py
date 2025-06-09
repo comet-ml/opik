@@ -40,7 +40,7 @@ Your task:
 - Analyze the examples to infer a consistent structure, and create a single string few_shot_example_template using the Python .format() style. Make sure to follow the following instructions:
     - Unless absolutely relevant, do not return an object but instead a string that can be inserted as part of {FEW_SHOT_EXAMPLE_PLACEHOLDER}
     - Make sure to include the variables as part of this string so we can before string formatting with actual examples. Only variables available in the examples can be used. Do not use anything else, do not apply any transformations to the variables either.
-    - The few shot examples should include the expected response as the goal is to provide examples of the expected output format.
+    - The few shot examples should include the expected response as the goal is to provide examples of the response.
     - Ensure the format of the few shot examples are consistent with how the model will be called
 
 Return your output as a JSON object with:
@@ -562,10 +562,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self, messages: List[Dict[str, str]], few_shot_examples: Optional[str] = None
     ):
         def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, Any]:
-            prompt_ = [{
-                "role": item["role"],
-                "content": item["content"].format(**dataset_item)
-            } for item in messages]
+            for key, value in dataset_item.items():
+                prompt_ = [{
+                    "role": item["role"],
+                    "content": item["content"].replace("{" + key + "}", str(value))
+                } for item in messages]
 
             if few_shot_examples:
                 prompt_ = [{
