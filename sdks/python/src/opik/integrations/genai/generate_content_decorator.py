@@ -99,7 +99,11 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             result_dict, RESPONSE_KEYS_TO_LOG_AS_OUTPUT
         )
 
-        model = result_dict["model_version"]
+        if result_dict.get("model_version") is not None:
+            # Gemini **may** add "models/" prefix to some model versions
+            model = result_dict["model_version"].split("/")[-1]
+        else:
+            model = None
 
         usage = llm_usage.try_build_opik_usage_or_log_error(
             provider=LLMProvider(self.provider),

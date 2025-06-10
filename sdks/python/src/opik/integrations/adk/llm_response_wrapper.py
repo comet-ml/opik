@@ -47,6 +47,9 @@ def pop_llm_usage_data(result_dict: Dict[str, Any]) -> Optional[LLMUsageData]:
         return None
 
     model = custom_metadata.pop("model_version", None)
+    if model is not None:
+        model = model.split("/")[-1]
+
     provider = custom_metadata.pop("provider", None)
 
     if provider in [LLMProvider.GOOGLE_AI, LLMProvider.GOOGLE_VERTEXAI]:

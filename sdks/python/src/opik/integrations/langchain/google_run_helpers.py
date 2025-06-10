@@ -72,5 +72,8 @@ def _get_provider_and_model(
         if provider == "vertexai":
             provider = LLMProvider.GOOGLE_VERTEXAI
         model = invocation_params.get("model_name")
+        if model is not None:
+            # Gemini **may** add "models/" prefix to some model versions
+            model = model.split("/")[-1]
 
     return provider, model
