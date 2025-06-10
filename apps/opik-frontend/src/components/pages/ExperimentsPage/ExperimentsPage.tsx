@@ -25,24 +25,28 @@ import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreC
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
+import CostCell from "@/components/shared/DataTableCells/CostCell";
+import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
 import {
   COLUMN_COMMENTS_ID,
+  COLUMN_DATASET_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
+  COLUMN_METADATA_ID,
   COLUMN_NAME_ID,
   COLUMN_TYPE,
   ColumnData,
   DynamicColumn,
 } from "@/types/shared";
+import { Filter } from "@/types/filters";
 import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import ExperimentsActionsPanel from "@/components/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
-import ExperimentsFiltersButton from "@/components/pages-shared/experiments/ExperimentsFiltersButton/ExperimentsFiltersButton";
 import ExperimentRowActionsCell from "@/components/pages/ExperimentsPage/ExperimentRowActionsCell";
 import FeedbackScoresChartsWrapper from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartsWrapper";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -71,7 +75,10 @@ import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackSc
 import { formatNumericData } from "@/lib/utils";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
-import CostCell from "@/components/shared/DataTableCells/CostCell";
+import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
+import ExperimentsPathsAutocomplete from "@/components/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
+import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
+import isObject from "lodash/isObject";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -152,6 +159,30 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     type: COLUMN_TYPE.string,
     cell: CommentsCell as never,
   },
+  {
+    id: COLUMN_METADATA_ID,
+    label: "Configuration",
+    type: COLUMN_TYPE.dictionary,
+    accessorFn: (row) =>
+      isObject(row.metadata)
+        ? JSON.stringify(row.metadata, null, 2)
+        : row.metadata,
+    cell: CodeCell as never,
+  },
+];
+
+export const FILTER_COLUMNS: ColumnData<GroupedExperiment>[] = [
+  {
+    id: COLUMN_DATASET_ID,
+    label: "Dataset",
+    type: COLUMN_TYPE.string,
+    disposable: true,
+  },
+  {
+    id: COLUMN_METADATA_ID,
+    label: "Configuration",
+    type: COLUMN_TYPE.dictionary,
+  },
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
@@ -179,11 +210,11 @@ const ExperimentsPage: React.FunctionComponent = () => {
     updateType: "replaceIn",
   });
 
-  const [page = 1, setPage] = useQueryParam("page", NumberParam, {
+  const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
     updateType: "replaceIn",
   });
 
-  const [datasetId = "", setDatasetId] = useQueryParam("dataset", StringParam, {
+  const [page = 1, setPage] = useQueryParam("page", NumberParam, {
     updateType: "replaceIn",
   });
 
@@ -210,10 +241,46 @@ const ExperimentsPage: React.FunctionComponent = () => {
     };
   }, []);
 
-  const { data, isPending, refetch, datasetsData } = useGroupedExperimentsList({
+  const datasetId = useMemo(
+    () =>
+      filters.find((f: Filter) => f.field === COLUMN_DATASET_ID)?.value || "",
+    [filters],
+  );
+
+  const preProcessedFilters = useMemo(() => {
+    return filters.filter((f: Filter) => f.field !== COLUMN_DATASET_ID);
+  }, [filters]);
+
+  const filtersConfig = useMemo(
+    () => ({
+      rowsMap: {
+        [COLUMN_DATASET_ID]: {
+          keyComponent: DatasetSelectBox,
+          keyComponentProps: {
+            className: "w-full min-w-72",
+          },
+          defaultOperator: "=",
+          operators: [{ label: "=", value: "=" }],
+        },
+        [COLUMN_METADATA_ID]: {
+          keyComponent: ExperimentsPathsAutocomplete,
+          keyComponentProps: {
+            placeholder: "key",
+            excludeRoot: true,
+            datasetId,
+            sorting: sortedColumns,
+          },
+        },
+      },
+    }),
+    [datasetId, sortedColumns],
+  );
+
+  const { data, isPending, refetch } = useGroupedExperimentsList({
     workspaceName,
     groupLimit,
-    datasetId: datasetId!,
+    datasetId,
+    filters: preProcessedFilters,
     sorting: sortedColumns,
     search: search!,
     page: page!,
@@ -239,7 +306,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
   const groupIds = useMemo(() => data?.groupIds ?? [], [data?.groupIds]);
   const total = data?.total ?? 0;
-  const noData = !search && !datasetId;
+  const noData = !search && filters.length === 0;
   const noDataText = noData
     ? "There are no experiments yet"
     : "No search results";
@@ -435,9 +502,11 @@ const ExperimentsPage: React.FunctionComponent = () => {
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
-          <ExperimentsFiltersButton
-            datasetId={datasetId!}
-            onChangeDatasetId={setDatasetId}
+          <FiltersButton
+            columns={FILTER_COLUMNS}
+            config={filtersConfig as never}
+            filters={filters}
+            onChange={setFilters}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -472,11 +541,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
         </div>
       </div>
       {Boolean(experiments.length) && (
-        <FeedbackScoresChartsWrapper
-          entities={experiments}
-          datasetsData={datasetsData}
-          isAverageScores
-        />
+        <FeedbackScoresChartsWrapper entities={experiments} isAverageScores />
       )}
       <DataTable
         columns={columns}
