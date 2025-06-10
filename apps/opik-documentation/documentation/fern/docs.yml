@@ -547,6 +547,28 @@ navigation:
               - page: OpenAI
                 path: docs/reference/typescript-sdk/integrations/openai.mdx
                 slug: openai
+          - section: Evaluation
+            slug: evaluation
+            contents:
+              - page: Overview
+                path: docs/reference/typescript-sdk/evaluation/overview.mdx
+                slug: overview
+              - page: Quick Start
+                path: docs/reference/typescript-sdk/evaluation/quick-start.mdx
+                slug: quick-start
+              - page: Datasets
+                path: docs/reference/typescript-sdk/evaluation/datasets.mdx
+                slug: datasets
+              - page: Evaluate Function
+                path: docs/reference/typescript-sdk/evaluation/evaluate.mdx
+                slug: evaluate_function
+              - page: Metrics
+                path: docs/reference/typescript-sdk/evaluation/metrics.mdx
+                slug: metrics
+              - page: Experiments
+                path: docs/reference/typescript-sdk/evaluation/experiments.mdx
+                slug: experiments
+
       - section: Rest API
         slug: rest-api
         contents:

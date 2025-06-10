@@ -1,0 +1,100 @@
+---
+title: Evaluate Function
+---
+
+The `evaluate` function allows you to run comprehensive evaluations of LLM tasks against datasets using customizable metrics.
+
+```typescript
+async function evaluate(options: EvaluateOptions): Promise<EvaluationResult>;
+```
+
+## Parameters
+
+The function accepts a single `options` parameter of type `EvaluateOptions`, which contains the following properties:
+
+| Parameter           | Type                      | Required | Description                                                                                |
+| ------------------- | ------------------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `dataset`           | `Dataset`                 | Yes      | The dataset to evaluate against, containing inputs and expected outputs                    |
+| `task`              | `EvaluationTask`          | Yes      | The specific LLM task to perform                                                           |
+| `scoringMetrics`    | `BaseMetric[]`            | No       | Optional array of metrics to evaluate model performance (e.g., accuracy, F1 score)         |
+| `experimentName`    | `string`                  | No       | Optional name for this evaluation experiment for tracking and reporting                    |
+| `projectName`       | `string`                  | No       | Optional project identifier to associate this experiment with                              |
+| `experimentConfig`  | `Record<string, unknown>` | No       | Optional configuration settings for the experiment as key-value pairs                      |
+| `nbSamples`         | `number`                  | No       | Optional number of samples to evaluate from the dataset (defaults to all if not specified) |
+| `client`            | `OpikClient`              | No       | Optional Opik client instance to use for tracking                                          |
+| `scoringKeyMapping` | `ScoringKeyMappingType`   | No       | Optional mapping between dataset keys and scoring metric inputs                            |
+
+## Returns
+
+The function returns a Promise that resolves to an `EvaluationResult` object containing:
+
+- Aggregated scores across all evaluated samples
+- Individual sample results
+- Execution metadata
+
+## Example Usage
+
+```typescript
+import {
+  evaluate,
+  EvaluationTask,
+  Opik,
+  BaseMetric,
+  EvaluationScoreResult,
+  ExactMatch,
+} from "opik";
+import OpenAI from "openai";
+
+// Initialize clients
+const openai = new OpenAI();
+const opik = new Opik();
+
+// Define dataset item type
+type DatasetItem = {
+  input: string;
+  expected_output: string;
+  metadata: {
+    category: string;
+    difficulty: string;
+    version: number;
+  };
+};
+
+// Define LLM task
+const llmTask: EvaluationTask<DatasetItem> = async (datasetItem) => {
+  const { input } = datasetItem;
+
+  const response = await openai.responses.create({
+    model: "gpt-4o",
+    instructions: "You are a coding assistant",
+    input,
+  });
+
+  return { output: response.output_text };
+};
+
+async function runEvaluation() {
+  // Get or create dataset
+  const dataset = await opik.getOrCreateDataset<DatasetItem>("example-dataset");
+
+  // Run evaluation
+  const result = await evaluate({
+    dataset,
+    task: llmTask,
+    scoringMetrics: [new ExactMatch()],
+    experimentName: "Example Evaluation",
+
+    // Map the output of the task and dataset item data to the expected metric inputs
+    scoringKeyMapping: {
+      expected: "expected_output",
+    },
+  });
+}
+```
+
+## Notes
+
+- The function automatically creates an experiment in Opik for tracking and analysis
+- If no `client` is provided, it uses the global Opik client instance
+- You can provide type parameters to properly type your dataset and task inputs/outputs
+- Errors during evaluation will be properly logged and re-thrown

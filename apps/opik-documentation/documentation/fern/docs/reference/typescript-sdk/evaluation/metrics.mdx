@@ -1,0 +1,234 @@
+---
+title: Evaluation Metrics
+---
+
+Metrics are a fundamental component of the Opik evaluation function. They provide quantitative assessments of your AI models' outputs, enabling objective comparisons and performance tracking over time.
+
+### What Are Metrics?
+
+In Opik, a metric is a function that calculates a score based on specific inputs, such as model outputs and reference answers. All metrics in Opik extend the `BaseMetric` abstract class, which provides the core functionality for validation and tracking.
+
+```typescript
+abstract class BaseMetric<GenericZodObjectType> {
+  public readonly name: string;
+  public readonly trackMetric: boolean;
+  public abstract readonly validationSchema: GenericZodObjectType;
+
+  abstract score(
+    input: Infer<GenericZodObjectType>
+  ):
+    | EvaluationScoreResult
+    | EvaluationScoreResult[]
+    | Promise<EvaluationScoreResult>
+    | Promise<EvaluationScoreResult[]>;
+}
+```
+
+### How Metrics Calculate Scores
+
+Each metric must implement the `score` method, which:
+
+1. Accepts an `input` object containing combined data from the task output, dataset item, and scoringKeyMapping
+2. Processes the inputs to produce a score
+3. Returns an `EvaluationScoreResult` or array of results, which includes:
+   - `name`: The metric name
+   - `value`: The numerical score (typically 0.0-1.0)
+   - `reason`: A human-readable explanation for the score
+
+### Types of Metrics
+
+Opik supports different types of metrics:
+
+1. **Heuristic metrics**: Simple rule-based evaluations (e.g., exact match, contains, regex match)
+2. **Model-based metrics**: Evaluations powered by AI models (coming soon)
+
+## Built-in Metrics
+
+Opik provides several built-in metrics for common evaluation scenarios:
+
+### ExactMatch
+
+Checks if the model output exactly matches the expected output:
+
+```typescript
+const exactMatch = new ExactMatch();
+// Usage requires both 'output' and 'expected' parameters
+```
+
+### Contains
+
+Checks if the model output contains specific text:
+
+```typescript
+const contains = new Contains();
+// Usage requires both 'output' and 'expected' parameters
+```
+
+### RegexMatch
+
+Checks if the model output matches a regular expression pattern:
+
+```typescript
+const regexMatch = new RegexMatch();
+// Usage requires 'output' and 'pattern' parameters
+```
+
+### IsJson
+
+Checks if the output is valid JSON:
+
+```typescript
+const isJson = new IsJson();
+// Usage requires 'output' parameter
+```
+
+## Metric Configuration
+
+### Custom Naming and Tracking
+
+Each metric can be configured with a custom name and tracking option:
+
+```typescript
+// Create metric with custom name
+const exactMatch = new ExactMatch("my_exact_match");
+
+// Create metric with tracking disabled
+const regexMatch = new RegexMatch("custom_regex", false);
+```
+
+### Combining Multiple Metrics
+
+You can use multiple metrics in a single evaluation:
+
+```typescript
+const metrics = [new ExactMatch(), new Contains(), new RegexMatch()];
+
+// In your evaluation configuration
+await evaluate({
+  dataset: myDataset,
+  task: myTask,
+  scoringMetrics: metrics,
+});
+```
+
+## Input Requirements
+
+### Validation Schema
+
+Each metric defines a Zod validation schema that specifies required inputs:
+
+```typescript
+// ExactMatch validation schema example
+const validationSchema = z.object({
+  output: z.string(), // The model output
+  expected: z.string(), // The expected output
+});
+```
+
+The validation system ensures all required parameters are present before executing the metric.
+
+### Mapping Inputs
+
+You can map dataset fields and task outputs to metric inputs using `scoringKeyMapping`:
+
+```typescript
+await evaluate({
+  dataset: myDataset,
+  task: myTask,
+  scoringMetrics: [new ExactMatch()],
+  scoringKeyMapping: {
+    // Map dataset/task fields to metric parameter names
+    output: "model.response",
+    expected: "dataset.answer",
+  },
+});
+```
+
+## Score Interpretation
+
+### Score Ranges
+
+Most metrics in Opik return scores between 0.0 and 1.0:
+
+- 1.0: Perfect match or ideal performance
+- 0.0: No match or complete failure
+- Intermediate values: Partial matches or varying degrees of success
+
+## Creating Custom Metrics
+
+### Implementing Your Own Metric
+
+To create a custom metric:
+
+1. Extend the `BaseMetric` class
+2. Define a validation schema using Zod
+3. Implement the `score` method
+
+Here's an example of a custom metric that checks if output length is within a specified range:
+
+```typescript
+import z from "zod";
+import { BaseMetric } from "@opik/sdk";
+import { EvaluationScoreResult } from "@opik/sdk";
+
+// Define validation schema
+const validationSchema = z.object({
+  output: z.string(),
+  minLength: z.number(),
+  maxLength: z.number(),
+});
+
+// Infer TypeScript type from schema
+type Input = z.infer<typeof validationSchema>;
+
+export class LengthRangeMetric extends BaseMetric {
+  public validationSchema = validationSchema;
+
+  constructor(name = "length_range", trackMetric = true) {
+    super(name, trackMetric);
+  }
+
+  async score(input: Input): Promise<EvaluationScoreResult> {
+    const { output, minLength, maxLength } = input;
+    const length = output.length;
+
+    // Calculate score (1.0 if within range, 0.0 otherwise)
+    const isWithinRange = length >= minLength && length <= maxLength;
+    const score = isWithinRange ? 1.0 : 0.0;
+
+    // Return result with explanation
+    return {
+      name: this.name,
+      value: score,
+      reason: isWithinRange
+        ? `Output length (${length}) is within range ${minLength}-${maxLength}`
+        : `Output length (${length}) is outside range ${minLength}-${maxLength}`,
+    };
+  }
+}
+```
+
+### Validation Best Practices
+
+When creating custom metrics:
+
+1. **Define clear validation schemas**:
+
+   ```typescript
+   const validationSchema = z.object({
+     output: z.string().min(1, "Output is required"),
+     threshold: z.number().min(0).max(1),
+   });
+   ```
+
+2. **Return meaningful reasons**:
+
+   ```typescript
+   return {
+     name: this.name,
+     value: score,
+     reason: `Score ${score.toFixed(2)} because [detailed explanation]`,
+   };
+   ```
+
+3. **Normalize scores** to a consistent range (typically 0.0-1.0) for easier comparison with other metrics
