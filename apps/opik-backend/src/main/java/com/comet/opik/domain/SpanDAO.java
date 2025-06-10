@@ -826,7 +826,8 @@ class SpanDAO {
                      if(metadata_length > 0, 1, 0) as metadata_count,
                      length(tags) as tags_count,
                      usage,
-                     total_estimated_cost
+                     total_estimated_cost,
+                     error_info
                 FROM spans final
                 <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = spans.id
@@ -870,7 +871,8 @@ class SpanDAO {
                 avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
                 toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
                 sumIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_sum_,
-                toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum
+                toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum,
+                countIf(error_info, error_info != '') AS error_count
             FROM spans_final s
             LEFT JOIN feedback_scores_agg AS f ON s.id = f.entity_id
             GROUP BY project_id

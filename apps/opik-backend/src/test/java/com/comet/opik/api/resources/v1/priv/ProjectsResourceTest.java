@@ -2,6 +2,8 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.TestComparators;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.ErrorCountWithDeviation;
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreBatchItem;
@@ -95,6 +97,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -136,8 +139,7 @@ class ProjectsResourceTest {
     public static final String URL_TEMPLATE_TRACE = "%s/v1/private/traces";
     public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
             "lastUpdatedTraceAt", "feedbackScores", "duration", "totalEstimatedCost", "totalEstimatedCostSum", "usage",
-            "traceCount",
-            "guardrailsFailedCount"};
+            "traceCount", "guardrailsFailedCount", "errorCount"};
     public static final String[] IGNORED_FIELD_MIN = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
             "lastUpdatedTraceAt"};
 
@@ -1299,16 +1301,7 @@ class ProjectsResourceTest {
                     .parallelStream()
                     .map(project -> buildProjectStats(project, apiKey, workspaceName))
                     .sorted(comparing)
-                    .map(project -> ProjectStatsSummaryItem.builder()
-                            .duration(project.duration())
-                            .totalEstimatedCost(project.totalEstimatedCost())
-                            .totalEstimatedCostSum(project.totalEstimatedCostSum())
-                            .usage(project.usage())
-                            .feedbackScores(project.feedbackScores())
-                            .projectId(project.id())
-                            .traceCount(project.traceCount())
-                            .guardrailsFailedCount(project.guardrailsFailedCount())
-                            .build())
+                    .map(ProjectsResourceTest.this::mapFromProjectToSummary)
                     .toList();
         }
 
@@ -1484,6 +1477,20 @@ class ProjectsResourceTest {
         }
     }
 
+    private ProjectStatsSummaryItem mapFromProjectToSummary(Project project) {
+        return ProjectStatsSummaryItem.builder()
+                .duration(project.duration())
+                .totalEstimatedCost(project.totalEstimatedCost())
+                .totalEstimatedCostSum(project.totalEstimatedCostSum())
+                .usage(project.usage())
+                .feedbackScores(project.feedbackScores())
+                .projectId(project.id())
+                .traceCount(project.traceCount())
+                .guardrailsFailedCount(project.guardrailsFailedCount())
+                .errorCount(project.errorCount())
+                .build();
+    }
+
     private Project buildProjectStats(Project project, String apiKey, String workspaceName) {
         var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
                 .map(trace -> {
@@ -1548,8 +1555,16 @@ class ProjectsResourceTest {
                     .build();
         }).toList();
 
+        return createProjectSummary(project, traces);
+    }
+
+    private Project createProjectSummary(Project project, List<Trace> traces) {
         List<BigDecimal> durations = StatsUtils.calculateQuantiles(
                 traces.stream()
+                        .map(t -> t.toBuilder()
+                                .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(t.startTime(),
+                                        t.endTime()))
+                                .build())
                         .map(Trace::duration)
                         .toList(),
                 List.of(0.5, 0.90, 0.99));
@@ -1562,6 +1577,7 @@ class ProjectsResourceTest {
                 .totalEstimatedCostSum(costSum)
                 .usage(traces.stream()
                         .map(Trace::usage)
+                        .filter(Objects::nonNull)
                         .flatMap(usage -> usage.entrySet().stream())
                         .collect(groupingBy(Map.Entry::getKey, averagingDouble(Map.Entry::getValue))))
                 .feedbackScores(getScoreAverages(traces))
@@ -1569,17 +1585,44 @@ class ProjectsResourceTest {
                 .traceCount((long) traces.size())
                 .guardrailsFailedCount(traces.stream()
                         .map(Trace::guardrailsValidations)
+                        .filter(Objects::nonNull)
                         .flatMap(List::stream)
                         .map(GuardrailsValidation::checks)
                         .flatMap(List::stream)
                         .filter(guardrail -> guardrail.result() == GuardrailResult.FAILED)
                         .count())
+                .errorCount(getErrorCountWithDeviation(traces, project.createdAt()))
+                .build();
+    }
+
+    private ErrorCountWithDeviation getErrorCountWithDeviation(List<Trace> traces, Instant projectCreatedAt) {
+        Instant lastWeek = projectCreatedAt.minus(7, ChronoUnit.DAYS);
+        long recentErrorCount = traces.stream()
+                .filter(trace -> trace.errorInfo() != null)
+                .filter(trace -> trace.startTime().isAfter(lastWeek) || trace.startTime().equals(lastWeek))
+                .count();
+
+        long pastPeriodErrorCount = traces.stream()
+                .filter(trace -> trace.errorInfo() != null)
+                .filter(trace -> trace.startTime().isBefore(lastWeek))
+                .count();
+
+        double errorCount = recentErrorCount + pastPeriodErrorCount;
+        Long deviationPercentage = pastPeriodErrorCount > 0
+                ? Math.round(((errorCount - pastPeriodErrorCount) / pastPeriodErrorCount) * 100)
+                : null;
+
+        return ErrorCountWithDeviation.builder()
+                .count((long) errorCount)
+                .deviation(recentErrorCount)
+                .deviationPercentage(deviationPercentage)
                 .build();
     }
 
     private List<FeedbackScoreAverage> getScoreAverages(List<Trace> traces) {
         return traces.stream()
                 .map(Trace::feedbackScores)
+                .filter(Objects::nonNull)
                 .flatMap(List::stream)
                 .collect(groupingBy(FeedbackScore::name,
                         BigDecimalCollectors.averagingBigDecimal(FeedbackScore::value)))
@@ -1592,12 +1635,16 @@ class ProjectsResourceTest {
                 .toList();
     }
 
-    private double getTotalEstimatedCost(List<Trace> traces) {
+    private Double getTotalEstimatedCost(List<Trace> traces) {
         long count = traces.stream()
                 .map(Trace::totalEstimatedCost)
                 .filter(Objects::nonNull)
                 .filter(cost -> cost.compareTo(BigDecimal.ZERO) > 0)
                 .count();
+
+        if (count == 0) {
+            return 0.0;
+        }
 
         return traces.stream()
                 .map(Trace::totalEstimatedCost)
@@ -1612,6 +1659,237 @@ class ProjectsResourceTest {
                 .filter(cost -> cost.compareTo(BigDecimal.ZERO) > 0)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .doubleValue();
+    }
+
+    private List<Trace> createTracesWithSpecificErrors(String projectName, String workspaceName, String apiKey,
+            int recentErrorCount, int pastPeriodErrorCount) {
+        // Create traces with errors before the last 7 days (past period errors)
+        List<Trace> pastTraces = new ArrayList<>(pastPeriodErrorCount);
+        if (pastPeriodErrorCount > 0) {
+            for (int i = 0; i < pastPeriodErrorCount; i++) {
+                Trace trace = createTraceWithError(projectName, Instant.now().minus(7 + i, ChronoUnit.DAYS));
+                pastTraces.add(trace);
+            }
+            traceResourceClient.batchCreateTraces(pastTraces, apiKey, workspaceName);
+        }
+
+        // Create traces with errors in the last 7 days (recent errors)
+        List<Trace> recentTraces = new ArrayList<>(recentErrorCount);
+        if (recentErrorCount > 0) {
+            for (int i = 0; i < recentErrorCount; i++) {
+                Trace trace = createTraceWithError(projectName, Instant.now().minus(7 + i, ChronoUnit.HOURS));
+                recentTraces.add(trace);
+            }
+            traceResourceClient.batchCreateTraces(recentTraces, apiKey, workspaceName);
+        }
+
+        return Stream.of(pastTraces.stream(), recentTraces.stream())
+                .flatMap(Function.identity())
+                .toList();
+    }
+
+    /**
+     * Creates a trace with an error for testing.
+     */
+    private Trace createTraceWithError(String projectName, Instant startTime) {
+
+        List<String> exception = List.of("RuntimeException", "ValidationException", "GuardrailException",
+                "TimeoutException");
+
+        ErrorInfo errorInfo = ErrorInfo.builder()
+                .exceptionType(exception.get(PodamUtils.getIntegerInRange(0, exception.size() - 1)))
+                .message("Test error message: " + UUID.randomUUID())
+                .build();
+
+        return factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .startTime(startTime)
+                .endTime(startTime.plusSeconds(1))
+                .errorInfo(errorInfo)
+                .usage(null)
+                .guardrailsValidations(null)
+                .feedbackScores(null)
+                .totalEstimatedCost(null)
+                .build();
+    }
+
+    private List<Trace> createTracesWithoutErrors(String projectName, String workspaceName, String apiKey) {
+        // Create traces without errors
+        int traceCount = 5;
+        List<Trace> traces = new ArrayList<>(traceCount);
+        for (int i = 0; i < traceCount; i++) {
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .startTime(Instant.now().minus(i, ChronoUnit.DAYS))
+                    .endTime(Instant.now().minus(i, ChronoUnit.DAYS).plusSeconds(1))
+                    .errorInfo(null)
+                    .totalEstimatedCost(null)
+                    .usage(null)
+                    .guardrailsValidations(null)
+                    .feedbackScores(null)
+                    .build();
+
+            traces.add(trace);
+        }
+
+        traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+        return traces;
+    }
+
+    @Nested
+    @DisplayName("Project Error Count Tests")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ProjectErrorCountTests {
+
+        @Test
+        @DisplayName("when project has errors in both periods, then return project stats with error count, deviation and percentage")
+        void getProjectStats__whenProjectHasErrorsInBothPeriods__thenReturnProjectStatsWithErrorCountDeviationAndPercentage() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create a project
+            Project project = factory.manufacturePojo(Project.class);
+            UUID projectId = createProject(project, apiKey, workspaceName);
+
+            // Create traces with errors
+            int recentErrorCount = PodamUtils.getIntegerInRange(1, 5);
+            int pastPeriodErrorCount = PodamUtils.getIntegerInRange(1, 5);
+            List<Trace> tracesWithSpecificErrors = createTracesWithSpecificErrors(project.name(), workspaceName, apiKey,
+                    recentErrorCount,
+                    pastPeriodErrorCount);
+
+            // Create expected project with error count
+            List<ProjectStatsSummaryItem> expectedProjectsSummary = Stream.of(
+                    createProjectSummary(project.toBuilder().id(projectId).build(), tracesWithSpecificErrors))
+                    .map(ProjectsResourceTest.this::mapFromProjectToSummary)
+                    .toList();
+
+            var actualProjectsSummary = projectResourceClient.getProjectStatsSummary(project.name(), apiKey,
+                    workspaceName);
+
+            // Verify error count using recursive comparison
+            assertSummaryResponse(actualProjectsSummary, expectedProjectsSummary);
+        }
+
+        @Test
+        @DisplayName("when project has errors only in recent period, then return project stats with error count and deviation but no percentage")
+        void getProjectStats__whenProjectHasErrorsOnlyInRecentPeriod__thenReturnProjectStatsWithErrorCountAndDeviationButNoPercentage() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create a project
+            Project project = factory.manufacturePojo(Project.class);
+            UUID projectId = createProject(project, apiKey, workspaceName);
+
+            // Create traces with errors
+            int recentErrorCount = PodamUtils.getIntegerInRange(1, 5);
+            int pastPeriodErrorCount = 0;
+            List<Trace> tracesWithSpecificErrors = createTracesWithSpecificErrors(project.name(), workspaceName, apiKey,
+                    recentErrorCount,
+                    pastPeriodErrorCount);
+
+            // Create expected project with error count
+            List<ProjectStatsSummaryItem> expectedProjectsSummary = Stream.of(
+                    createProjectSummary(project.toBuilder().id(projectId).build(), tracesWithSpecificErrors))
+                    .map(ProjectsResourceTest.this::mapFromProjectToSummary)
+                    .toList();
+
+            var actualProjectsSummary = projectResourceClient.getProjectStatsSummary(project.name(), apiKey,
+                    workspaceName);
+
+            // Verify error count using recursive comparison
+            assertSummaryResponse(actualProjectsSummary, expectedProjectsSummary);
+        }
+
+        @Test
+        @DisplayName("when project has no errors, then return project stats with zero error count")
+        void getProjectStats__whenProjectHasNoErrors__thenReturnProjectStatsWithZeroErrorCount() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create a project
+            Project project = factory.manufacturePojo(Project.class);
+            UUID projectId = createProject(project, apiKey, workspaceName);
+
+            // Create traces without errors
+            List<Trace> tracesWithNoErrors = createTracesWithoutErrors(project.name(), workspaceName, apiKey);
+
+            // Create expected project with error count of zero
+            List<ProjectStatsSummaryItem> expectedProjectsSummary = Stream.of(
+                    createProjectSummary(project.toBuilder().id(projectId).build(), tracesWithNoErrors))
+                    .map(ProjectsResourceTest.this::mapFromProjectToSummary)
+                    .toList();
+
+            var actualProjectsSummary = projectResourceClient.getProjectStatsSummary(project.name(), apiKey,
+                    workspaceName);
+
+            // Error count might be null or have count = 0
+            assertSummaryResponse(actualProjectsSummary, expectedProjectsSummary);
+        }
+
+        @Test
+        @DisplayName("when projects have errors, then return project stats summary with error counts")
+        void getProjectsStats__whenProjectsHaveErrors__thenReturnProjectStatsSummaryWithErrorCounts() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create projects with different error patterns
+            Project project1 = factory.manufacturePojo(Project.class);
+            UUID projectId1 = createProject(project1, apiKey, workspaceName);
+
+            Project project2 = factory.manufacturePojo(Project.class);
+            UUID projectId2 = createProject(project2, apiKey, workspaceName);
+
+            Project project3 = factory.manufacturePojo(Project.class);
+            UUID projectId3 = createProject(project3, apiKey, workspaceName);
+
+            // Create expected project stats summary items
+            int recentErrorCount1 = PodamUtils.getIntegerInRange(1, 5);
+            int pastPeriodErrorCount1 = PodamUtils.getIntegerInRange(1, 5);
+
+            int recentErrorCount2 = PodamUtils.getIntegerInRange(1, 5);
+            int pastPeriodErrorCount = 0;
+
+            List<ProjectStatsSummaryItem> expectedProjectsSummary = Stream.of(
+                    createProjectSummary(project1.toBuilder().id(projectId1).build(),
+                            createTracesWithSpecificErrors(project1.name(), workspaceName, apiKey, recentErrorCount1,
+                                    pastPeriodErrorCount1)),
+                    createProjectSummary(project2.toBuilder().id(projectId2).build(),
+                            createTracesWithSpecificErrors(project2.name(), workspaceName, apiKey, recentErrorCount2,
+                                    pastPeriodErrorCount)),
+                    createProjectSummary(project3.toBuilder().id(projectId3).build(),
+                            createTracesWithoutErrors(project3.name(), workspaceName, apiKey)))
+                    .map(ProjectsResourceTest.this::mapFromProjectToSummary)
+                    .toList();
+
+            var actualProjectsSummary = projectResourceClient.getProjectStatsSummary(null, apiKey, workspaceName);
+
+            // Error count might be null or have count = 0
+            assertSummaryResponse(actualProjectsSummary, expectedProjectsSummary.reversed());
+        }
+
+        private void assertSummaryResponse(ProjectStatsSummary actualProjectsSummary,
+                List<ProjectStatsSummaryItem> expectedProjectsSummary) {
+            assertThat(actualProjectsSummary.content()).hasSize(expectedProjectsSummary.size());
+
+            assertThat(actualProjectsSummary.content())
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, BigDecimal.class)
+                    .isEqualTo(expectedProjectsSummary);
+        }
     }
 
     @Nested
