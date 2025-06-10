@@ -77,6 +77,66 @@ Once the OpikTracer is configured, you will start to see the traces in the Opik 
   <img src="/img/cookbook/langgraph_cookbook.png" />
 </Frame>
 
+## Logging threads
+
+When you are running multi-turn conversations using [LangGraph persistence](https://langchain-ai.github.io/langgraph/concepts/persistence/#threads), Opik will use Langgraph's thread_id as Opik thread_id. Here is an example below:
+
+```python
+import sqlite3
+from langgraph.checkpoint.sqlite import SqliteSaver
+from typing import Annotated
+from pydantic import BaseModel
+from opik.integrations.langchain import OpikTracer
+from langchain_core.messages import HumanMessage
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langchain.chat_models import init_chat_model
+
+llm = init_chat_model("openai:gpt-4.1")
+
+
+# create your LangGraph graph
+class State(BaseModel):
+    messages: Annotated[list, add_messages]
+
+
+def chatbot(state):
+    # Typically your LLM calls would be done here
+    return {"messages": [llm.invoke(state.messages)]}
+
+
+graph = StateGraph(State)
+graph.add_node("chatbot", chatbot)
+graph.add_edge(START, "chatbot")
+graph.add_edge("chatbot", END)
+
+# Create a new SqliteSaver instance
+# Note: check_same_thread=False is OK as the implementation uses a lock
+# to ensure thread safety.
+conn = sqlite3.connect("checkpoints.sqlite", check_same_thread=False)
+memory = SqliteSaver(conn)
+
+app = graph.compile(checkpointer=memory)
+
+# Create the OpikTracer
+opik_tracer = OpikTracer(graph=app.get_graph(xray=True))
+
+thread_id = "e424a45e-7763-443a-94ae-434b39b67b72"
+config = {"callbacks": [opik_tracer], "configurable": {"thread_id": thread_id}}
+
+# Initialize the state
+state = State(**app.get_state(config).values) or State(messages=[])
+print("STATE", state)
+
+# Add the user message
+state.messages.append(HumanMessage(content="Hello, my name is Bob, how are you doing ?"))
+# state.messages.append(HumanMessage(content="What is my name ?"))
+
+result = app.invoke(state, config=config)
+
+print("Result", result)
+```
+
 ## Updating logged traces
 
 You can use the [`OpikTracer.created_traces`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/OpikTracer.html#opik.integrations.langchain.OpikTracer.created_traces) method to access the trace IDs collected by the OpikTracer callback:
