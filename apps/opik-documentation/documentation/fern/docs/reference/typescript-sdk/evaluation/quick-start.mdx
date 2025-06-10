@@ -216,6 +216,44 @@ When you run this code, you'll receive an evaluation result object containing:
   - `scoreResults`: Array of scores from each metric
 - `resultUrl`: Link to view detailed results in the Opik platform
 
+```typescript
+{
+  "experimentId": "01975908-818f-765a-abv6-08d179c15610",
+  "experimentName": "My First Evaluation",
+  "testResults": [
+    {
+      "testCase": {
+        "traceId": "01975908-82dc-73fd-862d-dd51152ddse1",
+        "datasetItemId": "01975908-810c-7663-b7a3-e3ae94484ca9",
+        "scoringInputs": {
+          "input": "What is machine learning?",
+          "metadata": {
+            "category": "AI basics",
+            "difficulty": "beginner",
+            "version": 1
+          },
+          "expected_output": "Machine learning is a type of artificial intelligence that enables systems to learn and improve from experience without being explicitly programmed.",
+          "id": "01975908-810c-7663-b7a3-e3ae43884ca9",
+          "output": "Arrr, machine learnin' be a way for computers to learn from data, akin to teachin' a parrot new tricks! Instead of givin' exact instructions, ye feed the machine lots o' examples, and it figures out how to make decisions on its own. It be useful for predictin' things, findin' patterns, and even speakin' like a fine pirate! 🏴‍☠️",
+          "expected": "Machine learning is a type of artificial intelligence that enables systems to learn and improve from experience without being explicitly programmed."
+        },
+        "taskOutput": {
+          "output": "Arrr, machine learnin' be a way for computers to learn from data, akin to teachin' a parrot new tricks! Instead of givin' exact instructions, ye feed the machine lots o' examples, and it figures out how to make decisions on its own. It be useful for predictin' things, findin' patterns, and even speakin' like a fine pirate! 🏴‍☠️"
+        }
+      },
+      "scoreResults": [
+        {
+          "name": "exact_match",
+          "value": 0,
+          "reason": "Exact match: No match"
+        }
+      ]
+    }
+  ],
+  "resultUrl": "https://comet.com/opik/api/v1/session/redirect/experiments/?experiment_id=01975908-818f-765a-abv6-08d179c15610&dataset_id=01975908-810c-7663-b7a3-e3ae94484ca9&path=aHR0cHM6Ly9kZXYuY29tZXQuY29tL29dfWsvYXBp"
+}
+```
+
 ## Troubleshooting & Best Practices
 
 ### API Key Issues
