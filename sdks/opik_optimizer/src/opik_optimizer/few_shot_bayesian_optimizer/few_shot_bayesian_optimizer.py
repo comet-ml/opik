@@ -377,6 +377,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             score=best_score,
             metric_name=metric.__name__,
             details={
+                "initial_score": baseline_score,
                 "chat_messages": best_trial.user_attrs["config"]["message_list"],
                 "prompt_parameter": best_trial.user_attrs["config"],
                 #"n_examples": best_n_examples,
@@ -414,6 +415,16 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         Returns:
             OptimizationResult: Result of the optimization
         """
+        if not isinstance(prompt, chat_prompt.ChatPrompt):
+            raise ValueError("Prompt must be a ChatPrompt object")
+        
+        if not isinstance(dataset, Dataset):
+            raise ValueError("Dataset must be a Dataset object")
+        
+        if not isinstance(metric, Callable):
+            raise ValueError("Metric must be a function that takes `dataset_item` and `llm_output` as arguments.")
+
+
         optimization = None
         try:
             optimization = self._opik_client.create_optimization(
@@ -421,15 +432,22 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
             )
+            optimization_run_id = optimization.id
         except Exception:
             logger.warning(
                 "Opik server does not support optimizations. Please upgrade opik."
             )
             optimization = None
+            optimization_run_id = None
 
         try:
             # Start experiment reporting
-            reporting.display_header("Few-Shot Bayesian Optimizer", verbose=self.verbose)
+            reporting.display_header(
+                algorithm=self.__class__.__name__,
+                optimization_id=optimization_run_id,
+                dataset_id=dataset.id,
+                verbose=self.verbose
+            )
             reporting.display_configuration(
                 prompt.formatted_messages,
                 optimizer_config={

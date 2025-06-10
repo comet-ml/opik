@@ -74,7 +74,6 @@ class OptimizationResult(pydantic.BaseModel):
             .replace("[dim]", "")
             .replace("[/dim]", "")
         )
-        stopped_early = self.details.get("stopped_early", "N/A")
 
         model_name = self.details.get("model", "N/A")
         temp = self.details.get("temperature")
@@ -101,7 +100,6 @@ class OptimizationResult(pydantic.BaseModel):
             f"Final Best Score: {final_score_str}",
             f"Total Improvement:{improvement_str.rjust(max(0, 18 - len('Total Improvement:')))}",
             f"Rounds Completed: {rounds_ran}",
-            f"Stopped Early:    {stopped_early}",
             "\nFINAL OPTIMIZED PROMPT / STRUCTURE:",
             "--------------------------------------------------------------------------------",
             f"{final_prompt_display}",
@@ -124,8 +122,6 @@ class OptimizationResult(pydantic.BaseModel):
         stopped_early = self.details.get("stopped_early", "N/A")
 
         model_name = self.details.get("model", "[dim]N/A[/dim]")
-        temp = self.details.get("temperature")
-        temp_str = f"{temp:.1f}" if isinstance(temp, (int, float)) else "[dim]N/A[/dim]"
 
         table = rich.table.Table.grid(padding=(0, 1))
         table.add_column(style="dim")
@@ -135,13 +131,12 @@ class OptimizationResult(pydantic.BaseModel):
             "Optimizer:",
             f"[bold]{self.optimizer}[/bold]",
         )
-        table.add_row("Model Used:", f"{model_name} ([dim]Temp:[/dim] {temp_str})")
+        table.add_row("Model Used:", f"{model_name}")
         table.add_row("Metric Evaluated:", f"[bold]{self.metric_name}[/bold]")
         table.add_row("Initial Score:", initial_score_str)
         table.add_row("Final Best Score:", f"[bold cyan]{final_score_str}[/bold cyan]")
         table.add_row("Total Improvement:", improvement_str)
         table.add_row("Rounds Completed:", str(rounds_ran))
-        table.add_row("Stopped Early:", str(stopped_early))
 
         # Display Chat Structure if available
         panel_title = "[bold]Final Optimized Prompt[/bold]"
