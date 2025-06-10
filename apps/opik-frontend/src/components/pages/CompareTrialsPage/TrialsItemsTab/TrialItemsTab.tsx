@@ -267,13 +267,6 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
 
   const datasetColumnsData = useMemo(() => {
     return [
-      {
-        id: COLUMN_CREATED_AT_ID,
-        label: "Created",
-        type: COLUMN_TYPE.time,
-        accessorFn: (row) => formatDate(row.created_at),
-        verticalAlignment: calculateVerticalAlignment(experimentsCount),
-      },
       ...dynamicDatasetColumns.map(
         ({ label, id, columnType }) =>
           ({
