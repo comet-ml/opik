@@ -26,7 +26,6 @@ Jinja2==3.1.6
 jiter==0.10.0
 jsonschema==4.24.0
 jsonschema-specifications==2025.4.1
-Levenshtein==0.27.1
 litellm==1.71.1
 markdown-it-py==3.0.0
 MarkupSafe==3.0.2
