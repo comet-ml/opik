@@ -100,6 +100,7 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
         )
 
         if result_dict.get("model_version") is not None:
+            # Gemini **may** add "models/" prefix to some model versions
             model = result_dict["model_version"].split("/")[-1]
         else:
             model = None
