@@ -1,16 +1,12 @@
 import dspy
-
 from opik.evaluation.metrics import Equals
-from opik_optimizer import MiproOptimizer
-from opik_optimizer.demo import get_or_create_dataset, get_litellm_cache
-from opik_optimizer import (
-    TaskConfig,
-    from_dataset_field,
-    from_llm_response_text,
-)
+
+from opik_optimizer import MiproOptimizer, TaskConfig
+from opik_optimizer.datasets import hotpot_300
+from opik_optimizer.demo import get_litellm_cache
 
 project_name = "optimize-mipro-hotpot"
-opik_dataset = get_or_create_dataset("hotpot-300")
+opik_dataset = hotpot_300()
 get_litellm_cache("test")
 
 optimizer = MiproOptimizer(
