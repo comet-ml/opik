@@ -1190,7 +1190,7 @@ class SpansResourceTest {
 
         private String getValidValue(Field field) {
             return switch (field.getType()) {
-                case STRING, LIST, DICTIONARY, ENUM -> RandomStringUtils.secure().nextAlphanumeric(10);
+                case STRING, LIST, DICTIONARY, ENUM, CONTAINER -> RandomStringUtils.secure().nextAlphanumeric(10);
                 case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
                 case DATE_TIME -> Instant.now().toString();
             };
@@ -1198,14 +1198,14 @@ class SpansResourceTest {
 
         private String getKey(Field field) {
             return switch (field.getType()) {
-                case STRING, NUMBER, DATE_TIME, LIST, ENUM -> null;
+                case STRING, NUMBER, DATE_TIME, LIST, ENUM, CONTAINER -> null;
                 case FEEDBACK_SCORES_NUMBER, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
             };
         }
 
         private String getInvalidValue(Field field) {
             return switch (field.getType()) {
-                case STRING, DICTIONARY, LIST, ENUM -> " ";
+                case STRING, DICTIONARY, LIST, ENUM, CONTAINER -> " ";
                 case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
             };
         }
@@ -1261,6 +1261,7 @@ class SpansResourceTest {
                                                         : getKey(filter.getKey()))
                                                 .value(getInvalidValue(filter.getKey()))
                                                 .build());
+                                case CONTAINER -> Stream.of();
                                 default -> Stream.of(SpanFilter.builder()
                                         .field(filter.getKey())
                                         .operator(operator)
@@ -4507,6 +4508,98 @@ class SpansResourceTest {
                     List.of(), exclude);
         }
 
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterErrorIsNotEmpty__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .totalEstimatedCost(null)
+                            .feedbackScores(null)
+                            .errorInfo(null)
+                            .build())
+                    .collect(toCollection(ArrayList::new));
+
+            spans.set(0, spans.getFirst().toBuilder()
+                    .errorInfo(podamFactory.manufacturePojo(ErrorInfo.class))
+                    .build());
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            var expectedSpans = List.of(spans.getFirst());
+            var unexpectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .build());
+
+            spanResourceClient.batchCreateSpans(unexpectedSpans, apiKey, workspaceName);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.ERROR_INFO)
+                    .operator(Operator.IS_NOT_EMPTY)
+                    .value("")
+                    .build());
+
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
+
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterErrorIsEmpty__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion) {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .totalEstimatedCost(null)
+                            .feedbackScores(null)
+                            .build())
+                    .collect(toCollection(ArrayList::new));
+
+            spans.set(0, spans.getFirst().toBuilder()
+                    .errorInfo(null)
+                    .build());
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            var expectedSpans = List.of(spans.getFirst());
+            var unexpectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .build());
+
+            spanResourceClient.batchCreateSpans(unexpectedSpans, apiKey, workspaceName);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.ERROR_INFO)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build());
+
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
+
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
+        }
     }
 
     private void getAndAssertPage(

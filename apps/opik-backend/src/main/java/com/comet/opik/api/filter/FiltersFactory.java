@@ -58,6 +58,14 @@ public class FiltersFactory {
                             return false;
                         }
                     })
+                    .put(FieldType.CONTAINER, filter -> {
+                        if (Operator.NO_VALUE_OPERATORS.contains(filter.operator())) {
+                            // don't validate value in case it's not needed
+                            return true;
+                        }
+
+                        return false;
+                    })
                     .put(FieldType.DICTIONARY, filter -> StringUtils.isNotBlank(filter.value()) &&
                             StringUtils.isNotBlank(filter.key()))
                     .put(FieldType.LIST, filter -> StringUtils.isNotBlank(filter.value()))
