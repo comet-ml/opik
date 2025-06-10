@@ -1,0 +1,275 @@
+---
+title: Quick Start
+---
+
+**In just 15 minutes**, learn how to evaluate your AI models with Opik's TypeScript SDK. This guide will walk you through creating a dataset, defining an evaluation task, and analyzing results with built-in metrics – everything you need to start making data-driven decisions about your AI systems.
+
+## Complete Working Example
+
+💡 **Copy, paste, and run** this complete example that:
+
+1. Creates a structured dataset for AI evaluation
+2. Defines an evaluation task using OpenAI's latest models
+3. Runs an evaluation with built-in metrics and analyzes the results
+
+```typescript
+import { config } from "dotenv";
+import { evaluate, EvaluationTask, Opik, ExactMatch } from "opik";
+import OpenAI from "openai";
+
+// Load environment variables from .env file
+config();
+
+// Initialize the OpenAI client
+const client = new OpenAI();
+
+// Create an Opik client
+const opik = new Opik();
+
+// define the type for DatasetItem
+type DatasetItem = {
+  input: string;
+  expected_output: string;
+  metadata: {
+    category: string;
+    difficulty: string;
+    version: number;
+  };
+};
+
+// Retrieve the existing dataset by name
+const retrievedDataset = await opik.getOrCreateDataset<DatasetItem>(
+  "testDataset"
+);
+
+// Add items to a dataset
+const itemsToAdd = [
+  {
+    input: "What is machine learning?",
+    expected_output:
+      "Machine learning is a type of artificial intelligence that enables systems to learn and improve from experience without being explicitly programmed.",
+    metadata: { category: "AI basics", difficulty: "beginner", version: 1 },
+  },
+];
+await retrievedDataset.insert(itemsToAdd);
+
+// Define a task that takes a dataset item and returns a result
+const llmTask: EvaluationTask<DatasetItem> = async (datasetItem) => {
+  const { input } = datasetItem;
+
+  const response = await client.responses.create({
+    model: "gpt-4o",
+    instructions: "You are a coding assistant that talks like a pirate",
+    input,
+  });
+
+  return { output: response.output_text };
+};
+
+// Run evaluation
+const result = await evaluate({
+  dataset: retrievedDataset,
+  task: llmTask,
+  scoringMetrics: [new ExactMatch()],
+  experimentName: "My First Evaluation",
+
+  // map the output of the task and dataset item data to the expected metric inputs
+  scoringKeyMapping: {
+    expected: "expected_output",
+  },
+});
+
+console.log(`Experiment ID: ${result.experimentId}`);
+console.log(`Experiment Name: ${result.experimentName}`);
+console.log(`Total test cases: ${result.testResults.length}`);
+```
+
+## Step-by-Step Walkthrough
+
+### 1. Setting up environment
+
+```typescript
+import { config } from "dotenv";
+import { evaluate, EvaluationTask, Opik, ExactMatch } from "opik";
+import OpenAI from "openai";
+
+// Load environment variables from .env file
+config();
+
+// Initialize the OpenAI client
+const client = new OpenAI();
+
+// Create an Opik client
+const opik = new Opik();
+```
+
+This section imports the necessary dependencies and configures your evaluation environment. The `dotenv` package securely loads your API keys from a `.env` file:
+
+```
+OPENAI_API_KEY=your_openai_api_key
+OPIK_API_KEY=your_opik_api_key
+OPIK_PROJECT_NAME=your_opik_project_name
+OPIK_WORKSPACE=your_opik_workspace
+```
+
+### 2. Building a structured evaluation dataset
+
+```typescript
+// Create an Opik client
+const opik = new Opik();
+
+// define the type for DatasetItem
+type DatasetItem = {
+  input: string;
+  expected_output: string;
+  metadata: {
+    category: string;
+    difficulty: string;
+    version: number;
+  };
+};
+
+// Retrieve the existing dataset by name
+const retrievedDataset = await opik.getOrCreateDataset<DatasetItem>(
+  "testDataset"
+);
+
+// Add items to a dataset
+const itemsToAdd = [
+  {
+    input: "What is machine learning?",
+    expected_output:
+      "Machine learning is a type of artificial intelligence that enables systems to learn and improve from experience without being explicitly programmed.",
+    metadata: { category: "AI basics", difficulty: "beginner", version: 1 },
+  },
+];
+await retrievedDataset.insert(itemsToAdd);
+```
+
+This section creates your evaluation dataset with full TypeScript support:
+
+- **Initialize the client**: Connect to Opik's evaluation platform
+- **Define your schema**: Use TypeScript types for dataset items with full IDE autocompletion
+- **Retrieve or create**: Use `getOrCreateDataset` to seamlessly work with existing or new datasets
+- **Add evaluation items**: Structure your test cases with inputs, expected outputs, and rich metadata for filtering and analysis
+
+> 📌 **Best practice**: Add descriptive metadata to each item for powerful filtering and analysis in the Opik UI.
+
+### 3. Defining your evaluation task
+
+```typescript
+// Define a task that takes a dataset item and returns a result
+const llmTask: EvaluationTask<DatasetItem> = async (datasetItem) => {
+  const { input } = datasetItem;
+
+  const response = await client.responses.create({
+    model: "gpt-4o", // Use any model you need to evaluate
+    instructions: "You are a coding assistant that talks like a pirate",
+    input,
+  });
+
+  return { output: response.output_text };
+};
+```
+
+Your evaluation task:
+
+- **Receives dataset items**: Automatically processes each item in your dataset
+- **Integrates with any API**: Works with OpenAI, Anthropic, your own models, or any API
+- **Returns structured output**: Package results in a format ready for evaluation
+
+### 4. Running your evaluation
+
+```typescript
+// Run evaluation with a built-in ExactMatch metric
+const result = await evaluate({
+  dataset: retrievedDataset,
+  task: llmTask,
+  scoringMetrics: [new ExactMatch()], // Use multiple metrics for comprehensive evaluation
+  experimentName: "My First Evaluation",
+
+  // map the output of the task and dataset item data to the expected metric inputs
+  scoringKeyMapping: {
+    expected: "expected_output",
+  },
+});
+
+console.log(`Experiment URL: ${result.resultUrl}`); // Direct link to view results
+```
+
+This single function call:
+
+- The dataset we created
+- Our defined LLM task
+- The built-in `ExactMatch` metric that compares outputs exactly
+- A name for the experiment
+- Key mapping to connect dataset fields with metric inputs
+
+## Expected Output
+
+When you run this code, you'll receive an evaluation result object containing:
+
+- `experimentId`: Unique identifier for your evaluation experiment
+- `experimentName`: The name you provided
+- `testResults`: Array of results for each dataset item
+  - `testCase`: Contains the input data and outputs
+  - `scoreResults`: Array of scores from each metric
+- `resultUrl`: Link to view detailed results in the Opik platform
+
+```typescript
+{
+  "experimentId": "01975908-818f-765a-abv6-08d179c15610",
+  "experimentName": "My First Evaluation",
+  "testResults": [
+    {
+      "testCase": {
+        "traceId": "01975908-82dc-73fd-862d-dd51152ddse1",
+        "datasetItemId": "01975908-810c-7663-b7a3-e3ae94484ca9",
+        "scoringInputs": {
+          "input": "What is machine learning?",
+          "metadata": {
+            "category": "AI basics",
+            "difficulty": "beginner",
+            "version": 1
+          },
+          "expected_output": "Machine learning is a type of artificial intelligence that enables systems to learn and improve from experience without being explicitly programmed.",
+          "id": "01975908-810c-7663-b7a3-e3ae43884ca9",
+          "output": "Arrr, machine learnin' be a way for computers to learn from data, akin to teachin' a parrot new tricks! Instead of givin' exact instructions, ye feed the machine lots o' examples, and it figures out how to make decisions on its own. It be useful for predictin' things, findin' patterns, and even speakin' like a fine pirate! 🏴‍☠️",
+          "expected": "Machine learning is a type of artificial intelligence that enables systems to learn and improve from experience without being explicitly programmed."
+        },
+        "taskOutput": {
+          "output": "Arrr, machine learnin' be a way for computers to learn from data, akin to teachin' a parrot new tricks! Instead of givin' exact instructions, ye feed the machine lots o' examples, and it figures out how to make decisions on its own. It be useful for predictin' things, findin' patterns, and even speakin' like a fine pirate! 🏴‍☠️"
+        }
+      },
+      "scoreResults": [
+        {
+          "name": "exact_match",
+          "value": 0,
+          "reason": "Exact match: No match"
+        }
+      ]
+    }
+  ],
+  "resultUrl": "https://comet.com/opik/api/v1/session/redirect/experiments/?experiment_id=01975908-818f-765a-abv6-08d179c15610&dataset_id=01975908-810c-7663-b7a3-e3ae94484ca9&path=aHR0cHM6Ly9kZXYuY29tZXQuY29tL29dfWsvYXBp"
+}
+```
+
+## Troubleshooting & Best Practices
+
+### API Key Issues
+
+```
+Error: Unauthorized: Invalid API key
+```
+
+- Make sure you've set up your `.env` file correctly
+- Verify your API keys are valid and have the correct permissions
+
+### Metric Input Mapping
+
+```
+Error: Metric 'ExactMatch' is skipped, missing required arguments: expected. Available arguments: output.
+```
+
+- Review your `scoringKeyMapping` to ensure it maps correctly to your dataset structure
+- Check that all metric required inputs are provided either in task output or via mapping
