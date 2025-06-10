@@ -46,10 +46,21 @@ export const VertexAIProviderDetailsFormSchema = z.object({
   location: z.string(),
 });
 
+export const VllmProviderDetailsFormSchema = z.object({
+  provider: ProviderSchema,
+  locationType: z.literal(PROVIDER_LOCATION_TYPE.cloud),
+  url: z
+    .string()
+    .url({ message: "URL is invalid" })
+    .min(1, { message: "URL is required" }),
+  apiKey: z.string().optional(),
+});
+
 export const AIProviderFormSchema = z.union([
   CloudAIProviderDetailsFormSchema,
   VertexAIProviderDetailsFormSchema,
   LocalAIProviderDetailsFormSchema,
+  VllmProviderDetailsFormSchema,
 ]);
 
 export type AIProviderFormType = z.infer<typeof AIProviderFormSchema>;

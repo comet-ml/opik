@@ -7,6 +7,7 @@ import {
   PROVIDER_TYPE,
 } from "@/types/providers";
 import useLocalAIProviderData from "@/hooks/useLocalAIProviderData";
+import useVllmAIProviderData from "@/hooks/useVllmAIProviderData";
 import { getDefaultProviderKey } from "@/lib/provider";
 import { PROVIDERS } from "@/constants/providers";
 
@@ -1547,14 +1548,19 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   [PROVIDER_TYPE.OLLAMA]: [
     // the list will be full filled base on data in localstorage
   ],
+
+  [PROVIDER_TYPE.VLLM]: [
+    // the list will be full filled base on response from the vllm server
+  ],
 };
 
 const useLLMProviderModelsData = () => {
   const { localModels, getLocalAIProviderData } = useLocalAIProviderData();
+  const { vllmModels } = useVllmAIProviderData();
 
   const getProviderModels = useCallback(() => {
-    return { ...PROVIDER_MODELS, ...localModels };
-  }, [localModels]);
+    return { ...PROVIDER_MODELS, ...localModels, ...vllmModels };
+  }, [localModels, vllmModels]);
 
   const calculateModelProvider = useCallback(
     (modelName?: PROVIDER_MODEL_TYPE | ""): PROVIDER_TYPE | "" => {

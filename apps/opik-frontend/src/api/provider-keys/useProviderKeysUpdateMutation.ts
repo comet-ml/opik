@@ -20,8 +20,10 @@ const useProviderKeysUpdateMutation = () => {
   return useMutation({
     mutationFn: async ({ providerKey }: UseProviderKeyUpdateMutationParams) => {
       const configuration = providerKey?.location
-        ? { configuration: { location } }
-        : {};
+        ? { configuration: { location: providerKey.location } }
+        : providerKey?.url
+          ? { configuration: { url: providerKey.url } }
+          : {};
 
       const { data } = await api.patch(
         `${PROVIDER_KEYS_REST_ENDPOINT}${providerKey.id}`,

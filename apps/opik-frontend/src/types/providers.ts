@@ -5,6 +5,7 @@ export enum PROVIDER_TYPE {
   OLLAMA = "ollama",
   GEMINI = "gemini",
   VERTEX_AI = "vertex-ai",
+  VLLM = "vllm",
 }
 
 export enum PROVIDER_MODEL_TYPE {
@@ -404,6 +405,7 @@ export interface ProviderKey {
 export interface ProviderKeyWithAPIKey extends ProviderKey {
   apiKey: string;
   location?: string;
+  url?: string;
 }
 
 export interface LLMOpenAIConfigsType {
@@ -444,10 +446,19 @@ export interface LLMVertexAIConfigsType {
   topP: number;
 }
 
+export interface LLMVllmConfigsType {
+  temperature: number;
+  maxCompletionTokens: number;
+  topP: number;
+  frequencyPenalty: number;
+  presencePenalty: number;
+}
+
 export type LLMPromptConfigsType =
   | Record<string, never>
   | LLMOpenAIConfigsType
   | LLMAnthropicConfigsType
   | LLMOpenRouterConfigsType
   | LLMGeminiConfigsType
-  | LLMVertexAIConfigsType;
+  | LLMVertexAIConfigsType
+  | LLMVllmConfigsType;

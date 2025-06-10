@@ -4,6 +4,7 @@ import OpenRouterIcon from "@/icons/integrations/open_router.svg?react";
 import OllamaIcon from "@/icons/integrations/ollama.svg?react";
 import GeminiIcon from "@/icons/integrations/gemini.svg?react";
 import VertexAIIcon from "@/icons/integrations/vertex_ai.svg?react";
+import VLLMIcon from "@/icons/integrations/vllm.svg?react";
 
 import {
   PROVIDER_LOCATION_TYPE,
@@ -94,6 +95,14 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     icon: VertexAIIcon,
     apiKeyName: "VERTEX_API_KEY",
     defaultModel: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17,
+    locationType: PROVIDER_LOCATION_TYPE.cloud,
+  },
+  [PROVIDER_TYPE.VLLM]: {
+    label: "vLLM",
+    value: PROVIDER_TYPE.VLLM,
+    icon: VLLMIcon,
+    apiKeyName: "VLLM_API_KEY",
+    defaultModel: "",
     locationType: PROVIDER_LOCATION_TYPE.cloud,
   },
 };

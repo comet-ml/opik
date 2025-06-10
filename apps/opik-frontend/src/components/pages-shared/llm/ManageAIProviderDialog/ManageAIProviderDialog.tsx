@@ -46,6 +46,7 @@ import {
 import CloudAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CloudAIProviderDetails";
 import LocalAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/LocalAIProviderDetails";
 import VertexAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/VertexAIProviderDetails";
+import VllmAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/VllmAIProviderDetails";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 
@@ -162,14 +163,17 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
   const cloudConfigHandler = useCallback(() => {
     const apiKey = form.getValues("apiKey");
+    const url = form.getValues("url");
     const location = form.getValues("location");
     const isVertex = provider === PROVIDER_TYPE.VERTEX_AI;
+    const isVllm = provider === PROVIDER_TYPE.VLLM;
 
     if (providerKey || calculatedProviderKey) {
       updateMutate({
         providerKey: {
           id: providerKey?.id ?? calculatedProviderKey?.id,
           apiKey,
+          url: isVllm ? url : undefined,
           location: isVertex ? location : undefined,
         },
       });
@@ -182,6 +186,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         providerKey: {
           apiKey,
           provider,
+          url: isVllm ? url : undefined,
           location: isVertex ? location : undefined,
         },
       });
@@ -227,6 +232,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   const getProviderDetails = () => {
     if (provider === PROVIDER_TYPE.VERTEX_AI) {
       return <VertexAIProviderDetails form={form} />;
+    }
+
+    if (provider === PROVIDER_TYPE.VLLM) {
+      return <VllmAIProviderDetails form={form} />;
     }
 
     if (!isCloudProvider) {
