@@ -40,8 +40,13 @@ jobs:
 
         - name: Install opik_optimizer
           run: pip install .
-
+        
+        - name: Install test requirements
+          run: |
+            cd ./tests
+            pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt -r ./unit/test_requirements.txt
+  
         - name: Run unit tests
-          run: python -m pytest tests/unit -v --junitxml=${{ github.workspace }}/opik_optimizer_unit_test_results_${{matrix.python_version}}.xml --cov=src/opik_optimizer --cov-report=xml
+          run: pytest tests/unit -vv --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
 
 
