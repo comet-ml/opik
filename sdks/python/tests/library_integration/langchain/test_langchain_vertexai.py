@@ -98,6 +98,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,

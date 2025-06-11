@@ -22,6 +22,7 @@ def test_span__provider_supported__usage_format_is_correct__usage_converted_to_o
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         name="some-name",
         spans=[
             SpanModel(
@@ -67,6 +68,7 @@ def test_span__provider_not_passed__usage_format_is_correct_for_some_provider__u
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         name="some-name",
         spans=[
             SpanModel(
@@ -111,6 +113,7 @@ def test_span__unknown_provider_passed__usage_format_is_correct_for_some_provide
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         name="some-name",
         spans=[
             SpanModel(
@@ -160,6 +163,7 @@ def test_span__unknown_provider_passed__usage_format_is_also_unknown__usage_flat
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         name="some-name",
         spans=[
             SpanModel(
@@ -206,6 +210,7 @@ def test_span__user_added_openai_keys_to_unknown_usage_themselves__they_are_incl
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         name="some-name",
         spans=[
             SpanModel(

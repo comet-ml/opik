@@ -93,6 +93,7 @@ def test_llama_index__happyflow(
             metadata={"created_from": "llama_index"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             project_name=expected_project_name,
             spans=ANY_BUT_NONE,  # too complex spans tree, no check
         ),
@@ -104,6 +105,7 @@ def test_llama_index__happyflow(
             metadata={"created_from": "llama_index"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             project_name=expected_project_name,
             spans=ANY_BUT_NONE,  # too complex spans tree, no check
         ),
@@ -178,6 +180,7 @@ def test_llama_index__no_index_construction_logging_happyflow(
             metadata={"created_from": "llama_index"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             project_name=expected_project_name,
             spans=ANY_BUT_NONE,  # too complex spans tree, no check
         ),
@@ -251,6 +254,7 @@ def test_llama_index_chat__happyflow(
             metadata={"created_from": "llama_index"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             project_name=expected_project_name,
             spans=[
                 SpanModel(
@@ -339,6 +343,7 @@ def test_llama_index_stream_chat__happyflow(
             metadata={"created_from": "llama_index"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             project_name=expected_project_name,
             spans=[
                 SpanModel(

@@ -145,3 +145,41 @@ class TraceData:
             self.attachments = attachments
         else:
             self.attachments.extend(attachments)
+
+    @property
+    def as_start_parameters(self) -> Dict[str, Any]:
+        """Returns parameters of this trace to be sent to the server when starting a new trace."""
+        start_parameters: Dict[str, Any] = {
+            "id": self.id,
+            "start_time": self.start_time,
+            "project_name": self.project_name,
+        }
+        if self.name is not None:
+            start_parameters["name"] = self.name
+        if self.input is not None:
+            start_parameters["input"] = self.input
+        if self.metadata is not None:
+            start_parameters["metadata"] = self.metadata
+        if self.tags is not None:
+            start_parameters["tags"] = self.tags
+
+        return start_parameters
+
+    @property
+    def as_parameters(self) -> Dict[str, Any]:
+        """Returns all parameters of this trace to be sent to the server."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "start_time": self.start_time,
+            "end_time": self.end_time,
+            "metadata": self.metadata,
+            "input": self.input,
+            "output": self.output,
+            "tags": self.tags,
+            "feedback_scores": self.feedback_scores,
+            "project_name": self.project_name,
+            "error_info": self.error_info,
+            "thread_id": self.thread_id,
+            "attachments": self.attachments,
+        }

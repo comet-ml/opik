@@ -121,6 +121,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
         metadata={"a": "b", "created_from": "langchain"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -229,6 +230,7 @@ def test_langchain__openai_llm_is_used__streaming_mode__token_usage_is_logged__h
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -330,6 +332,7 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -454,6 +457,7 @@ def test_langchain__openai_llm_is_used__sync_stream__no_token_usage_is_logged__h
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -560,6 +564,7 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         error_info={
             "exception_type": ANY_STRING(),
             "traceback": ANY_STRING(),

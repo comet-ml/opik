@@ -179,6 +179,7 @@ class OpikTracer(tracing.Tracer):
                 name=self._name,
                 tags=context.get("tags"),
             )
+            assert trace is not None
             span = OpikSpanBridge(trace)
         elif tags.get(_COMPONENT_TYPE_KEY) in _ALL_SUPPORTED_GENERATORS:
             span = OpikSpanBridge(

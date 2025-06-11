@@ -128,6 +128,31 @@ def fake_backend_without_batching(patch_streamer_without_batching):
         yield fake_message_processor_
 
 
+@pytest.fixture
+def fake_backend_with_patched_environment(request, patch_streamer):
+    """
+    Allows patching environment variables for the duration of the test.
+    Creates a fake backend as in the `fake_backend` fixture.
+    """
+    with testlib.patch_environ(add_keys=request.param):
+        streamer, fake_message_processor_ = patch_streamer
+
+        fake_message_processor_ = cast(
+            backend_emulator_message_processor.BackendEmulatorMessageProcessor,
+            fake_message_processor_,
+        )
+
+        mock_construct_online_streamer = mock.Mock()
+        mock_construct_online_streamer.return_value = streamer
+
+        with mock.patch.object(
+            streamer_constructors,
+            "construct_online_streamer",
+            mock_construct_online_streamer,
+        ):
+            yield fake_message_processor_
+
+
 def random_chars(n: int = 6) -> str:
     return "".join(random.choice(string.ascii_letters) for _ in range(n))
 

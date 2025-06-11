@@ -79,6 +79,7 @@ def test_aisuite__openai_provider__client_chat_completions_create__happyflow(
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=PROJECT_NAME,
         spans=[
             SpanModel(
@@ -139,6 +140,7 @@ def test_aisuite__nonopenai_provider__client_chat_completions_create__happyflow(
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=PROJECT_NAME,
         spans=[
             SpanModel(
@@ -196,6 +198,7 @@ def test_aisuite_client_chat_completions_create__create_raises_an_error__span_an
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=PROJECT_NAME,
         error_info={
             "exception_type": ANY_STRING(),
@@ -271,6 +274,7 @@ def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tra
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=PROJECT_NAME,
         spans=[
             SpanModel(
