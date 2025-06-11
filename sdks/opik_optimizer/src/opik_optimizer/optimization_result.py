@@ -17,6 +17,10 @@ class OptimizationResult(pydantic.BaseModel):
     score: float
     metric_name: str
     
+    # Initial score
+    initial_prompt: Optional[List[Dict[Literal["role", "content"], str]]] = None
+    initial_score: Optional[float] = None
+    
     details: Dict[str, Any] = pydantic.Field(default_factory=dict)
     history: List[Dict[str, Any]] = []
     llm_calls: Optional[int] = None
@@ -33,7 +37,7 @@ class OptimizationResult(pydantic.BaseModel):
 
     def _calculate_improvement_str(self) -> str:
         """Helper to calculate improvement percentage string."""
-        initial_s = self.details.get("initial_score")
+        initial_s = self.initial_score
         final_s = self.score
 
         # Check if initial score exists and is a number
@@ -60,7 +64,7 @@ class OptimizationResult(pydantic.BaseModel):
         """Provides a clean, well-formatted plain-text summary."""
         separator = "=" * 80
         rounds_ran = len(self.details.get("rounds", []))
-        initial_score = self.details.get("initial_score")
+        initial_score = self.initial_score
         initial_score_str = (
             f"{initial_score:.4f}" if isinstance(initial_score, (int, float)) else "N/A"
         )
@@ -112,7 +116,7 @@ class OptimizationResult(pydantic.BaseModel):
         """Provides a rich, formatted output for terminals supporting Rich."""
         improvement_str = self._calculate_improvement_str()
         rounds_ran = len(self.details.get("rounds", []))
-        initial_score = self.details.get("initial_score")
+        initial_score = self.initial_score
         initial_score_str = (
             f"{initial_score:.4f}"
             if isinstance(initial_score, (int, float))
