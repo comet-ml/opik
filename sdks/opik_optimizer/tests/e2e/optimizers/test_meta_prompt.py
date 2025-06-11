@@ -23,7 +23,7 @@ def test_metaprompt_optimizer():
     
     # Initialize optimizer with reduced parameters for faster testing
     optimizer = MetaPromptOptimizer(
-        model="openai/gpt-4",  # or "azure/gpt-4"
+        model="openai/gpt-4o",  # or "azure/gpt-4"
         temperature=0.1,
         max_tokens=10000,
         num_threads=8,
@@ -85,7 +85,7 @@ def test_metaprompt_optimizer():
     
     # Validate model configuration in details
     assert 'model' in results.details, "Details should contain 'model'"
-    assert results.details['model'] == "openai/gpt-4", f"Expected openai/gpt-4, got {results.details['model']}"
+    assert results.details['model'] == "openai/gpt-4o", f"Expected openai/gpt-4o, got {results.details['model']}"
     
     assert 'temperature' in results.details, "Details should contain 'temperature'"
     assert results.details['temperature'] == 0.1, f"Expected temperature 0.1, got {results.details['temperature']}"
