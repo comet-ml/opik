@@ -50,6 +50,29 @@ print(result.final_output)
   made. You can also view this information aggregated for the entire agent execution.
 </Tip>
 
+## Logging threads
+
+When you are running multi-turn conversations with OpenAI Agents using [OpenAI Agents trace API](https://openai.github.io/openai-agents-python/running_agents/#conversationschat-threads), Opik integration automatically use the trace group_id as the Thread ID so you can easily review conversation inside Opik. Here is an example below:
+
+```python
+async def main():
+    agent = Agent(name="Assistant", instructions="Reply very concisely.")
+
+    thread_id = str(uuid.uuid4())
+
+    with trace(workflow_name="Conversation", group_id=thread_id):
+        # First turn
+        result = await Runner.run(agent, "What city is the Golden Gate Bridge in?")
+        print(result.final_output)
+        # San Francisco
+
+        # Second turn
+        new_input = result.to_input_list() + [{"role": "user", "content": "What state is it in?"}]
+        result = await Runner.run(agent, new_input)
+        print(result.final_output)
+        # California
+```
+
 ## Further improvements
 
 OpenAI Agents is still a relatively new framework and we are working on a couple of improvements:

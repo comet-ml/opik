@@ -44,6 +44,7 @@ def test_guardrails__trace_and_span_per_one_validation_check(
         metadata={"created_from": "guardrails", "model": "gpt-3.5-turbo"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=expected_project_name,
         spans=[
             SpanModel(

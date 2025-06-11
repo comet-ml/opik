@@ -1,0 +1,258 @@
+The Opik TypeScript SDK provides robust functionality for creating and managing datasets. Datasets in Opik serve as collections of data items that can be used for various purposes, including evaluation.
+
+## Dataset Fundamentals
+
+A dataset in Opik is a named collection of data items. Each dataset:
+
+- Has a unique identifier and name
+- Contains items that share a common structure
+- Supports powerful deduplication capabilities
+- Using for evaluation
+
+## TypeScript Type Safety
+
+One of the key features of the Opik SDK is strong TypeScript typing support for datasets. You can define custom types for your dataset items to ensure type safety throughout your application:
+
+```typescript
+// Define a custom dataset item type
+type QuestionAnswerItem = {
+  question: string;
+  answer: string;
+  metadata: {
+    category: string;
+    difficulty: string;
+  };
+};
+
+// Create a typed dataset
+const dataset = await opik.createDataset<QuestionAnswerItem>(
+  "qa-dataset", // Dataset name
+  "Question-Answer pairs for evaluation" // Dataset description
+);
+```
+
+## Working with Datasets
+
+### Creating Datasets
+
+```typescript
+// Create a new dataset
+await opik.createDataset<YourItemType>(
+  "dataset-name",
+  "Optional dataset description"
+);
+
+// Get an existing dataset or create it if it doesn't exist
+const dataset = await opik.getOrCreateDataset<YourItemType>(
+  "dataset-name",
+  "Optional dataset description"
+);
+```
+
+### Managing Dataset Items
+
+```typescript
+// Insert items
+await dataset.insert([
+  { id: "item1", question: "What is ML?", answer: "Machine learning is..." },
+  {
+    id: "item2",
+    question: "What is AI?",
+    answer: "Artificial intelligence is...",
+  },
+]);
+
+// Update existing items
+await dataset.update([
+  {
+    id: "item1",
+    question: "What is Machine Learning?",
+    answer: "Updated answer...",
+  },
+]);
+
+// Delete specific items
+await dataset.delete(["item1", "item2"]);
+
+// Clear all items from the dataset
+await dataset.clear();
+```
+
+<Tip>
+  The Opik SDK automatically handles deduplication when inserting items into a
+  dataset. This feature ensures that identical items are not added multiple
+  times.
+</Tip>
+
+### Retrieving Dataset Items
+
+```typescript
+// Get a specific number of items
+const items = await dataset.getItems(10);
+
+// Get items with pagination
+const firstBatch = await dataset.getItems(10);
+const lastItemId = firstBatch[firstBatch.length - 1].id;
+const nextBatch = await dataset.getItems(10, lastItemId);
+```
+
+### Working with JSON
+
+```typescript
+// Import items from a JSON string
+const jsonData = JSON.stringify([
+  {
+    query: "What is the capital of France?",
+    response: "Paris",
+    tags: ["geography", "europe"],
+  },
+]);
+
+// Map JSON keys to dataset item fields
+const keysMapping = {
+  query: "question", // 'query' in JSON becomes 'question' in dataset item
+  response: "answer", // 'response' in JSON becomes 'answer' in dataset item
+  tags: "metadata.tags", // 'tags' in JSON becomes 'metadata.tags' in dataset item
+};
+
+// Specify keys to ignore
+const ignoreKeys = ["irrelevant_field"];
+
+// Insert from JSON with mapping
+await dataset.insertFromJson(jsonData, keysMapping, ignoreKeys);
+
+// Export dataset to JSON with custom key mapping
+const exportMapping = { question: "prompt", answer: "completion" };
+const exportedJson = await dataset.toJson(exportMapping);
+```
+
+## API Reference
+
+<Info>
+  The generic type parameter `T` represents the DatasetItem type that defines
+  the structure of items stored in this dataset.
+</Info>
+### OpikClient Dataset Methods
+
+#### `createDataset<T>`
+
+Creates a new dataset.
+
+**Arguments:**
+
+- `name: string` - The name of the dataset
+- `description?: string` - Optional description of the dataset
+
+**Returns:** `Promise<Dataset<T>>` - A promise that resolves to the created Dataset object
+
+#### `getDataset<T>`
+
+Retrieves an existing dataset by name.
+
+**Arguments:**
+
+- `name: string` - The name of the dataset to retrieve
+
+**Returns:** `Promise<Dataset<T>>` - A promise that resolves to the Dataset object
+
+#### `getOrCreateDataset<T>`
+
+Retrieves an existing dataset by name or creates it if it doesn't exist.
+
+**Arguments:**
+
+- `name: string` - The name of the dataset
+- `description?: string` - Optional description (used only if creating a new dataset)
+
+**Returns:** `Promise<Dataset<T>>` - A promise that resolves to the existing or newly created Dataset object
+
+#### `getDatasets<T>`
+
+Retrieves a list of datasets.
+
+**Arguments:**
+
+- `maxResults?: number` - Optional maximum number of datasets to retrieve (default: 100)
+
+**Returns:** `Promise<Dataset<T>[]>` - A promise that resolves to an array of Dataset objects
+
+#### `deleteDataset`
+
+Deletes a dataset by name.
+
+**Arguments:**
+
+- `name: string` - The name of the dataset to delete
+
+**Returns:** `Promise<void>`
+
+### Dataset Class Methods
+
+#### `insert`
+
+Inserts new items into the dataset with automatic deduplication.
+
+**Arguments:**
+
+- `items: T[]` - List of objects to add to the dataset
+
+**Returns:** `Promise<void>`
+
+#### `update`
+
+Updates existing items in the dataset.
+
+**Arguments:**
+
+- `items: T[]` - List of objects to update in the dataset (must include IDs)
+
+**Returns:** `Promise<void>`
+
+#### `delete`
+
+Deletes items from the dataset.
+
+**Arguments:**
+
+- `itemIds: string[]` - List of item IDs to delete
+
+**Returns:** `Promise<void>`
+
+#### `clear`
+
+Deletes all items from the dataset.
+
+**Returns:** `Promise<void>`
+
+#### `getItems`
+
+Retrieves items from the dataset.
+
+**Arguments:**
+
+- `nbSamples?: number` - Optional number of items to retrieve (if not set, all items are returned)
+- `lastRetrievedId?: string` - Optional ID of the last retrieved item for pagination
+
+**Returns:** `Promise<T[]>` - A promise that resolves to an array of dataset items
+
+#### `insertFromJson`
+
+Inserts items from a JSON string into the dataset.
+
+**Arguments:**
+
+- `jsonArray: string` - JSON string in array format
+- `keysMapping?: Record<string, string>` - Optional dictionary that maps JSON keys to dataset item field names
+- `ignoreKeys?: string[]` - Optional array of keys to ignore when constructing dataset items
+
+**Returns:** `Promise<void>`
+
+#### `toJson`
+
+Exports the dataset to a JSON string.
+
+**Arguments:**
+
+- `keysMapping?: Record<string, string>` - Optional dictionary that maps dataset item field names to output JSON keys
+
+**Returns:** `Promise<string>` - A JSON string representation of all items in the dataset
