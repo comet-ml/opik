@@ -51,7 +51,7 @@ jobs:
             # Opik Configuration
             OPIK_API_KEY: ${{ secrets.OPIK_API_KEY }}
             OPIK_WORKSPACE: ${{ secrets.OPIK_WORKSPACE }}
-            OPIK_URL_OVERRIDE: ${{ secrets.OPIK_URL_OVERRIDE }}
+            OPIK_URL_OVERRIDE: https://www.comet.com/opik/api
             
             # OpenAI Configuration
             OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
