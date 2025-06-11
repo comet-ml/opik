@@ -57,7 +57,7 @@ jobs:
         - name: Run E2E tests
           env:
             # Opik Configuration
-            OPIK_API_KEY: ${{ secrets.OPIK_API_KEY }}
+            OPIK_API_KEY: ${{ secrets.COMET_API_KEY }}
             OPIK_URL_OVERRIDE: https://www.comet.com/opik/api
             
             # OpenAI Configuration
