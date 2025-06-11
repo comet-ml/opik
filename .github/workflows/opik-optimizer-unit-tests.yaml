@@ -38,6 +38,14 @@ jobs:
           with:
             python-version: ${{matrix.python_version}}
 
+        - name: Cache HuggingFace datasets
+          uses: actions/cache@v4
+          with:
+            path: ~/.cache/huggingface
+            key: hf-datasets-${{ hashFiles('**/datasets/*.py') }}
+            restore-keys: |
+              hf-datasets-
+
         - name: Install opik_optimizer
           run: pip install .
         
