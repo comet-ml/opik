@@ -58,7 +58,6 @@ jobs:
           env:
             # Opik Configuration
             OPIK_API_KEY: ${{ secrets.OPIK_API_KEY }}
-            OPIK_WORKSPACE: ${{ secrets.OPIK_WORKSPACE }}
             OPIK_URL_OVERRIDE: https://www.comet.com/opik/api
             
             # OpenAI Configuration
