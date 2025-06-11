@@ -402,7 +402,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "temperature": self.model_kwargs.get("temperature"),
             },
             history=optuna_history_processed,
-            llm_calls=self.llm_call_counter
+            llm_calls=self.llm_call_counter,
+            dataset_id=dataset.id,
+            optimization_id=optimization_id,
         )
 
     def optimize_prompt( # type: ignore
