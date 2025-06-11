@@ -4988,6 +4988,7 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
+                            .usage(null)
                             .feedbackScores(null)
                             .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
                             .comments(null)
@@ -8180,7 +8181,7 @@ class TracesResourceTest {
 
             var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
             assertThat(actualError).isEqualTo(expectedError);
-    }
+        }
 
     }
 
@@ -8241,9 +8242,9 @@ class TracesResourceTest {
 
             Comparator<Trace> comparator = direction == Direction.ASC
                     ? Comparator.comparing(Trace::spanCount)
-                    .thenComparing(Comparator.comparing(Trace::id).reversed())
+                            .thenComparing(Comparator.comparing(Trace::id).reversed())
                     : Comparator.comparing(Trace::spanCount).reversed()
-                    .thenComparing(Comparator.comparing(Trace::id).reversed());
+                            .thenComparing(Comparator.comparing(Trace::id).reversed());
             List<Trace> expected = traces.stream().sorted(comparator).toList();
 
             // Replace full trace assertion with just checking the spanCount values
@@ -8287,10 +8288,10 @@ class TracesResourceTest {
             // Replace full trace assertion with just checking the spanCount values and IDs
             // For ties, we also need to verify ID ordering
             List<Object[]> expectedPairs = expected.stream()
-                    .map(t -> new Object[] { t.spanCount(), t.id() })
+                    .map(t -> new Object[]{t.spanCount(), t.id()})
                     .toList();
             List<Object[]> actualPairs = actual.stream()
-                    .map(t -> new Object[] { t.spanCount(), t.id() })
+                    .map(t -> new Object[]{t.spanCount(), t.id()})
                     .toList();
 
             assertThat(actualPairs).containsExactlyElementsOf(expectedPairs);
@@ -8536,7 +8537,7 @@ class TracesResourceTest {
             Trace t3 = createTrace().toBuilder().projectName(projectName).build();
 
             List<Span> spans = new ArrayList<>();
-            spans.addAll(buildSpans(t1, "completion_tokens", 10, 5  ));
+            spans.addAll(buildSpans(t1, "completion_tokens", 10, 5));
             spans.addAll(buildSpans(t2, "completion_tokens", 30));
             spans.addAll(buildSpans(t3, "completion_tokens", 20));
 
@@ -8911,7 +8912,7 @@ class TracesResourceTest {
                 int end = Math.min(i + batchSize, traces.size());
                 traceResourceClient.batchCreateTraces(traces.subList(i, end), apiKey, workspaceName);
             }
-            
+
             // Create spans in smaller batches
             for (int i = 0; i < allSpans.size(); i += batchSize) {
                 int end = Math.min(i + batchSize, allSpans.size());
@@ -8922,7 +8923,7 @@ class TracesResourceTest {
             Map<UUID, Integer> usageByTraceId = allSpans.stream()
                     .collect(Collectors.groupingBy(Span::traceId,
                             Collectors.summingInt(s -> (Integer) s.usage().get("completion_tokens"))));
-            
+
             List<Trace> expected = traces.stream()
                     .map(t -> t.toBuilder()
                             .usage(Map.of("completion_tokens", usageByTraceId.getOrDefault(t.id(), 0).longValue()))
@@ -8935,13 +8936,15 @@ class TracesResourceTest {
             // Implement pagination for retrieving results
             int pageSize = 10;
             List<Trace> actualTraces = new ArrayList<>();
-            
+
             for (int page = 1; page <= (count / pageSize) + 1; page++) {
                 Trace.TracePage p = traceResourceClient.getTraces(projectName, projectId, apiKey, workspaceName,
-                        List.of(), List.of(SortingField.builder().field("usage.completion_tokens").direction(Direction.ASC).build()),
+                        List.of(),
+                        List.of(SortingField.builder().field("usage.completion_tokens").direction(Direction.ASC)
+                                .build()),
                         pageSize, Map.of("page", String.valueOf(page)));
                 actualTraces.addAll(p.content());
-                
+
                 if (p.content().size() < pageSize) {
                     break;
                 }
@@ -8954,7 +8957,7 @@ class TracesResourceTest {
             List<Long> actualTokens = actualTraces.stream()
                     .map(t -> (Long) t.usage().get("completion_tokens"))
                     .toList();
-                    
+
             assertThat(actualTokens).containsExactlyElementsOf(expectedTokens);
         }
     }
