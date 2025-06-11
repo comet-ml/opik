@@ -341,8 +341,15 @@ class MetaPromptOptimizer(BaseOptimizer):
         Returns:
             OptimizationResult: Structured result containing optimization details
         """
-        reporting.display_header(self.__class__.__name__, verbose=self.verbose)
+        if not isinstance(prompt, chat_prompt.ChatPrompt):
+            raise ValueError("Prompt must be a ChatPrompt object")
         
+        if not isinstance(dataset, Dataset):
+            raise ValueError("Dataset must be a Dataset object")
+        
+        if not isinstance(metric, Callable):
+            raise ValueError("Metric must be a function that takes `dataset_item` and `llm_output` as arguments.")
+
         total_items = len(dataset.get_items())
         if n_samples is not None and n_samples > total_items:
             logger.warning(
@@ -350,16 +357,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             )
             n_samples = None
 
-        reporting.display_configuration(
-            messages=prompt.formatted_messages,
-            optimizer_config={
-                "optimizer": self.__class__.__name__,
-                "n_samples": n_samples,
-                "auto_continue": auto_continue
-            },
-            verbose=self.verbose
-        )
-
+        
         optimization = None
         try:
             optimization = self._opik_client.create_optimization(
@@ -373,6 +371,22 @@ class MetaPromptOptimizer(BaseOptimizer):
                 f"Opik server does not support optimizations: {e}. Please upgrade opik."
             )
             optimization = None
+
+        reporting.display_header(
+            algorithm=self.__class__.__name__,
+            optimization_id=optimization.id if optimization is not None else None,
+            dataset_id=dataset.id,
+            verbose=self.verbose
+        )
+        reporting.display_configuration(
+            messages=prompt.formatted_messages,
+            optimizer_config={
+                "optimizer": self.__class__.__name__,
+                "n_samples": n_samples,
+                "auto_continue": auto_continue
+            },
+            verbose=self.verbose
+        )
 
         try:
             result = self._optimize_prompt(

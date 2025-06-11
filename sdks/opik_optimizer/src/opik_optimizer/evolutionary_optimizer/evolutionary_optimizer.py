@@ -828,7 +828,36 @@ Return only the new prompt list object.
             auto_continue: Whether to automatically continue optimization
             **kwargs: Additional keyword arguments
         """
-        reporting.display_header(self.__class__.__name__, verbose=self.verbose)
+        if not isinstance(prompt, chat_prompt.ChatPrompt):
+            raise ValueError("Prompt must be a ChatPrompt object")
+        
+        if not isinstance(dataset, opik.Dataset):
+            raise ValueError("Dataset must be a Dataset object")
+        
+        if not isinstance(metric, Callable):
+            raise ValueError("Metric must be a function that takes `dataset_item` and `llm_output` as arguments.")
+
+        # Step 0. Start Opik optimization run
+        opik_optimization_run: Optional[optimization.Optimization] = None
+        try:
+            opik_optimization_run: optimization.Optimization = self._opik_client.create_optimization(
+                dataset_name=dataset.name,
+                objective_name=metric.__name__,
+                metadata={"optimizer": self.__class__.__name__},
+            )
+            self._current_optimization_id = opik_optimization_run.id
+            logger.info(f"Created Opik Optimization run with ID: {self._current_optimization_id}")
+        except Exception as e:
+            logger.warning(f"Opik server error: {e}. Continuing without Opik tracking.")
+            self._current_optimization_id = None
+
+        reporting.display_header(
+            algorithm=self.__class__.__name__,
+            optimization_id=self._current_optimization_id,
+            dataset_id=dataset.id,
+            verbose=self.verbose
+        )
+
         reporting.display_configuration(
             prompt.formatted_messages,
             {
@@ -841,6 +870,7 @@ Return only the new prompt list object.
             verbose=self.verbose
         )
 
+        # Step 1. Step variables and define fitness function
         self.llm_call_counter = 0
         self._history = []
         self._current_optimization_id = None
@@ -851,7 +881,6 @@ Return only the new prompt list object.
         self._current_population = []
         self._generations_without_overall_improvement = 0
         
-        # Step 0. Define fitness function
         if self.enable_moo:
             def _deap_evaluate_individual_fitness(
                     messages: List[Dict[str, str]]
@@ -883,19 +912,6 @@ Return only the new prompt list object.
                 )
                 return (fitness_score,)
         self.toolbox.register("evaluate", _deap_evaluate_individual_fitness)
-
-        # Step 1. Start Opik optimization run
-        opik_optimization_run: Optional[optimization.Optimization] = None
-        try:
-            opik_optimization_run: optimization.Optimization = self._opik_client.create_optimization(
-                dataset_name=dataset.name,
-                objective_name=metric.__name__,
-                metadata={"optimizer": self.__class__.__name__},
-            )
-            self._current_optimization_id = opik_optimization_run.id
-            logger.info(f"Created Opik Optimization run with ID: {self._current_optimization_id}")
-        except Exception as e:
-            logger.warning(f"Opik server error: {e}. Continuing without Opik tracking.")
 
         # Step 2. Compute the initial performance of the prompt
         with reporting.baseline_performance(verbose=self.verbose) as report_baseline_performance:

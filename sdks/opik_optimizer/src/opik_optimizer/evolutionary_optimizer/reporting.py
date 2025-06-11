@@ -2,8 +2,6 @@ from contextlib import contextmanager
 from io import StringIO
 from typing import List
 
-import rich
-from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 

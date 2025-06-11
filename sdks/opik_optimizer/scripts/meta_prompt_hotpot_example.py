@@ -1,13 +1,18 @@
-from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik.evaluation.metrics import LevenshteinRatio
-from opik_optimizer.demo import get_or_create_dataset
 
+from opik_optimizer import ChatPrompt, MetaPromptOptimizer
+from opik_optimizer.datasets import hotpot_300
 
 # Get or create the Hotpot dataset
-hotpot_dataset = get_or_create_dataset("hotpot-300")
+hotpot_dataset = hotpot_300()
 
 # Define the initial prompt to optimize
-initial_prompt = "Answer the question."
+initial_prompt = ChatPrompt(
+    messages=[
+        {"role": "system", "content": "Answer the question."},
+        {"role": "user", "content": "{question}"},
+    ]
+)
 project_name = "optimize-metaprompt-hotpot"
 
 # Initialize the optimizer with custom parameters

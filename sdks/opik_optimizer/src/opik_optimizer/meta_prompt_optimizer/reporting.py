@@ -1,6 +1,5 @@
 from contextlib import contextmanager
 
-import rich
 from rich.text import Text
 
 from ..reporting_utils import (

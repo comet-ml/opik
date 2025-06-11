@@ -1,9 +1,9 @@
 from opik.evaluation.metrics import LevenshteinRatio
 
 from opik_optimizer import ChatPrompt, FewShotBayesianOptimizer
-from opik_optimizer.demo import get_or_create_dataset
+from opik_optimizer.datasets import hotpot_300
 
-hot_pot_dataset = get_or_create_dataset("hotpot-300")
+hot_pot_dataset = hotpot_300()
 
 # For chat prompts instruction doesn't need to contain input parameters from dataset examples.
 prompt  = ChatPrompt(

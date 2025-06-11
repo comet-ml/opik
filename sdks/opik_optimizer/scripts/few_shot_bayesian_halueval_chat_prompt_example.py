@@ -2,7 +2,7 @@ from opik.evaluation import metrics
 from opik.evaluation.metrics import score_result
 
 from opik_optimizer import ChatPrompt, FewShotBayesianOptimizer
-from opik_optimizer.demo import get_or_create_dataset
+from opik_optimizer.datasets import halu_eval_300
 
 
 class HaluEvalObjective(metrics.BaseMetric):
@@ -37,7 +37,7 @@ class HaluEvalObjective(metrics.BaseMetric):
 
 project_name = "optimize-few-shot-bayesian-halueval"
 halu_eval_accuracy = HaluEvalObjective(project_name=project_name)
-halu_eval_dataset = get_or_create_dataset("halu-eval-300")
+halu_eval_dataset = halu_eval_300()
 
 
 # For chat prompts instruction doesn't need to contain input parameters from dataset examples.
