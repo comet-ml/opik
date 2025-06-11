@@ -904,6 +904,8 @@ class TraceDAOImpl implements TraceDAO {
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost
                 FROM spans final
+                WHERE workspace_id = :workspace_id
+                AND project_id IN :project_ids
                 GROUP BY workspace_id, project_id, trace_id
             ), feedback_scores_agg AS (
                 SELECT
