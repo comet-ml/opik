@@ -44,7 +44,7 @@ jobs:
         - name: Install test requirements
           run: |
             cd ./tests
-            pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt -r ./e2e/test_requirements.txt
+            pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
 
         - name: Run E2E tests
           env:
