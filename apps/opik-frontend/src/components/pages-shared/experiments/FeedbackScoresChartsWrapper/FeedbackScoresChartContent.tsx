@@ -30,6 +30,7 @@ export type ChartData = {
   dataset: Dataset;
   data: DataRecord[];
   lines: string[];
+  index: number;
 };
 
 type FeedbackScoresChartContentProps = {

@@ -1,5 +1,5 @@
 ValidationResponse
-================
+==================
 
 .. autoclass:: opik.guardrails.schemas.ValidationResponse
     :members:
