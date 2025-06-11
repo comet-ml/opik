@@ -8187,8 +8187,8 @@ class TracesResourceTest {
     }
 
     @Nested
-    @DisplayName("SpanCount sorting:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("SpanCount sorting:")
     class SpanCountSortingTests {
 
         private Trace buildTrace(String projectName, int spanCount) {
@@ -8213,6 +8213,7 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @EnumSource(Direction.class)
+        @DisplayName("Sort traces by span count in ascending and descending order")
         void getTracesByProject__whenSortingBySpanCount__thenReturnTracesSorted(Direction direction) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -8253,6 +8254,7 @@ class TracesResourceTest {
         }
 
         @Test
+        @DisplayName("Sort traces with identical span counts using trace ID as tie-breaker")
         void getTracesByProject__whenSortingBySpanCountWithIdenticalValues__thenReturnTracesSorted() {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -8298,6 +8300,7 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @EnumSource(Direction.class)
+        @DisplayName("Sort traces with zero span count values correctly")
         void getTracesByProject__whenSortingBySpanCountWithZeroValues__thenReturnTracesSorted(Direction direction) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -8337,6 +8340,7 @@ class TracesResourceTest {
         }
 
         @Test
+        @DisplayName("Sort traces by span count with pagination")
         void getTracesByProject__whenSortingBySpanCountWithPagination__thenReturnTracesPagesSorted() {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -8378,6 +8382,7 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @EnumSource(Direction.class)
+        @DisplayName("Sort traces with large and sparse span count values")
         void getTracesByProject__whenSortingBySpanCountWithLargeValues__thenReturnTracesSorted(Direction direction) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -8418,6 +8423,7 @@ class TracesResourceTest {
         }
 
         @Test
+        @DisplayName("Sort a large number of traces by span count (performance test)")
         void getTracesByProject__whenSortingBySpanCountWithManyTraces__thenReturnTracesSorted() {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -8479,8 +8485,8 @@ class TracesResourceTest {
     }
 
     @Nested
-    @DisplayName("Usage subfield sorting:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Usage subfield sorting:")
     class UsageSubfieldSortingTests {
 
         private List<Span> buildSpans(Trace trace, String key, Integer... values) {
@@ -8517,6 +8523,7 @@ class TracesResourceTest {
         }
 
         @Test
+        @DisplayName("Sort traces by completion tokens in ascending order")
         void getTracesByProject__whenSortingByCompletionTokensAsc__thenReturnTracesSorted() {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
