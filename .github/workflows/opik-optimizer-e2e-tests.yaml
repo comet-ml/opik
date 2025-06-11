@@ -16,7 +16,12 @@ env:
 jobs:
     run-e2e-tests:
         name: Opik Optimizer E2E Tests Python ${{matrix.python_version}}
-        runs-on: ubuntu-latest   
+        runs-on: ubuntu-latest
+        
+        defaults:
+          run:
+            working-directory: sdks/opik_optimizer/
+        
         strategy:
             fail-fast: false
             matrix:
@@ -25,19 +30,16 @@ jobs:
                 ]
 
         steps:
-        - name: Checkout
-          uses: actions/checkout@v4.1.1
+        - name: Check out code
+          uses: actions/checkout@v4
             
         - name: Setup Python ${{matrix.python_version}}
           uses: actions/setup-python@v5
           with:
             python-version: ${{matrix.python_version}}
 
-        - name: Install dependencies
-          run: |
-            cd ${{ github.workspace }}/sdks/opik_optimizer
-            python -m pip install --upgrade pip
-            pip install -r requirements.txt
+        - name: Install opik_optimizer
+          run: pip install .
 
         - name: Run E2E tests
           env:
@@ -51,11 +53,7 @@ jobs:
 
             # Test Configuration
             OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
-          run: |
-            cd ${{ github.workspace }}/sdks/opik_optimizer
-            pytest tests/e2e -v --junitxml=${{ github.workspace }}/opik_optimizer_e2e_test_results_${{matrix.python_version}}.xml --timeout=300
-
-
+          run: python -m pytest tests/e2e -v --junitxml=${{ github.workspace }}/opik_optimizer_e2e_test_results_${{matrix.python_version}}.xml --timeout=300
 
         - name: Upload test artifacts on failure
           if: failure()
@@ -63,6 +61,6 @@ jobs:
           with:
               name: opik-optimizer-e2e-logs-p${{matrix.python_version}}
               path: |
-                ${{ github.workspace }}/sdks/opik_optimizer/*.log
-                ${{ github.workspace }}/sdks/opik_optimizer/tests/**/*.log
+                *.log
+                tests/**/*.log
               retention-days: 7 

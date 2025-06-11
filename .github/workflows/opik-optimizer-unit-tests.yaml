@@ -6,9 +6,6 @@ on:
         paths:
           - 'sdks/opik_optimizer/**'
 
-permissions:
-  contents: read
-
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
@@ -16,7 +13,12 @@ env:
 jobs:
     run-unit-tests:
         name: Opik Optimizer Unit Tests Python ${{matrix.python_version}}
-        runs-on: ubuntu-latest   
+        runs-on: ubuntu-latest
+        
+        defaults:
+          run:
+            working-directory: sdks/opik_optimizer/
+        
         strategy:
             fail-fast: false
             matrix:
@@ -28,23 +30,18 @@ jobs:
                 ]
 
         steps:
-        - name: Checkout
-          uses: actions/checkout@v4.1.1
+        - name: Check out code
+          uses: actions/checkout@v4
             
         - name: Setup Python ${{matrix.python_version}}
           uses: actions/setup-python@v5
           with:
             python-version: ${{matrix.python_version}}
 
-        - name: Install dependencies
-          run: |
-            cd ${{ github.workspace }}/sdks/opik_optimizer
-            python -m pip install --upgrade pip
-            pip install -r requirements.txt
+        - name: Install opik_optimizer
+          run: pip install .
 
         - name: Run unit tests
-          run: |
-            cd ${{ github.workspace }}/sdks/opik_optimizer
-            pytest tests/unit -v --junitxml=${{ github.workspace }}/opik_optimizer_unit_test_results_${{matrix.python_version}}.xml --cov=src/opik_optimizer --cov-report=xml
+          run: python -m pytest tests/unit -v --junitxml=${{ github.workspace }}/opik_optimizer_unit_test_results_${{matrix.python_version}}.xml --cov=src/opik_optimizer --cov-report=xml
 
 
