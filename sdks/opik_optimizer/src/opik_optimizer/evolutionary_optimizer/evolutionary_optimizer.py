@@ -846,7 +846,6 @@ Return only the new prompt list object.
                 metadata={"optimizer": self.__class__.__name__},
             )
             self._current_optimization_id = opik_optimization_run.id
-            logger.info(f"Created Opik Optimization run with ID: {self._current_optimization_id}")
         except Exception as e:
             logger.warning(f"Opik server error: {e}. Continuing without Opik tracking.")
             self._current_optimization_id = None
@@ -873,7 +872,6 @@ Return only the new prompt list object.
         # Step 1. Step variables and define fitness function
         self.llm_call_counter = 0
         self._history = []
-        self._current_optimization_id = None
         self._current_generation = 0
         self._best_fitness_history = []
         self._generations_without_improvement = 0
@@ -992,7 +990,7 @@ Return only the new prompt list object.
                 best_prompt=best_prompt_overall,
                 best_score=best_primary_score_overall,
                 improvement=0.0
-            ).dict()
+            ).model_dump()
             self._add_to_history(initial_round_data)
 
         with reporting.start_evolutionary_algo(verbose=self.verbose) as report_evolutionary_algo:
@@ -1051,7 +1049,7 @@ Return only the new prompt list object.
                     best_prompt=best_prompt_overall,
                     best_score=best_primary_score_overall,
                     improvement=(best_primary_score_overall - initial_primary_score) / abs(initial_primary_score) if initial_primary_score and initial_primary_score != 0 else (1.0 if best_primary_score_overall > 0 else 0.0)
-                ).dict()
+                ).model_dump()
                 self._add_to_history(gen_round_data)
 
         stopped_early_flag = self._generations_without_overall_improvement >= self.DEFAULT_EARLY_STOPPING_GENERATIONS
@@ -1117,6 +1115,7 @@ Return only the new prompt list object.
         # Add final details
         final_details.update({
             "total_generations_run": generation_idx + 1,
+            "num_generations": self.num_generations,
             "population_size": self.population_size,
             "mutation_probability": self.mutation_rate,
             "crossover_probability": self.crossover_rate,
@@ -1148,7 +1147,9 @@ Return only the new prompt list object.
         return OptimizationResult(
             optimizer=self.__class__.__name__,
             prompt=final_best_prompt.formatted_messages, 
-            score=final_primary_score, 
+            score=final_primary_score,
+            initial_prompt=prompt.formatted_messages,
+            initial_score=initial_primary_score,
             metric_name=metric.__name__,
             details=final_details,
             history=self.get_history(),
@@ -1202,6 +1203,7 @@ Return only the new prompt list object.
             response = litellm.completion(
                 model=self.model, messages=messages, **final_call_params
             )
+            self.llm_call_counter += 1
 
             logger.debug(f"Response: {response}")
             return response.choices[0].message.content

@@ -1,0 +1,52 @@
+name: Opik Optimizer Unit Tests
+run-name: "Opik Optimizer Unit Tests ${{ github.ref_name }} by @${{ github.actor }}"
+on:
+    workflow_dispatch:
+    pull_request:
+        paths:
+          - 'sdks/opik_optimizer/**'
+
+env:
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_SENTRY_ENABLE: False
+
+jobs:
+    run-unit-tests:
+        name: Opik Optimizer Unit Tests Python ${{matrix.python_version}}
+        runs-on: ubuntu-latest   
+        strategy:
+            fail-fast: false
+            matrix:
+                python_version: [
+                  "3.9",
+                  "3.10",
+                  "3.11",
+                  "3.12"
+                ]
+
+        steps:
+        - name: Checkout
+          uses: actions/checkout@v4.1.1
+            
+        - name: Setup Python ${{matrix.python_version}}
+          uses: actions/setup-python@v5
+          with:
+            python-version: ${{matrix.python_version}}
+
+        - name: Install dependencies
+          run: |
+            cd ${{ github.workspace }}/sdks/opik_optimizer
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+
+        - name: Run unit tests
+          run: |
+            cd ${{ github.workspace }}/sdks/opik_optimizer
+            pytest tests/unit -v --junitxml=${{ github.workspace }}/opik_optimizer_unit_test_results_${{matrix.python_version}}.xml --cov=src/opik_optimizer --cov-report=xml
+
+        - name: Publish Test Report
+          uses: EnricoMi/publish-unit-test-result-action/linux@v2
+          if: always()
+          with:
+            check_name: Opik Optimizer Unit Tests Results Python ${{matrix.python_version}}
+            files: ${{ github.workspace }}/opik_optimizer_unit_test_results_${{matrix.python_version}}.xml
