@@ -5,17 +5,19 @@ from typing import Any, Dict, List, Literal, Optional
 import pydantic
 import rich
 
-from .reporting_utils import get_console
+from .reporting_utils import get_console, get_link_text
 
 
 class OptimizationResult(pydantic.BaseModel):
     """Result oan optimization run."""
 
     optimizer: str = "Optimizer"
-    
+
     prompt: List[Dict[Literal["role", "content"], str]]
     score: float
     metric_name: str
+    optimization_id: Optional[str] = None
+    dataset_id: Optional[str] = None
     
     # Initial score
     initial_prompt: Optional[List[Dict[Literal["role", "content"], str]]] = None
@@ -29,7 +31,7 @@ class OptimizationResult(pydantic.BaseModel):
     demonstrations: Optional[List[Dict[str, Any]]] = None
     mipro_prompt: Optional[str] = None
     tool_prompts: Optional[Dict[str, str]] = None
-    
+
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
     def model_dump(self, *kargs, **kwargs) -> Dict[str, Any]:
@@ -141,6 +143,15 @@ class OptimizationResult(pydantic.BaseModel):
         table.add_row("Final Best Score:", f"[bold cyan]{final_score_str}[/bold cyan]")
         table.add_row("Total Improvement:", improvement_str)
         table.add_row("Rounds Completed:", str(rounds_ran))
+        table.add_row(
+            "Optimization run link:",
+            get_link_text(
+                pre_text="",
+                link_text="Open in Opik Dashboard",
+                dataset_id=self.dataset_id,
+                optimization_id=self.optimization_id,
+            ),
+        )
 
         # Display Chat Structure if available
         panel_title = "[bold]Final Optimized Prompt[/bold]"
@@ -167,9 +178,7 @@ class OptimizationResult(pydantic.BaseModel):
         except Exception:
             # Fallback to simple text prompt
             prompt_renderable = rich.text.Text(str(self.prompt or ""), overflow="fold")
-            panel_title = (
-                "[bold]Final Optimized Prompt (Instruction - fallback)[/bold]"
-            )
+            panel_title = "[bold]Final Optimized Prompt (Instruction - fallback)[/bold]"
 
         prompt_panel = rich.panel.Panel(
             prompt_renderable, title=panel_title, border_style="blue", padding=(1, 2)
