@@ -83,4 +83,27 @@ public class RedirectResourceClient {
             return null;
         }
     }
+
+    public String optimizationsRedirect(UUID datasetId, UUID optimizationId, String sessionToken, String workspaceName,
+            String path,
+            int expectedStatus) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .property(ClientProperties.FOLLOW_REDIRECTS, false)
+                .path("optimizations")
+                .queryParam("dataset_id", datasetId)
+                .queryParam("optimization_id", optimizationId)
+                .queryParam("workspace_name", workspaceName)
+                .queryParam("path", path)
+                .request()
+                .cookie(SESSION_COOKIE, sessionToken)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            if (expectedStatus == 303) {
+                return actualResponse.getHeaderString("Location");
+            }
+
+            return null;
+        }
+    }
 }

@@ -15,6 +15,7 @@ export const TraceThreadPage: core.serialization.ObjectSchema<
     size: core.serialization.number().optional(),
     total: core.serialization.number().optional(),
     content: core.serialization.list(TraceThread).optional(),
+    sortableBy: core.serialization.list(core.serialization.string()).optional(),
 });
 
 export declare namespace TraceThreadPage {
@@ -23,5 +24,6 @@ export declare namespace TraceThreadPage {
         size?: number | null;
         total?: number | null;
         content?: TraceThread.Raw[] | null;
+        sortableBy?: string[] | null;
     }
 }

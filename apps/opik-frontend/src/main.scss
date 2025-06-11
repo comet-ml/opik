@@ -116,27 +116,27 @@
 /* custom classes */
 @layer base {
   .comet-title-xl {
-    @apply font-medium text-3xl tracking-[0.01em] text-foreground-secondary;
+    @apply font-medium text-3xl tracking-normal text-foreground-secondary;
   }
 
   .comet-title-l {
-    @apply font-medium text-2xl tracking-[0.01em] text-foreground-secondary;
+    @apply font-medium text-2xl tracking-normal text-foreground-secondary;
   }
 
   .comet-title-m {
-    @apply font-medium text-xl tracking-[0.01em] text-foreground-secondary;
+    @apply font-medium text-xl tracking-normal text-foreground-secondary;
   }
 
   .comet-title-s {
-    @apply font-medium text-lg tracking-[0.02em] text-foreground-secondary;
+    @apply font-medium text-lg tracking-normal text-foreground-secondary;
   }
 
   .comet-title-xs {
-    @apply font-medium text-sm tracking-[0.03em] text-foreground-secondary;
+    @apply font-medium text-sm tracking-normal text-foreground-secondary;
   }
 
   .comet-body {
-    @apply font-normal text-base tracking-[0.01em] text-foreground-secondary;
+    @apply font-normal text-base tracking-normal text-foreground-secondary;
   }
 
   .comet-body-accented {
@@ -144,7 +144,7 @@
   }
 
   .comet-body-s {
-    @apply font-normal text-sm tracking-[0.02em];
+    @apply font-normal text-sm tracking-normal;
   }
 
   .comet-body-s-accented {
@@ -152,7 +152,7 @@
   }
 
   .comet-body-xs {
-    @apply font-normal text-xs tracking-[0.02em];
+    @apply font-normal text-xs tracking-normal;
   }
 
   .comet-body-xs-accented {
@@ -160,7 +160,7 @@
   }
 
   .comet-code {
-    @apply font-normal text-sm tracking-[0.02em];
+    @apply font-normal text-sm tracking-normal;
     font-family:
       Ubuntu Mono,
       ui-monospace,

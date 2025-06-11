@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { Spinner } from "@/components/ui/spinner";
 
 type LoaderProps = {
-  message?: string;
+  message?: React.ReactNode;
   className?: string;
 };
 
@@ -18,7 +18,7 @@ const Loader: React.FunctionComponent<LoaderProps> = ({
         className,
       )}
     >
-      <Spinner />
+      <Spinner className="mb-2" />
       {message}
     </div>
   );

@@ -31,6 +31,7 @@ public class FiltersFactory {
     private static final Map<FieldType, Function<Filter, Boolean>> FIELD_TYPE_VALIDATION_MAP = new EnumMap<>(
             ImmutableMap.<FieldType, Function<Filter, Boolean>>builder()
                     .put(FieldType.STRING, filter -> StringUtils.isNotBlank(filter.value()))
+                    .put(FieldType.ENUM, filter -> StringUtils.isNotBlank(filter.value()))
                     .put(FieldType.DATE_TIME, filter -> {
                         try {
                             Instant.parse(filter.value());

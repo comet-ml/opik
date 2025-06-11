@@ -215,7 +215,6 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
           <div className="w-full overflow-hidden">
             <ExplainerDescription
               className="mb-4"
-              size="sm"
               {...EXPLAINERS_MAP[
                 EXPLAINER_ID.why_would_i_want_to_add_traces_to_a_dataset
               ]}
