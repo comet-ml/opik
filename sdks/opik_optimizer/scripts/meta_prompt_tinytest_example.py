@@ -1,10 +1,10 @@
 from opik.evaluation.metrics import LevenshteinRatio
 
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
-from opik_optimizer.demo import get_or_create_dataset
+from opik_optimizer.datasets import tiny_test
 
 # Get or create the test dataset
-tiny_test_dataset = get_or_create_dataset("tiny-test")
+tiny_test_dataset = tiny_test()
 project_name = "optimize-metaprompt-tinytest"
 
 # Define the initial prompt to optimize - intentionally vague to allow for improvement

@@ -2,12 +2,13 @@ import logging
 from contextlib import contextmanager
 from typing import Dict, List, Optional
 
-import rich
 from rich import box
 from rich.console import Console, Group
 from rich.panel import Panel
 from rich.progress import track
 from rich.text import Text
+
+from .utils import get_optimization_run_url_by_id
 
 PANEL_WIDTH = 70
 
@@ -21,10 +22,8 @@ def convert_tqdm_to_rich(description: Optional[str] = None, verbose: int = 1):
     """Context manager to convert tqdm to rich."""
     import opik.evaluation.engine.evaluation_tasks_executor
     
-    optimizer_logger = logging.getLogger('opik_optimizer')
-
     def _tqdm_to_track(iterable, desc, disable, total):
-        disable = verbose == 0 or optimizer_logger.level > logging.INFO
+        disable = verbose == 0
         return track(
             iterable,
             description=description or desc,
@@ -91,16 +90,36 @@ def display_messages(messages: List[Dict[str, str]], prefix: str = ""):
         for line in rendered_panel.splitlines():
             console.print(Text(prefix) + Text.from_ansi(line))
 
-def display_header(algorithm: str, verbose: int = 1):
+def display_header(
+    algorithm: str,
+    optimization_id: Optional[str]=None,
+    dataset_id: Optional[str]=None,
+    verbose: int = 1
+):
     if verbose < 1:
         return
+
+    if optimization_id is not None and dataset_id is not None:    
+        optimization_url = get_optimization_run_url_by_id(
+            optimization_id=optimization_id,
+            dataset_id=dataset_id
+        )
+        
+        # Create a visually appealing panel with an icon and ensure link doesn't wrap
+        
+        link_text = Text("-> View optimization details in your Opik dashboard")
+        link_text.stylize(f"link {optimization_url}", 28, len(link_text))
+    else:
+        link_text = Text("No optimization run link available", style="dim")
 
     content = Text.assemble(
         ("● ", "green"),  
         "Running Opik Evaluation - ",
-        (algorithm, "blue")
-    )
+        (algorithm, "blue"),
+        "\n\n"
+    ).append(link_text)
 
+    
     panel = Panel(
         content,
         box=box.ROUNDED,
