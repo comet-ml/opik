@@ -49,6 +49,7 @@ import VertexAIProviderDetails from "@/components/pages-shared/llm/ManageAIProvi
 import VllmAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/VllmAIProviderDetails";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import useVllmAIProviderData from "@/hooks/useVllmAIProviderData";
 
 type ManageAIProviderDialogProps = {
   providerKey?: ProviderKey;
@@ -71,6 +72,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
   const { getLocalAIProviderData, setLocalAIProviderData } =
     useLocalAIProviderData();
+  const { getVllmAIProviderData } = useVllmAIProviderData();
   const { mutate: createMutate } = useProviderKeysCreateMutation();
   const { mutate: updateMutate } = useProviderKeysUpdateMutation();
   const { mutate: deleteMutate } = useProviderKeysDeleteMutation();
@@ -82,6 +84,15 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       : undefined,
   );
 
+  const providerUrl = useMemo(() => {
+    if (providerKey?.provider === PROVIDER_TYPE.VLLM) {
+      const vllmData = getVllmAIProviderData();
+      return vllmData?.url || "";
+    }
+
+    return localData?.url || "";
+  }, [providerKey, localData, getVllmAIProviderData]);
+
   const form: UseFormReturn<AIProviderFormType> = useForm<
     z.infer<typeof AIProviderFormSchema>
   >({
@@ -92,7 +103,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         ? PROVIDERS[providerKey.provider]?.locationType
         : PROVIDER_LOCATION_TYPE.cloud,
       apiKey: "",
-      url: localData?.url ?? "",
+      url: providerUrl,
       models: localData?.models ?? "",
       location: undefined,
     },

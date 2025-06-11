@@ -49,11 +49,12 @@ export const VertexAIProviderDetailsFormSchema = z.object({
 export const VllmProviderDetailsFormSchema = z.object({
   provider: ProviderSchema,
   locationType: z.literal(PROVIDER_LOCATION_TYPE.cloud),
-  url: z
-    .string()
-    .url({ message: "URL is invalid" })
-    .min(1, { message: "URL is required" }),
-  apiKey: z.string().optional(),
+  url: z.string().url(),
+  apiKey: z
+    .string({
+      required_error: "API key is required",
+    })
+    .min(1, { message: "API key is required" }),
 });
 
 export const AIProviderFormSchema = z.union([

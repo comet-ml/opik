@@ -1550,7 +1550,7 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.VLLM]: [
-    // the list will be full filled base on response from the vllm server
+    // the list will be full filled base on response from the vllm server's /models endpoint
   ],
 };
 

@@ -41,7 +41,7 @@ const VllmAIProviderDetails: React.FC<VllmAIProviderDetailsProps> = ({
                 <FormControl>
                   <Input
                     id="url"
-                    placeholder={urlLabel}
+                    placeholder={"https://vllm.example.com/v1"}
                     value={field.value}
                     onChange={(e) => field.onChange(e.target.value)}
                     className={cn({
@@ -84,7 +84,8 @@ const VllmAIProviderDetails: React.FC<VllmAIProviderDetailsProps> = ({
 
       <span className="comet-body-s text-light-slate mt-1">
         You may or may not need an API key for vLLM, depending on your server
-        configuration.
+        configuration. If you do not need an API key, you can enter a dummy
+        value.
       </span>
     </div>
   );
