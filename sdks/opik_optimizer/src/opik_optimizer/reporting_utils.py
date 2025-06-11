@@ -121,10 +121,10 @@ def display_header(
         return
 
     link_text = get_link_text(
-        "-> View optimization details ",
-        "in your Opik dashboard",
-        optimization_id,
-        dataset_id,
+        pre_text="-> View optimization details ",
+        link_text="in your Opik dashboard",
+        optimization_id=optimization_id,
+        dataset_id=dataset_id,
     )
 
     content = Text.assemble(

@@ -146,10 +146,10 @@ class OptimizationResult(pydantic.BaseModel):
         table.add_row(
             "Optimization run link:",
             get_link_text(
-                "",
-                "Open in Opik Dashboard",
-                self.dataset_id,
-                self.optimization_id,
+                pre_text="",
+                link_text="Open in Opik Dashboard",
+                dataset_id=self.dataset_id,
+                optimization_id=self.optimization_id,
             ),
         )
 

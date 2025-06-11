@@ -548,7 +548,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             best_score=best_score,
             initial_score=initial_score,
             rounds=rounds,
-            dataset_id=dataset_id,
+            dataset_id=dataset.id,
             optimization_id=optimization_id,
         )
 
