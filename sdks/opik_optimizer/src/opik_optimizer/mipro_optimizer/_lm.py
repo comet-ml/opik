@@ -82,6 +82,7 @@ class LM(BaseLM):
         self.finetuning_model = finetuning_model
         self.launch_kwargs = launch_kwargs or {}
         self.train_kwargs = train_kwargs or {}
+        self.llm_call_counter = 0
 
         # Handle model-specific configuration for different model families
         model_family = model.split("/")[-1].lower() if "/" in model else model.lower()
@@ -129,6 +130,7 @@ class LM(BaseLM):
         if not getattr(results, "cache_hit", False) and dspy.settings.usage_tracker and hasattr(results, "usage"):
             settings.usage_tracker.add_usage(self.model, dict(results.usage))
 
+        self.llm_call_counter += 1
         return results
 
     def launch(self, launch_kwargs: Optional[Dict[str, Any]] = None):
@@ -323,6 +325,7 @@ def litellm_completion(request: Dict[str, Any], num_retries: int, cache={"no-cac
             **retry_kwargs,
             **request,
         )
+
         chunks = []
         async for chunk in response:
             if caller_predict_id:

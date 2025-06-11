@@ -145,7 +145,7 @@ def display_result(initial_score, best_score, best_prompt, verbose: int = 1):
             perc_change = (best_score - initial_score) / initial_score
             content = [Text(f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})", style="bold green")]
     else:
-        content = [Text("Optimization trial did not find a better prompt than the initial one.", style="bold red")]
+        content = [Text(f"Optimization run did not find a better prompt than the initial one.\nScore: {best_score:.4f}", style="dim bold red")]
     
     content.append(Text("\nOptimized prompt:"))
     for i, msg in enumerate(best_prompt):

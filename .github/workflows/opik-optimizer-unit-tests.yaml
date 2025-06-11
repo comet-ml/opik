@@ -1,0 +1,60 @@
+name: Opik Optimizer Unit Tests
+run-name: "Opik Optimizer Unit Tests ${{ github.ref_name }} by @${{ github.actor }}"
+on:
+    workflow_dispatch:
+    pull_request:
+        paths:
+          - 'sdks/opik_optimizer/**'
+
+env:
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_SENTRY_ENABLE: False
+
+jobs:
+    run-unit-tests:
+        name: Opik Optimizer Unit Tests Python ${{matrix.python_version}}
+        runs-on: ubuntu-latest
+        
+        defaults:
+          run:
+            working-directory: sdks/opik_optimizer/
+        
+        strategy:
+            fail-fast: false
+            matrix:
+                python_version: [
+                  "3.9",
+                  "3.10",
+                  "3.11",
+                  "3.12"
+                ]
+
+        steps:
+        - name: Check out code
+          uses: actions/checkout@v4
+            
+        - name: Setup Python ${{matrix.python_version}}
+          uses: actions/setup-python@v5
+          with:
+            python-version: ${{matrix.python_version}}
+
+        - name: Cache HuggingFace datasets
+          uses: actions/cache@v4
+          with:
+            path: ~/.cache/huggingface
+            key: hf-datasets-${{ hashFiles('**/datasets/*.py') }}
+            restore-keys: |
+              hf-datasets-
+
+        - name: Install opik_optimizer
+          run: pip install .
+        
+        - name: Install test requirements
+          run: |
+            cd ./tests
+            pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
+  
+        - name: Run unit tests
+          run: pytest tests/unit -vv --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+
+

@@ -1,0 +1,78 @@
+name: Opik Optimizer E2E Tests
+run-name: "Opik Optimizer E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
+on:
+    workflow_dispatch:
+    pull_request:
+        paths:
+          - 'sdks/opik_optimizer/**'
+
+permissions:
+  contents: read
+
+env:
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_SENTRY_ENABLE: False
+
+jobs:
+    run-e2e-tests:
+        name: Opik Optimizer E2E Tests Python ${{matrix.python_version}}
+        runs-on: ubuntu-latest
+        
+        defaults:
+          run:
+            working-directory: sdks/opik_optimizer/
+        
+        strategy:
+            fail-fast: false
+            matrix:
+                python_version: [
+                  "3.12"
+                ]
+
+        steps:
+        - name: Check out code
+          uses: actions/checkout@v4
+            
+        - name: Setup Python ${{matrix.python_version}}
+          uses: actions/setup-python@v5
+          with:
+            python-version: ${{matrix.python_version}}
+
+        - name: Cache HuggingFace datasets
+          uses: actions/cache@v4
+          with:
+            path: ~/.cache/huggingface
+            key: hf-datasets-${{ hashFiles('**/datasets/*.py') }}
+            restore-keys: |
+              hf-datasets-
+
+        - name: Install opik_optimizer
+          run: pip install .
+
+        - name: Install test requirements
+          run: |
+            cd ./tests
+            pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
+
+        - name: Run E2E tests
+          env:
+            # Opik Configuration
+            OPIK_API_KEY: ${{ secrets.COMET_API_KEY }}
+            OPIK_WORKSPACE: ${{ secrets.COMET_WORKSPACE }}
+            
+            # OpenAI Configuration
+            OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+            # Test Configuration
+            OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
+          run: pytest tests/e2e -vv --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+
+        - name: Upload test artifacts on failure
+          if: failure()
+          uses: actions/upload-artifact@v4
+          with:
+              name: opik-optimizer-e2e-logs-p${{matrix.python_version}}
+              path: |
+                *.log
+                tests/**/*.log
+              retention-days: 7 
