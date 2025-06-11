@@ -193,6 +193,19 @@ export const extractIdFromLocation = (location: string) =>
 export const formatNumericData = (value: number, precision = 3) =>
   String(round(value, precision));
 
+export const formatNumberInK = (value: number): string => {
+  if (value >= 1000000000) {
+    return `${(value / 1000000000).toFixed(1)}b`;
+  }
+  if (value >= 1000000) {
+    return `${(value / 1000000).toFixed(1)}m`;
+  }
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}k`;
+  }
+  return value.toString();
+};
+
 export const updateTextAreaHeight = (
   textarea: HTMLTextAreaElement | null,
   minHeight: number = 80,
