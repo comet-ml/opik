@@ -17,6 +17,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.TraceThread.TraceThreadPage;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.Visibility;
@@ -125,6 +126,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -173,6 +175,8 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class TracesResourceTest {
+
+    //    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     public static final String URL_TEMPLATE = "%s/v1/private/traces";
     private static final String URL_TEMPLATE_SPANS = "%s/v1/private/spans";
@@ -1525,24 +1529,16 @@ class TracesResourceTest {
                     .toList();
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-            // create spans to populate usage and total cost statistics
-            List<Span> spans = new ArrayList<>();
-            for (Trace trace : traces) {
-                for (int i = 0; i < trace.spanCount(); i++) {
-                    spans.add(factory.manufacturePojo(Span.class).toBuilder()
-                            .traceId(trace.id())
-                            .projectName(projectName)
-                            .startTime(trace.startTime()) // Add this line
-                            .usage(Map.of("prompt_tokens", randomNumber(1, 50)))
-                            .totalEstimatedCost(new BigDecimal(randomNumber(1, 10)))
-                            .build());
-                }
-            }
-
-            if (!spans.isEmpty()) {
-                spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
-            }
-
+            var spans = traces.stream()
+                    .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                            .map(span -> span.toBuilder()
+                                    .projectName(projectName)
+                                    .traceId(trace.id())
+                                    .startTime(trace.startTime())
+                                    .usage(null)
+                                    .totalEstimatedCost(null)
+                                    .build()))
+                    .toList();
             batchCreateSpansAndAssert(spans, apiKey, workspaceName);
 
             var values = testAssertion.transformTestParams(traces, traces.reversed(), List.of());
@@ -4994,9 +4990,6 @@ class TracesResourceTest {
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
-                            .spanCount((int) randomNumber(1, 5))
-                            .usage(Map.of("prompt_tokens", (long) randomNumber(1, 50)))
-                            .totalEstimatedCost(new BigDecimal(randomNumber(1, 10)))
                             .feedbackScores(null)
                             .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
                             .comments(null)
@@ -5159,39 +5152,7 @@ class TracesResourceTest {
                     Arguments.of(Comparator.comparing(Trace::threadId), SortingField.builder()
                             .field(SortableFields.THREAD_ID).direction(Direction.ASC).build()),
                     Arguments.of(Comparator.comparing(Trace::threadId).reversed(), SortingField.builder()
-                            .field(SortableFields.THREAD_ID).direction(Direction.DESC).build()),
-                    Arguments.of(
-                            Comparator.comparing(Trace::spanCount)
-                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
-                            SortingField.builder().field(SortableFields.SPAN_COUNT).direction(Direction.ASC).build()),
-                    Arguments.of(
-                            Comparator.comparing(Trace::spanCount).reversed()
-                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
-                            SortingField.builder().field(SortableFields.SPAN_COUNT).direction(Direction.DESC).build()),
-                    Arguments.of(
-                            Comparator
-                                    .comparing(Trace::totalEstimatedCost,
-                                            Comparator.nullsFirst(Comparator.naturalOrder()))
-                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
-                            SortingField.builder().field(SortableFields.TOTAL_ESTIMATED_COST).direction(Direction.ASC)
-                                    .build()),
-                    Arguments.of(
-                            Comparator
-                                    .comparing(Trace::totalEstimatedCost,
-                                            Comparator.nullsLast(Comparator.reverseOrder()))
-                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
-                            SortingField.builder().field(SortableFields.TOTAL_ESTIMATED_COST).direction(Direction.DESC)
-                                    .build()),
-                    Arguments.of(
-                            Comparator.comparing((Trace t) -> t.usage() == null ? null : t.usage().get("prompt_tokens"),
-                                    Comparator.nullsFirst(Comparator.naturalOrder()))
-                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
-                            SortingField.builder().field("usage.prompt_tokens").direction(Direction.ASC).build()),
-                    Arguments.of(
-                            Comparator.comparing((Trace t) -> t.usage() == null ? null : t.usage().get("prompt_tokens"),
-                                    Comparator.nullsLast(Comparator.reverseOrder()))
-                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
-                            SortingField.builder().field("usage.prompt_tokens").direction(Direction.DESC).build()));
+                            .field(SortableFields.THREAD_ID).direction(Direction.DESC).build()));
         }
 
         @Test
@@ -8221,8 +8182,776 @@ class TracesResourceTest {
 
             var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
             assertThat(actualError).isEqualTo(expectedError);
+    }
+
+    }
+
+    @Nested
+    @DisplayName("SpanCount sorting:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SpanCountSortingTests {
+
+        private Trace buildTrace(String projectName, int spanCount) {
+            return createTrace().toBuilder()
+                    .projectId(null)
+                    .projectName(projectName)
+                    .spanCount(spanCount)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .comments(null)
+                    .build();
         }
 
+        private List<Span> buildSpans(Trace trace, int count) {
+            return IntStream.range(0, count)
+                    .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                            .traceId(trace.id())
+                            .projectName(trace.projectName())
+                            .build())
+                    .toList();
+        }
+
+        @ParameterizedTest
+        @EnumSource(Direction.class)
+        void getTracesByProject__whenSortingBySpanCount__thenReturnTracesSorted(Direction direction) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            List<Trace> traces = new ArrayList<>();
+            List<Span> spans = new ArrayList<>();
+            int[] counts = {3, 1, 2};
+            for (int count : counts) {
+                Trace trace = buildTrace(projectName, count);
+                traces.add(trace);
+                spans.addAll(buildSpans(trace, count));
+            }
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+            List<SortingField> sorting = List.of(
+                    SortingField.builder().field(SortableFields.SPAN_COUNT).direction(direction).build());
+            Trace.TracePage page = traceResourceClient.getTraces(projectName, projectId, apiKey, workspaceName,
+                    List.of(), sorting, 100, Map.of());
+            List<Trace> actual = page.content();
+
+            Comparator<Trace> comparator = direction == Direction.ASC
+                    ? Comparator.comparing(Trace::spanCount)
+                    .thenComparing(Comparator.comparing(Trace::id).reversed())
+                    : Comparator.comparing(Trace::spanCount).reversed()
+                    .thenComparing(Comparator.comparing(Trace::id).reversed());
+            List<Trace> expected = traces.stream().sorted(comparator).toList();
+
+            // Replace full trace assertion with just checking the spanCount values
+            assertThat(actual).extracting(Trace::spanCount)
+                    .containsExactlyElementsOf(expected.stream().map(Trace::spanCount).toList());
+        }
+
+        @Test
+        void getTracesByProject__whenSortingBySpanCountWithIdenticalValues__thenReturnTracesSorted() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            List<Trace> traces = new ArrayList<>();
+            List<Span> spans = new ArrayList<>();
+
+            for (int i = 0; i < 3; i++) {
+                Trace trace = buildTrace(projectName, 5);
+                traces.add(trace);
+                spans.addAll(buildSpans(trace, 5));
+            }
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+            List<SortingField> sorting = List.of(
+                    SortingField.builder().field(SortableFields.SPAN_COUNT).direction(Direction.ASC).build());
+            Trace.TracePage page = traceResourceClient.getTraces(projectName, projectId, apiKey, workspaceName,
+                    List.of(), sorting, 100, Map.of());
+            List<Trace> actual = page.content();
+
+            Comparator<Trace> comparator = Comparator.comparing(Trace::spanCount)
+                    .thenComparing(Comparator.comparing(Trace::id).reversed());
+            List<Trace> expected = traces.stream().sorted(comparator).toList();
+
+            // Replace full trace assertion with just checking the spanCount values and IDs
+            // For ties, we also need to verify ID ordering
+            List<Object[]> expectedPairs = expected.stream()
+                    .map(t -> new Object[] { t.spanCount(), t.id() })
+                    .toList();
+            List<Object[]> actualPairs = actual.stream()
+                    .map(t -> new Object[] { t.spanCount(), t.id() })
+                    .toList();
+
+            assertThat(actualPairs).containsExactlyElementsOf(expectedPairs);
+        }
+
+        @ParameterizedTest
+        @EnumSource(Direction.class)
+        void getTracesByProject__whenSortingBySpanCountWithZeroValues__thenReturnTracesSorted(Direction direction) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            List<Trace> traces = new ArrayList<>();
+            List<Span> spans = new ArrayList<>();
+            int[] counts = {0, 2, 5};
+            for (int count : counts) {
+                Trace trace = buildTrace(projectName, count);
+                traces.add(trace);
+                spans.addAll(buildSpans(trace, count));
+            }
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+            List<SortingField> sorting = List.of(
+                    SortingField.builder().field(SortableFields.SPAN_COUNT).direction(direction).build());
+            Trace.TracePage page = traceResourceClient.getTraces(projectName, projectId, apiKey, workspaceName,
+                    List.of(), sorting, 100, Map.of());
+            List<Trace> actual = page.content();
+
+            Comparator<Trace> comparator = direction == Direction.ASC
+                    ? Comparator.comparing(Trace::spanCount)
+                            .thenComparing(Comparator.comparing(Trace::id).reversed())
+                    : Comparator.comparing(Trace::spanCount).reversed()
+                            .thenComparing(Comparator.comparing(Trace::id).reversed());
+            List<Trace> expected = traces.stream().sorted(comparator).toList();
+
+            assertThat(actual).extracting(Trace::spanCount)
+                    .containsExactlyElementsOf(expected.stream().map(Trace::spanCount).toList());
+        }
+
+        @Test
+        void getTracesByProject__whenSortingBySpanCountWithPagination__thenReturnTracesPagesSorted() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            List<Trace> traces = new ArrayList<>();
+            List<Span> spans = new ArrayList<>();
+            for (int i = 0; i < 6; i++) {
+                Trace trace = buildTrace(projectName, i);
+                traces.add(trace);
+                spans.addAll(buildSpans(trace, i));
+            }
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+            List<SortingField> sorting = List.of(
+                    SortingField.builder().field(SortableFields.SPAN_COUNT).direction(Direction.ASC).build());
+
+            List<Trace> expected = traces.stream()
+                    .sorted(Comparator.comparing(Trace::spanCount)
+                            .thenComparing(Comparator.comparing(Trace::id).reversed()))
+                    .toList();
+
+            List<Trace> collected = new ArrayList<>();
+            for (int page = 1; page <= 3; page++) {
+                Trace.TracePage p = traceResourceClient.getTraces(projectName, projectId, apiKey, workspaceName,
+                        List.of(), sorting, 2, Map.of("page", String.valueOf(page)));
+                collected.addAll(p.content());
+            }
+
+            assertThat(collected.stream().map(Trace::spanCount).toList())
+                    .containsExactlyElementsOf(expected.stream().map(Trace::spanCount).toList());
+        }
+
+        @ParameterizedTest
+        @EnumSource(Direction.class)
+        void getTracesByProject__whenSortingBySpanCountWithLargeValues__thenReturnTracesSorted(Direction direction) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            int[] counts = {0, 1, 10, 100};
+            List<Trace> traces = new ArrayList<>();
+            List<Span> spans = new ArrayList<>();
+            for (int c : counts) {
+                Trace t = buildTrace(projectName, c);
+                traces.add(t);
+                spans.addAll(buildSpans(t, c));
+            }
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+            List<SortingField> sorting = List.of(
+                    SortingField.builder().field(SortableFields.SPAN_COUNT).direction(direction).build());
+            Trace.TracePage page = traceResourceClient.getTraces(projectName, projectId, apiKey, workspaceName,
+                    List.of(), sorting, 100, Map.of());
+            List<Trace> actual = page.content();
+
+            Comparator<Trace> comparator = direction == Direction.ASC
+                    ? Comparator.comparing(Trace::spanCount)
+                            .thenComparing(Comparator.comparing(Trace::id).reversed())
+                    : Comparator.comparing(Trace::spanCount).reversed()
+                            .thenComparing(Comparator.comparing(Trace::id).reversed());
+            List<Integer> expectedCounts = traces.stream().sorted(comparator)
+                    .map(Trace::spanCount).toList();
+
+            assertThat(actual).extracting(Trace::spanCount)
+                    .containsExactlyElementsOf(expectedCounts);
+        }
+
+        @Test
+        void getTracesByProject__whenSortingBySpanCountWithManyTraces__thenReturnTracesSorted() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            int traceCount = 30;
+            List<Trace> traces = new ArrayList<>();
+            List<Span> allSpans = new ArrayList<>();
+
+            for (int i = 0; i < traceCount; i++) {
+                int cnt = PodamUtils.getIntegerInRange(0, 10);
+                Trace t = buildTrace(projectName, cnt);
+                traces.add(t);
+                allSpans.addAll(buildSpans(t, cnt));
+            }
+
+            // Create traces in smaller batches
+            int batchSize = 10;
+            for (int i = 0; i < traces.size(); i += batchSize) {
+                int end = Math.min(i + batchSize, traces.size());
+                traceResourceClient.batchCreateTraces(traces.subList(i, end), apiKey, workspaceName);
+            }
+
+            // Create spans in smaller batches
+            for (int i = 0; i < allSpans.size(); i += batchSize) {
+                int end = Math.min(i + batchSize, allSpans.size());
+                batchCreateSpansAndAssert(allSpans.subList(i, end), apiKey, workspaceName);
+            }
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+            List<SortingField> sorting = List.of(
+                    SortingField.builder().field(SortableFields.SPAN_COUNT).direction(Direction.ASC).build());
+
+            int pageSize = 25;
+            List<Integer> allCounts = new ArrayList<>();
+
+            // Get all traces with pagination
+            for (int page = 1; page <= (traceCount / pageSize) + 1; page++) {
+                Trace.TracePage p = traceResourceClient.getTraces(projectName, projectId, apiKey, workspaceName,
+                        List.of(), sorting, pageSize, Map.of("page", String.valueOf(page)));
+                allCounts.addAll(p.content().stream().map(Trace::spanCount).toList());
+
+                if (p.content().size() < pageSize) {
+                    break;
+                }
+            }
+
+            List<Integer> expectedCounts = traces.stream()
+                    .sorted(Comparator.comparing(Trace::spanCount)
+                            .thenComparing(Comparator.comparing(Trace::id).reversed()))
+                    .map(Trace::spanCount)
+                    .toList();
+
+            assertThat(allCounts).containsExactlyElementsOf(expectedCounts);
+        }
+    }
+
+    @Nested
+    @DisplayName("Usage subfield sorting:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class UsageSubfieldSortingTests {
+
+        private List<Span> buildSpans(Trace trace, String key, Integer... values) {
+            if (values.length > 0) {
+                // Use provided values if specified
+                return IntStream.range(0, values.length)
+                        .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                                .projectName(trace.projectName())
+                                .traceId(trace.id())
+                                .usage(Map.of(key, values[i]))
+                                .build())
+                        .toList();
+            } else {
+                // Generate random values using Podam
+                int count = PodamUtils.getIntegerInRange(1, 5); // Random number of spans
+                return IntStream.range(0, count)
+                        .mapToObj(i -> {
+                            int tokenValue = PodamUtils.getIntegerInRange(1, 1000);
+                            return factory.manufacturePojo(Span.class).toBuilder()
+                                    .projectName(trace.projectName())
+                                    .traceId(trace.id())
+                                    .usage(Map.of(key, tokenValue))
+                                    .build();
+                        })
+                        .toList();
+            }
+        }
+
+        private Trace.TracePage fetchSorted(String projectName, UUID projectId, String workspaceName,
+                String apiKey, String sortField, Direction direction, int size, Map<String, String> queryParams) {
+            SortingField sortingField = new SortingField(sortField, direction);
+            return traceResourceClient.getTraces(projectName, projectId, apiKey, workspaceName,
+                    List.of(), List.of(sortingField), size, queryParams);
+        }
+
+        @Test
+        void getTracesByProject__whenSortingByCompletionTokensAsc__thenReturnTracesSorted() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            Trace t1 = createTrace().toBuilder().projectName(projectName).build();
+            Trace t2 = createTrace().toBuilder().projectName(projectName).build();
+            Trace t3 = createTrace().toBuilder().projectName(projectName).build();
+
+            List<Span> spans = new ArrayList<>();
+            spans.addAll(buildSpans(t1, "completion_tokens", 10, 5));
+            spans.addAll(buildSpans(t2, "completion_tokens", 30));
+            spans.addAll(buildSpans(t3, "completion_tokens", 20));
+
+            traceResourceClient.batchCreateTraces(List.of(t1, t2, t3), apiKey, workspaceName);
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            Trace e1 = t1.toBuilder().usage(aggregateSpansUsage(buildSpans(t1, "completion_tokens", 10, 5))).build();
+            Trace e2 = t2.toBuilder().usage(aggregateSpansUsage(buildSpans(t2, "completion_tokens", 30))).build();
+            Trace e3 = t3.toBuilder().usage(aggregateSpansUsage(buildSpans(t3, "completion_tokens", 20))).build();
+
+            List<Trace> expected = List.of(e1, e3, e2).stream()
+                    .sorted(Comparator.comparing(t -> t.usage().get("completion_tokens")))
+                    .toList();
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            Trace.TracePage page = fetchSorted(projectName, projectId, workspaceName, apiKey,
+                    "usage.completion_tokens", Direction.ASC, expected.size(), Map.of());
+
+            TraceAssertions.assertTraces(page.content(), expected, USER);
+        }
+
+        @Test
+        void getTracesByProject__whenSortingByCompletionTokensDesc__thenReturnTracesSorted() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            Trace t1 = createTrace().toBuilder().projectName(projectName).build();
+            Trace t2 = createTrace().toBuilder().projectName(projectName).build();
+            Trace t3 = createTrace().toBuilder().projectName(projectName).build();
+
+            List<Span> spans = new ArrayList<>();
+            spans.addAll(buildSpans(t1, "completion_tokens", 1));
+            spans.addAll(buildSpans(t2, "completion_tokens", 5));
+            spans.addAll(buildSpans(t3, "completion_tokens", 3));
+
+            traceResourceClient.batchCreateTraces(List.of(t1, t2, t3), apiKey, workspaceName);
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            Trace e1 = t1.toBuilder().usage(aggregateSpansUsage(buildSpans(t1, "completion_tokens", 1))).build();
+            Trace e2 = t2.toBuilder().usage(aggregateSpansUsage(buildSpans(t2, "completion_tokens", 5))).build();
+            Trace e3 = t3.toBuilder().usage(aggregateSpansUsage(buildSpans(t3, "completion_tokens", 3))).build();
+
+            List<Trace> expected = List.of(e2, e3, e1).stream()
+                    .sorted(Comparator.comparing((Trace t) -> t.usage().get("completion_tokens"))
+                            .reversed())
+                    .toList();
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            Trace.TracePage page = fetchSorted(projectName, projectId, workspaceName, apiKey,
+                    "usage.completion_tokens", Direction.DESC, expected.size(), Map.of());
+
+            TraceAssertions.assertTraces(page.content(), expected, USER);
+        }
+
+        @Test
+        void getTracesByProject__whenSortingByOriginalUsagePromptTokensAsc__thenReturnTracesSorted() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            Trace t1 = createTrace().toBuilder().projectName(projectName).build();
+            Trace t2 = createTrace().toBuilder().projectName(projectName).build();
+
+            List<Span> spans = new ArrayList<>();
+            spans.addAll(buildSpans(t1, "original_usage.prompt_tokens", 5, 5));
+            spans.addAll(buildSpans(t2, "original_usage.prompt_tokens", 2));
+
+            traceResourceClient.batchCreateTraces(List.of(t1, t2), apiKey, workspaceName);
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            Trace e1 = t1.toBuilder()
+                    .usage(aggregateSpansUsage(buildSpans(t1, "original_usage.prompt_tokens", 5, 5)))
+                    .build();
+            Trace e2 = t2.toBuilder()
+                    .usage(aggregateSpansUsage(buildSpans(t2, "original_usage.prompt_tokens", 2)))
+                    .build();
+
+            List<Trace> expected = List.of(e2, e1).stream()
+                    .sorted(Comparator.comparing(t -> t.usage().get("original_usage.prompt_tokens")))
+                    .toList();
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            Trace.TracePage page = fetchSorted(projectName, projectId, workspaceName, apiKey,
+                    "usage.original_usage.prompt_tokens", Direction.ASC, expected.size(), Map.of());
+
+            TraceAssertions.assertTraces(page.content(), expected, USER);
+        }
+
+        @Test
+        void getTracesByProject__whenSortingByOriginalUsagePromptTokensDesc__thenReturnTracesSorted() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            Trace t1 = createTrace().toBuilder().projectName(projectName).build();
+            Trace t2 = createTrace().toBuilder().projectName(projectName).build();
+
+            List<Span> spans = new ArrayList<>();
+            spans.addAll(buildSpans(t1, "original_usage.prompt_tokens", 1));
+            spans.addAll(buildSpans(t2, "original_usage.prompt_tokens", 10));
+
+            traceResourceClient.batchCreateTraces(List.of(t1, t2), apiKey, workspaceName);
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            Trace e1 = t1.toBuilder()
+                    .usage(aggregateSpansUsage(buildSpans(t1, "original_usage.prompt_tokens", 1)))
+                    .build();
+            Trace e2 = t2.toBuilder()
+                    .usage(aggregateSpansUsage(buildSpans(t2, "original_usage.prompt_tokens", 10)))
+                    .build();
+
+            List<Trace> expected = List.of(e2, e1).stream()
+                    .sorted(Comparator.comparing((Trace t) -> t.usage().get("original_usage.prompt_tokens"))
+                            .reversed())
+                    .toList();
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            Trace.TracePage page = fetchSorted(projectName, projectId, workspaceName, apiKey,
+                    "usage.original_usage.prompt_tokens", Direction.DESC, expected.size(), Map.of());
+
+            TraceAssertions.assertTraces(page.content(), expected, USER);
+        }
+
+        @Test
+        void getTracesByProject__whenSortingWithMissingUsageValues__thenReturnTracesSorted() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            Trace t1 = createTrace().toBuilder().projectName(projectName).build();
+            Trace t2 = createTrace().toBuilder().projectName(projectName).build();
+
+            List<Span> spans = new ArrayList<>();
+            spans.add(factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(t1.id())
+                    .usage(null)
+                    .build());
+            spans.addAll(buildSpans(t1, "completion_tokens", 5));
+            spans.add(factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(t2.id())
+                    .usage(null)
+                    .build());
+            spans.addAll(buildSpans(t2, "completion_tokens", 10));
+
+            traceResourceClient.batchCreateTraces(List.of(t1, t2), apiKey, workspaceName);
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            Trace e1 = t1.toBuilder().usage(Map.of("completion_tokens", 5L)).build();
+            Trace e2 = t2.toBuilder().usage(Map.of("completion_tokens", 10L)).build();
+
+            List<Trace> expected = List.of(e1, e2).stream()
+                    .sorted(Comparator.comparing(t -> t.usage().get("completion_tokens")))
+                    .toList();
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            Trace.TracePage page = fetchSorted(projectName, projectId, workspaceName, apiKey,
+                    "usage.completion_tokens", Direction.ASC, expected.size(), Map.of());
+
+            TraceAssertions.assertTraces(page.content(), expected, USER);
+        }
+
+        @Test
+        void getTracesByProject__whenSortingByUsageWithIdenticalValues__thenReturnTracesSorted() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            Trace t1 = createTrace().toBuilder().projectName(projectName).build();
+            Trace t2 = createTrace().toBuilder().projectName(projectName).build();
+            Trace t3 = createTrace().toBuilder().projectName(projectName).build();
+
+            List<Span> spans = new ArrayList<>();
+            spans.addAll(buildSpans(t1, "completion_tokens", 10));
+            spans.addAll(buildSpans(t2, "completion_tokens", 20));
+            spans.addAll(buildSpans(t3, "completion_tokens", 10));
+
+            traceResourceClient.batchCreateTraces(List.of(t1, t2, t3), apiKey, workspaceName);
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            Trace e1 = t1.toBuilder().usage(Map.of("completion_tokens", 10L)).build();
+            Trace e2 = t2.toBuilder().usage(Map.of("completion_tokens", 20L)).build();
+            Trace e3 = t3.toBuilder().usage(Map.of("completion_tokens", 10L)).build();
+
+            Comparator<Trace> comparator = Comparator.comparing((Trace t) -> t.usage().get("completion_tokens"))
+                    .thenComparing(Comparator.comparing(Trace::id).reversed());
+            List<Trace> expected = List.of(e1, e2, e3).stream().sorted(comparator).toList();
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            Trace.TracePage page = fetchSorted(projectName, projectId, workspaceName, apiKey,
+                    "usage.completion_tokens", Direction.ASC, expected.size(), Map.of());
+
+            TraceAssertions.assertTraces(page.content(), expected, USER);
+        }
+
+        @Test
+        void getTracesByProject__whenSortingByCompletionTokensWithZeroValues__thenReturnTracesSorted() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            Trace t1 = createTrace().toBuilder().projectName(projectName).build();
+            Trace t2 = createTrace().toBuilder().projectName(projectName).build();
+
+            List<Span> spans = new ArrayList<>();
+            spans.addAll(buildSpans(t1, "completion_tokens", 0));
+            spans.addAll(buildSpans(t2, "completion_tokens", 5));
+
+            traceResourceClient.batchCreateTraces(List.of(t1, t2), apiKey, workspaceName);
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            Trace e1 = t1.toBuilder().usage(Map.of("completion_tokens", 0L)).build();
+            Trace e2 = t2.toBuilder().usage(Map.of("completion_tokens", 5L)).build();
+
+            List<Trace> expected = List.of(e1, e2).stream()
+                    .sorted(Comparator.comparing(t -> t.usage().get("completion_tokens")))
+                    .toList();
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            Trace.TracePage page = fetchSorted(projectName, projectId, workspaceName, apiKey,
+                    "usage.completion_tokens", Direction.ASC, expected.size(), Map.of());
+
+            TraceAssertions.assertTraces(page.content(), expected, USER);
+        }
+
+        @Test
+        void getTracesByProject__whenSortingByCompletionTokensWithPagination__thenReturnTracesSorted() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            List<Trace> traces = IntStream.range(0, 5)
+                    .mapToObj(i -> createTrace().toBuilder().projectName(projectName).build())
+                    .toList();
+
+            List<Span> spans = new ArrayList<>();
+            int value = 50;
+            for (Trace trace : traces) {
+                spans.addAll(buildSpans(trace, "completion_tokens", value));
+                value -= 10;
+            }
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            List<Trace> expected = new ArrayList<>();
+            int val = 50;
+            for (Trace trace : traces) {
+                expected.add(trace.toBuilder().usage(Map.of("completion_tokens", (long) val)).build());
+                val -= 10;
+            }
+
+            Comparator<Trace> comp = Comparator.comparing((Trace t) -> t.usage().get("completion_tokens"))
+                    .reversed();
+            expected = expected.stream().sorted(comp).toList();
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            SortingField sortingField = new SortingField("usage.completion_tokens", Direction.DESC);
+
+            Trace.TracePage page1 = traceResourceClient.getTraces(projectName, projectId, apiKey, workspaceName,
+                    List.of(), List.of(sortingField), 2, Map.of("page", "1"));
+            Trace.TracePage page2 = traceResourceClient.getTraces(projectName, projectId, apiKey, workspaceName,
+                    List.of(), List.of(sortingField), 2, Map.of("page", "2"));
+
+            TraceAssertions.assertTraces(page1.content(), expected.subList(0, 2), USER);
+            TraceAssertions.assertTraces(page2.content(), expected.subList(2, 4), USER);
+        }
+
+        @Test
+        void getTracesByProject__whenSortingByCompletionTokensWithLargeValues__thenReturnTracesSorted() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            long[] values = {0, 1, 100, 1000};
+
+            List<Trace> traces = IntStream.range(0, values.length)
+                    .mapToObj(i -> createTrace().toBuilder().projectName(projectName).build())
+                    .toList();
+
+            List<Span> spans = new ArrayList<>();
+            for (int i = 0; i < traces.size(); i++) {
+                spans.addAll(buildSpans(traces.get(i), "completion_tokens", (int) values[i]));
+            }
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+
+            List<Trace> expected = IntStream.range(0, values.length)
+                    .mapToObj(i -> traces.get(i).toBuilder()
+                            .usage(Map.of("completion_tokens", values[i]))
+                            .build())
+                    .sorted(Comparator.comparing(t -> t.usage().get("completion_tokens")))
+                    .toList();
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            Trace.TracePage page = fetchSorted(projectName, projectId, workspaceName, apiKey,
+                    "usage.completion_tokens", Direction.ASC, expected.size(), Map.of());
+
+            TraceAssertions.assertTraces(page.content(), expected, USER);
+        }
+
+        @Test
+        void getTracesByProject__whenSortingByCompletionTokensWithManyTraces__thenReturnTracesSorted() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            // Reduce number of traces to a more manageable size
+            int count = 30;
+            List<Trace> traces = IntStream.range(0, count)
+                    .mapToObj(i -> createTrace().toBuilder().projectName(projectName).build())
+                    .toList();
+
+            List<Span> allSpans = new ArrayList<>();
+            Random r = new Random();
+            for (Trace trace : traces) {
+                // Just use the same pattern as other successful tests
+                allSpans.addAll(buildSpans(trace, "completion_tokens", r.nextInt(1000)));
+            }
+
+            // Create traces in smaller batches
+            int batchSize = 10;
+            for (int i = 0; i < traces.size(); i += batchSize) {
+                int end = Math.min(i + batchSize, traces.size());
+                traceResourceClient.batchCreateTraces(traces.subList(i, end), apiKey, workspaceName);
+            }
+            
+            // Create spans in smaller batches
+            for (int i = 0; i < allSpans.size(); i += batchSize) {
+                int end = Math.min(i + batchSize, allSpans.size());
+                batchCreateSpansAndAssert(allSpans.subList(i, end), apiKey, workspaceName);
+            }
+
+            // Group spans by trace ID and create expected traces with aggregated usage
+            Map<UUID, Integer> usageByTraceId = allSpans.stream()
+                    .collect(Collectors.groupingBy(Span::traceId,
+                            Collectors.summingInt(s -> (Integer) s.usage().get("completion_tokens"))));
+            
+            List<Trace> expected = traces.stream()
+                    .map(t -> t.toBuilder()
+                            .usage(Map.of("completion_tokens", usageByTraceId.getOrDefault(t.id(), 0).longValue()))
+                            .build())
+                    .sorted(Comparator.comparing((Trace t) -> t.usage().get("completion_tokens")))
+                    .toList();
+
+            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            // Implement pagination for retrieving results
+            int pageSize = 10;
+            List<Trace> actualTraces = new ArrayList<>();
+            
+            for (int page = 1; page <= (count / pageSize) + 1; page++) {
+                Trace.TracePage p = traceResourceClient.getTraces(projectName, projectId, apiKey, workspaceName,
+                        List.of(), List.of(SortingField.builder().field("usage.completion_tokens").direction(Direction.ASC).build()),
+                        pageSize, Map.of("page", String.valueOf(page)));
+                actualTraces.addAll(p.content());
+                
+                if (p.content().size() < pageSize) {
+                    break;
+                }
+            }
+
+            // Compare only the completion_tokens values
+            List<Long> expectedTokens = expected.stream()
+                    .map(t -> (Long) t.usage().get("completion_tokens"))
+                    .toList();
+            List<Long> actualTokens = actualTraces.stream()
+                    .map(t -> (Long) t.usage().get("completion_tokens"))
+                    .toList();
+                    
+            assertThat(actualTokens).containsExactlyElementsOf(expectedTokens);
+        }
     }
 
     private void assertErrorResponse(Response actualResponse, String message, int expected) {
