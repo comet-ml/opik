@@ -176,8 +176,6 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class TracesResourceTest {
 
-    //    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
-
     public static final String URL_TEMPLATE = "%s/v1/private/traces";
     private static final String URL_TEMPLATE_SPANS = "%s/v1/private/spans";
 
@@ -8538,7 +8536,7 @@ class TracesResourceTest {
             Trace t3 = createTrace().toBuilder().projectName(projectName).build();
 
             List<Span> spans = new ArrayList<>();
-            spans.addAll(buildSpans(t1, "completion_tokens", 10, 5));
+            spans.addAll(buildSpans(t1, "completion_tokens", 10, 5  ));
             spans.addAll(buildSpans(t2, "completion_tokens", 30));
             spans.addAll(buildSpans(t3, "completion_tokens", 20));
 
