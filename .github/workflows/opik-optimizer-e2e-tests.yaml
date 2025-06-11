@@ -55,12 +55,7 @@ jobs:
             cd ${{ github.workspace }}/sdks/opik_optimizer
             pytest tests/e2e -v --junitxml=${{ github.workspace }}/opik_optimizer_e2e_test_results_${{matrix.python_version}}.xml --timeout=300
 
-        - name: Publish Test Report
-          uses: EnricoMi/publish-unit-test-result-action/linux@v2
-          if: always()
-          with:
-            check_name: Opik Optimizer E2E Tests Results Python ${{matrix.python_version}}
-            files: ${{ github.workspace }}/opik_optimizer_e2e_test_results_${{matrix.python_version}}.xml
+
 
         - name: Upload test artifacts on failure
           if: failure()

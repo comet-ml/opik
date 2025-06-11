@@ -47,9 +47,4 @@ jobs:
             cd ${{ github.workspace }}/sdks/opik_optimizer
             pytest tests/unit -v --junitxml=${{ github.workspace }}/opik_optimizer_unit_test_results_${{matrix.python_version}}.xml --cov=src/opik_optimizer --cov-report=xml
 
-        - name: Publish Test Report
-          uses: EnricoMi/publish-unit-test-result-action/linux@v2
-          if: always()
-          with:
-            check_name: Opik Optimizer Unit Tests Results Python ${{matrix.python_version}}
-            files: ${{ github.workspace }}/opik_optimizer_unit_test_results_${{matrix.python_version}}.xml
+
