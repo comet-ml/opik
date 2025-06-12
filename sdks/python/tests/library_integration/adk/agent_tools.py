@@ -1,6 +1,7 @@
 import datetime
 from zoneinfo import ZoneInfo
 
+
 def get_weather_in_the_city(city: str) -> dict:
     if city.lower() == "new york":
         return {

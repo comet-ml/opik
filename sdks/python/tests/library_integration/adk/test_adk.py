@@ -1,8 +1,6 @@
 import opik
-import os
 from typing import Optional, Iterator
 from . import agent_tools
-import time
 from google.adk import agents as adk_agents
 from google.adk import runners as adk_runners
 from google.adk import sessions as adk_sessions
@@ -24,7 +22,7 @@ import uuid
 
 from opik.integrations.adk import helpers as adk_helpers
 
-#pytestmark = pytest.mark.usefixtures("ensure_vertexai_configured")
+# pytestmark = pytest.mark.usefixtures("ensure_vertexai_configured")
 
 APP_NAME = "ADK_app"
 USER_ID = "ADK_test_user"
@@ -43,17 +41,27 @@ EXPECTED_USAGE_KEYS_GOOGLE = [
 
 async def _build_runner(root_agent: adk_agents.Agent) -> adk_runners.Runner:
     session_service = adk_sessions.InMemorySessionService()
-    _ = await session_service.create_session(app_name=APP_NAME, user_id=USER_ID, session_id=SESSION_ID)
+    _ = await session_service.create_session(
+        app_name=APP_NAME, user_id=USER_ID, session_id=SESSION_ID
+    )
 
-    runner = adk_runners.Runner(agent=root_agent, app_name=APP_NAME, session_service=session_service)
+    runner = adk_runners.Runner(
+        agent=root_agent, app_name=APP_NAME, session_service=session_service
+    )
     return runner
+
 
 def _extract_final_response(events: Iterator[adk_events.Event]) -> Optional[str]:
     events = list(events)
-    last_event: adk_events.Event = events[-1] # supposed to be the last agent response
+    last_event: adk_events.Event = events[-1]  # supposed to be the last agent response
     # Don't use event.is_final_response() only because it may be true for nested agents!
-    assert last_event.is_final_response() and last_event.content and last_event.content.parts
+    assert (
+        last_event.is_final_response()
+        and last_event.content
+        and last_event.content.parts
+    )
     return last_event.content.parts[0].text
+
 
 @pytest.mark.asyncio
 async def test_adk__single_agent__multiple_tools(fake_backend):
@@ -62,8 +70,12 @@ async def test_adk__single_agent__multiple_tools(fake_backend):
     root_agent = adk_agents.Agent(
         name="weather_time_agent",
         model=MODEL_NAME,
-        description=("Agent to answer questions about the weather in a city (only 'New York' supported)."),
-        instruction=("I can answer your questions about the weather in a city (only 'New York' supported)."),
+        description=(
+            "Agent to answer questions about the weather in a city (only 'New York' supported)."
+        ),
+        instruction=(
+            "I can answer your questions about the weather in a city (only 'New York' supported)."
+        ),
         tools=[agent_tools.get_weather_in_the_city],
         before_agent_callback=opik_tracer.before_agent_callback,
         after_agent_callback=opik_tracer.after_agent_callback,
@@ -80,8 +92,8 @@ async def test_adk__single_agent__multiple_tools(fake_backend):
         session_id=SESSION_ID,
         new_message=genai_types.Content(
             role="user",
-            parts=[genai_types.Part(text="What is the weather in New York?")]
-        )
+            parts=[genai_types.Part(text="What is the weather in New York?")],
+        ),
     )
     final_response = _extract_final_response(events)
 
@@ -136,7 +148,7 @@ async def test_adk__single_agent__multiple_tools(fake_backend):
                 input={"city": "New York"},
                 output={
                     "status": "success",
-                    "report": "The weather in New York is sunny with a temperature of 25 degrees Celsius (41 degrees Fahrenheit)."
+                    "report": "The weather in New York is sunny with a temperature of 25 degrees Celsius (41 degrees Fahrenheit).",
                 },
             ),
             SpanModel(
@@ -152,7 +164,7 @@ async def test_adk__single_agent__multiple_tools(fake_backend):
                 provider=adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
-            )
+            ),
         ],
     )
 
@@ -162,15 +174,24 @@ async def test_adk__single_agent__multiple_tools(fake_backend):
 
 
 @pytest.mark.asyncio
-async def test_adk__single_agent__multiple_tools__thread_with_more_than_one_trace(fake_backend):
+async def test_adk__single_agent__multiple_tools__thread_with_more_than_one_trace(
+    fake_backend,
+):
     opik_tracer = OpikTracer()
 
     root_agent = adk_agents.Agent(
         name="weather_time_agent",
         model=MODEL_NAME,
-        description=("Agent to answer questions about the weather in a city (only 'New York' supported)."),
-        instruction=("I can answer your questions about the weather in a city (only 'New York' supported)."),
-        tools=[agent_tools.get_weather_in_the_city, agent_tools.get_current_time_in_the_city],
+        description=(
+            "Agent to answer questions about the weather in a city (only 'New York' supported)."
+        ),
+        instruction=(
+            "I can answer your questions about the weather in a city (only 'New York' supported)."
+        ),
+        tools=[
+            agent_tools.get_weather_in_the_city,
+            agent_tools.get_current_time_in_the_city,
+        ],
         before_agent_callback=opik_tracer.before_agent_callback,
         after_agent_callback=opik_tracer.after_agent_callback,
         before_model_callback=opik_tracer.before_model_callback,
@@ -186,8 +207,8 @@ async def test_adk__single_agent__multiple_tools__thread_with_more_than_one_trac
         session_id=SESSION_ID,
         new_message=genai_types.Content(
             role="user",
-            parts=[genai_types.Part(text="What is the weather in New York?")]
-        )
+            parts=[genai_types.Part(text="What is the weather in New York?")],
+        ),
     )
     weather_question_response = _extract_final_response(events)
 
@@ -195,9 +216,8 @@ async def test_adk__single_agent__multiple_tools__thread_with_more_than_one_trac
         user_id=USER_ID,
         session_id=SESSION_ID,
         new_message=genai_types.Content(
-            role="user",
-            parts=[genai_types.Part(text="What is the time in New York?")]
-        )
+            role="user", parts=[genai_types.Part(text="What is the time in New York?")]
+        ),
     )
     time_question_response = _extract_final_response(events)
 
@@ -216,7 +236,12 @@ async def test_adk__single_agent__multiple_tools__thread_with_more_than_one_trac
             "user_id": USER_ID,
         },
         output=ANY_DICT.containing(
-            {"content": {"parts": [{"text": weather_question_response}], "role": "model"}}
+            {
+                "content": {
+                    "parts": [{"text": weather_question_response}],
+                    "role": "model",
+                }
+            }
         ),
         input={
             "role": "user",
@@ -249,7 +274,7 @@ async def test_adk__single_agent__multiple_tools__thread_with_more_than_one_trac
                 input={"city": "New York"},
                 output={
                     "status": "success",
-                    "report": "The weather in New York is sunny with a temperature of 25 degrees Celsius (41 degrees Fahrenheit)."
+                    "report": "The weather in New York is sunny with a temperature of 25 degrees Celsius (41 degrees Fahrenheit).",
                 },
             ),
             SpanModel(
@@ -265,7 +290,7 @@ async def test_adk__single_agent__multiple_tools__thread_with_more_than_one_trac
                 provider=adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
-            )
+            ),
         ],
     )
 
@@ -331,7 +356,7 @@ async def test_adk__single_agent__multiple_tools__thread_with_more_than_one_trac
                 provider=adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
-            )
+            ),
         ],
     )
 
@@ -339,11 +364,11 @@ async def test_adk__single_agent__multiple_tools__thread_with_more_than_one_trac
     weather_trace_tree = fake_backend.trace_trees[0]
     time_trace_tree = fake_backend.trace_trees[1]
 
-    assert_equal(EXPECTED_WEATHER_QUESTION_TRACE_TREE,  weather_trace_tree)
+    assert_equal(EXPECTED_WEATHER_QUESTION_TRACE_TREE, weather_trace_tree)
     assert_dict_has_keys(weather_trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
     assert_dict_has_keys(weather_trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
-    assert_equal(EXPECTED_TIME_QUESTION_TRACE_TREE,  time_trace_tree)
+    assert_equal(EXPECTED_TIME_QUESTION_TRACE_TREE, time_trace_tree)
     assert_dict_has_keys(time_trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
     assert_dict_has_keys(time_trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
@@ -378,8 +403,8 @@ async def test_adk__sequential_agent_with_subagents(fake_backend):
         description="Runs translator to english then summarizer, in order.",
         before_agent_callback=opik_tracer.before_agent_callback,
         after_agent_callback=opik_tracer.after_agent_callback,
-        #before_model_callback=opik_tracer.before_model_callback,
-        #after_model_callback=opik_tracer.after_model_callback,
+        # before_model_callback=opik_tracer.before_model_callback,
+        # after_model_callback=opik_tracer.after_model_callback,
     )
 
     runner = await _build_runner(root_agent)
@@ -403,9 +428,8 @@ das Schreiben von Texten oder das Zusammenfassen von Inhalten erfüllen."
         user_id=USER_ID,
         session_id=SESSION_ID,
         new_message=genai_types.Content(
-            role="user",
-            parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
-        )
+            role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
+        ),
     )
     final_response = _extract_final_response(events)
 
@@ -459,7 +483,7 @@ das Schreiben von Texten oder das Zusammenfassen von Inhalten erfüllen."
                         model=MODEL_NAME,
                         usage=ANY_DICT,
                     )
-                ]
+                ],
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -486,8 +510,8 @@ das Schreiben von Texten oder das Zusammenfassen von Inhalten erfüllen."
                         model=MODEL_NAME,
                         usage=ANY_DICT,
                     )
-                ]
-            )
+                ],
+            ),
         ],
     )
 
