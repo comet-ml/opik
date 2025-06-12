@@ -62,7 +62,9 @@ def _extract_final_response(events: Iterator[adk_events.Event]) -> Optional[str]
 
 
 def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
-    opik_tracer = OpikTracer(tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"})
+    opik_tracer = OpikTracer(
+        tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}
+    )
 
     root_agent = adk_agents.Agent(
         name="weather_time_agent",
@@ -371,7 +373,9 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
     assert_dict_has_keys(time_trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
-def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(fake_backend):
+def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
+    fake_backend,
+):
     opik_tracer = OpikTracer()
 
     translator_to_english = adk_agents.Agent(
@@ -516,8 +520,12 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(f
     assert_dict_has_keys(trace_tree.spans[1].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
-def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the_tool_span(fake_backend):
-    opik_tracer = OpikTracer(tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"})
+def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the_tool_span(
+    fake_backend,
+):
+    opik_tracer = OpikTracer(
+        tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}
+    )
 
     @opik.track(type="tool")
     def is_city_supported(city: str) -> bool:
