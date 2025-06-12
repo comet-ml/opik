@@ -122,6 +122,8 @@ def test_opik_tracer_with_sample_agent(
     assert len(spans) == 3
     assert spans[0].provider == adk_helpers.get_adk_provider()
     assert spans[2].provider == adk_helpers.get_adk_provider()
+    testlib.assert_dict_has_keys(spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
+    testlib.assert_dict_has_keys(spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
 @pytest.mark.parametrize("start_api_server", ["sample_agent_openai"], indirect=True)
@@ -144,7 +146,7 @@ def test_opik_tracer_with_sample_agent__openai(
         f"{base_url}/run",
         json=json_data,
     )
-    # print("Response: ", result.text)
+    print("Response: ", result.text)
     assert result.status_code == 200
 
     traces = opik_client_unique_project_name.search_traces(
@@ -193,7 +195,7 @@ def test_opik_tracer_with_sample_agent__anthropic(
         f"{base_url}/run",
         json=json_data,
     )
-    # print("Response: ", result.text)
+    print("Response: ", result.text)
     assert result.status_code == 200
 
     traces = opik_client_unique_project_name.search_traces(
