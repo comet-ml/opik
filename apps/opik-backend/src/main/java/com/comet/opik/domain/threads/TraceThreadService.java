@@ -92,7 +92,8 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
         return getReopenedThreads(traceThreads, criteria)
                 .flatMap(reopenedThreads -> traceThreadDAO.save(traceThreads)
-                        .doOnSuccess(count -> log.info("Saved {} trace threads for project {}", count, projectId)))
+                        .doOnSuccess(
+                                count -> log.info("Saved '{}' trace threads for projectId: '{}'", count, projectId)))
                 //Next we will publish the event to notify about reopened threads
                 .then();
     }
