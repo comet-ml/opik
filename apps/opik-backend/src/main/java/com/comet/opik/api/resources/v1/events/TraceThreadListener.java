@@ -35,7 +35,9 @@ public class TraceThreadListener {
      */
     @Subscribe
     public void onTracesCreated(TracesCreated event) {
-        log.info("Received TracesCreated event for workspace: {}, projectIds: {}", event.workspaceId(),
+        log.info(
+                "Received TracesCreated event for workspace: '{}', projectIds: '[{}]'. Processing trace thread ingestion",
+                event.workspaceId(),
                 event.projectIds());
 
         Map<UUID, Set<String>> projectThreadIds = new HashMap<>();
@@ -49,7 +51,16 @@ public class TraceThreadListener {
             }
         });
 
-        processEvent(event, projectThreadIds).blockLast();
+        processEvent(event, projectThreadIds)
+                .doOnError(error -> {
+                    log.info("Fail to process TracesCreated event for workspace: '{}', projectIds: '[{}]', error: '{}'",
+                            event.workspaceId(), event.projectIds(), error.getMessage());
+                    log.error("Error processing trace thread ingestion", error);
+                })
+                .doOnComplete(
+                        () -> log.info("Completed processing TracesCreated event for workspace: '{}', projectIds: '{}'",
+                                event.workspaceId(), event.projectIds()))
+                .subscribe();
     }
 
     private Flux<Void> processEvent(TracesCreated event, Map<UUID, Set<String>> projectThreadIds) {
