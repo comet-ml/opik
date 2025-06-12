@@ -1,5 +1,8 @@
 import dspy
+
+from typing import Any, Dict
 from opik.evaluation.metrics import Equals
+from opik.evaluation.metrics.score_result import ScoreResult
 
 from opik_optimizer import MiproOptimizer, TaskConfig
 from opik_optimizer.datasets import hotpot_300
@@ -16,6 +19,7 @@ optimizer = MiproOptimizer(
     num_threads=16,
 )
 
+
 # Tools:
 def search_wikipedia(query: str) -> list[str]:
     """
@@ -27,7 +31,8 @@ def search_wikipedia(query: str) -> list[str]:
     )
     return [x["text"] for x in results]
 
-def equals(dataset_item, llm_output):
+
+def equals(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
     metric = Equals()
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 

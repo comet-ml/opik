@@ -1,0 +1,23 @@
+name: "Opik Optimizer - Linter"
+run-name: "SDK Linter ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+    contents: read
+on:
+    pull_request:
+        paths:
+        - 'sdks/opik_optimizer/**'
+jobs:
+    lint:
+        runs-on: ubuntu-latest
+        defaults:
+            run:
+                working-directory: sdks/opik_optimizer
+        steps:
+            - uses: actions/checkout@v4
+            
+            - name: install pre-commit
+              run: pip install pre-commit
+            
+            - name: linting
+              run: pre-commit run --all-files --show-diff-on-failure
+        

@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List, Optional
 import litellm
 import opik
 from opik.rest_api.core import ApiError
+from opik.api_objects import optimization
 from pydantic import BaseModel
 
 from . import _throttle, optimization_result
@@ -34,7 +35,13 @@ class OptimizationRound(BaseModel):
 
 
 class BaseOptimizer:
-    def __init__(self, model: str, project_name: Optional[str] = None, verbose: int = 1, **model_kwargs):
+    def __init__(
+        self,
+        model: str,
+        project_name: Optional[str] = None,
+        verbose: int = 1,
+        **model_kwargs: Any,
+    ) -> None:
         """
         Base class for optimizers.
 
@@ -49,7 +56,7 @@ class BaseOptimizer:
         self.model_kwargs = model_kwargs
         self.project_name = project_name
         self.verbose = verbose
-        self._history = []
+        self._history: List[OptimizationRound] = []
         self.experiment_config = None
         self.llm_call_counter = 0
 
@@ -61,16 +68,16 @@ class BaseOptimizer:
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
-        metrics: List[Callable],
+        metric: Callable,
         experiment_config: Optional[Dict] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
         """
         Optimize a prompt.
 
         Args:
            dataset: Opik dataset name, or Opik dataset
-           metrics: A list of metric functions, these functions should have two arguments:
+           metric: A metric function, this function should have two arguments:
                dataset_item and llm_output
            prompt: the prompt to optimize
            input_key: input field of dataset
@@ -85,11 +92,11 @@ class BaseOptimizer:
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
-        metrics: List[Callable],
+        metric: Callable,
         n_samples: Optional[int] = None,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> float:
         """
         Evaluate a prompt.
@@ -109,7 +116,7 @@ class BaseOptimizer:
         """
         pass
 
-    def get_history(self) -> List[Dict[str, Any]]:
+    def get_history(self) -> List[OptimizationRound]:
         """
         Get the optimization history.
 
@@ -118,7 +125,7 @@ class BaseOptimizer:
         """
         return self._history
 
-    def _add_to_history(self, round_data: Dict[str, Any]):
+    def _add_to_history(self, round_data: OptimizationRound) -> None:
         """
         Add a round to the optimization history.
 
@@ -127,8 +134,9 @@ class BaseOptimizer:
         """
         self._history.append(round_data)
 
-            
-    def update_optimization(self, optimization, status: str) -> None:
+    def update_optimization(
+        self, optimization: optimization.Optimization, status: str
+    ) -> None:
         """
         Update the optimization status
         """

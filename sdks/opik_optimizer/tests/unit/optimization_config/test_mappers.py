@@ -10,44 +10,38 @@ from opik_optimizer.optimization_config.mappers import (
 
 
 class TestMappers:
-    def test_from_dataset_field_with_name(self):
+    def test_from_dataset_field_with_name(self) -> None:
         mapper = from_dataset_field(name="test_field")
         assert isinstance(mapper, str)
 
-    def test_from_dataset_field_with_transform(self):
+    def test_from_dataset_field_with_transform(self) -> None:
         mapper = from_dataset_field(transform=lambda x: x["test_field"])
         assert callable(mapper)
 
-    def test_from_dataset_field_with_both(self):
+    def test_from_dataset_field_with_both(self) -> None:
         with pytest.raises(ValueError):
-            from_dataset_field(
-                name="test_field",
-                transform=lambda x: x["test_field"]
-            )
+            from_dataset_field(name="test_field", transform=lambda x: x["test_field"])
 
-    def test_from_dataset_field_with_none(self):
+    def test_from_dataset_field_with_none(self) -> None:
         with pytest.raises(ValueError):
             from_dataset_field()
 
-    def test_from_llm_response_text(self):
+    def test_from_llm_response_text(self) -> None:
         mapper = from_llm_response_text()
         assert isinstance(mapper, str)
 
-    def test_from_agent_output_with_name(self):
+    def test_from_agent_output_with_name(self) -> None:
         mapper = from_agent_output(name="test_field")
         assert callable(mapper)
 
-    def test_from_agent_output_with_transform(self):
+    def test_from_agent_output_with_transform(self) -> None:
         mapper = from_agent_output(transform=lambda x: x["test_field"])
         assert callable(mapper)
 
-    def test_from_agent_output_with_both(self):
+    def test_from_agent_output_with_both(self) -> None:
         with pytest.raises(ValueError):
-            from_agent_output(
-                name="test_field",
-                transform=lambda x: x["test_field"]
-            )
+            from_agent_output(name="test_field", transform=lambda x: x["test_field"])
 
-    def test_from_agent_output_with_none(self):
+    def test_from_agent_output_with_none(self) -> None:
         mapper = from_agent_output()
-        assert isinstance(mapper, str) 
+        assert isinstance(mapper, str)

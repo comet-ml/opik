@@ -1,4 +1,6 @@
 from opik.evaluation.metrics import LevenshteinRatio
+from opik.evaluation.metrics.score_result import ScoreResult
+from typing import Any, Dict
 
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik_optimizer.datasets import tiny_test
@@ -11,7 +13,7 @@ project_name = "optimize-metaprompt-tinytest"
 initial_prompt = ChatPrompt(
     messages=[
         {"role": "system", "content": "Answer the question."},
-        {"role": "user", "content": "{text}"}
+        {"role": "user", "content": "{text}"},
     ]
 )
 
@@ -27,10 +29,12 @@ optimizer = MetaPromptOptimizer(
     num_threads=16,  # Number of threads for parallel evaluation
 )
 
+
 # Create the optimization configurations
-def levenshtein_ratio(dataset_item, llm_output):
+def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
     metric = LevenshteinRatio()
     return metric.score(reference=dataset_item["label"], output=llm_output)
+
 
 result = optimizer.optimize_prompt(
     prompt=initial_prompt,

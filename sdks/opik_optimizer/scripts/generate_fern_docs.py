@@ -1,10 +1,9 @@
 import inspect
 import re
-from typing import get_origin, get_args
 from typing import Any, Dict, List, Optional, get_type_hints
+import opik_optimizer
 
 from pydantic import BaseModel
-from pydantic.fields import FieldInfo
 
 
 class ParameterInfo(BaseModel):
@@ -38,7 +37,7 @@ class ClassInspector:
         """
         Parses the 'Args:' section of a docstring and extracts parameter descriptions.
         """
-        param_desc = {}
+        param_desc: Dict[str, str] = {}
         if not docstring:
             return param_desc
 
@@ -62,8 +61,7 @@ class ClassInspector:
 
     def get_pydantic_model_fields(self) -> List[ParameterInfo]:
         fields = []
-        for name, model_field in self.cls.model_fields.items():
-            field_info: FieldInfo = model_field.annotation
+        for name, model_field in self.cls.model_fields.items():  # type: ignore
             default = model_field.default if model_field.default is not None else None
             is_required = model_field.is_required()
             annotation = model_field.annotation
@@ -75,13 +73,15 @@ class ClassInspector:
 
             description = model_field.description or None
 
-            fields.append(ParameterInfo(
-                path=name,
-                type=type_str,
-                default=default,
-                required=is_required,
-                description=description
-            ))
+            fields.append(
+                ParameterInfo(
+                    path=name,
+                    type=type_str,
+                    default=default,
+                    required=is_required,
+                    description=description,
+                )
+            )
         return fields
 
     def parse_signature(
@@ -98,21 +98,30 @@ class ClassInspector:
 
         parameters = []
         for param in sig.parameters.values():
-            if param.name == 'self':
+            if param.name == "self":
                 continue
 
             param_type = type_hints.get(param.name, None)
-            param_type_str = param_type.__name__ if hasattr(param_type, '__name__') else str(param_type)
+            if param_type is None:
+                param_type_str = "Any"
+            else:
+                param_type_str = (
+                    param_type.__name__
+                    if hasattr(param_type, "__name__")
+                    else str(param_type)
+                )
             is_required = param.default is inspect._empty
             default_value = None if is_required else param.default
 
-            parameters.append(ParameterInfo(
-                path=param.name,
-                type=param_type_str,
-                default=default_value,
-                required=is_required,
-                description=param_docs.get(param.name)
-            ))
+            parameters.append(
+                ParameterInfo(
+                    path=param.name,
+                    type=param_type_str,
+                    default=default_value,
+                    required=is_required,
+                    description=param_docs.get(param.name),
+                )
+            )
 
         return parameters
 
@@ -124,20 +133,18 @@ class ClassInspector:
         public_methods_info = []
 
         for name, func in methods:
-            if name.startswith('_') and name != '__init__':
+            if name.startswith("_") and name != "__init__":
                 continue
 
-            if name == '__init__':
+            if name == "__init__":
                 continue  # Handled separately
 
             doc = inspect.getdoc(func) or ""
             parameters = self.parse_signature(func, doc)
 
-            public_methods_info.append(MethodInfo(
-                name=name,
-                docstring=doc,
-                parameters=parameters
-            ))
+            public_methods_info.append(
+                MethodInfo(name=name, docstring=doc, parameters=parameters)
+            )
 
         return public_methods_info
 
@@ -145,31 +152,33 @@ class ClassInspector:
         if issubclass(self.cls, BaseModel):
             init_params = self.get_pydantic_model_fields()
         else:
-            init_func = getattr(self.cls, '__init__', None)
+            init_func = getattr(self.cls, "__init__", None)
             init_doc = inspect.getdoc(init_func) if init_func else None
             init_params = self.parse_signature(init_func, init_doc) if init_func else []
 
         return ClassInfo(
             class_docstring=self.get_docstring(),
             init_parameters=init_params,
-            public_methods=self.get_public_methods()
+            public_methods=self.get_public_methods(),
         )
 
     def format_param_field(self, param: ParameterInfo) -> str:
         field = f'<ParamField path="{param.path}" type="{param.type or "Any"}"'
         if not param.required:
-            field += ' optional={true}'
+            field += " optional={true}"
         if param.default is not None and param.default != inspect._empty:
             field += f' defaultValue="{param.default}"'
-        
+
         if param.description:
-            field += f'>{param.description}</ParamField>'
+            field += f">{param.description}</ParamField>"
         else:
-            field += ' />'
+            field += " />"
 
         return field
 
-    def format_method_signature(self, name: str, parameters: List[ParameterInfo]) -> str:
+    def format_method_signature(
+        self, name: str, parameters: List[ParameterInfo]
+    ) -> str:
         if len(parameters) == 0:
             lines = [f"{name}()"]
         else:
@@ -197,7 +206,9 @@ class ClassInspector:
 
         # Class header and constructor
         output.append(f"## {self.cls.__name__}\n")
-        output.append(self.format_method_signature(self.cls.__name__, info.init_parameters))
+        output.append(
+            self.format_method_signature(self.cls.__name__, info.init_parameters)
+        )
         output.append("")
 
         if info.init_parameters and len(info.init_parameters) > 0:
@@ -224,7 +235,6 @@ class ClassInspector:
 
         return "\n".join(output)
 
-import opik_optimizer
 
 classes_to_document = [
     opik_optimizer.FewShotBayesianOptimizer,
@@ -233,7 +243,7 @@ classes_to_document = [
     opik_optimizer.ChatPrompt,
     opik_optimizer.OptimizationResult,
     # opik_optimizer.datasets
-    ]
+]
 
 
 res = """---

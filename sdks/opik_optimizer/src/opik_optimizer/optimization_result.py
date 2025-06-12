@@ -1,6 +1,6 @@
 """Module containing the OptimizationResult class."""
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Optional
 
 import pydantic
 import rich
@@ -13,16 +13,17 @@ class OptimizationResult(pydantic.BaseModel):
 
     optimizer: str = "Optimizer"
 
-    prompt: List[Dict[Literal["role", "content"], str]]
+    prompt: List[Dict[str, str]]
     score: float
     metric_name: str
+
     optimization_id: Optional[str] = None
     dataset_id: Optional[str] = None
-    
+
     # Initial score
-    initial_prompt: Optional[List[Dict[Literal["role", "content"], str]]] = None
+    initial_prompt: Optional[List[Dict[str, str]]] = None
     initial_score: Optional[float] = None
-    
+
     details: Dict[str, Any] = pydantic.Field(default_factory=dict)
     history: List[Dict[str, Any]] = []
     llm_calls: Optional[int] = None
@@ -34,7 +35,7 @@ class OptimizationResult(pydantic.BaseModel):
 
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
-    def model_dump(self, *kargs, **kwargs) -> Dict[str, Any]:
+    def model_dump(self, *kargs: Any, **kwargs: Any) -> Dict[str, Any]:
         return super().model_dump(*kargs, **kwargs)
 
     def _calculate_improvement_str(self) -> str:
@@ -125,7 +126,6 @@ class OptimizationResult(pydantic.BaseModel):
             else "[dim]N/A[/dim]"
         )
         final_score_str = f"{self.score:.4f}"
-        stopped_early = self.details.get("stopped_early", "N/A")
 
         model_name = self.details.get("model", "[dim]N/A[/dim]")
 

@@ -7,36 +7,34 @@ from opik.evaluation.metrics import base_metric, score_result
 
 logger = logging.getLogger(__name__)
 
-def _create_metric_class(metric: Callable):
+
+def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
     class MetricClass(base_metric.BaseMetric):
-        def __init__(self):
+        def __init__(self) -> None:
             self.name = metric.__name__
 
-        def score(self, llm_output, **kwargs) -> score_result.ScoreResult:
+        def score(self, llm_output: str, **kwargs: Any) -> score_result.ScoreResult:
             try:
                 metric_val = metric(dataset_item=kwargs, llm_output=llm_output)
-                if isinstance(metric_val , score_result.ScoreResult):
+                if isinstance(metric_val, score_result.ScoreResult):
                     return score_result.ScoreResult(
-                        name = self.name,
-                        value = metric_val.value,
+                        name=self.name,
+                        value=metric_val.value,
                         scoring_failed=metric_val.scoring_failed,
                         metadata=metric_val.metadata,
-                        reason=metric_val.reason
+                        reason=metric_val.reason,
                     )
                 else:
                     return score_result.ScoreResult(
-                        name = self.name,
-                        value = metric_val,
-                        scoring_failed=False
+                        name=self.name, value=metric_val, scoring_failed=False
                     )
             except Exception:
                 return score_result.ScoreResult(
-                    name = self.name,
-                    value = 0,
-                    scoring_failed=True
+                    name=self.name, value=0, scoring_failed=True
                 )
 
     return MetricClass()
+
 
 def evaluate(
     dataset: opik.Dataset,
@@ -78,7 +76,7 @@ def evaluate(
         items = [item for item in items if item.get("id") in dataset_item_ids]
 
     eval_metrics = [_create_metric_class(metric)]
-    
+
     if optimization_id is not None:
         result = opik_evaluator.evaluate_optimization_trial(
             optimization_id=optimization_id,

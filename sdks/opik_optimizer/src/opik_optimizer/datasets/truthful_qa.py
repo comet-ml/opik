@@ -1,8 +1,8 @@
 import opik
+from typing import Any, Dict, List
 
-def truthful_qa(
-    test_mode: bool = False
-) -> opik.Dataset:
+
+def truthful_qa(test_mode: bool = False) -> opik.Dataset:
     """
     Dataset containing the first 300 samples of the TruthfulQA dataset.
     """
@@ -11,29 +11,35 @@ def truthful_qa(
 
     client = opik.Opik()
     dataset = client.get_or_create_dataset(dataset_name)
-    
+
     items = dataset.get_items()
     if len(items) == nb_items:
         return dataset
     elif len(items) != 0:
-        raise ValueError(f"Dataset {dataset_name} contains {len(items)} items, expected {nb_items}. We recommend deleting the dataset and re-creating it.")
+        raise ValueError(
+            f"Dataset {dataset_name} contains {len(items)} items, expected {nb_items}. We recommend deleting the dataset and re-creating it."
+        )
     elif len(items) == 0:
         import datasets as ds
 
         # Load data from file and insert into the dataset
         download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)
         ds.disable_progress_bar()
-        
-        gen_dataset = ds.load_dataset("truthful_qa", "generation", download_config=download_config)
-        mc_dataset = ds.load_dataset("truthful_qa", "multiple_choice", download_config=download_config)
-        
-        data = []
+
+        gen_dataset = ds.load_dataset(
+            "truthful_qa", "generation", download_config=download_config
+        )
+        mc_dataset = ds.load_dataset(
+            "truthful_qa", "multiple_choice", download_config=download_config
+        )
+
+        data: List[Dict[str, Any]] = []
         for gen_item, mc_item in zip(
             gen_dataset["validation"], mc_dataset["validation"]
         ):
             if len(data) >= nb_items:
                 break
-                
+
             # Get correct answers from both configurations
             correct_answers = set(gen_item["correct_answers"])
             if "mc1_targets" in mc_item:
@@ -101,7 +107,7 @@ def truthful_qa(
             if all(field in example and example[field] for field in required_fields):
                 data.append(example)
         ds.enable_progress_bar()
-        
+
         dataset.insert(data)
 
         return dataset

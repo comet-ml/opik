@@ -13,12 +13,14 @@ CACHE_CONFIG = {
     "disk_cache_dir": CACHE_DIR,
 }
 
-def initialize_cache():
+
+def initialize_cache() -> Cache:
     """Initialize the LiteLLM cache with custom configuration."""
     litellm.cache = Cache(**CACHE_CONFIG)
     return litellm.cache
 
-def clear_cache():
+
+def clear_cache() -> None:
     """Clear the LiteLLM cache."""
     if litellm.cache:
-        litellm.cache.clear() 
+        litellm.cache.clear()

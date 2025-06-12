@@ -1,8 +1,7 @@
 import opik
 
-def halu_eval_300(
-    test_mode: bool = False
-) -> opik.Dataset:
+
+def halu_eval_300(test_mode: bool = False) -> opik.Dataset:
     """
     Dataset containing the first 300 samples of the HaluEval dataset.
     """
@@ -11,12 +10,14 @@ def halu_eval_300(
 
     client = opik.Opik()
     dataset = client.get_or_create_dataset(dataset_name)
-    
+
     items = dataset.get_items()
     if len(items) == nb_items:
         return dataset
     elif len(items) != 0:
-        raise ValueError(f"Dataset {dataset_name} contains {len(items)} items, expected {nb_items}. We recommend deleting the dataset and re-creating it.")
+        raise ValueError(
+            f"Dataset {dataset_name} contains {len(items)} items, expected {nb_items}. We recommend deleting the dataset and re-creating it."
+        )
     elif len(items) == 0:
         import pandas as pd
 

@@ -57,7 +57,7 @@ class OptimizationContextManager:
                 name=self.name,
                 metadata=self.metadata,
             )
-            
+
             if self.optimization:
                 return self.optimization
             else:
@@ -156,25 +156,33 @@ def random_chars(n: int) -> str:
     return "".join(random.choice(string.ascii_letters) for _ in range(n))
 
 
-def disable_experiment_reporting():
+def disable_experiment_reporting() -> None:
     import opik.evaluation.report
-    
-    opik.evaluation.report._patch_display_experiment_results = opik.evaluation.report.display_experiment_results
-    opik.evaluation.report._patch_display_experiment_link = opik.evaluation.report.display_experiment_link
+
+    opik.evaluation.report._patch_display_experiment_results = (
+        opik.evaluation.report.display_experiment_results
+    )
+    opik.evaluation.report._patch_display_experiment_link = (
+        opik.evaluation.report.display_experiment_link
+    )
     opik.evaluation.report.display_experiment_results = lambda *args, **kwargs: None
     opik.evaluation.report.display_experiment_link = lambda *args, **kwargs: None
 
 
-def enable_experiment_reporting():
+def enable_experiment_reporting() -> None:
     import opik.evaluation.report
 
     try:
-        opik.evaluation.report.display_experiment_results = opik.evaluation.report._patch_display_experiment_results
-        opik.evaluation.report.display_experiment_link = opik.evaluation.report._patch_display_experiment_link
+        opik.evaluation.report.display_experiment_results = (
+            opik.evaluation.report._patch_display_experiment_results
+        )
+        opik.evaluation.report.display_experiment_link = (
+            opik.evaluation.report._patch_display_experiment_link
+        )
     except AttributeError:
         pass
 
-    
+
 def json_to_dict(json_str: str) -> Any:
     cleaned_json_string = json_str.strip()
 
@@ -182,7 +190,7 @@ def json_to_dict(json_str: str) -> Any:
         return json.loads(cleaned_json_string)
     except json.JSONDecodeError:
         if cleaned_json_string.startswith("```json"):
-            cleaned_json_string = cleaned_json_string[7:] 
+            cleaned_json_string = cleaned_json_string[7:]
             if cleaned_json_string.endswith("```"):
                 cleaned_json_string = cleaned_json_string[:-3]
         elif cleaned_json_string.startswith("```"):
@@ -232,9 +240,7 @@ def ensure_ending_slash(url: str) -> str:
     return url.rstrip("/") + "/"
 
 
-def get_optimization_run_url_by_id(
-    dataset_id: str, optimization_id: str
-) -> str:
+def get_optimization_run_url_by_id(dataset_id: str, optimization_id: str) -> str:
     opik_config = opik.config.get_from_user_inputs()
     url_override = opik_config.url_override
     encoded_opik_url = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")

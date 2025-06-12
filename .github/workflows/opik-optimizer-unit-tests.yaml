@@ -1,4 +1,4 @@
-name: Opik Optimizer Unit Tests
+name: "Opik Optimizer - Unit Tests"
 run-name: "Opik Optimizer Unit Tests ${{ github.ref_name }} by @${{ github.actor }}"
 on:
     workflow_dispatch:

@@ -1,4 +1,6 @@
 from opik.evaluation.metrics import LevenshteinRatio
+from opik.evaluation.metrics.score_result import ScoreResult
+from typing import Any, Dict
 
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik_optimizer.datasets import hotpot_300
@@ -28,10 +30,12 @@ optimizer = MetaPromptOptimizer(
     subsample_size=10,  # Fixed subsample size of 10 items
 )
 
+
 # Create the optimization configuration
-def levenshtein_ratio(dataset_item, llm_output):
+def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
     metric = LevenshteinRatio()
     return metric.score(reference=dataset_item["answer"], output=llm_output)
+
 
 # Optimize the prompt using the optimization config
 result = optimizer.optimize_prompt(

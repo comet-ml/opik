@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple, Union, Optional
+from typing import Dict, Optional
 
 import uuid
 import dspy
@@ -46,7 +46,10 @@ def opik_metric_to_dspy(metric, output):
     def opik_metric_score_wrapper(example, prediction, trace=None):
         try:
             # Calculate the score using the metric
-            score_result = metric(dataset_item=example.toDict(), llm_output=getattr(prediction, answer_field, ""))
+            score_result = metric(
+                dataset_item=example.toDict(),
+                llm_output=getattr(prediction, answer_field, ""),
+            )
             return (
                 score_result.value if hasattr(score_result, "value") else score_result
             )

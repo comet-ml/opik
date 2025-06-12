@@ -1,4 +1,4 @@
-name: "Publish Optimizer SDK"
+name: "Optimizer SDK - Publish"
 run-name: "Publish Optimizer SDK ${{ github.ref_name }} by @${{ github.actor }}"
 
 permissions:
