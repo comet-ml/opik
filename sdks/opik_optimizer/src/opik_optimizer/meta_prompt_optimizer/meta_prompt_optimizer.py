@@ -625,8 +625,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         best_score: float,
         initial_score: float,
         rounds: List[OptimizationRound],
-        dataset_id: str,
-        optimization_id: str,
+        dataset_id: Optional[str],
+        optimization_id: Optional[str],
     ) -> OptimizationResult:
         """Create the final OptimizationResult object."""
         details = {
