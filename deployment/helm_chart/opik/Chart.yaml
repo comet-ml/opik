@@ -32,7 +32,7 @@ dependencies:
   repository: "https://charts.bitnami.com/bitnami"
   condition: mysql.enabled
 - name: zookeeper
-  version: 12.12.1
+  version: 13.8.3
   repository: https://charts.bitnami.com/bitnami
   condition: zookeeper.enabled
 - name: redis
