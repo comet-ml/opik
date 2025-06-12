@@ -2183,7 +2183,7 @@ class TracesResourceTest {
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
-                    .startTime(Instant.now().plusSeconds(60 * 5))
+                    .startTime(Instant.now())
                     .build());
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);

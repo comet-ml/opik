@@ -25,7 +25,8 @@ public record ProjectStatsSummary(List<ProjectStatsSummaryItem> content) {
             Double totalEstimatedCostSum,
             Map<String, Double> usage,
             Long traceCount,
-            Long guardrailsFailedCount) {
+            Long guardrailsFailedCount,
+            ErrorCountWithDeviation errorCount) {
     }
 
 }
