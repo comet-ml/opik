@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 import pydantic
 import rich
 
-from .reporting_utils import get_console
+from .reporting_utils import get_console, get_link_text
 
 
 class OptimizationResult(pydantic.BaseModel):
@@ -17,6 +17,9 @@ class OptimizationResult(pydantic.BaseModel):
     score: float
     metric_name: str
 
+    optimization_id: Optional[str] = None
+    dataset_id: Optional[str] = None
+    
     # Initial score
     initial_prompt: Optional[List[Dict[str, str]]] = None
     initial_score: Optional[float] = None
@@ -140,6 +143,15 @@ class OptimizationResult(pydantic.BaseModel):
         table.add_row("Final Best Score:", f"[bold cyan]{final_score_str}[/bold cyan]")
         table.add_row("Total Improvement:", improvement_str)
         table.add_row("Rounds Completed:", str(rounds_ran))
+        table.add_row(
+            "Optimization run link:",
+            get_link_text(
+                pre_text="",
+                link_text="Open in Opik Dashboard",
+                dataset_id=self.dataset_id,
+                optimization_id=self.optimization_id,
+            ),
+        )
 
         # Display Chat Structure if available
         panel_title = "[bold]Final Optimized Prompt[/bold]"

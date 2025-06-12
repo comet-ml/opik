@@ -436,6 +436,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             },
             history=optuna_history_processed,
             llm_calls=self.llm_call_counter,
+            dataset_id=dataset.id,
+            optimization_id=optimization_id,
         )
 
     def optimize_prompt(  # type: ignore

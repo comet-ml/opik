@@ -75,6 +75,9 @@ def test_optimization_result_import_and_creation() -> None:
     initial_prompt = [{"role": "user", "content": "Initial prompt"}]
     optimized_prompt = [{"role": "user", "content": "Optimized prompt"}]
 
+    DATASET_ID = "DATASET-ID"
+    OPTIMIZATION_ID = "OPTIMIZATION-ID"
+    
     result = OptimizationResult(
         optimizer="TestOptimizer",
         prompt=optimized_prompt,
@@ -85,6 +88,8 @@ def test_optimization_result_import_and_creation() -> None:
         details={"test": "data"},
         history=[],
         llm_calls=10,
+        dataset_id=DATASET_ID,
+        optimization_id=OPTIMIZATION_ID,
     )
 
     # Validate new fields are accessible
@@ -93,6 +98,9 @@ def test_optimization_result_import_and_creation() -> None:
     assert result.score == 0.85
     assert result.optimizer == "TestOptimizer"
 
+    assert result.optimization_id == OPTIMIZATION_ID
+    assert result.dataset_id == DATASET_ID
+    
     # Test model_dump includes new fields
     dumped = result.model_dump()
     assert "initial_prompt" in dumped

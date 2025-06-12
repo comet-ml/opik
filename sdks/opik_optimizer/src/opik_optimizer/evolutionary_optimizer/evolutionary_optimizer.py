@@ -1391,8 +1391,10 @@ Return only the new prompt list object.
             initial_score=initial_primary_score,
             metric_name=metric.__name__,
             details=final_details,
-            history=[x.model_dump() for x in self.get_history()],
+            history=self.get_history(),
             llm_calls=self.llm_call_counter,
+            dataset_id=dataset.id,
+            optimization_id=self._current_optimization_id,
         )
 
     @_throttle.rate_limited(_rate_limiter)

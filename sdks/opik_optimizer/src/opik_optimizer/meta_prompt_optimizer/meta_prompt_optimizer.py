@@ -569,6 +569,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             best_score=best_score,
             initial_score=initial_score,
             rounds=rounds,
+            dataset_id=dataset.id,
+            optimization_id=optimization_id,
         )
 
     def _calculate_improvement(
@@ -623,6 +625,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         best_score: float,
         initial_score: float,
         rounds: List[OptimizationRound],
+        dataset_id: str,
+        optimization_id: str,
     ) -> OptimizationResult:
         """Create the final OptimizationResult object."""
         details = {
@@ -644,6 +648,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             metric_name=getattr(metric, "__name__", str(metric)),
             details=details,
             llm_calls=self.llm_call_counter,
+            dataset_id=dataset_id,
+            optimization_id=optimization_id,
         )
 
     def _get_task_context(self, metric: Callable) -> str:
