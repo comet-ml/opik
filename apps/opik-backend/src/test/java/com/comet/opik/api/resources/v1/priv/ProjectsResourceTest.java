@@ -26,6 +26,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.ProjectStatsSummaryItemMapper;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
@@ -97,7 +98,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -1478,17 +1478,7 @@ class ProjectsResourceTest {
     }
 
     private ProjectStatsSummaryItem mapFromProjectToSummary(Project project) {
-        return ProjectStatsSummaryItem.builder()
-                .duration(project.duration())
-                .totalEstimatedCost(project.totalEstimatedCost())
-                .totalEstimatedCostSum(project.totalEstimatedCostSum())
-                .usage(project.usage())
-                .feedbackScores(project.feedbackScores())
-                .projectId(project.id())
-                .traceCount(project.traceCount())
-                .guardrailsFailedCount(project.guardrailsFailedCount())
-                .errorCount(project.errorCount())
-                .build();
+        return ProjectStatsSummaryItemMapper.INSTANCE.mapFromProject(project);
     }
 
     private Project buildProjectStats(Project project, String apiKey, String workspaceName) {
@@ -1607,13 +1597,13 @@ class ProjectsResourceTest {
                 .filter(trace -> trace.startTime().isBefore(lastWeek))
                 .count();
 
-        double errorCount = recentErrorCount + pastPeriodErrorCount;
+        long errorCount = recentErrorCount + pastPeriodErrorCount;
         Long deviationPercentage = pastPeriodErrorCount > 0
-                ? Math.round(((errorCount - pastPeriodErrorCount) / pastPeriodErrorCount) * 100)
+                ? Long.valueOf(Math.round(((errorCount - pastPeriodErrorCount) / pastPeriodErrorCount) * 100))
                 : null;
 
         return ErrorCountWithDeviation.builder()
-                .count((long) errorCount)
+                .count(errorCount)
                 .deviation(recentErrorCount)
                 .deviationPercentage(deviationPercentage)
                 .build();
@@ -1635,7 +1625,7 @@ class ProjectsResourceTest {
                 .toList();
     }
 
-    private Double getTotalEstimatedCost(List<Trace> traces) {
+    private double getTotalEstimatedCost(List<Trace> traces) {
         long count = traces.stream()
                 .map(Trace::totalEstimatedCost)
                 .filter(Objects::nonNull)
@@ -1663,29 +1653,28 @@ class ProjectsResourceTest {
 
     private List<Trace> createTracesWithSpecificErrors(String projectName, String workspaceName, String apiKey,
             int recentErrorCount, int pastPeriodErrorCount) {
+
+        List<Trace> traces = new ArrayList<>(pastPeriodErrorCount + recentErrorCount);
+
         // Create traces with errors before the last 7 days (past period errors)
-        List<Trace> pastTraces = new ArrayList<>(pastPeriodErrorCount);
         if (pastPeriodErrorCount > 0) {
             for (int i = 0; i < pastPeriodErrorCount; i++) {
                 Trace trace = createTraceWithError(projectName, Instant.now().minus(7 + i, ChronoUnit.DAYS));
-                pastTraces.add(trace);
+                traces.add(trace);
             }
-            traceResourceClient.batchCreateTraces(pastTraces, apiKey, workspaceName);
         }
 
         // Create traces with errors in the last 7 days (recent errors)
-        List<Trace> recentTraces = new ArrayList<>(recentErrorCount);
         if (recentErrorCount > 0) {
             for (int i = 0; i < recentErrorCount; i++) {
                 Trace trace = createTraceWithError(projectName, Instant.now().minus(7 + i, ChronoUnit.HOURS));
-                recentTraces.add(trace);
+                traces.add(trace);
             }
-            traceResourceClient.batchCreateTraces(recentTraces, apiKey, workspaceName);
         }
 
-        return Stream.of(pastTraces.stream(), recentTraces.stream())
-                .flatMap(Function.identity())
-                .toList();
+        traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+        return traces;
     }
 
     /**
