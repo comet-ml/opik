@@ -399,7 +399,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         best_trial = study.best_trial
         best_score = best_trial.value
         best_example_indices = best_trial.user_attrs.get("example_indices", [])
-
+        
         if best_score <= baseline_score:
             best_score = baseline_score
             best_prompt = initial_prompt.formatted_messages
@@ -415,7 +415,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         return optimization_result.OptimizationResult(
             optimizer=self.__class__.__name__,
-            prompt=best_trial.user_attrs["config"]["message_list"],
+            prompt=best_prompt,
             initial_prompt=initial_prompt.formatted_messages,
             initial_score=baseline_score,
             score=best_score,

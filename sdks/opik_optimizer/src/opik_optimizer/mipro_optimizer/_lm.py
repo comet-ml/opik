@@ -22,12 +22,11 @@ from dspy.dsp.utils.settings import settings
 from dspy.utils.callback import BaseCallback, with_callbacks
 from dspy.clients.base_lm import BaseLM
 
-from .._throttle import rate_limited, get_rate_limiter_for_current_opik_installation
+from .._throttle import RateLimiter, rate_limited, get_rate_limiter_for_current_opik_installation
 
 logger = logging.getLogger(__name__)
 # Limit how fast an LLM can be called:
 limiter = get_rate_limiter_for_current_opik_installation()
-
 
 class LM(BaseLM):
     """
@@ -96,9 +95,7 @@ class LM(BaseLM):
             assert (
                 max_tokens >= 20_000 and temperature == 1.0
             ), "OpenAI's reasoning models require passing temperature=1.0 and max_tokens >= 20_000 to `dspy.LM(...)`"
-            self.kwargs = dict(
-                temperature=temperature, max_completion_tokens=max_tokens, **kwargs
-            )
+            self.kwargs = dict(temperature=temperature, max_completion_tokens=max_tokens, **kwargs)
         else:
             self.kwargs = dict(temperature=temperature, max_tokens=max_tokens, **kwargs)
 
@@ -114,22 +111,14 @@ class LM(BaseLM):
 
         # Make the request and handle LRU & disk caching.
         if cache_in_memory:
-            completion = (
-                cached_litellm_completion
-                if self.model_type == "chat"
-                else cached_litellm_text_completion
-            )
+            completion = cached_litellm_completion if self.model_type == "chat" else cached_litellm_text_completion
 
             results = completion(
                 request=dict(model=self.model, messages=messages, **kwargs),
                 num_retries=self.num_retries,
             )
         else:
-            completion = (
-                litellm_completion
-                if self.model_type == "chat"
-                else litellm_text_completion
-            )
+            completion = litellm_completion if self.model_type == "chat" else litellm_text_completion
 
             results = completion(
                 request=dict(model=self.model, messages=messages, **kwargs),
@@ -138,11 +127,7 @@ class LM(BaseLM):
                 cache={"no-cache": not cache, "no-store": not cache},
             )
 
-        if (
-            not getattr(results, "cache_hit", False)
-            and dspy.settings.usage_tracker
-            and hasattr(results, "usage")
-        ):
+        if not getattr(results, "cache_hit", False) and dspy.settings.usage_tracker and hasattr(results, "usage"):
             settings.usage_tracker.add_usage(self.model, dict(results.usage))
 
         self.llm_call_counter += 1
@@ -254,11 +239,7 @@ def request_cache(maxsize: Optional[int] = None):
                 return value.model_json_schema()
             elif isinstance(value, pydantic.BaseModel):
                 return value.model_dump()
-            elif (
-                callable(value)
-                and hasattr(value, "__code__")
-                and hasattr(value.__code__, "co_code")
-            ):
+            elif callable(value) and hasattr(value, "__code__") and hasattr(value.__code__, "co_code"):
                 return value.__code__.co_code.decode("utf-8")
             else:
                 # Note: We don't attempt to compute a hash of the value, since the default
@@ -311,11 +292,7 @@ def cached_litellm_completion(request: Dict[str, Any], num_retries: int):
     )
 
 
-def litellm_completion(
-    request: Dict[str, Any],
-    num_retries: int,
-    cache={"no-cache": True, "no-store": True},
-):
+def litellm_completion(request: Dict[str, Any], num_retries: int, cache={"no-cache": True, "no-store": True}):
     retry_kwargs = dict(
         retry_policy=_get_litellm_retry_policy(num_retries),
         retry_strategy="exponential_backoff_retry",
@@ -370,11 +347,7 @@ def cached_litellm_text_completion(request: Dict[str, Any], num_retries: int):
     )
 
 
-def litellm_text_completion(
-    request: Dict[str, Any],
-    num_retries: int,
-    cache={"no-cache": True, "no-store": True},
-):
+def litellm_text_completion(request: Dict[str, Any], num_retries: int, cache={"no-cache": True, "no-store": True}):
     # Extract the provider and model from the model string.
     # TODO: Not all the models are in the format of "provider/model"
     model = request.pop("model").split("/", 1)
@@ -385,9 +358,7 @@ def litellm_text_completion(
     api_base = request.pop("api_base", None) or os.getenv(f"{provider}_API_BASE")
 
     # Build the prompt from the messages.
-    prompt = "\n\n".join(
-        [x["content"] for x in request.pop("messages")] + ["BEGIN RESPONSE:"]
-    )
+    prompt = "\n\n".join([x["content"] for x in request.pop("messages")] + ["BEGIN RESPONSE:"])
 
     return litellm.text_completion(
         cache=cache,

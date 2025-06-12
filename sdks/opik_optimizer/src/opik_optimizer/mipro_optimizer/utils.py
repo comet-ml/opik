@@ -1,24 +1,24 @@
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Tuple, Union, Optional
 
 import uuid
 import dspy
 import re
 import random
 
-from dspy.signatures.signature import make_signature, Signature
+from dspy.signatures.signature import make_signature
 
 
 class State(dict):
-    def __getattr__(self, key: str) -> Any:
+    def __getattr__(self, key):
         try:
             return self[key]
         except KeyError as e:
             raise AttributeError(e)
 
-    def __setattr__(self, key: str, value: Any) -> Any:
+    def __setattr__(self, key, value):
         self[key] = value
 
-    def __delattr__(self, key: str) -> None:
+    def __delattr__(self, key):
         try:
             del self[key]
         except KeyError as e:
@@ -28,8 +28,8 @@ class State(dict):
 def create_dspy_signature(
     input: str,
     output: str,
-    prompt: Optional[str] = None,
-) -> Signature:
+    prompt: str = None,
+):
     """
     Create a dspy Signature given inputs, outputs, prompt
     """
@@ -40,18 +40,13 @@ def create_dspy_signature(
     )
 
 
-def opik_metric_to_dspy(metric: Callable, output: str) -> Callable:
+def opik_metric_to_dspy(metric, output):
     answer_field = output
 
-    def opik_metric_score_wrapper(
-        example: Any, prediction: Any, trace: Optional[Any] = None
-    ) -> float:
+    def opik_metric_score_wrapper(example, prediction, trace=None):
         try:
             # Calculate the score using the metric
-            score_result = metric(
-                dataset_item=example.toDict(),
-                llm_output=getattr(prediction, answer_field, ""),
-            )
+            score_result = metric(dataset_item=example.toDict(), llm_output=getattr(prediction, answer_field, ""))
             return (
                 score_result.value if hasattr(score_result, "value") else score_result
             )
@@ -82,7 +77,7 @@ def create_dspy_training_set(
     return output
 
 
-def get_tool_prompts(tool_names: List[str], text: str) -> Dict[str, str]:
+def get_tool_prompts(tool_names, text: str) -> Dict[str, str]:
     """
     Extract the embedded tool prompts from a text.
     """

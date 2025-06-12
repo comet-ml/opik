@@ -925,7 +925,10 @@ Return only the new prompt list object.
         report.performing_evaluation(len(invalid))
         for ind_idx, ind in enumerate(invalid):
             fit = self.toolbox.evaluate(ind)
-            ind.fitness.values = fit
+            if self.enable_moo:
+                ind.fitness.values = fit
+            else:
+                ind.fitness.values = tuple([fit[0]])
             best_gen_score = max(best_gen_score, fit[0])
 
             report.performed_evaluation(ind_idx, ind.fitness.values[0])
@@ -1124,7 +1127,10 @@ Return only the new prompt list object.
             for i, ind, fit in zip(
                 range(len(deap_population)), deap_population, fitnesses
             ):
-                ind.fitness.values = fit
+                if self.enable_moo:
+                    ind.fitness.values = fit
+                else:
+                    ind.fitness.values = tuple([fit[0]])
                 report_initial_population.set_score(i, fit[0], _best_score)
 
         hof.update(deap_population)
@@ -1142,6 +1148,9 @@ Return only the new prompt list object.
                 # Single-objective
                 current_best_on_front = hof[0]
                 best_primary_score_overall = current_best_on_front.fitness.values[0]
+                best_prompt_overall = chat_prompt.ChatPrompt(
+                    messages=current_best_on_front
+                )
 
             if self.enable_moo:
                 logger.info(

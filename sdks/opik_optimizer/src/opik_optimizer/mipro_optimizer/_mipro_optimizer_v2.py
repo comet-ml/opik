@@ -24,14 +24,10 @@ from optuna.distributions import CategoricalDistribution
 
 from ..optimization_config.configs import TaskConfig
 
-from opik_optimizer import task_evaluator
-from opik_optimizer.optimization_config import mappers
 
-
-class Logger:
+class Logger():
     def info(self, *args, **kwargs):
         print(*args)
-
 
 logger = Logger()
 
@@ -53,6 +49,10 @@ BLUE = "\033[94m"
 BOLD = "\033[1m"
 ENDC = "\033[0m"  # Resets the color to default
 
+import opik
+from opik_optimizer import task_evaluator
+from opik_optimizer.optimization_config.configs import TaskConfig
+from opik_optimizer.optimization_config import mappers
 
 def get_prompt(program):
     """
@@ -64,7 +64,6 @@ def get_prompt(program):
         instructions = program.signature.instructions
 
     return instructions
-
 
 class MIPROv2(Teleprompter):
     def __init__(
@@ -555,19 +554,18 @@ class MIPROv2(Teleprompter):
 
         examples = []
         for demo in demo_candidates.values():
-            for l_ in demo:
-                for example in l_:
+            for l in demo:
+                for example in l:
                     examples.append(example.toDict())
         prompt = get_prompt(program)
         experiment_config = {
             **self.experiment_config,
-            **{
-                "configuration": {
-                    "prompt": prompt,
-                    "examples": examples,
-                },
-                "evaluation": "initial",
+            **{"configuration": {
+                "prompt": prompt,
+                "examples": examples,
             },
+               "evaluation": "initial",
+            }
         }
 
         default_score = eval_candidate_program_with_opik(
@@ -581,7 +579,7 @@ class MIPROv2(Teleprompter):
             experiment_config=experiment_config,
             optimization_id=self.opik_optimization_id,
         )
-
+        
         logger.info(f"Default program score: {default_score}\n")
 
         trial_logs = {}
@@ -608,13 +606,7 @@ class MIPROv2(Teleprompter):
 
         # Define the objective function
         def objective(trial):
-            nonlocal \
-                program, \
-                best_program, \
-                best_score, \
-                trial_logs, \
-                total_eval_calls, \
-                score_data
+            nonlocal program, best_program, best_score, trial_logs, total_eval_calls, score_data
 
             trial_num = trial.number + 1
             if minibatch:
@@ -935,19 +927,18 @@ class MIPROv2(Teleprompter):
 
         examples = []
         for demo in demo_candidates.values():
-            for l_ in demo:
-                for example in l_:
+            for l in demo:
+                for example in l:
                     examples.append(example.toDict())
         prompt = get_prompt(highest_mean_program)
         experiment_config = {
             **self.experiment_config,
-            **{
-                "configuration": {
-                    "prompt": prompt,
-                    "examples": examples,
-                },
-                "evaluation": "full",
-            },
+            **{"configuration": {
+                "prompt": prompt,
+                "examples": examples,
+              },
+               "evaluation": "full",
+            }
         }
 
         full_eval_score = eval_candidate_program_with_opik(
@@ -997,7 +988,7 @@ class MIPROv2(Teleprompter):
         trial_logs[trial_num + 1]["full_eval_score"] = full_eval_score
 
         if full_eval_score == 1.0:
-            return self.early_stop(default_score, program)  # noqa: F821
+            return self.early_stop(default_score, program)
 
         # Update best score and program if necessary
         if full_eval_score > best_score:
@@ -1051,12 +1042,9 @@ def eval_candidate_program_with_opik(
             candidate_program._assert_failures += dspy.settings.get("assert_failures")
         if hasattr(candidate_program, "_suggest_failures"):
             candidate_program._suggest_failures += dspy.settings.get("suggest_failures")
+        
+        return {mappers.from_llm_response_text(): prediction[prompt_task_config.output_dataset_field]}
 
-        return {
-            mappers.from_llm_response_text(): prediction[
-                prompt_task_config.output_dataset_field
-            ]
-        }
 
     score = task_evaluator.evaluate(
         dataset=opik_dataset,
@@ -1068,5 +1056,5 @@ def eval_candidate_program_with_opik(
         experiment_config=experiment_config,
         optimization_id=optimization_id,
     )
-
+    
     return score
