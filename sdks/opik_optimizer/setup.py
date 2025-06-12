@@ -1,8 +1,8 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 setup(
     name="opik_optimizer",
-    version="0.8.1",
+    version="0.9.2",
     description="Agent optimization with Opik",
     author="Comet ML",
     author_email="support@comet.com",

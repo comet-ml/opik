@@ -4791,6 +4791,11 @@ class SpansResourceTest {
                             "gpt-4o-mini-2024-07-18", "openai",
                             null, null),
                     Arguments.of(
+                            Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "claude-3-5-sonnet-latest", "anthropic",
+                            null, null),
+                    Arguments.of(
                             Map.of("original_usage.input_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                                     "original_usage.output_tokens",
                                     Math.abs(podamFactory.manufacturePojo(Integer.class)),

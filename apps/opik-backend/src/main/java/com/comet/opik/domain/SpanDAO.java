@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ScoreSource;
@@ -897,6 +898,17 @@ class SpanDAO {
             ;
             """;
 
+    private static final String SPAN_DAILY_BI_INFORMATION = """
+                SELECT
+                     workspace_id,
+                     created_by AS user,
+                     COUNT(DISTINCT id) AS span_count
+                FROM spans
+                WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+                GROUP BY workspace_id, created_by
+            ;
+            """;
+
     // ESTIMATED COST CHANGE
     // 1.1 - Added cached tokens for OpenAI
     private static final String ESTIMATED_COST_VERSION = "1.1";
@@ -1652,6 +1664,21 @@ class SpanDAO {
                 .flatMap(result -> result.map((row, rowMetadata) -> SpansCountResponse.WorkspaceSpansCount.builder()
                         .workspace(row.get("workspace_id", String.class))
                         .spanCount(row.get("span_count", Integer.class))
+                        .build()));
+    }
+
+    @WithSpan
+    public Flux<BiInformationResponse.BiInformation> getSpanBIInformation() {
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(SPAN_DAILY_BI_INFORMATION);
+                    return Flux.from(statement.execute());
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> BiInformationResponse.BiInformation.builder()
+                        .workspaceId(row.get("workspace_id", String.class))
+                        .user(row.get("user", String.class))
+                        .count(row.get("span_count", Long.class))
                         .build()));
     }
 
