@@ -70,7 +70,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             WHERE workspace_id = :workspace_id
             <if(project_ids)>AND project_id IN :project_ids<endif>
             <if(status)> AND status = :status <endif>
-            <if(ids)> AND id = :ids <endif>
+            <if(ids)> AND id IN :ids <endif>
             <if(threadIds)> AND thread_id IN :thread_ids <endif>
             ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id

@@ -5,7 +5,7 @@ import lombok.Builder;
 import java.util.List;
 import java.util.UUID;
 
-import static com.comet.opik.domain.threads.TraceThreadModel.*;
+import static com.comet.opik.domain.threads.TraceThreadModel.Status;
 
 @Builder(toBuilder = true)
 public record TraceThreadCriteria(
