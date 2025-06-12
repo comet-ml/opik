@@ -4,7 +4,7 @@ import os
 import random
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, cast
 
-import Levenshtein
+import rapidfuzz.distance.Indel
 import litellm
 import numpy as np
 import opik
@@ -262,14 +262,14 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
         if not hasattr(self, "_current_population") or not self._current_population:
             return 0.0
 
-        # Calculate average Levenshtein distance between all pairs
+        # Calculate average Levenshtein using rapidfuzz distance between all pairs
         total_distance = 0.0
         count = 0
         for i in range(len(self._current_population)):
             for j in range(i + 1, len(self._current_population)):
                 str1 = str(self._current_population[i])
                 str2 = str(self._current_population[j])
-                distance = Levenshtein.distance(str1, str2)
+                distance = rapidfuzz.distance.Indel.normalized_similarity(str1, str2)
                 max_len = max(len(str1), len(str2))
                 if max_len > 0:
                     normalized_distance = distance / max_len
