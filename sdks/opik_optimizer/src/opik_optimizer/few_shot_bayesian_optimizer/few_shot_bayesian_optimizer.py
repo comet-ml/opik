@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import random
@@ -194,6 +195,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
     def _run_optimization(
         self,
+        initial_prompt: chat_prompt.ChatPrompt,
         fewshot_prompt_template: FewShotPromptTemplate,
         dataset: Dataset,
         metric: Callable,
@@ -249,13 +251,14 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 for key, value in example.items():
                     processed_example[key] = str(value)
 
-                try:
-                    processed_demo_examples.append(
-                        fewshot_prompt_template.example_template.format(**processed_example)
-                    )
-                except Exception:
-                    logger.error(f"Failed to format fewshot prompt template {fewshot_prompt_template} with example: {processed_example} ")
-                    raise
+                processed_demo_example=fewshot_prompt_template.example_template
+                for key, value in processed_example.items():
+                    try:
+                        processed_demo_example=processed_demo_example.replace(f"{{{key}}}", str(value))
+                    except Exception:
+                        logger.error(f"Failed to format fewshot prompt template {fewshot_prompt_template} with example: {processed_example} ")
+                        raise
+                processed_demo_examples.append(processed_demo_example)
             few_shot_examples = "\n\n".join(processed_demo_examples)
             
             llm_task = self._build_task_from_messages(
@@ -364,6 +367,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         best_score = best_trial.value
         best_example_indices = best_trial.user_attrs.get("example_indices", [])
 
+        if best_score <= baseline_score:
+            best_score = baseline_score
+            best_prompt = initial_prompt.formatted_messages
+        else:
+            best_prompt = best_trial.user_attrs["config"]["message_list"]
+
         reporting.display_result(
             initial_score=baseline_score,
             best_score=best_score,
@@ -374,6 +383,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         return optimization_result.OptimizationResult(
             optimizer=self.__class__.__name__,
             prompt=best_trial.user_attrs["config"]["message_list"],
+            initial_prompt=initial_prompt.formatted_messages,
+            initial_score=baseline_score,
             score=best_score,
             metric_name=metric.__name__,
             details={
@@ -391,7 +402,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "temperature": self.model_kwargs.get("temperature"),
             },
             history=optuna_history_processed,
-            llm_calls=self.llm_call_counter
+            llm_calls=self.llm_call_counter,
+            dataset_id=dataset.id,
+            optimization_id=optimization_id,
         )
 
     def optimize_prompt( # type: ignore
@@ -486,6 +499,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
             # Step 3. Start the optimization process
             result = self._run_optimization(
+                initial_prompt=prompt,
                 fewshot_prompt_template=fewshot_template,
                 dataset=dataset,
                 metric=metric,
@@ -581,18 +595,15 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self, messages: List[Dict[str, str]], few_shot_examples: Optional[str] = None
     ):
         def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, Any]:
+            prompt_ = copy.deepcopy(messages)
             for key, value in dataset_item.items():
-                prompt_ = [{
-                    "role": item["role"],
-                    "content": item["content"].replace("{" + key + "}", str(value))
-                } for item in messages]
+                for item in prompt_:
+                    item["content"] = item["content"].replace("{" + key + "}", str(value))
 
             if few_shot_examples:
-                prompt_ = [{
-                    "role": item["role"],
-                    "content": item["content"].replace(FEW_SHOT_EXAMPLE_PLACEHOLDER, few_shot_examples)
-                } for item in prompt_]
-                
+                for item in prompt_:
+                    item["content"] = item["content"].replace(FEW_SHOT_EXAMPLE_PLACEHOLDER, few_shot_examples)
+            
             response = self._call_model(
                 model=self.model,
                 messages=prompt_,
