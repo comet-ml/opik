@@ -13,7 +13,6 @@ import useLocalStorageState from "use-local-storage-state";
 
 import {
   CELL_VERTICAL_ALIGNMENT,
-  COLUMN_CREATED_AT_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
@@ -38,11 +37,10 @@ import CompareExperimentsNameHeader from "@/components/pages-shared/experiments/
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import Loader from "@/components/shared/Loader/Loader";
-import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
 import { Experiment, ExperimentsCompare } from "@/types/datasets";
-import { formatDate } from "@/lib/date";
 import {
   convertColumnDataToColumn,
   hasAnyVisibleColumns,
@@ -267,13 +265,6 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
 
   const datasetColumnsData = useMemo(() => {
     return [
-      {
-        id: COLUMN_CREATED_AT_ID,
-        label: "Created",
-        type: COLUMN_TYPE.time,
-        accessorFn: (row) => formatDate(row.created_at),
-        verticalAlignment: calculateVerticalAlignment(experimentsCount),
-      },
       ...dynamicDatasetColumns.map(
         ({ label, id, columnType }) =>
           ({
@@ -506,12 +497,11 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
 
   return (
     <>
-      <PageBodyStickyContainer
-        className="pb-4"
-        direction="horizontal"
-        limitWidth
-      >
-        <CalloutAlert {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_trial_items]} />
+      <PageBodyStickyContainer direction="horizontal" limitWidth>
+        <ExplainerCallout
+          className="mb-4"
+          {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_trial_items]}
+        />
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"

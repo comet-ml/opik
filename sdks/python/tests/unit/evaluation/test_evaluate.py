@@ -16,7 +16,6 @@ from ...testlib.models import FeedbackScoreModel, TraceModel
 
 def test_evaluate__happyflow(
     fake_backend,
-    configure_opik_local_env_vars,
 ):
     mock_dataset = mock.MagicMock(
         spec=["__internal_api__get_items_as_dataclasses__", "id"]
@@ -93,6 +92,7 @@ def test_evaluate__happyflow(
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -163,6 +163,7 @@ def test_evaluate__happyflow(
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -226,7 +227,6 @@ def test_evaluate__happyflow(
 
 def test_evaluate_with_scoring_key_mapping(
     fake_backend,
-    configure_opik_local_env_vars,
 ):
     mock_dataset = mock.MagicMock(
         spec=["__internal_api__get_items_as_dataclasses__", "id"]
@@ -307,6 +307,7 @@ def test_evaluate_with_scoring_key_mapping(
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -381,6 +382,7 @@ def test_evaluate_with_scoring_key_mapping(
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -450,9 +452,7 @@ def test_evaluate_with_scoring_key_mapping(
         assert_equal(expected_trace, actual_trace)
 
 
-def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_misses_output_argument__exception_raised(
-    configure_opik_local_env_vars,
-):
+def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_misses_output_argument__exception_raised():
     # Dataset is the only thing which is mocked for this test because
     # evaluate should raise an exception right after the first attempt
     # to compute Equals metric score.
@@ -502,7 +502,6 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
 
 def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace(
     fake_backend,
-    configure_opik_local_env_vars,
 ):
     mock_dataset = mock.MagicMock(
         spec=["__internal_api__get_items_as_dataclasses__", "id"]
@@ -564,6 +563,7 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         error_info={
             "exception_type": "Exception",
             "message": "some-error-message",
@@ -598,7 +598,6 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
 
 def test_evaluate_prompt_happyflow(
     fake_backend,
-    configure_opik_local_env_vars,
 ):
     MODEL_NAME = "gpt-3.5-turbo"
 
@@ -688,6 +687,7 @@ def test_evaluate_prompt_happyflow(
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -741,6 +741,7 @@ def test_evaluate_prompt_happyflow(
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -790,7 +791,6 @@ def test_evaluate_prompt_happyflow(
 
 def test_evaluate__aggregated_metric__happy_flow(
     fake_backend,
-    configure_opik_local_env_vars,
 ):
     mock_dataset = mock.MagicMock(
         spec=["__internal_api__get_items_as_dataclasses__", "id"]
@@ -878,6 +878,7 @@ def test_evaluate__aggregated_metric__happy_flow(
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -992,6 +993,7 @@ def test_evaluate__aggregated_metric__happy_flow(
             },
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,

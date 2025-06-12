@@ -1,10 +1,12 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { Calendar, Clock, Tag, Trash } from "lucide-react";
 
 import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
 import { Trace } from "@/types/traces";
 import { formatDate, formatDuration } from "@/lib/date";
+import useAppStore from "@/store/AppStore";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import Loader from "@/components/shared/Loader/Loader";
 import NoData from "@/components/shared/NoData/NoData";
@@ -40,6 +42,8 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   onClose,
   onRowChange,
 }) => {
+  const navigate = useNavigate();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
   const [height, setHeight] = useState<number>(0);
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
@@ -144,6 +148,34 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             </span>
           </div>
         </TooltipWrapper>
+        <div className="flex flex-auto"></div>
+        <Button
+          variant="outline"
+          size="sm"
+          key="Go to project"
+          onClick={() => {
+            navigate({
+              to: "/$workspaceName/projects/$projectId/traces",
+              params: {
+                projectId,
+                workspaceName,
+              },
+              search: {
+                traces_filters: [
+                  {
+                    id: "thread_id_filter",
+                    field: "thread_id",
+                    type: COLUMN_TYPE.string,
+                    operator: "=",
+                    value: threadId,
+                  },
+                ],
+              },
+            });
+          }}
+        >
+          View all traces
+        </Button>
       </div>
     );
   };
@@ -191,8 +223,9 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           setOpen={setPopupOpen}
           onConfirm={handleThreadDelete}
           title="Delete thread"
-          description="Are you sure you want to delete this thread?"
+          description="Deleting a thread will also remove all traces linked to it and their data. This action can’t be undone. Are you sure you want to continue?"
           confirmText="Delete thread"
+          confirmButtonVariant="destructive"
         />
         <Button variant="outline" size="sm" onClick={() => setPopupOpen(true)}>
           <Trash className="mr-2 size-4" />

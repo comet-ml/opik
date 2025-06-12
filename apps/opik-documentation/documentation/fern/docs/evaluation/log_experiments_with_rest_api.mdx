@@ -1,0 +1,330 @@
+---
+subtitle: Step by step guide to using the Experiments REST API to log evaluation results
+---
+
+If you’re working in Python or JavaScript, the easiest way to integrate with Opik is through our official SDKs.
+
+But if your stack includes something else, like **Go, Java, Kotlin, or Ruby**, no problem!
+That’s where the **[REST API](https://www.comet.com/docs/opik/reference/rest-api)** comes in: it gives you flexible, language-agnostic access to log and manage your projects and experiments directly in Opik.
+
+This guide shows you how to record experiment results for your LLM application using the Experiments bulk logging API.
+
+<Tip>
+  The full API reference for the **Record experiment items in bulk** endpoint is available
+  [here](https://www.comet.com/docs/opik/reference/rest-api/experiments/experiment-items-bulk).
+</Tip>
+
+## Endpoint Overview
+
+The **Record Experiment Items in Bulk** endpoint allows you to log multiple experiment item evaluations in a single request, including optional model outputs, traces, spans, and structured feedback scores.
+
+**Method:** `PUT`  
+**URL:** `/api/v1/private/experiments/items/bulk`
+
+<Warning>
+  **Request Size Limit**: The maximum allowed payload size is **4MB**. For larger submissions, please divide the data
+  into smaller batches.
+</Warning>
+
+## Minimum Required Fields
+
+At a minimum, your request must contain:
+
+- `experiment_name` (string): Name of the experiment.
+- `dataset_name` (string): Name of the dataset the evaluation is tied to.
+- `items` (list of objects): Each object must include a unique `dataset_item_id` (UUID).
+
+This minimal structure is sufficient to register the dataset item to the experiment.
+
+## Optional Enhancements for Richer Evaluation
+
+Each `item` can optionally include:
+
+- `evaluate_task_result`: A map, list, or string representing the output of your application.
+- `trace`: An object representing the full execution trace.
+
+<Warning>Important: you may supply *either* `evaluate_task_result` or `trace` — not both.</Warning>
+
+- `spans`: A list of structured span objects representing sub-steps or stages of execution.
+- `feedback_scores`: A list of structured objects that describe evaluation signals. Each feedback score includes:
+  - `name`
+  - `category_name`
+  - `value`
+  - `reason`
+  - `source`
+
+<Tip>
+  Tip: use feedback scores to record evaluations such as accuracy, fluency, or custom criteria from heuristics or human
+  reviewers.
+</Tip>
+
+## Example Use Cases
+
+Here are a few common ways teams can use the bulk logging endpoint to evaluate their LLM applications effectively:
+
+- **Register** a dataset item with minimal fields.
+- **Log application responses** with `evaluate_task_result`.
+- **Attach feedback scores** like accuracy scores or annotations.
+- **Enable full experiment observability** with traces and spans.
+
+## Example Requests
+
+### 1. Minimal Payload
+
+```bash
+curl -X PUT http://localhost:5173/api/v1/private/experiments/items/bulk   -H "Content-Type: application/json"   -d '{
+    "experiment_name": "my_experiment",
+    "dataset_name": "my_dataset",
+    "items": [
+      {
+        "dataset_item_id": "4a7c2cfb-1234-4321-aaaa-111111111111"
+      }
+    ]
+  }'
+```
+
+### 2. Add Model Output
+
+```bash
+curl -X PUT http://localhost:5173/api/v1/private/experiments/items/bulk   -H "Content-Type: application/json"   -d '{
+    "experiment_name": "my_experiment",
+    "dataset_name": "my_dataset",
+    "items": [
+      {
+        "dataset_item_id": "4a7c2cfb-1234-4321-aaaa-111111111111",
+        "evaluate_task_result": {
+          "_llm_task_output": "Madrid",
+          "explanation": "Predicted capital of Spain"
+        }
+      }
+    ]
+  }'
+```
+
+### 3. Include Feedback Scores
+
+```bash
+curl -X PUT http://localhost:5173/api/v1/private/experiments/items/bulk   -H "Content-Type: application/json"   -d '{
+    "experiment_name": "my_experiment",
+    "dataset_name": "my_dataset",
+    "items": [
+      {
+        "dataset_item_id": "4a7c2cfb-1234-4321-aaaa-111111111111",
+        "evaluate_task_result": {
+          "_llm_task_output": "Madrid"
+        },
+        "feedback_scores": [
+          {
+            "name": "accuracy",
+            "category_name": "geography",
+            "value": 1,
+            "reason": "Correct capital",
+            "source": "ui"
+          }
+        ]
+      }
+    ]
+  }'
+```
+
+### 4. Full Payload with Multiple Items - Example in Python
+
+```python
+import requests
+import os
+
+url = os.getenv('OPIK_URL_OVERRIDE') + "/v1/private/experiments/items/bulk"
+headers = {
+    "Authorization": os.getenv('OPIK_API_KEY'),
+    "Comet-Workspace": os.getenv('OPIK_WORKSPACE'),
+    "Content-Type": "application/json"
+}
+
+data = {
+    "experiment_name": "new_experiment_api_full",
+    "dataset_name": "valid-structure",
+    "items": [
+        {
+            "dataset_item_id": "0196ab58-b7aa-7241-8672-965726cb236c",
+            "evaluate_task_result": {
+                "_llm_task_output": "Madrid",
+                "just_field": "Hello from here :)"
+            },
+            "feedback_scores": [
+                {
+                    "name": "accuracy",
+                    "category_name": "geography",
+                    "value": 1,
+                    "reason": "Correct city",
+                    "source": "ui"
+                }
+            ]
+        },
+        {
+            "dataset_item_id": "0196ab58-643e-714a-b2bc-b5d93c2889aa",
+            "evaluate_task_result": {
+                "_llm_task_output": "Kyiv"
+            },
+            "feedback_scores": [
+                {
+                    "name": "fluency",
+                    "category_name": "language",
+                    "value": 1,
+                    "reason": "Output was fluent",
+                    "source": "ui"
+                }
+            ]
+        },
+        {
+            "dataset_item_id": "0196ab57-d1ce-72f5-abef-793153fff106",
+            "evaluate_task_result": {
+                "_llm_task_output": "Paris"
+            },
+            "feedback_scores": [
+                {
+                    "name": "accuracy",
+                    "category_name": "geography",
+                    "value": 1,
+                    "reason": "Correct",
+                    "source": "ui"
+                }
+            ]
+        }
+    ]
+}
+
+try:
+    response = requests.put(url, headers=headers, json=data)
+    print(response.status_code)
+    print(response.json())
+except requests.exceptions.RequestException as e:
+    print("Request failed:", e)
+```
+
+### 5. Full Payload with Multiple Items - Example in Java (Using Jackson + HttpClient)
+
+The following example shows how to stream dataset items and log experiment results in bulk using Java.
+
+```java
+public static void main(String[] args) {
+
+    // This example uses Jackson to handle JSON serialization and deserialization.
+    ObjectMapper mapper = new ObjectMapper();
+
+    String baseURI = System.getenv("OPIK_URL_OVERRIDE"); // e.g., "http://localhost:5173/api"
+    String workspaceName = System.getenv("WORKSPACE_NAME");
+    String apiKey = System.getenv("API_KEY");
+
+    String datasetName = "my-dataset";
+    String experimentName = "my-experiment";
+
+    Map<String, String> requestBody = Map.of("dataset_name", datasetName);
+
+    try (var client = HttpClient.newHttpClient()) {
+
+        var request = HttpRequest.newBuilder()
+                .uri(URI.create(baseURI).resolve("/v1/private/datasets/items/stream"))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/octet-stream")
+                .header("Authorization", apiKey)
+                .header("Comet-Workspace", workspaceName)
+                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(requestBody)))
+                .build();
+
+        HttpResponse<InputStream> response = client.send(
+                request,
+                HttpResponse.BodyHandlers.ofInputStream()
+        );
+
+        List<JsonNode> experimentItems = new ArrayList<>();
+        try (var reader = new BufferedReader(new InputStreamReader(response.body()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                JsonNode datasetItem = mapper.readTree(line);
+                String question = datasetItem.get("data").get("question").asText();
+                UUID datasetItemId = UUID.fromString(datasetItem.get("id").asText());
+
+                JsonNode evaluationTaskOutput = callTargetApplication(question);
+                List<JsonNode> scoresResults = callLmmOrMetricCalc(evaluationTaskOutput);
+
+                ArrayNode scoreResultsArray = JsonNodeFactory.instance.arrayNode().addAll(scoresResults);
+
+                JsonNode experimentItem = JsonNodeFactory.instance.objectNode()
+                        .put("dataset_item_id", datasetItemId.toString())
+                        .setAll(Map.of(
+                                "evaluation_task_output", evaluationTaskOutput,
+                                "feedback_scores", scoreResultsArray));
+
+                experimentItems.add(experimentItem);
+            }
+        }
+
+        var experimentBatchBody = JsonNodeFactory.instance.objectNode()
+                .put("dataset_name", datasetName)
+                .put("experiment_name", experimentName)
+                .setAll(Map.of("items", JsonNodeFactory.instance.arrayNode().addAll(experimentItems)));
+
+        var experimentRequest = HttpRequest.newBuilder()
+                .uri(URI.create(baseURI).resolve("/v1/private/experiments/items/bulk"))
+                .header("Content-Type", "application/json")
+                .header("Authorization", apiKey)
+                .header("Comet-Workspace", workspaceName)
+                .PUT(HttpRequest.BodyPublishers.ofString(experimentBatchBody.toString()))
+                .build();
+
+        HttpResponse<String> experimentResponse = client.send(experimentRequest, HttpResponse.BodyHandlers.ofString());
+
+        if (experimentResponse.statusCode() == 204) {
+            System.out.println("Experiment items successfully created.");
+        } else {
+            System.out.printf("Failed to create experiment items, status code %s body %s",
+                experimentResponse.statusCode(), experimentResponse.body());
+        }
+
+    } catch (InterruptedException | IOException e) {
+        throw new RuntimeException(e);
+    }
+}
+
+```
+
+## Authentication
+
+Depending on your deployment, you can access the Experiments REST API either without authentication for local open-source on-premise setups, or with API key authentication for the Opik Cloud environment
+
+<Tabs>
+  <Tab value="Open Source" title="Open-Source (No Auth Required)">
+    ```bash
+    curl -X PUT 'http://localhost:5173/api/v1/private/experiments/items/bulk' \
+      -H 'Content-Type: application/json' \
+      -d '{ ... }'
+    ```
+    
+  </Tab>
+  <Tab value="Cloud" title="Opik Cloud">
+    
+    ```bash
+    curl -X PUT 'https://www.comet.com/opik/api/v1/private/experiments/items/bulk' \
+      -H 'Accept: application/json' \
+      -H 'Content-Type: application/json' \
+      -H 'Comet-Workspace: <your-workspace-name>' \
+      -H 'authorization: <your-api-key>'
+    ```
+    
+    <Warning>
+    Do **not** prefix your API key with `Bearer` — use it as a raw value.
+    </Warning>    
+  </Tab>
+</Tabs>
+
+## Environment Variables
+
+To promote security, flexibility, and reusability, it is recommended to manage authentication credentials using environment variables. This approach prevents hardcoding sensitive information and allows seamless configuration across different environments.
+
+You can define environment variables directly in your system environment or load them via a .env file using tools like dotenv. Alternatively, credentials and other configurations can also be managed through a centralized configuration file, depending on your deployment setup and preference.
+
+```bash
+export OPIK_API_KEY="your_api_key"
+export OPIK_WORKSPACE="your_workspace_name"
+export OPIK_URL_OVERRIDE="https://www.comet.com/opik/api"
+```

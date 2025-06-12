@@ -50,6 +50,7 @@ def test_crewai__happyflow(
         output=ANY_DICT,
         project_name=project_name,
         start_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         tags=["crewai"],
         spans=[
             SpanModel(

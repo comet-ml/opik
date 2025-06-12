@@ -2,11 +2,14 @@ import React from "react";
 
 import {
   Dialog,
+  DialogAutoScrollBody,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 type UseThisPromptDialogProps = {
   open: boolean;
@@ -55,13 +58,18 @@ const UseThisPromptDialog: React.FunctionComponent<
         <DialogHeader>
           <DialogTitle>Use this prompt</DialogTitle>
         </DialogHeader>
-
-        <div className="flex flex-col gap-2">
-          <div className="comet-body-accented mt-4">Creating a prompt</div>
-          <CodeHighlighter data={getCreatingPrompt(promptName)} />
-          <div className="comet-body-accented mt-4">Getting a prompt</div>
-          <CodeHighlighter data={getGettingPrompt(promptName)} />
-        </div>
+        <DialogAutoScrollBody>
+          <ExplainerDescription
+            className="mb-4"
+            {...EXPLAINERS_MAP[EXPLAINER_ID.how_do_i_use_this_prompt]}
+          />
+          <div className="flex flex-col gap-2">
+            <div className="comet-body-accented mt-4">Creating a prompt</div>
+            <CodeHighlighter data={getCreatingPrompt(promptName)} />
+            <div className="comet-body-accented mt-4">Getting a prompt</div>
+            <CodeHighlighter data={getGettingPrompt(promptName)} />
+          </div>
+        </DialogAutoScrollBody>
       </DialogContent>
     </Dialog>
   );

@@ -35,6 +35,7 @@ import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { PromptVersion, PromptWithLatestVersion } from "@/types/prompts";
 import usePromptById from "@/api/prompts/usePromptById";
 import usePromptCreateMutation from "@/api/prompts/usePromptCreateMutation";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const extractMetadata = (prompt?: PromptWithLatestVersion) => {
   return prompt?.latest_version?.metadata
@@ -225,9 +226,13 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
                       extensions={[jsonLanguage, EditorView.lineWrapping]}
                     />
                   </div>
-                  <p className="comet-body-xs mt-2 text-light-slate">
-                    {`Enter a valid JSON object using key-value pairs inside curly braces (e.g. {"key": "value"}).`}
-                  </p>
+                  <Description className="mt-2 block">
+                    {
+                      EXPLAINERS_MAP[
+                        EXPLAINER_ID.what_format_should_the_metadata_be
+                      ].description
+                    }
+                  </Description>
                 </AccordionContent>
               </AccordionItem>
               {showInvalidJSON && (

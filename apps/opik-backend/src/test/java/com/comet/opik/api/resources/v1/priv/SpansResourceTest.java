@@ -1190,7 +1190,7 @@ class SpansResourceTest {
 
         private String getValidValue(Field field) {
             return switch (field.getType()) {
-                case STRING, LIST, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
+                case STRING, LIST, DICTIONARY, ENUM -> RandomStringUtils.secure().nextAlphanumeric(10);
                 case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
                 case DATE_TIME -> Instant.now().toString();
             };
@@ -1198,14 +1198,14 @@ class SpansResourceTest {
 
         private String getKey(Field field) {
             return switch (field.getType()) {
-                case STRING, NUMBER, DATE_TIME, LIST -> null;
+                case STRING, NUMBER, DATE_TIME, LIST, ENUM -> null;
                 case FEEDBACK_SCORES_NUMBER, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
             };
         }
 
         private String getInvalidValue(Field field) {
             return switch (field.getType()) {
-                case STRING, DICTIONARY, LIST -> " ";
+                case STRING, DICTIONARY, LIST, ENUM -> " ";
                 case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
             };
         }
@@ -4698,6 +4698,11 @@ class SpansResourceTest {
                             "gpt-4o-mini-2024-07-18", "openai",
                             null, null),
                     Arguments.of(
+                            Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                                    "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "claude-3-5-sonnet-latest", "anthropic",
+                            null, null),
+                    Arguments.of(
                             Map.of("original_usage.input_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                                     "original_usage.output_tokens",
                                     Math.abs(podamFactory.manufacturePojo(Integer.class)),
@@ -4940,26 +4945,6 @@ class SpansResourceTest {
                     API_KEY,
                     List.of(),
                     List.of());
-        }
-
-        @Test
-        void batch__whenSendingMultipleSpansWithSameId__thenReturn422() {
-            var id = generator.generate();
-            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
-                    .map(span -> span.toBuilder()
-                            .id(id)
-                            .build())
-                    .toList();
-            try (var actualResponse = spanResourceClient.callBatchCreateSpans(spans, API_KEY, TEST_WORKSPACE)) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode())
-                        .isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                var actualErrorMessage = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                var expectedErrorMessage = new io.dropwizard.jersey.errors.ErrorMessage(
-                        HttpStatus.SC_UNPROCESSABLE_ENTITY, "Duplicate span id '%s'".formatted(id));
-                assertThat(actualErrorMessage).isEqualTo(expectedErrorMessage);
-            }
         }
 
         @Test
