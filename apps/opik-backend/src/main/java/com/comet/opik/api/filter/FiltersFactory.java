@@ -58,7 +58,7 @@ public class FiltersFactory {
                             return false;
                         }
                     })
-                    .put(FieldType.CONTAINER, filter -> {
+                    .put(FieldType.ERROR_CONTAINER, filter -> {
                         if (Operator.NO_VALUE_OPERATORS.contains(filter.operator())) {
                             // don't validate value in case it's not needed
                             return true;

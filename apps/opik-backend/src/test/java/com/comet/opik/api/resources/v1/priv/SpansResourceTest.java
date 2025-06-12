@@ -1190,7 +1190,7 @@ class SpansResourceTest {
 
         private String getValidValue(Field field) {
             return switch (field.getType()) {
-                case STRING, LIST, DICTIONARY, ENUM, CONTAINER -> RandomStringUtils.secure().nextAlphanumeric(10);
+                case STRING, LIST, DICTIONARY, ENUM, ERROR_CONTAINER -> RandomStringUtils.secure().nextAlphanumeric(10);
                 case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
                 case DATE_TIME -> Instant.now().toString();
             };
@@ -1198,14 +1198,14 @@ class SpansResourceTest {
 
         private String getKey(Field field) {
             return switch (field.getType()) {
-                case STRING, NUMBER, DATE_TIME, LIST, ENUM, CONTAINER -> null;
+                case STRING, NUMBER, DATE_TIME, LIST, ENUM, ERROR_CONTAINER -> null;
                 case FEEDBACK_SCORES_NUMBER, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
             };
         }
 
         private String getInvalidValue(Field field) {
             return switch (field.getType()) {
-                case STRING, DICTIONARY, LIST, ENUM, CONTAINER -> " ";
+                case STRING, DICTIONARY, LIST, ENUM, ERROR_CONTAINER -> " ";
                 case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
             };
         }
@@ -1261,7 +1261,7 @@ class SpansResourceTest {
                                                         : getKey(filter.getKey()))
                                                 .value(getInvalidValue(filter.getKey()))
                                                 .build());
-                                case CONTAINER -> Stream.of();
+                                case ERROR_CONTAINER -> Stream.of();
                                 default -> Stream.of(SpanFilter.builder()
                                         .field(filter.getKey())
                                         .operator(operator)
