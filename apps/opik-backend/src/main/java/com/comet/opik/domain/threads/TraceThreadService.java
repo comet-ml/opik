@@ -1,6 +1,5 @@
 package com.comet.opik.domain.threads;
 
-import com.comet.opik.api.events.TraceThreadsReopened;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.google.common.eventbus.EventBus;
@@ -12,7 +11,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.util.context.ContextView;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -24,10 +22,11 @@ import java.util.stream.Collectors;
 @ImplementedBy(TraceThreadServiceImpl.class)
 public interface TraceThreadService {
 
-    public static String THREADS_LOCK = "trace-threads-process";
+    String THREADS_LOCK = "trace-threads-process";
 
     Mono<Void> processTraceThreads(Set<String> threadIds, UUID projectId);
 
+    Mono<List<TraceThreadModel>> getThreadsByProject(int page, int size, TraceThreadCriteria criteria);
 }
 
 @Slf4j
@@ -43,22 +42,22 @@ class TraceThreadServiceImpl implements TraceThreadService {
     public Mono<Void> processTraceThreads(Set<String> threadIds, UUID projectId) {
         return lockService.executeWithLockCustomExpire(
                 new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
-                Mono.defer(() -> Flux.deferContextual(context -> processThreadAsync(threadIds, projectId, context))
+                Mono.defer(() -> processThreadAsync(threadIds, projectId)
                         .collectList()
                         .flatMap(traceThreads -> this.saveTraceThreads(projectId, traceThreads))
                         .then()),
                 Duration.ofMillis(1));
     }
 
-    private Flux<TraceThreadModel> processThreadAsync(Set<String> threadIds, UUID projectId, ContextView context) {
-        return Flux.fromIterable(threadIds)
+    private Flux<TraceThreadModel> processThreadAsync(Set<String> threadIds, UUID projectId) {
+        return Flux.deferContextual(context -> Flux.fromIterable(threadIds)
                 .flatMap(threadId -> {
                     String workspaceId = context.get(RequestContext.WORKSPACE_ID);
                     String userName = context.get(RequestContext.USER_NAME);
 
                     return traceThreadIdService.getOrCreateTraceThreadId(workspaceId, projectId, threadId)
                             .map(traceThreadId -> mapToModel(traceThreadId, userName));
-                });
+                }));
     }
 
     private TraceThreadModel mapToModel(TraceThreadIdModel traceThread, String userName) {
@@ -87,19 +86,14 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
         var criteria = TraceThreadCriteria.builder()
                 .projectId(projectId)
+                .status(TraceThreadModel.Status.INACTIVE)
                 .ids(ids)
                 .build();
 
         return getReopenedThreads(traceThreads, criteria)
-                .flatMap(reopenedThreads -> traceThreadDAO.save(traceThreads).thenReturn(reopenedThreads))
-                .flatMap(reopenedThreads -> {
-                    if (!reopenedThreads.isEmpty()) {
-                        log.info("Reopened threads for project {}: '[{}]'", projectId, reopenedThreads);
-                        eventBus.post(new TraceThreadsReopened(reopenedThreads));
-                    }
-
-                    return Mono.empty();
-                })
+                .flatMap(reopenedThreads -> traceThreadDAO.save(traceThreads)
+                        .doOnSuccess(count -> log.info("Saved {} trace threads for project {}", count, projectId)))
+                //Next we will publish the event to notify about reopened threads
                 .then();
     }
 
@@ -108,9 +102,14 @@ class TraceThreadServiceImpl implements TraceThreadService {
         return traceThreadDAO.findThreadsByProject(1, traceThreads.size(), criteria)
                 .map(existingThreads -> existingThreads
                         .stream()
-                        .filter(TraceThreadModel::isInactive)
                         .map(TraceThreadModel::id)
                         .collect(Collectors.toSet()));
+    }
+
+    @Override
+    public Mono<List<TraceThreadModel>> getThreadsByProject(int page, int size, TraceThreadCriteria criteria) {
+        return traceThreadDAO.findThreadsByProject(page, size, criteria)
+                .switchIfEmpty(Mono.just(List.of()));
     }
 
 }

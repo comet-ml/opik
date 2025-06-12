@@ -11,8 +11,7 @@ import java.util.UUID;
  *
  * @param id The unique identifier for the trace thread it will also be referenced as trace thread id.
  * @param projectId The unique identifier for the project associated with the trace thread.
- * @param threadId The unique identifier for the thread, this is an external id provided by the user.
- * This is different from the id field, which is the internal id used by the system.
+ * @param threadId The unique identifier for the thread, this is an external id provided by the user. This is different from the id field, which is the internal id used by the system.
  * @param createdAt The timestamp when the trace thread was
  * @param createdBy The username responsible by creating the trace thread.
  */
