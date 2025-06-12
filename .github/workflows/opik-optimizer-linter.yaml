@@ -1,5 +1,7 @@
 name: "Opik Optimizer - Linter"
 run-name: "SDK Linter ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+    contents: read
 on:
     pull_request:
         paths:
