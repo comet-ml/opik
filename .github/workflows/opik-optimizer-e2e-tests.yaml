@@ -1,4 +1,4 @@
-name: Opik Optimizer E2E Tests
+name: "Opik Optimizer - E2E Tests"
 run-name: "Opik Optimizer E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
 on:
     workflow_dispatch:
