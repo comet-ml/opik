@@ -1,4 +1,5 @@
 import json
+import copy
 import logging
 import os
 from typing import Any, Callable, Dict, List, Optional, overload
@@ -255,7 +256,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             **experiment_config,
             **{
                 "optimizer": self.__class__.__name__,
-                "metric": metric.__name__,
+                "metric": getattr(metric, '__name__', str(metric)),
                 "dataset": dataset.name,
                 "configuration": {
                     "prompt": prompt.formatted_messages,
@@ -300,7 +301,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         # Use dataset's get_items with limit for sampling
         logger.debug(
-            f"Starting evaluation with {subset_size if subset_size else 'all'} samples for metric: {metric.__name__}"
+            f"Starting evaluation with {subset_size if subset_size else 'all'} samples for metric: {getattr(metric, '__name__', str(metric))}"
         )
         score = task_evaluator.evaluate(
             dataset=dataset,
@@ -362,7 +363,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         try:
             optimization = self._opik_client.create_optimization(
                 dataset_name=dataset.name,
-                objective_name=metric.__name__,
+                objective_name=getattr(metric, '__name__', str(metric)),
                 metadata={"optimizer": self.__class__.__name__},
             )
             logger.debug(f"Created optimization with ID: {optimization.id}")
@@ -425,6 +426,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.dataset = dataset
         self.prompt = prompt
         self.llm_call_counter = 0 # Reset counter for run
+        initial_prompt: List[Dict[str, str]] = prompt.formatted_messages
 
         current_prompt = prompt.formatted_messages
         experiment_config = experiment_config or {}
@@ -432,7 +434,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             **experiment_config,
             **{
                 "optimizer": self.__class__.__name__,
-                "metric": metric.__name__,
+                "metric": getattr(metric, '__name__', str(metric)),
                 "dataset": self.dataset.name,
                 "configuration": {
                     "prompt": current_prompt,
@@ -541,11 +543,13 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         return self._create_result(
             metric,
-            prompt,
-            best_prompt,
-            best_score,
-            initial_score,
-            rounds,
+            initial_prompt=initial_prompt,
+            best_prompt=best_prompt,
+            best_score=best_score,
+            initial_score=initial_score,
+            rounds=rounds,
+            dataset_id=dataset.id,
+            optimization_id=optimization_id,
         )
 
     def _calculate_improvement(
@@ -595,21 +599,21 @@ class MetaPromptOptimizer(BaseOptimizer):
     def _create_result(
         self,
         metric: Callable,
-        prompt: chat_prompt.ChatPrompt,
-        best_prompt: str,
+        initial_prompt: List[Dict[str, str]],
+        best_prompt: List[Dict[str, str]],
         best_score: float,
         initial_score: float,
         rounds: List[OptimizationRound],
+        dataset_id: str,
+        optimization_id: str,
     ) -> OptimizationResult:
         """Create the final OptimizationResult object."""
         details = {
-            "initial_prompt": prompt,
-            "initial_score": initial_score,
             "final_prompt": best_prompt,
             "final_score": best_score,
             "rounds": rounds,
             "total_rounds": len(rounds),
-            "metric_name": metric.__name__,
+            "metric_name": getattr(metric, '__name__', str(metric)),
             "model": self.model,
             "temperature": self.model_kwargs.get("temperature"),
         }
@@ -618,9 +622,13 @@ class MetaPromptOptimizer(BaseOptimizer):
             optimizer=self.__class__.__name__,
             prompt=best_prompt,
             score=best_score,
-            metric_name=metric.__name__,
+            initial_prompt=initial_prompt,
+            initial_score=initial_score,
+            metric_name=getattr(metric, '__name__', str(metric)),
             details=details,
-            llm_calls=self.llm_call_counter
+            llm_calls=self.llm_call_counter,
+            dataset_id=dataset_id,
+            optimization_id=optimization_id,
         )
 
     def _get_task_context(self, metric: Callable) -> str:

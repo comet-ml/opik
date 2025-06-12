@@ -34,6 +34,7 @@ def test_metric_equals__track_enabled__happyflow(fake_backend):
         output={"output": score_result},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -80,6 +81,7 @@ def test_metric_equals__track_enabled__project_name_set__data_logged_to_the_spec
         output={"output": score_result},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name="metric-project-name",
         spans=[
             SpanModel(

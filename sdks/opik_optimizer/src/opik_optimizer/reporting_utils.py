@@ -90,41 +90,48 @@ def display_messages(messages: List[Dict[str, str]], prefix: str = ""):
         for line in rendered_panel.splitlines():
             console.print(Text(prefix) + Text.from_ansi(line))
 
+
+def get_link_text(
+    pre_text: str,
+    link_text: str,
+    optimization_id: Optional[str] = None,
+    dataset_id: Optional[str] = None,
+) -> Text:
+    if optimization_id is not None and dataset_id is not None:
+        optimization_url = get_optimization_run_url_by_id(
+            optimization_id=optimization_id, dataset_id=dataset_id
+        )
+
+        # Create a visually appealing panel with an icon and ensure link doesn't wrap
+        link_text = Text(pre_text + link_text)
+        link_text.stylize(f"link {optimization_url}", len(pre_text), len(link_text))
+    else:
+        link_text = Text("No optimization run link available", style="dim")
+
+    return link_text
+
+
 def display_header(
     algorithm: str,
-    optimization_id: Optional[str]=None,
-    dataset_id: Optional[str]=None,
-    verbose: int = 1
+    optimization_id: Optional[str] = None,
+    dataset_id: Optional[str] = None,
+    verbose: int = 1,
 ):
     if verbose < 1:
         return
 
-    if optimization_id is not None and dataset_id is not None:    
-        optimization_url = get_optimization_run_url_by_id(
-            optimization_id=optimization_id,
-            dataset_id=dataset_id
-        )
-        
-        # Create a visually appealing panel with an icon and ensure link doesn't wrap
-        
-        link_text = Text("-> View optimization details in your Opik dashboard")
-        link_text.stylize(f"link {optimization_url}", 28, len(link_text))
-    else:
-        link_text = Text("No optimization run link available", style="dim")
+    link_text = get_link_text(
+        pre_text="-> View optimization details ",
+        link_text="in your Opik dashboard",
+        optimization_id=optimization_id,
+        dataset_id=dataset_id,
+    )
 
     content = Text.assemble(
-        ("● ", "green"),  
-        "Running Opik Evaluation - ",
-        (algorithm, "blue"),
-        "\n\n"
+        ("● ", "green"), "Running Opik Evaluation - ", (algorithm, "blue"), "\n\n"
     ).append(link_text)
 
-    
-    panel = Panel(
-        content,
-        box=box.ROUNDED,
-        width=PANEL_WIDTH
-    )
+    panel = Panel(content, box=box.ROUNDED, width=PANEL_WIDTH)
 
     console = get_console()
     console.print(panel)
@@ -145,7 +152,7 @@ def display_result(initial_score, best_score, best_prompt, verbose: int = 1):
             perc_change = (best_score - initial_score) / initial_score
             content = [Text(f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})", style="bold green")]
     else:
-        content = [Text("Optimization trial did not find a better prompt than the initial one.", style="bold red")]
+        content = [Text(f"Optimization run did not find a better prompt than the initial one.\nScore: {best_score:.4f}", style="dim bold red")]
     
     content.append(Text("\nOptimized prompt:"))
     for i, msg in enumerate(best_prompt):

@@ -62,6 +62,7 @@ def test_langchain__happyflow(
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=expected_project_name,
         spans=[
             SpanModel(
@@ -199,6 +200,7 @@ def test_langchain__distributed_headers__happyflow(
         tags=["tag_d1", "tag_d2"],
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=project_name,
         spans=[
             SpanModel(
@@ -320,6 +322,7 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
         output={"output": "the-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=project_name,
         spans=[
             SpanModel(
@@ -449,6 +452,7 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
         output={"output": "output-of-manually-created-trace"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,

@@ -12,4 +12,3 @@ CREATE TABLE IF NOT EXISTS project_trace_threads (
 );
 
 --rollback DROP TABLE IF EXISTS project_trace_threads;
-
