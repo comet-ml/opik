@@ -33,11 +33,11 @@ class TaskResult(BaseModel):
         cls,
         obj: Any,
         *,
-        strict: bool | None = None,
-        from_attributes: bool | None = None,
-        context: Any | None = None,
-        by_alias: bool | None = None,
-        by_name: bool | None = None,
+        strict: Optional[bool] = None,
+        from_attributes: Optional[bool] = None,
+        context: Optional[Any] = None,
+        by_alias: Optional[bool] = None,
+        by_name: Optional[bool] = None,
     ) -> "TaskResult":
         """Custom validation method to handle nested objects during deserialization."""
         # Handle ChatPrompt objects
