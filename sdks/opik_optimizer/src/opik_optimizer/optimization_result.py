@@ -19,7 +19,7 @@ class OptimizationResult(pydantic.BaseModel):
 
     optimization_id: Optional[str] = None
     dataset_id: Optional[str] = None
-    
+
     # Initial score
     initial_prompt: Optional[List[Dict[str, str]]] = None
     initial_score: Optional[float] = None

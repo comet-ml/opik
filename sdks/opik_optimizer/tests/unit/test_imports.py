@@ -77,7 +77,7 @@ def test_optimization_result_import_and_creation() -> None:
 
     DATASET_ID = "DATASET-ID"
     OPTIMIZATION_ID = "OPTIMIZATION-ID"
-    
+
     result = OptimizationResult(
         optimizer="TestOptimizer",
         prompt=optimized_prompt,
@@ -100,7 +100,7 @@ def test_optimization_result_import_and_creation() -> None:
 
     assert result.optimization_id == OPTIMIZATION_ID
     assert result.dataset_id == DATASET_ID
-    
+
     # Test model_dump includes new fields
     dumped = result.model_dump()
     assert "initial_prompt" in dumped

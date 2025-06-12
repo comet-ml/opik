@@ -15,6 +15,7 @@ from opik.opik_context import get_current_span_data
 from ..utils import optimization_context
 from ..base_optimizer import BaseOptimizer
 from ..optimization_config.configs import TaskConfig
+from ..optimization_result import OptimizationResult
 from ._lm import LM
 from ._mipro_optimizer_v2 import MIPROv2
 from .utils import (
