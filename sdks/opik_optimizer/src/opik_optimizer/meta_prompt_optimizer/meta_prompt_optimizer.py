@@ -800,7 +800,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                         # Log details
                         focus = item.get("improvement_focus", "N/A")
                         reasoning = item.get("reasoning", "N/A")
-                        logger.debug(f"Generated prompt: {item["prompt"]}")
+                        logger.debug(f"Generated prompt: {item['prompt']}")
                         logger.debug(f"  Improvement focus: {focus}")
                         logger.debug(f"  Reasoning: {reasoning}")
                     else:
