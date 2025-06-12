@@ -214,11 +214,6 @@ class OpikTracer:
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
-        print("========================================")
-        print(output)
-        print("========================================")
-
         try:
             # Ignore partial chunks, ADK will call this method with the full
             # response at the end
