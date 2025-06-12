@@ -99,9 +99,12 @@ class OpikTracer:
             trace_metadata["adk_invocation_id"] = callback_context.invocation_id
             trace_metadata.update(session_metadata)
 
-            user_input = adk_helpers.convert_adk_base_model_to_dict(
-                callback_context.user_content
-            )
+            if callback_context.user_content is not None:
+                user_input = adk_helpers.convert_adk_base_model_to_dict(
+                    callback_context.user_content
+                )
+            else:
+                user_input = None
             name = self.name or callback_context.agent_name
 
             current_trace_data = self._context_storage.get_trace_data()
@@ -198,6 +201,11 @@ class OpikTracer:
         *args: Any,
         **kwargs: Any,
     ) -> None:
+        output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
+        print("========================================")
+        print(output)
+        print("========================================")
+
         try:
             # Ignore partial chunks, ADK will call this method with the full
             # response at the end
