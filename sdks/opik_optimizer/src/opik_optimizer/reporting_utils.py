@@ -103,7 +103,7 @@ def get_link_text(
 
         # Create a visually appealing panel with an icon and ensure link doesn't wrap
         link_text = Text(pre_text + link_text)
-        link_text.stylize(f"link {optimization_url}", len(pre_text), len(link_text)) # type: ignore
+        link_text.stylize(f"link {optimization_url}", len(pre_text), len(link_text))  # type: ignore
     else:
         link_text = Text("No optimization run link available", style="dim")
 
