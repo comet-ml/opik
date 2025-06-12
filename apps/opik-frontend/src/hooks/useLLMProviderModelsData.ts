@@ -47,6 +47,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.GPT_4O_2024_05_13,
       label: "GPT 4o 2024-05-13",
     },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_4_1_MINI,
+      label: "GPT 4.1 Mini",
+    },
 
     // GPT-4 Models
     {
@@ -1028,6 +1032,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       structuredOutput: true,
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_1_MINI,
+      label: "openai/gpt-4.1-mini",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO,
       label: "openai/gpt-3.5-turbo",
     },
@@ -1507,6 +1515,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_1_5_PRO,
       label: "Gemini 1.5 Pro",
+      structuredOutput: true,
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      label: "Gemini 2.5 Flash",
+      structuredOutput: true,
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_SONNET_4,
+      label: "Gemini Sonnet 4",
       structuredOutput: true,
     },
   ],

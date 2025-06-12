@@ -10,6 +10,7 @@ export enum PROVIDER_TYPE {
 export enum PROVIDER_MODEL_TYPE {
   // <------ openai
   GPT_4O = "gpt-4o",
+  GPT_4_1_MINI = "gpt-4.1-mini",
   GPT_4O_MINI = "gpt-4o-mini",
   GPT_4O_MINI_2024_07_18 = "gpt-4o-mini-2024-07-18",
   GPT_4O_2024_08_06 = "gpt-4o-2024-08-06",
@@ -272,6 +273,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_4_TURBO = "openai/gpt-4-turbo",
   OPENAI_GPT_4_TURBO_PREVIEW = "openai/gpt-4-turbo-preview",
   OPENAI_GPT_4_VISION_PREVIEW = "openai/gpt-4-vision-preview",
+  OPENAI_GPT_4_1_MINI = "openai/gpt-4.1-mini",
   OPENAI_O1 = "openai/o1",
   OPENAI_O1_MINI = "openai/o1-mini",
   OPENAI_O1_MINI_2024_09_12 = "openai/o1-mini-2024-09-12",
@@ -365,6 +367,8 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_1_5_FLASH = "gemini-1.5-flash",
   GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b",
   GEMINI_1_5_PRO = "gemini-1.5-pro",
+  GEMINI_2_5_FLASH = "gemini-2.5-flash",
+  GEMINI_SONNET_4 = "gemini-sonnet-4",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17 = "vertex_ai/gemini-2.5-flash-preview-04-17",
