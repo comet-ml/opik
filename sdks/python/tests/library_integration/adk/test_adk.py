@@ -64,7 +64,7 @@ def _extract_final_response(events: Iterator[adk_events.Event]) -> Optional[str]
 
 
 def test_adk__single_agent__multiple_tools(fake_backend):
-    opik_tracer = OpikTracer()
+    opik_tracer = OpikTracer(tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"})
 
     root_agent = adk_agents.Agent(
         name="weather_time_agent",
@@ -109,10 +109,12 @@ def test_adk__single_agent__multiple_tools(fake_backend):
         last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "google-adk",
+            "adk-metadata-key": "adk-metadata-value",
             "adk_invocation_id": ANY_STRING(),
             "app_name": APP_NAME,
             "user_id": USER_ID,
         },
+        tags=["adk-test"],
         output=ANY_DICT.containing(
             {"content": {"parts": [{"text": final_response}], "role": "model"}}
         ),
