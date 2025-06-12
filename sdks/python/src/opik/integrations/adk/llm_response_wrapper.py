@@ -38,19 +38,27 @@ class LLMUsageData:
 
 def pop_llm_usage_data(result_dict: Dict[str, Any]) -> Optional[LLMUsageData]:
     """Extracts Opik usage metadata from ADK output and removes it from the result dict."""
-    custom_metadata = result_dict.get("custom_metadata", None)
-    if custom_metadata is None:
+    opik_usage_metadata = None
+    provider = None
+    model = None
+
+    if (custom_metadata := result_dict.get("custom_metadata", None)) is not None:
+        if (opik_usage_metadata := custom_metadata.pop("opik_usage", None)) is not None:
+            model = custom_metadata.pop("model_version", None)
+            if model is not None:
+                model = model.split("/")[-1]
+
+            provider = custom_metadata.pop("provider", None)
+    else:
+        provider = adk_helpers.get_adk_provider()
+        model = None
+
+    # in streaming mode ADK returns the usage metadata in the result dict as the last call
+    # to the after_model_callback bypassing our patching (no opik_usage)
+    if opik_usage_metadata is None and "usage_metadata" not in result_dict:
         return None
 
-    opik_usage_metadata = custom_metadata.pop("opik_usage", None)
-    if opik_usage_metadata is None:
-        return None
-
-    model = custom_metadata.pop("model_version", None)
-    if model is not None:
-        model = model.split("/")[-1]
-
-    provider = custom_metadata.pop("provider", None)
+    opik_usage_metadata = result_dict["usage_metadata"]
 
     if provider in [LLMProvider.GOOGLE_AI, LLMProvider.GOOGLE_VERTEXAI]:
         usage = llm_usage.try_build_opik_usage_or_log_error(

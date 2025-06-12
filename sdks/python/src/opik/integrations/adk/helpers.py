@@ -4,6 +4,8 @@ from typing import (
     Dict,
 )
 
+from google.adk.models import LlmResponse
+
 import opik.types as opik_types
 import pydantic
 
@@ -23,3 +25,16 @@ def get_adk_provider() -> opik_types.LLMProvider:
         if use_vertexai
         else opik_types.LLMProvider.GOOGLE_AI
     )
+
+
+def has_empty_text_part_content(llm_response: LlmResponse) -> bool:
+    if llm_response.content is None or len(llm_response.content.parts) == 0:
+        return True
+
+    # to filter out something like this: {"candidates":[{"content":{"parts":[{"text":""}],"role":"model"}}],...}}
+    if len(llm_response.content.parts) == 1:
+        part = llm_response.content.parts[0]
+        if part.text is not None and len(part.text) == 0:
+            return True
+
+    return False
