@@ -4,7 +4,7 @@ import shutil
 import os
 import litellm
 from litellm.caching import Cache
-import requests
+import requests  # type: ignore
 
 NAMED_CACHES = {
     "test": "https://drive.google.com/file/d/1RifNtpN-pl0DW49daRaAMJwW7MCsOh6y/view?usp=sharing",

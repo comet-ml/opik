@@ -24,13 +24,11 @@ from .utils import (
     get_tool_prompts,
     opik_metric_to_dspy,
 )
+import logging
 
 # Using disk cache for LLM calls
 disk_cache_dir = os.path.expanduser("~/.litellm_cache")
 litellm.cache = Cache(type="disk", disk_cache_dir=disk_cache_dir)
-
-# Set up logging
-import logging
 
 logger = logging.getLogger(__name__)  # Inherits config from setup_logging
 
@@ -428,13 +426,13 @@ class MiproOptimizer(BaseOptimizer):
         # self.num_candidates is set in prepare_optimize_prompt, defaults to 10
         # If self.num_candidates is 0 or None, this logic might break or be odd.
         # Add a safeguard for num_candidates_per_round if self.num_candidates is not usable.
-        num_candidates_per_round = (
-            self.num_candidates
-            if hasattr(self, "num_candidates")
-            and self.num_candidates
-            and self.num_candidates > 0
-            else 1
-        )
+        # num_candidates_per_round = (
+        #     self.num_candidates
+        #     if hasattr(self, "num_candidates")
+        #     and self.num_candidates
+        #     and self.num_candidates > 0
+        #     else 1
+        # )
 
         for i, candidate_data in enumerate(self.results.candidate_programs):
             program_module = candidate_data.get("program")

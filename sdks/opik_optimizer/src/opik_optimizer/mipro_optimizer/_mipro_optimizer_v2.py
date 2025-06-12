@@ -25,7 +25,6 @@ from optuna.distributions import CategoricalDistribution
 from ..optimization_config.configs import TaskConfig
 
 from opik_optimizer import task_evaluator
-from opik_optimizer.optimization_config.configs import TaskConfig
 from opik_optimizer.optimization_config import mappers
 
 
@@ -556,8 +555,8 @@ class MIPROv2(Teleprompter):
 
         examples = []
         for demo in demo_candidates.values():
-            for l in demo:
-                for example in l:
+            for l_ in demo:
+                for example in l_:
                     examples.append(example.toDict())
         prompt = get_prompt(program)
         experiment_config = {
@@ -936,8 +935,8 @@ class MIPROv2(Teleprompter):
 
         examples = []
         for demo in demo_candidates.values():
-            for l in demo:
-                for example in l:
+            for l_ in demo:
+                for example in l_:
                     examples.append(example.toDict())
         prompt = get_prompt(highest_mean_program)
         experiment_config = {
@@ -998,7 +997,7 @@ class MIPROv2(Teleprompter):
         trial_logs[trial_num + 1]["full_eval_score"] = full_eval_score
 
         if full_eval_score == 1.0:
-            return self.early_stop(default_score, program)
+            return self.early_stop(default_score, program)  # noqa: F821
 
         # Update best score and program if necessary
         if full_eval_score > best_score:
