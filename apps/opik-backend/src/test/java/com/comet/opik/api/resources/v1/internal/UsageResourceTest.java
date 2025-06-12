@@ -244,6 +244,19 @@ class UsageResourceTest {
         }
 
         @Test
+        @DisplayName("Get spans daily info for BI events, no Auth")
+        void spanBiInfoTest() {
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .build())
+                    .toList();
+            biInfoTest(spans, SPANS_RESOURCE_URL_TEMPLATE, "spans",
+                    subtractClickHouseTableRecordsCreatedAtOneDay("spans"));
+        }
+
+        @Test
         @DisplayName("Get experiments daily info for BI events, no Auth")
         void experimentBiInfoTest() {
             var experiments = experimentResourceClient.generateExperimentList();
