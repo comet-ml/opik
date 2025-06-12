@@ -71,7 +71,7 @@ class OpikTracer:
         trace_data = self._context_storage.pop_trace_data()
         assert trace_data is not None
         trace_data.init_end_time()
-        self._opik_client.trace(**trace_data.__dict__)
+        self._opik_client.trace(**trace_data.as_parameters)
 
     def _end_current_span(
         self,
@@ -79,7 +79,21 @@ class OpikTracer:
         span_data = self._context_storage.pop_span_data()
         assert span_data is not None
         span_data.init_end_time()
-        self._opik_client.span(**span_data.__dict__)
+        self._opik_client.span(**span_data.as_parameters)
+
+    def _start_span(self, span_data: span.SpanData) -> None:
+        self._context_storage.add_span_data(span_data)
+        self._opik_created_spans.add(span_data.id)
+
+        if self._opik_client.config.log_start_trace_span:
+            self._opik_client.span(**span_data.as_start_parameters)
+
+    def _start_trace(self, trace_data: trace.TraceData) -> None:
+        self._context_storage.set_trace_data(trace_data)
+        self._current_trace_created_by_opik_tracer.set(trace_data.id)
+
+        if self._opik_client.config.log_start_trace_span:
+            self._opik_client.trace(**trace_data.as_start_parameters)
 
     def _set_current_context_data(self, value: SpanOrTraceData) -> None:
         if isinstance(value, span.SpanData):
@@ -116,8 +130,8 @@ class OpikTracer:
                     thread_id=thread_id,
                     input=user_input,
                 )
-                self._context_storage.set_trace_data(current_trace)
-                self._current_trace_created_by_opik_tracer.set(current_trace.id)
+
+                self._start_trace(trace_data=current_trace)
             else:
                 start_span_arguments = arguments_helpers.StartSpanParameters(
                     name=name,
@@ -132,8 +146,8 @@ class OpikTracer:
                         opik_context_storage=self._context_storage,
                     )
                 )
-                self._context_storage.add_span_data(opik_span_data)
-                self._opik_created_spans.add(opik_span_data.id)
+
+                self._start_span(span_data=opik_span_data)
         except Exception as e:
             LOGGER.error(f"Failed during before_agent_callback(): {e}", exc_info=True)
 
@@ -188,8 +202,7 @@ class OpikTracer:
                 opik_context_storage=self._context_storage,
             )
 
-            self._context_storage.add_span_data(span_data)
-            self._opik_created_spans.add(span_data.id)
+            self._start_span(span_data=span_data)
 
         except Exception as e:
             LOGGER.error(f"Failed during before_model_callback(): {e}", exc_info=True)
@@ -275,8 +288,9 @@ class OpikTracer:
                 distributed_trace_headers=None,
                 opik_context_storage=self._context_storage,
             )
-            self._context_storage.add_span_data(span_data)
-            self._opik_created_spans.add(span_data.id)
+
+            self._start_span(span_data=span_data)
+
         except Exception as e:
             LOGGER.error(f"Failed during before_tool_callback(): {e}", exc_info=True)
 

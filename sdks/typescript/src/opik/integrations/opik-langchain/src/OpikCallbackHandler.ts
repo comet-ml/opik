@@ -4,7 +4,15 @@ import {
 } from "@langchain/core/callbacks/base";
 import { Serialized } from "@langchain/core/load/serializable";
 import { ChainValues } from "@langchain/core/utils/types";
-import { Opik, Span, Trace, logger, SpanType, OpikSpanType } from "opik";
+import {
+  Opik,
+  Span,
+  Trace,
+  logger,
+  SpanType,
+  OpikSpanType,
+  OpikConfig,
+} from "opik";
 import {
   extractCallArgs,
   inputFromChainValues,
@@ -25,6 +33,7 @@ export interface OpikCallbackHandlerOptions {
   metadata?: JsonNode;
   projectName?: string;
   client?: Opik;
+  clientConfig?: OpikConfig;
 }
 
 type StartTracingArgs = {
@@ -58,8 +67,7 @@ export class OpikCallbackHandler
   private options: OpikCallbackHandlerOptions;
   private client: Opik;
   private rootTraceId?: string;
-  private rootTrace?: Trace;
-  private spansMap: Map<string, Span> = new Map();
+  private tracerMap: Map<string, Trace | Span> = new Map();
 
   constructor(options?: Partial<OpikCallbackHandlerOptions>) {
     super();
@@ -67,7 +75,7 @@ export class OpikCallbackHandler
     this.options = {
       ...options,
     };
-    this.client = options?.client ?? new Opik();
+    this.client = options?.client ?? new Opik(options?.clientConfig);
 
     if (options?.projectName) {
       this.client.config.projectName = options?.projectName;
@@ -90,52 +98,50 @@ export class OpikCallbackHandler
       return;
     }
 
+    const existingTracer = this.tracerMap.get(runId);
+    if (existingTracer) {
+      existingTracer.update({
+        input: inputFromChainValues(input),
+        tags,
+        metadata,
+        model,
+        provider,
+      });
+
+      return;
+    }
+
     if (!parentRunId) {
       this.rootTraceId = runId;
-      this.rootTrace = this.client.trace({
+      const trace = this.client.trace({
         name,
         input,
         tags: this.options.tags,
         metadata,
       });
-    }
+      this.tracerMap.set(runId, trace);
 
-    if (!this.rootTrace) {
-      logger.debug(`handleChainStart error ${runId} has no parent`);
       return;
     }
 
-    let parentSpanId: string | undefined;
+    const parentTracer = this.tracerMap.get(parentRunId);
 
-    if (!!this.rootTraceId && this.rootTraceId !== parentRunId) {
-      parentSpanId = parentRunId;
+    if (!parentTracer) {
+      logger.info(`Parent ${parentRunId} not found`);
+      return;
     }
 
-    const existingSpan = this.spansMap.get(runId);
-    let span: Span;
+    const span = parentTracer.span({
+      type: type || OpikSpanType.General,
+      name,
+      input: inputFromChainValues(input),
+      tags,
+      metadata,
+      model,
+      provider,
+    });
 
-    if (existingSpan) {
-      span = existingSpan.update({
-        input: inputFromChainValues(input),
-        tags,
-        metadata,
-        model,
-        provider,
-      });
-    } else {
-      span = this.rootTrace.span({
-        type: type || OpikSpanType.General,
-        name,
-        input: inputFromChainValues(input),
-        tags,
-        metadata,
-        model,
-        provider,
-        parentSpanId,
-      });
-    }
-
-    this.spansMap.set(runId, span);
+    this.tracerMap.set(runId, span);
   }
 
   private endTracing({
@@ -156,7 +162,7 @@ export class OpikCallbackHandler
       };
     }
 
-    const span = this.spansMap.get(runId);
+    const span = this.tracerMap.get(runId);
 
     if (!span) {
       logger.debug(`handleChainEnd span ${runId} has not found`);
@@ -171,18 +177,16 @@ export class OpikCallbackHandler
       usage,
       metadata,
     });
-
     span.end();
 
-    this.spansMap.delete(runId);
-
     if (runId === this.rootTraceId) {
-      this.rootTrace?.update({
+      const rootTrace = this.tracerMap.get(this.rootTraceId)!;
+      rootTrace?.update({
         output,
       });
       this.rootTraceId = undefined;
-      this.rootTrace?.end();
-      this.rootTrace = undefined;
+      rootTrace?.end();
+      this.tracerMap.clear();
     }
   }
 

@@ -1,0 +1,154 @@
+---
+title: Experiments
+---
+
+Experiments in Opik allow you to link traces (execution data) with dataset items to create a foundation for evaluation and comparison. Experiments let you track, analyze, and compare the performance of your LLM applications across different versions, models, or configurations.
+
+## What are Experiments?
+
+An experiment in Opik connects traces (records of LLM executions) with dataset items, creating a linkage that enables structured evaluation and analysis. This connection allows you to:
+
+- Compare different LLM implementations against the same dataset
+- Evaluate model performance with various metrics
+- Track improvements or regressions over time
+- Analyze feedback scores across different versions
+
+## Creating and Managing Experiments
+
+The TypeScript SDK provides several methods to create and manage experiments through the `OpikClient` class.
+
+### Getting Experiments
+
+```typescript
+// Get all experiments with a specific name
+const experiments = await opik.getExperimentsByName("my-experiment");
+
+// Get a single experiment by name (first match if multiple exist)
+const experiment = await opik.getExperiment("my-experiment");
+
+// Get all experiments associated with a dataset
+const datasetExperiments = await opik.getDatasetExperiments("my-dataset", 100); // Optional maxResults parameter (default: 100)
+```
+
+### Deleting an Experiment
+
+```typescript
+// Delete an experiment by ID
+await opik.deleteExperiment("experiment-id");
+```
+
+## Working with Experiment Items
+
+Experiment items are the core components that link dataset items with traces. These connections enable you to analyze how your LLM application performs on specific inputs.
+
+### Creating Experiment Items
+
+```typescript
+import { ExperimentItemReferences } from "opik";
+
+// Get an existing experiment
+const experiment = await opik.getExperiment("my-experiment");
+
+// Create references between dataset items and traces
+const experimentItems = [
+  new ExperimentItemReferences({
+    datasetItemId: "dataset-item-1",
+    traceId: "trace-id-1",
+  }),
+  new ExperimentItemReferences({
+    datasetItemId: "dataset-item-2",
+    traceId: "trace-id-2",
+  }),
+];
+
+// Insert the experiment items
+await experiment.insert(experimentItems);
+```
+
+### Retrieving Experiment Items
+
+```typescript
+// Get all items in an experiment
+const allItems = await experiment.getItems();
+
+// Get a limited number of items
+const limitedItems = await experiment.getItems({ maxResults: 50 });
+
+// Get items with truncated data (improves performance for large datasets)
+const truncatedItems = await experiment.getItems({ truncate: true });
+```
+
+## Experiment URL
+
+Get the URL to view the experiment in the Opik web interface:
+
+```typescript
+const url = await experiment.getUrl();
+console.log(`View experiment at: ${url}`);
+```
+
+## Data Structures
+
+### Experiment
+
+Represents an experiment in Opik that connects traces with dataset items:
+
+```typescript
+class Experiment {
+  readonly id: string; // Unique identifier of the experiment
+  readonly name?: string; // Optional name of the experiment
+  readonly datasetName: string; // Name of the dataset associated with the experiment
+
+  // Creates new experiment items by linking traces with dataset items
+  insert(experimentItemReferences: ExperimentItemReferences[]): Promise<void>;
+
+  // Retrieves experiment items with options for pagination and data truncation
+  getItems(options?: {
+    maxResults?: number; // Maximum number of items to retrieve
+    truncate?: boolean; // Whether to truncate large data fields
+  }): Promise<ExperimentItemContent[]>;
+
+  // Gets the URL to view the experiment in the Opik web interface
+  getUrl(): Promise<string>;
+}
+```
+
+### ExperimentItemReferences
+
+References connecting a dataset item to a trace:
+
+```typescript
+interface ExperimentItemReferences {
+  readonly datasetItemId: string; // ID of the dataset item
+  readonly traceId: string; // ID of the trace
+}
+```
+
+### ExperimentItemContent
+
+Content of an experiment item including evaluation data and feedback scores:
+
+```typescript
+interface ExperimentItemContent {
+  readonly id?: string; // Experiment item ID
+  readonly datasetItemId: string; // Dataset item ID
+  readonly traceId: string; // Trace ID
+  readonly datasetItemData?: JsonListStringCompare; // Dataset item data
+  readonly evaluationTaskOutput?: JsonListStringCompare; // Evaluation task output
+  readonly feedbackScores: FeedbackScore[]; // Feedback scores for the item
+}
+```
+
+### FeedbackScore
+
+Represents a feedback score for an experiment item:
+
+```typescript
+interface FeedbackScore {
+  categoryName: string; // Category of the feedback
+  name: string; // Name of the feedback metric
+  reason?: string; // Optional reason for the score
+  value: number; // Score value
+  source: string; // Source of the feedback
+}
+```
