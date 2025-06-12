@@ -39,9 +39,9 @@ EXPECTED_USAGE_KEYS_GOOGLE = [
 ]
 
 
-async def _build_runner(root_agent: adk_agents.Agent) -> adk_runners.Runner:
+def _build_runner(root_agent: adk_agents.Agent) -> adk_runners.Runner:
     session_service = adk_sessions.InMemorySessionService()
-    _ = await session_service.create_session(
+    _ = session_service.create_session_sync(
         app_name=APP_NAME, user_id=USER_ID, session_id=SESSION_ID
     )
 
@@ -63,8 +63,7 @@ def _extract_final_response(events: Iterator[adk_events.Event]) -> Optional[str]
     return last_event.content.parts[0].text
 
 
-@pytest.mark.asyncio
-async def test_adk__single_agent__multiple_tools(fake_backend):
+def test_adk__single_agent__multiple_tools(fake_backend):
     opik_tracer = OpikTracer()
 
     root_agent = adk_agents.Agent(
@@ -85,7 +84,7 @@ async def test_adk__single_agent__multiple_tools(fake_backend):
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = await _build_runner(root_agent)
+    runner = _build_runner(root_agent)
 
     events = runner.run(
         user_id=USER_ID,
@@ -173,8 +172,7 @@ async def test_adk__single_agent__multiple_tools(fake_backend):
     assert_dict_has_keys(trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
-@pytest.mark.asyncio
-async def test_adk__single_agent__multiple_tools__thread_with_more_than_one_trace(
+def test_adk__single_agent__multiple_tools__thread_with_more_than_one_trace(
     fake_backend,
 ):
     opik_tracer = OpikTracer()
@@ -200,7 +198,7 @@ async def test_adk__single_agent__multiple_tools__thread_with_more_than_one_trac
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = await _build_runner(root_agent)
+    runner = _build_runner(root_agent)
 
     events = runner.run(
         user_id=USER_ID,
@@ -373,8 +371,7 @@ async def test_adk__single_agent__multiple_tools__thread_with_more_than_one_trac
     assert_dict_has_keys(time_trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
-@pytest.mark.asyncio
-async def test_adk__sequential_agent_with_subagents(fake_backend):
+def test_adk__sequential_agent_with_subagents(fake_backend):
     opik_tracer = OpikTracer()
 
     translator_to_english = adk_agents.Agent(
@@ -407,7 +404,7 @@ async def test_adk__sequential_agent_with_subagents(fake_backend):
         # after_model_callback=opik_tracer.after_model_callback,
     )
 
-    runner = await _build_runner(root_agent)
+    runner = _build_runner(root_agent)
 
     INPUT_GERMAN_TEXT = """
 Wie große Sprachmodelle (LLMs) funktionieren
