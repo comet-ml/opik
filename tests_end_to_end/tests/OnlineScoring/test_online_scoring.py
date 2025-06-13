@@ -1,7 +1,7 @@
 from playwright.sync_api import Page, expect
 from page_objects.TracesPage import TracesPage
 from page_objects.ProjectsPage import ProjectsPage
-from sdk_helpers import wait_for_number_of_traces_to_be_visible
+from tests.sdk_helpers import wait_for_number_of_traces_to_be_visible
 import opik
 import os
 import logging
