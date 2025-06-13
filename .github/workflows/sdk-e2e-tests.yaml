@@ -44,7 +44,8 @@ jobs:
             OPIK_USAGE_REPORT_ENABLED: false
           run: |
             cd deployment/docker-compose
-            docker compose up -d --build
+            export OPIK_FRONTEND_FLAVOR=guardrails
+            docker compose --profile guardrails up -d --build
         
         - name: Check Opik server availability
           shell: bash
