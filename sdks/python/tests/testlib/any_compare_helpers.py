@@ -43,10 +43,11 @@ class AnyDict:
     def __repr__(self):
         if self.containing_items is None:
             return "<ANY_DICT>"
-        return f"<ANY_DICT_WITH_CONTAIN_CONDITION>"
+        return "<ANY_DICT_WITH_CONTAIN_CONDITION>"
 
     def containing(self, containing: Dict):
         return AnyDict(containing)
+
 
 class AnyList:
     """A helper object that compares equal to all lists."""
@@ -85,8 +86,8 @@ class AnyString:
     def __repr__(self):
         if self._startswith is None:
             return "<ANY_STRING>"
-        return f"<ANY_STRING_WITH_STARTSWITH_CONDITION>"
-    
+        return "<ANY_STRING_WITH_STARTSWITH_CONDITION>"
+
     def starting_with(self, startswith: str):
         return AnyString(startswith=startswith)
 

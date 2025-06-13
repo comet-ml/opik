@@ -354,7 +354,9 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 input={"city": "New York"},
                 output={
                     "status": "success",
-                    "report": ANY_STRING.starting_with("The current time in New York is"),
+                    "report": ANY_STRING.starting_with(
+                        "The current time in New York is"
+                    ),
                 },
             ),
             SpanModel(
