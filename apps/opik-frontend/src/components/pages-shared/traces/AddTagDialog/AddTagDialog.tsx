@@ -37,6 +37,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
   const [newTag, setNewTag] = useState<string>("");
   const traceUpdateMutation = useTraceUpdateMutation();
   const spanUpdateMutation = useSpanUpdateMutation();
+  const MAX_ENTITIES = 10;
 
   const handleClose = () => {
     setOpen(false);
@@ -116,6 +117,12 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
             {type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
           </DialogTitle>
         </DialogHeader>
+        {rows.length > MAX_ENTITIES && (
+          <div className="mb-2 text-sm text-red-500">
+            You can only add tags to up to {MAX_ENTITIES} entities at a time.
+            Please select fewer entities.
+          </div>
+        )}
         <div className="grid gap-4 py-4">
           <div className="flex items-center gap-4">
             <Input
@@ -123,6 +130,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
               value={newTag}
               onChange={(event) => setNewTag(event.target.value)}
               className="col-span-3"
+              disabled={rows.length > MAX_ENTITIES}
             />
           </div>
         </div>
@@ -130,7 +138,10 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
           <Button variant="outline" onClick={handleClose}>
             Cancel
           </Button>
-          <Button onClick={handleAddTag} disabled={!newTag}>
+          <Button
+            onClick={handleAddTag}
+            disabled={!newTag || rows.length > MAX_ENTITIES}
+          >
             Add tag
           </Button>
         </DialogFooter>
