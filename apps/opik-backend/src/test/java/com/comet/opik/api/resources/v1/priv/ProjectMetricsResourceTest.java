@@ -26,8 +26,8 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.GuardrailResult;
+import com.comet.opik.domain.MetricsService;
 import com.comet.opik.domain.ProjectMetricsDAO;
-import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -393,11 +393,11 @@ class ProjectMetricsResourceTest {
             return Stream.of(
                     arguments(named("start later than end", Entity.json(validReq.toBuilder()
                             .intervalEnd(now.minus(2, ChronoUnit.HOURS))
-                            .build())), ProjectMetricsService.ERR_START_BEFORE_END),
+                            .build())), MetricsService.ERR_START_BEFORE_END),
                     arguments(named("start equal to end", Entity.json(validReq.toBuilder()
                             .intervalStart(now)
                             .intervalEnd(now)
-                            .build())), ProjectMetricsService.ERR_START_BEFORE_END));
+                            .build())), MetricsService.ERR_START_BEFORE_END));
         }
 
         @Test

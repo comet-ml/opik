@@ -16,7 +16,7 @@ import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.FeedbackScoreService;
-import com.comet.opik.domain.ProjectMetricsService;
+import com.comet.opik.domain.MetricsService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -57,7 +57,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static com.comet.opik.domain.ProjectMetricsService.ERR_START_BEFORE_END;
+import static com.comet.opik.domain.MetricsService.ERR_START_BEFORE_END;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
 @Path("/v1/private/projects")
@@ -73,7 +73,7 @@ public class ProjectsResource {
     private final @NonNull ProjectService projectService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull SortingFactoryProjects sortingFactory;
-    private final @NonNull ProjectMetricsService metricsService;
+    private final @NonNull MetricsService metricsService;
     private final @NonNull FeedbackScoreService feedbackScoreService;
 
     @GET
