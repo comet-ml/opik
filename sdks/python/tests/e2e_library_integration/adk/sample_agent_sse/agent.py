@@ -73,7 +73,7 @@ def after_agent_callback(
 
 root_agent = Agent(
     name="weather_time_agent",
-    model="gemini-2.5-flash-preview-05-20",
+    model="gemini-2.0-flash",
     description="Agent to answer questions about the time and weather in a city.",
     instruction=(
         "You are a helpful agent who can answer user questions about the time and weather in a city."
