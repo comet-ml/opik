@@ -8323,6 +8323,7 @@ class TracesResourceTest {
                             .projectId(projectId)
                             .projectName(projectName)
                             .threadId(threadId)
+                            .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
                             .build())
                     .toList();
 
@@ -8376,6 +8377,7 @@ class TracesResourceTest {
                                     .projectId(projectId)
                                     .projectName(projectName)
                                     .threadId(PodamUtils.getIntegerInRange(0, 1) % 2 == 0 ? threadId1 : threadId2)
+                                    .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
                                     .build())
                             .toList())
                     .toList();
