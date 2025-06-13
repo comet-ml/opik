@@ -52,7 +52,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                          :created_by<item.index>,
                          :last_updated_by<item.index>,
                          parseDateTime64BestEffort(:created_at<item.index> , 9),
-                         parseDateTime64BestEffort(:last_updated_at<item.index> , 9)
+                         parseDateTime64BestEffort(:last_updated_at<item.index> , 6)
                      )
                      <if(item.hasNext)>
                         ,
