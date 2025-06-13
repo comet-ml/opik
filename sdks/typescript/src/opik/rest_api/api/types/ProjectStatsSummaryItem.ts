@@ -13,4 +13,5 @@ export interface ProjectStatsSummaryItem {
     usage?: Record<string, number>;
     traceCount?: number;
     guardrailsFailedCount?: number;
+    errorCount?: OpikApi.ErrorCountWithDeviation;
 }
