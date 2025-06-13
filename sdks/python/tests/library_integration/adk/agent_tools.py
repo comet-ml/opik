@@ -2,7 +2,7 @@ import datetime
 from zoneinfo import ZoneInfo
 
 
-def get_weather_in_the_city(city: str) -> dict:
+def get_weather(city: str) -> dict:
     if city.lower() == "new york":
         return {
             "status": "success",
@@ -18,7 +18,7 @@ def get_weather_in_the_city(city: str) -> dict:
         }
 
 
-def get_current_time_in_the_city(city: str) -> dict:
+def get_current_time(city: str) -> dict:
     if city.lower() == "new york":
         tz_identifier = "America/New_York"
     else:

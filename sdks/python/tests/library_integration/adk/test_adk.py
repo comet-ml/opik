@@ -5,6 +5,7 @@ from google.adk import agents as adk_agents
 from google.adk import runners as adk_runners
 from google.adk import sessions as adk_sessions
 from google.adk import events as adk_events
+from google.adk.models import lite_llm as adk_lite_llm
 from google.genai import types as genai_types
 
 from opik.integrations.adk import OpikTracer
@@ -19,7 +20,7 @@ from ...testlib import (
 )
 import uuid
 
-from opik.integrations.adk import helpers as adk_helpers
+from opik.integrations.adk import helpers as opik_adk_helpers
 
 
 APP_NAME = "ADK_app"
@@ -42,7 +43,6 @@ def _build_runner(root_agent: adk_agents.Agent) -> adk_runners.Runner:
     _ = session_service.create_session_sync(
         app_name=APP_NAME, user_id=USER_ID, session_id=SESSION_ID
     )
-
     runner = adk_runners.Runner(
         agent=root_agent, app_name=APP_NAME, session_service=session_service
     )
@@ -51,6 +51,9 @@ def _build_runner(root_agent: adk_agents.Agent) -> adk_runners.Runner:
 
 def _extract_final_response(events: Iterator[adk_events.Event]) -> Optional[str]:
     events = list(events)
+    if len(events) == 0:
+        raise Exception("Agent failed to execute.")
+
     last_event: adk_events.Event = events[-1]  # supposed to be the last agent response
     # Don't use event.is_final_response() only because it may be true for nested agents!
     assert (
@@ -75,7 +78,7 @@ def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
         instruction=(
             "I can answer your questions about the weather in a city (only 'New York' supported)."
         ),
-        tools=[agent_tools.get_weather_in_the_city],
+        tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
         after_agent_callback=opik_tracer.after_agent_callback,
         before_model_callback=opik_tracer.before_model_callback,
@@ -134,13 +137,13 @@ def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
                 type="llm",
                 input=ANY_DICT,
                 output=ANY_DICT,
-                provider=adk_helpers.get_adk_provider(),
+                provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="get_weather_in_the_city",
+                name="get_weather",
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 last_updated_at=ANY_BUT_NONE,
@@ -162,7 +165,7 @@ def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
                 type="llm",
                 input=ANY_DICT,
                 output=ANY_DICT,
-                provider=adk_helpers.get_adk_provider(),
+                provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
             ),
@@ -189,8 +192,8 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             "I can answer your questions about the weather in a city (only 'New York' supported)."
         ),
         tools=[
-            agent_tools.get_weather_in_the_city,
-            agent_tools.get_current_time_in_the_city,
+            agent_tools.get_weather,
+            agent_tools.get_current_time,
         ],
         before_agent_callback=opik_tracer.before_agent_callback,
         after_agent_callback=opik_tracer.after_agent_callback,
@@ -259,13 +262,13 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 type="llm",
                 input=ANY_DICT,
                 output=ANY_DICT,
-                provider=adk_helpers.get_adk_provider(),
+                provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="get_weather_in_the_city",
+                name="get_weather",
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 last_updated_at=ANY_BUT_NONE,
@@ -287,7 +290,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 type="llm",
                 input=ANY_DICT,
                 output=ANY_DICT,
-                provider=adk_helpers.get_adk_provider(),
+                provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
             ),
@@ -325,13 +328,13 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 type="llm",
                 input=ANY_DICT,
                 output=ANY_DICT,
-                provider=adk_helpers.get_adk_provider(),
+                provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="get_current_time_in_the_city",
+                name="get_current_time",
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 last_updated_at=ANY_BUT_NONE,
@@ -353,7 +356,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 type="llm",
                 input=ANY_DICT,
                 output=ANY_DICT,
-                provider=adk_helpers.get_adk_provider(),
+                provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
             ),
@@ -479,7 +482,7 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
                         type="llm",
                         input=ANY_DICT,
                         output=ANY_DICT,
-                        provider=adk_helpers.get_adk_provider(),
+                        provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
                         usage=ANY_DICT,
                     )
@@ -506,7 +509,7 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
                         type="llm",
                         input=ANY_DICT,
                         output=ANY_DICT,
-                        provider=adk_helpers.get_adk_provider(),
+                        provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
                         usage=ANY_DICT,
                     )
@@ -531,7 +534,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
     def is_city_supported(city: str) -> bool:
         return city.lower() == "new york"
 
-    def get_weather_function_with_tracked_step(city: str) -> Dict[str, str]:
+    def get_weather(city: str) -> Dict[str, str]:
         if not is_city_supported(city):
             return {
                 "status": "error",
@@ -552,7 +555,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
         instruction=(
             "I can answer your questions about the weather in a city (only 'New York' supported)."
         ),
-        tools=[get_weather_function_with_tracked_step],
+        tools=[get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
         after_agent_callback=opik_tracer.after_agent_callback,
         before_model_callback=opik_tracer.before_model_callback,
@@ -611,13 +614,13 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
                 type="llm",
                 input=ANY_DICT,
                 output=ANY_DICT,
-                provider=adk_helpers.get_adk_provider(),
+                provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="get_weather_function_with_tracked_step",
+                name="get_weather",
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 last_updated_at=ANY_BUT_NONE,
@@ -651,7 +654,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
                 type="llm",
                 input=ANY_DICT,
                 output=ANY_DICT,
-                provider=adk_helpers.get_adk_provider(),
+                provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
             ),
@@ -661,3 +664,124 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
     assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
     assert_dict_has_keys(trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
+
+
+def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(fake_backend):
+    opik_tracer = OpikTracer(
+        tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}
+    )
+
+    root_agent = adk_agents.Agent(
+        name="weather_time_agent",
+        model=adk_lite_llm.LiteLlm(f"openai/gpt-4o-mini"),
+        description=(
+            "Agent to answer questions about the weather in a city (only 'New York' supported)."
+        ),
+        instruction=(
+            "I can answer your questions about the weather in a city (only 'New York' supported)."
+        ),
+        tools=[agent_tools.get_weather],
+        before_agent_callback=opik_tracer.before_agent_callback,
+        after_agent_callback=opik_tracer.after_agent_callback,
+        before_model_callback=opik_tracer.before_model_callback,
+        after_model_callback=opik_tracer.after_model_callback,
+        before_tool_callback=opik_tracer.before_tool_callback,
+        after_tool_callback=opik_tracer.after_tool_callback,
+    )
+
+    runner = _build_runner(root_agent)
+
+    events = runner.run(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        new_message=genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text="What is the weather in New York?")],
+        ),
+    )
+    final_response = _extract_final_response(events)
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) > 0
+    trace_tree = fake_backend.trace_trees[0]
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="weather_time_agent",
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        metadata={
+            "created_from": "google-adk",
+            "adk-metadata-key": "adk-metadata-value",
+            "adk_invocation_id": ANY_STRING(),
+            "app_name": APP_NAME,
+            "user_id": USER_ID,
+        },
+        tags=["adk-test"],
+        output=ANY_DICT.containing(
+            {"content": {"parts": [{"text": final_response}], "role": "model"}}
+        ),
+        input={
+            "role": "user",
+            "parts": [{"text": "What is the weather in New York?"}],
+        },
+        thread_id=SESSION_ID,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="openai/gpt-4o-mini",
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="llm",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                provider="openai",  # not necessary supported by opik, just taken from the prefix of litellm model
+                model=ANY_STRING(startswith="gpt-4o-mini"),
+                usage=ANY_DICT,
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="get_weather",
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="tool",
+                input={"city": "New York"},
+                output={
+                    "status": "success",
+                    "report": "The weather in New York is sunny with a temperature of 25 degrees Celsius (41 degrees Fahrenheit).",
+                },
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="openai/gpt-4o-mini",
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="llm",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                provider="openai",  # not necessary supported by opik, just taken from the prefix of litellm model
+                model=ANY_STRING(startswith="gpt-4o-mini"),
+                usage=ANY_DICT,
+            ),
+        ],
+    )
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+    EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT = [
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "original_usage.prompt_tokens",
+        "original_usage.completion_tokens",
+        "original_usage.total_tokens",
+    ]
+    assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT)
+    assert_dict_has_keys(trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT)
