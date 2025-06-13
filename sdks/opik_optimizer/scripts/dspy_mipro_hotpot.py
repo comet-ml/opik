@@ -9,6 +9,8 @@ In this example, we show how to use DSPy's MIPROv2 with:
 import os
 
 import dspy
+from opik.evaluation.metrics.score_result import ScoreResult
+from typing import Any, Dict
 
 # Setup cache on disk:
 import litellm
@@ -21,7 +23,9 @@ from opik_optimizer import (
     TaskConfig,
 )
 from opik_optimizer.datasets import hotpot_300
-from opik_optimizer.mipro_optimizer import MIPROv2  # Or from dspy.teleprompt import MIPROv2
+from opik_optimizer.mipro_optimizer import (
+    MIPROv2,
+)  # Or from dspy.teleprompt import MIPROv2
 from opik_optimizer.mipro_optimizer.utils import (
     create_dspy_training_set,
     opik_metric_to_dspy,
@@ -55,8 +59,9 @@ def search_wikipedia(query: str) -> list[str]:
 
 
 # This are useful methods of logging optimization data:
-def equals(dataset_item, llm_output):
+def equals(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
     return Equals().score(reference=dataset_item["answer"], output=llm_output)
+
 
 task_config = TaskConfig(
     instruction_prompt="Answer the question",
@@ -99,7 +104,7 @@ with optimization_context(
         opik_metric=equals,
         opik_prompt_task_config=task_config,
         opik_project_name=project_name,
-        opik_optimization_id=optimization.id,
+        opik_optimization_id=optimization.id if optimization is not None else None,
         experiment_config=experiment_config,
     )
 

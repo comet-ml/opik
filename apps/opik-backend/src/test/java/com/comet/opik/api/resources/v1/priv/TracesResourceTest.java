@@ -1417,6 +1417,7 @@ class TracesResourceTest {
                                                         : getKey(filter.getKey()))
                                                 .value(getInvalidValue(filter.getKey()))
                                                 .build());
+                                case ERROR_CONTAINER -> Stream.of();
                                 default -> Stream.of(TraceFilter.builder()
                                         .field(filter.getKey())
                                         .operator(operator)
@@ -2183,7 +2184,7 @@ class TracesResourceTest {
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
-                    .startTime(Instant.now().plusSeconds(60 * 5))
+                    .startTime(Instant.now())
                     .build());
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -4321,6 +4322,102 @@ class TracesResourceTest {
             testAssertion.assertTest(projectName, null, apiKey, workspaceName, valuesPassed.expected(),
                     valuesPassed.unexpected(), valuesPassed.all(), filtersPassed, Map.of());
         }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterErrorIsNotEmpty__thenReturnTracesFiltered(String endpoint,
+                TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .totalEstimatedCost(null)
+                            .threadId(null)
+                            .guardrailsValidations(null)
+                            .errorInfo(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            traces.set(0, traces.getFirst().toBuilder()
+                    .errorInfo(factory.manufacturePojo(ErrorInfo.class))
+                    .build());
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            var expectedTraces = List.of(traces.getFirst());
+            var unexpectedTraces = List.of(createTrace().toBuilder()
+                    .projectId(null)
+                    .build());
+            traceResourceClient.batchCreateTraces(unexpectedTraces, apiKey, workspaceName);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.ERROR_INFO)
+                    .operator(Operator.IS_NOT_EMPTY)
+                    .value("")
+                    .build());
+
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
+
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
+                    filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterErrorIsEmpty__thenReturnTracesFiltered(String endpoint, TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .totalEstimatedCost(null)
+                            .threadId(null)
+                            .guardrailsValidations(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            traces.set(0, traces.getFirst().toBuilder()
+                    .errorInfo(null)
+                    .build());
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            var expectedTraces = List.of(traces.getFirst());
+            var unexpectedTraces = List.of(createTrace().toBuilder()
+                    .projectId(null)
+                    .build());
+            traceResourceClient.batchCreateTraces(unexpectedTraces, apiKey, workspaceName);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.ERROR_INFO)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build());
+
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
+
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
+                    filters, Map.of());
+        }
     }
 
     private BigDecimal calculateEstimatedCost(List<Span> spans) {
@@ -4387,19 +4484,20 @@ class TracesResourceTest {
             case STRING, LIST, DICTIONARY, ENUM -> RandomStringUtils.secure().nextAlphanumeric(10);
             case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
             case DATE_TIME -> Instant.now().toString();
+            case ERROR_CONTAINER -> "";
         };
     }
 
     private String getKey(Field field) {
         return switch (field.getType()) {
-            case STRING, NUMBER, DATE_TIME, LIST, ENUM -> null;
+            case STRING, NUMBER, DATE_TIME, LIST, ENUM, ERROR_CONTAINER -> null;
             case FEEDBACK_SCORES_NUMBER, DICTIONARY -> RandomStringUtils.secure().nextAlphanumeric(10);
         };
     }
 
     private String getInvalidValue(Field field) {
         return switch (field.getType()) {
-            case STRING, DICTIONARY, LIST, ENUM -> " ";
+            case STRING, DICTIONARY, LIST, ENUM, ERROR_CONTAINER -> " ";
             case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
         };
     }
@@ -5693,6 +5791,7 @@ class TracesResourceTest {
                 .comments(null)
                 .totalEstimatedCost(null)
                 .usage(null)
+                .errorInfo(null)
                 .build();
     }
 
