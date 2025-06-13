@@ -59,7 +59,6 @@ export enum EXPLAINER_ID {
   metric_sentence_bleu = "metric_sentence_bleu",
   metric_corpus_bleu = "metric_corpus_bleu",
   metric_rouge = "metric_rouge",
-  metric_sentiment = "metric_sentiment",
   metric_hallucination = "metric_hallucination",
   metric_g_eval = "metric_g_eval",
   metric_moderation = "metric_moderation",
@@ -424,13 +423,6 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
       "Calculates the ROUGE score for a candidate vs. one or more references.",
     docLink: "/evaluation/metrics/heuristic_metrics",
     docHash: "#rouge",
-  },
-  [EXPLAINER_ID.metric_sentiment]: {
-    id: EXPLAINER_ID.metric_sentiment,
-    description:
-      "Analyzes the sentiment of text using NLTK’s VADER sentiment analyzer.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#sentiment",
   },
   [EXPLAINER_ID.metric_hallucination]: {
     id: EXPLAINER_ID.metric_hallucination,

@@ -1,9 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
-import useProjectsList from "@/api/projects/useProjectsList";
-import { keepPreviousData } from "@tanstack/react-query";
-import { Eye, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
+import toLower from "lodash/toLower";
 
-import useAppStore from "@/store/AppStore";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,42 +13,26 @@ import {
 } from "@/components/ui/dropdown-menu";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Separator } from "@/components/ui/separator";
+import { Project } from "@/types/projects";
 import RemovableTag from "@/components/shared/RemovableTag/RemovableTag";
-import toLower from "lodash/toLower";
 
-const LOADED_PROJECTS_COUNT = 100;
+export const LOADED_PROJECTS_COUNT = 100;
 const MAX_SELECTED_PROJECTS = 10;
 
 type ProjectSelectorProps = {
   projectIds: string[];
   setProjectIds: (projectIds: string[]) => void;
+  projects: Project[];
+  totalProjects: number;
 };
 
 const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   projectIds,
   setProjectIds,
+  projects,
+  totalProjects,
 }) => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [search, setSearch] = useState("");
-
-  const { data: projectData } = useProjectsList(
-    {
-      workspaceName,
-      sorting: [
-        {
-          desc: true,
-          id: "last_updated_trace_at",
-        },
-      ],
-      page: 1,
-      size: LOADED_PROJECTS_COUNT,
-    },
-    {
-      placeholderData: keepPreviousData,
-    },
-  );
-
-  const projects = useMemo(() => projectData?.content || [], [projectData]);
 
   const selectedProjects = useMemo(() => {
     if (!projectIds || projectIds.length === 0) {
@@ -63,9 +45,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     return projects.filter((p) => toLower(p.name).includes(toLower(search)));
   }, [projects, search]);
 
-  const hasMoreProjects = Boolean(
-    projectData?.total && projectData.total > LOADED_PROJECTS_COUNT,
-  );
+  const hasMoreProjects = Boolean(totalProjects > LOADED_PROJECTS_COUNT);
 
   const openStateChangeHandler = useCallback((open: boolean) => {
     // need to clear state when it closed
