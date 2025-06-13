@@ -5,6 +5,7 @@ import last from "lodash/last";
 import get from "lodash/get";
 import round from "lodash/round";
 import isUndefined from "lodash/isUndefined";
+import isNumber from "lodash/isNumber";
 import times from "lodash/times";
 import sample from "lodash/sample";
 import mapKeys from "lodash/mapKeys";
@@ -204,6 +205,16 @@ export const formatNumberInK = (value: number): string => {
     return `${(value / 1000).toFixed(1)}k`;
   }
   return value.toString();
+};
+
+export const calculatePercentageChange = (
+  baseValue: number | null | undefined,
+  newValue: number | null | undefined,
+): number | undefined => {
+  if (!isNumber(baseValue) || !isNumber(newValue)) return undefined;
+  if (baseValue === 0 && newValue === 0) return 0;
+  if (baseValue === 0) return undefined;
+  return ((newValue - baseValue) / Math.abs(baseValue)) * 100;
 };
 
 export const updateTextAreaHeight = (

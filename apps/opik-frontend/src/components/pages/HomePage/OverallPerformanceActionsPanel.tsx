@@ -1,11 +1,11 @@
 import React from "react";
-import useLocalStorageState from "use-local-storage-state";
 
+import { Project } from "@/types/projects";
 import { DropdownOption } from "@/types/shared";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import ProjectSelector from "@/components/pages/HomePage/ProjectSelector";
 
-enum PERIOD_OPTION_TYPE {
+export enum PERIOD_OPTION_TYPE {
   THREE_DAYS = "3",
   SEVEN_DAYS = "7",
   FOURTEEN_DAYS = "14",
@@ -31,38 +31,32 @@ const PERIOD_OPTIONS: DropdownOption<PERIOD_OPTION_TYPE>[] = [
   },
 ];
 
-const TIME_PERIOD_KEY = "home-time-period";
-const SELECTED_PROJECTS_KEY = "home-selected-projects";
-
 type OverallPerformanceActionsPanelProps = {
-  period?: string;
-  setPeriod?: (period: string) => void;
+  period: PERIOD_OPTION_TYPE;
+  setPeriod: (period: PERIOD_OPTION_TYPE) => void;
+  projectsIds: string[];
+  setProjectsIds: (projectsIds: string[]) => void;
+  projects: Project[];
+  totalProjects: number;
 };
 
 const OverallPerformanceActionsPanel: React.FC<
   OverallPerformanceActionsPanelProps
-> = () => {
-  const [period, setPeriod] = useLocalStorageState<PERIOD_OPTION_TYPE>(
-    TIME_PERIOD_KEY,
-    {
-      defaultValue: PERIOD_OPTION_TYPE.THREE_DAYS,
-    },
-  );
-
-  const [projectsIds, setProjectsIds] = useLocalStorageState<string[]>(
-    SELECTED_PROJECTS_KEY,
-    {
-      defaultValue: [],
-    },
-  );
-
-  // TODO lala need to sync about validation of projects ids (What about saving per workspace???)
-
+> = ({
+  period,
+  setPeriod,
+  projectsIds,
+  setProjectsIds,
+  projects,
+  totalProjects,
+}) => {
   return (
     <div className="flex items-center justify-between gap-4 pt-4">
       <ProjectSelector
         projectIds={projectsIds}
         setProjectIds={setProjectsIds}
+        projects={projects}
+        totalProjects={totalProjects}
       ></ProjectSelector>
       <div className="w-32 shrink-0">
         <SelectBox
