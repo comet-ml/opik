@@ -17,6 +17,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.TraceThread.TraceThreadPage;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.Visibility;
@@ -125,8 +126,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -5079,7 +5082,10 @@ class TracesResourceTest {
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
-            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+            List<Trace> traces;
+            List<Span> spans = new ArrayList<>();
+
+            traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
@@ -5095,6 +5101,44 @@ class TracesResourceTest {
                     .collect(Collectors.toCollection(ArrayList::new));
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            if (Objects.equals(sorting.field(), SortableFields.SPAN_COUNT) || sorting.field().startsWith("usage.")) {
+                traces = traces.stream().map(t -> t
+                        .toBuilder()
+                        .spanCount(PodamUtils.getIntegerInRange(1, 3))
+                        .build())
+                        .collect(Collectors.toCollection(ArrayList::new));
+
+                Map<String, Integer> usage = null;
+
+                if (sorting.field().startsWith("usage.")) {
+                    int tokens = Math.abs(factory.manufacturePojo(Integer.class));
+                    usage = Map.of("completion_tokens", tokens);
+                }
+
+                for (Trace trace : traces) {
+                    for (int i = 0; i < trace.spanCount(); i++) {
+                        spans.add(factory.manufacturePojo(Span.class).toBuilder()
+                                .usage(usage)
+                                .projectName(projectName)
+                                .traceId(trace.id())
+                                .type(SpanType.general)
+                                .build());
+                    }
+                }
+
+                spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+                if (sorting.field().startsWith("usage.")) {
+                    Map<UUID, List<Span>> spansByTrace = spans.stream().collect(Collectors.groupingBy(Span::traceId));
+                    traces = traces.stream()
+                            .map(t -> t.toBuilder()
+                                    .usage(aggregateSpansUsage(spansByTrace.get(t.id())))
+                                    .build())
+                            .collect(Collectors.toCollection(ArrayList::new));
+                }
+            }
+
 
             var expectedTraces = traces.stream()
                     .sorted(comparator)
@@ -5199,6 +5243,18 @@ class TracesResourceTest {
             Comparator<Trace> tagsComparator = Comparator.comparing(trace -> trace.tags().toString());
             Comparator<Trace> errorInfoComparator = Comparator.comparing(trace -> trace.errorInfo().toString());
 
+            Comparator<Trace> usageComparatorAsc = Comparator.comparing(
+                    (Trace t) -> Optional.ofNullable(t.usage()).map(u -> u.get("completion_tokens"))
+                            .orElse(null),
+                    Comparator.nullsFirst(Comparator.naturalOrder()))
+                    .thenComparing(Comparator.comparing(Trace::id).reversed());
+
+            Comparator<Trace> usageComparatorDesc = Comparator.comparing(
+                            (Trace t) -> Optional.ofNullable(t.usage()).map(u -> u.get("completion_tokens"))
+                                    .orElse(null),
+                            Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(Comparator.comparing(Trace::id).reversed());
+
             return Stream.of(
                     Arguments.of(Comparator.comparing(Trace::name),
                             SortingField.builder().field(SortableFields.NAME).direction(Direction.ASC).build()),
@@ -5247,7 +5303,17 @@ class TracesResourceTest {
                     Arguments.of(Comparator.comparing(Trace::threadId), SortingField.builder()
                             .field(SortableFields.THREAD_ID).direction(Direction.ASC).build()),
                     Arguments.of(Comparator.comparing(Trace::threadId).reversed(), SortingField.builder()
-                            .field(SortableFields.THREAD_ID).direction(Direction.DESC).build()));
+                            .field(SortableFields.THREAD_ID).direction(Direction.DESC).build()),
+                    Arguments.of(Comparator.comparing(Trace::spanCount)
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field(SortableFields.SPAN_COUNT).direction(Direction.ASC).build()),
+                    Arguments.of(Comparator.comparing(Trace::spanCount).reversed()
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field(SortableFields.SPAN_COUNT).direction(Direction.DESC).build()),
+                    Arguments.of(usageComparatorAsc,
+                            new SortingField("usage.completion_tokens", Direction.ASC)),
+                    Arguments.of(usageComparatorDesc,
+                            new SortingField("usage.completion_tokens", Direction.DESC)));
         }
 
         @Test
@@ -8249,7 +8315,7 @@ class TracesResourceTest {
                     SortableFields.CREATED_BY,
                     SortableFields.CREATED_AT,
                     SortableFields.TOTAL_ESTIMATED_COST,
-                    SortableFields.DYNAMIC_USAGE);
+                    SortableFields.USAGE);
         }
 
         @Test
