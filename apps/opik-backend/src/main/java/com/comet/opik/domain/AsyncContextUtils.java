@@ -11,7 +11,7 @@ import reactor.core.publisher.Mono;
 @UtilityClass
 public class AsyncContextUtils {
 
-    static ContextAwareStream<Result> bindWorkspaceIdToFlux(Statement statement) {
+    public static ContextAwareStream<Result> bindWorkspaceIdToFlux(Statement statement) {
         return (userName, workspaceId) -> {
             statement.bind("workspace_id", workspaceId);
             return Flux.from(statement.execute());
