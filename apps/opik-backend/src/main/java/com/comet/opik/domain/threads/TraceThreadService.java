@@ -1,5 +1,6 @@
 package com.comet.opik.domain.threads;
 
+import com.comet.opik.api.events.TraceThreadsReopened;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.google.common.eventbus.EventBus;
@@ -27,6 +28,11 @@ public interface TraceThreadService {
     Mono<Void> processTraceThreads(Set<String> threadIds, UUID projectId);
 
     Mono<List<TraceThreadModel>> getThreadsByProject(int page, int size, TraceThreadCriteria criteria);
+
+    Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(Instant lastUpdatedUntil,
+            int limit);
+
+    Mono<Void> processProjectWithTraceThreadsPendingClosure(UUID projectId, Instant lastUpdatedUntil);
 }
 
 @Slf4j
@@ -91,10 +97,19 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 .build();
 
         return getReopenedThreads(traceThreads, criteria)
-                .flatMap(reopenedThreads -> traceThreadDAO.save(traceThreads)
+                .flatMap(reopenedThreads -> traceThreadDAO.save(traceThreads).thenReturn(reopenedThreads)
                         .doOnSuccess(
                                 count -> log.info("Saved '{}' trace threads for projectId: '{}'", count, projectId)))
-                //Next we will publish the event to notify about reopened threads
+                .flatMap(reopenedTraceThreadIds -> {
+                    if (reopenedTraceThreadIds.isEmpty()) {
+                        return Mono.empty();
+                    }
+
+                    log.info("Reopened '{}' trace threads for projectId: '{}'", reopenedTraceThreadIds.size(),
+                            projectId);
+                    eventBus.post(new TraceThreadsReopened(reopenedTraceThreadIds));
+                    return Mono.empty();
+                })
                 .then();
     }
 
@@ -113,4 +128,22 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 .switchIfEmpty(Mono.just(List.of()));
     }
 
+    @Override
+    public Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(
+            @NonNull Instant lastUpdatedUntil, int limit) {
+        return traceThreadDAO.findProjectsWithPendingClosureThreads(lastUpdatedUntil, limit);
+    }
+
+    @Override
+    public Mono<Void> processProjectWithTraceThreadsPendingClosure(@NonNull UUID projectId,
+            @NonNull Instant lastUpdatedUntil) {
+        return lockService.executeWithLockCustomExpire(
+                new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
+                Mono.deferContextual(contextView -> traceThreadDAO.closeThreadWith(projectId, lastUpdatedUntil)
+                        .doOnSuccess(
+                                count -> log.info("Closed '{}' trace threads for projectId: '{}' on workspaceId: '{}'",
+                                        count, projectId, contextView.get(RequestContext.WORKSPACE_ID)))
+                        .then()),
+                Duration.ofSeconds(5));
+    }
 }

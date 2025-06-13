@@ -25,4 +25,7 @@ public interface LockService {
     <T> Mono<T> executeWithLock(Lock lock, Mono<T> action);
     <T> Mono<T> executeWithLockCustomExpire(Lock lock, Mono<T> action, Duration duration);
     <T> Flux<T> executeWithLock(Lock lock, Flux<T> action);
+
+    <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<T> failToAcquireLockAction, Duration actionTimeout,
+            Duration lockTimeout);
 }

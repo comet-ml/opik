@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.events.TraceThreadsReopened;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -61,6 +62,18 @@ public class TraceThreadListener {
                         () -> log.info("Completed processing TracesCreated event for workspace: '{}', projectIds: '{}'",
                                 event.workspaceId(), event.projectIds()))
                 .subscribe();
+    }
+
+    /**
+     * Handles the TraceThreadsReopened event. Currently, this method is a placeholder
+     * and does not implement any specific logic for reopening trace threads.
+     *
+     * @param event the TraceThreadsReopened event containing the IDs of reopened trace threads
+     */
+    @Subscribe
+    public void onThreadReopen(TraceThreadsReopened event) {
+        log.info("Received TraceThreadsReopened event for trace thread IDs: '{}'", event.ids());
+        // TODO: Implement logic to handle reopening of trace threads
     }
 
     private Flux<Void> processEvent(TracesCreated event, Map<UUID, Set<String>> projectThreadIds) {

@@ -23,7 +23,6 @@ import java.util.function.Consumer;
 class RedissonLockService implements LockService {
 
     private static final String LOCK_ACQUIRED = "Lock '{}' acquired";
-    private static final String LOCK_RELEASED = "Lock '{}' released";
     private static final String TRYING_TO_LOCK_WITH = "Trying to lock with '{}'";
     private static final Consumer<Void> NO_OP = __ -> {
     };
@@ -83,12 +82,15 @@ class RedissonLockService implements LockService {
     }
 
     private Mono<LockInstance> acquire(RPermitExpirableSemaphoreReactive semaphore, Duration duration) {
+        Duration defaultLockTTL = Duration.ofSeconds(distributedLockConfig.getTtlInSeconds());
+
+        // Ensure the TTL is at least as long as the lock duration
+        long ttlInMillis = Math.max(duration.toMillis(), defaultLockTTL.toMillis());
+
         return semaphore
                 .setPermits(1)
-                .then(Mono.defer(
-                        () -> semaphore.acquire(duration.toMillis(), TimeUnit.MILLISECONDS)))
-                .flatMap(locked -> semaphore.expire(Duration.ofSeconds(distributedLockConfig.getTtlInSeconds()))
-                        .thenReturn(new LockInstance(semaphore, locked)));
+                .then(Mono.defer(() -> semaphore.acquire(duration.toMillis(), TimeUnit.MILLISECONDS)))
+                .flatMap(locked -> expire(Duration.ofMillis(ttlInMillis), locked, semaphore));
     }
 
     private <T> Mono<T> runAction(Lock lock, Mono<T> action, String locked) {
@@ -111,6 +113,41 @@ class RedissonLockService implements LockService {
                 .flatMapMany(lockInstance -> stream(lock, stream, lockInstance.locked())
                         .subscribeOn(Schedulers.boundedElastic())
                         .doFinally(signalType -> lockInstance.release(lock)));
+    }
+
+    @Override
+    public <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<T> failToAcquireLockAction,
+            Duration actionTimeout, Duration lockWaitTime) {
+        RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock);
+        log.debug(TRYING_TO_LOCK_WITH, lock);
+
+        return Mono.defer(() -> semaphore.setPermits(1)
+                //Try to acquire the lock until the lockWaitTime expires if the lock is not available it will return Mono.empty()
+                // If the lock is acquired, it sets the expiration time using the actionTimeout
+                .then(Mono.defer(() -> semaphore.tryAcquire(lockWaitTime.toMillis(), actionTimeout.toMillis(),
+                        TimeUnit.MILLISECONDS)))
+                .flatMap(locked -> expire(actionTimeout, locked, semaphore)))
+                .flatMap(lockInstance -> runAction(lock, action, lockInstance))
+                .onErrorResume(RedisException.class, e -> handleError(lock, failToAcquireLockAction, e))
+                .onErrorResume(IllegalStateException.class, e -> handleError(lock, failToAcquireLockAction, e))
+                .switchIfEmpty(failToAcquireLockAction);
+    }
+
+    private <T> Mono<T> runAction(Lock lock, Mono<T> action, LockInstance lockInstance) {
+        return runAction(lock, action, lockInstance.locked())
+                .subscribeOn(Schedulers.boundedElastic())
+                .doFinally(signalType -> lockInstance.release(lock));
+    }
+
+    private Mono<LockInstance> expire(Duration actionTimeout, String locked,
+            RPermitExpirableSemaphoreReactive semaphore) {
+        return semaphore.expire(actionTimeout)
+                .thenReturn(new LockInstance(semaphore, locked));
+    }
+
+    private static <T> Mono<T> handleError(Lock lock, Mono<T> failToAcquireLockAction, Exception e) {
+        log.warn("Failed to acquire lock '{}', executing fallback action", lock, e);
+        return failToAcquireLockAction;
     }
 
     private <T> Flux<T> stream(Lock lock, Flux<T> action, String locked) {
