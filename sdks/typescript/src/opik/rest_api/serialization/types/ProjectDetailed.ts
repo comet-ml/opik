@@ -8,6 +8,7 @@ import * as core from "../../core";
 import { ProjectDetailedVisibility } from "./ProjectDetailedVisibility";
 import { FeedbackScoreAverageDetailed } from "./FeedbackScoreAverageDetailed";
 import { PercentageValuesDetailed } from "./PercentageValuesDetailed";
+import { ErrorCountWithDeviationDetailed } from "./ErrorCountWithDeviationDetailed";
 
 export const ProjectDetailed: core.serialization.ObjectSchema<
     serializers.ProjectDetailed.Raw,
@@ -38,6 +39,7 @@ export const ProjectDetailed: core.serialization.ObjectSchema<
         "guardrails_failed_count",
         core.serialization.number().optional(),
     ),
+    errorCount: core.serialization.property("error_count", ErrorCountWithDeviationDetailed.optional()),
 });
 
 export declare namespace ProjectDetailed {
@@ -58,5 +60,6 @@ export declare namespace ProjectDetailed {
         usage?: Record<string, number> | null;
         trace_count?: number | null;
         guardrails_failed_count?: number | null;
+        error_count?: ErrorCountWithDeviationDetailed.Raw | null;
     }
 }

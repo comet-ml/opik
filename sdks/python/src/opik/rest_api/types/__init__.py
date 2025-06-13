@@ -106,6 +106,8 @@ from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEnti
 from .delete_feedback_score import DeleteFeedbackScore
 from .delete_ids_holder import DeleteIdsHolder
 from .delta import Delta
+from .error_count_with_deviation import ErrorCountWithDeviation
+from .error_count_with_deviation_detailed import ErrorCountWithDeviationDetailed
 from .error_info import ErrorInfo
 from .error_info_experiment_item_bulk_write_view import ErrorInfoExperimentItemBulkWriteView
 from .error_info_public import ErrorInfoPublic
@@ -393,6 +395,8 @@ __all__ = [
     "DeleteFeedbackScore",
     "DeleteIdsHolder",
     "Delta",
+    "ErrorCountWithDeviation",
+    "ErrorCountWithDeviationDetailed",
     "ErrorInfo",
     "ErrorInfoExperimentItemBulkWriteView",
     "ErrorInfoPublic",
