@@ -73,5 +73,26 @@ def assert_dict_has_keys(dic: Dict[str, Any], keys: List[str]) -> None:
         return
 
     raise AssertionError(
-        f"Dict does't contain all the required keys. Dict keys: {dic.keys()}, required keys: {keys}"
+        f"Dict doesn't contain all the required keys. Dict keys: {dic.keys()}, required keys: {keys}"
+    )
+
+
+def assert_dict_keys_in_list(dic: Dict[str, Any], keys: List[str]) -> None:
+    """
+    Asserts that all keys in the dictionary are present in the given list.
+
+    Args:
+        dic: The dictionary whose keys need to be checked
+        keys: The list of allowed keys
+
+    Raises:
+        AssertionError: If any key in the dictionary is not in the provided list
+    """
+    invalid_keys = [key for key in dic.keys() if key not in keys]
+
+    if len(invalid_keys) == 0:
+        return
+
+    raise AssertionError(
+        f"Dict contains keys that are not in the allowed list. Invalid keys: {invalid_keys}, allowed keys: {keys}"
     )

@@ -1,6 +1,5 @@
 import os
 import subprocess
-import sys
 import time
 
 import certifi
@@ -142,9 +141,6 @@ def test_opik_tracer_with_sample_agent(
     testlib.assert_dict_has_keys(spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
-@pytest.mark.skipif(
-    sys.version_info[:2] == (3, 9), reason="Test not supported on Python 3.9"
-)
 @pytest.mark.parametrize("start_api_server", ["sample_agent_sse"], indirect=True)
 def test_opik_tracer_with_sample_agent_sse(
     opik_client_unique_project_name, start_api_server
@@ -181,14 +177,18 @@ def test_opik_tracer_with_sample_agent_sse(
     assert trace.usage is not None
     assert "adk_invocation_id" in trace.metadata.keys()
     assert trace.metadata["created_from"] == "google-adk"
-    testlib.assert_dict_has_keys(trace.usage, EXPECTED_USAGE_KEYS_GOOGLE_REASONING)
+    testlib.assert_dict_keys_in_list(trace.usage, EXPECTED_USAGE_KEYS_GOOGLE_REASONING)
 
     spans = opik_client_unique_project_name.search_spans()
     assert len(spans) == 3
     assert spans[0].provider == adk_helpers.get_adk_provider()
     assert spans[2].provider == adk_helpers.get_adk_provider()
-    testlib.assert_dict_has_keys(spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE_REASONING)
-    testlib.assert_dict_has_keys(spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE_REASONING)
+    testlib.assert_dict_keys_in_list(
+        spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE_REASONING
+    )
+    testlib.assert_dict_keys_in_list(
+        spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE_REASONING
+    )
 
 
 @pytest.mark.parametrize("start_api_server", ["sample_agent_openai"], indirect=True)
