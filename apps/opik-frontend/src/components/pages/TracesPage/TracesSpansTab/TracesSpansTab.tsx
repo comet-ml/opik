@@ -312,6 +312,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
+  const clearRowSelection = useCallback(() => {
+    setRowSelection({});
+  }, []);
+
   const { data, isPending, refetch } = useTracesOrSpansList(
     {
       projectId,
@@ -718,6 +722,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             rows={selectedRows}
             columnsToExport={columnsToExport}
             type={type as TRACE_DATA_TYPE}
+            onClearSelection={clearRowSelection}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <TooltipWrapper
