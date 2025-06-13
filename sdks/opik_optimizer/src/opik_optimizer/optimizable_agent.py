@@ -7,14 +7,16 @@ from litellm.integrations.opik.opik import OpikLogger
 
 from .optimization_config.chat_prompt import ChatPrompt
 
-class OptimizableAgent():
+
+class OptimizableAgent:
     """
     An agent class to subclass to make an Optimizable Agent.
     """
+
     model = None
     project_name = None
     fallback_prompt = "You are a helpful assistant."
-    
+
     def __init__(self, agent_config: Dict[str, Any]):
         if self.project_name is None:
             self.project_name = "Default Project"
@@ -29,16 +31,13 @@ class OptimizableAgent():
 
     def init_agent(self, agent_config):
         self.chat_prompt = agent_config.get(
-            "chat-prompt",
-            ChatPrompt(system=self.fallback_prompt)
+            "chat-prompt", ChatPrompt(system=self.fallback_prompt)
         )
 
     def llm_invoke(self, query):
         messages = []
         if self.chat_prompt.system:
-            messages.append(
-                {"role": "system", "content": self.chat_prompt.system}
-            )
+            messages.append({"role": "system", "content": self.chat_prompt.system})
         if self.chat_prompt.messages:
             messages.extend(self.chat_prompt.messages)
 

@@ -61,6 +61,7 @@ The user will provide a question string like "Who is Barack Obama?".
 3. Respond clearly to the user, stating the answer found by the tool.
 """
 
+
 class ADKAgent(OptimizableAgent):
     model = "openai/gpt-4.1"
     project_name = "adk-agent-wikipedia"
