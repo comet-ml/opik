@@ -84,7 +84,7 @@ jobs:
       - name: ADK Tests Python ${{ matrix.python_version }}
         if: contains(fromJSON('["adk", "all"]'), env.LIBS)
         env:
-          GOOGLE_CLOUD_LOCATION: us-east1
+          GOOGLE_CLOUD_LOCATION: global
           GOOGLE_CLOUD_PROJECT: opik-sdk-tests
           GOOGLE_GENAI_USE_VERTEXAI: TRUE
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
