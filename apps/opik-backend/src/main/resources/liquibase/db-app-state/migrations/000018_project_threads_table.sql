@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS project_trace_threads (
     id CHAR(36) NOT NULL,
     project_id CHAR(36) NOT NULL,
-    thread_id VARCHAR(255) NOT NULL,
+    thread_id VARCHAR(150) NOT NULL,
     created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     created_by VARCHAR(100) NOT NULL DEFAULT 'admin',
     CONSTRAINT `project_trace_threads_pk` PRIMARY KEY (id),
