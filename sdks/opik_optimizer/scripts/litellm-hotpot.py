@@ -29,4 +29,6 @@ dataset = hotpot_300()
 
 # Optimize it:
 optimizer = FewShotBayesianOptimizer()
-result = optimizer.optimize_agent(LiteLLMAgent, dataset, levenshtein_ratio)
+result = optimizer.optimize_agent(
+    agent_class=LiteLLMAgent, dataset=dataset, metric=levenshtein_ratio
+)
