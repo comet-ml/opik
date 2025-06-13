@@ -1,6 +1,7 @@
 from .any_compare_helpers import ANY, ANY_BUT_NONE, ANY_DICT, ANY_LIST, ANY_STRING
 from .assert_helpers import (
     assert_dict_has_keys,
+    assert_dict_keys_in_list,
     assert_dicts_equal,
     assert_equal,
     prepare_difference_report,
@@ -20,6 +21,7 @@ __all__ = [
     "SpanModel",
     "TraceModel",
     "assert_dict_has_keys",
+    "assert_dict_keys_in_list",
     "assert_dicts_equal",
     "assert_equal",
     "patch_environ",

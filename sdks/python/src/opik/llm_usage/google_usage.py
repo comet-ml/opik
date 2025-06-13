@@ -17,6 +17,9 @@ class GoogleGeminiUsage(base_original_provider_usage.BaseOriginalProviderUsage):
     cached_content_token_count: Optional[int] = None
     """Output only. Number of tokens in the cached part in the input (the cached content)."""
 
+    thoughts_token_count: Optional[int] = None
+    """Number of tokens spent for reasoning. Only available for Gemini models with reasoning enabled. (Gemini-2.5 and above)"""
+
     def to_backend_compatible_flat_dict(self, parent_key_prefix: str) -> Dict[str, int]:
         return super().to_backend_compatible_flat_dict(parent_key_prefix)
 
