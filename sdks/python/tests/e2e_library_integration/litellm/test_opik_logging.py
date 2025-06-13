@@ -67,7 +67,7 @@ def test_litellm_opik_logging__happyflow(
         trace_id=traces[0].id,
         span_id=spans[0].id,
         parent_span_id=None,
-        name=ANY_STRING(startswith=MODEL_NAME),
+        name=ANY_STRING.starting_with(MODEL_NAME),
         metadata=ANY_DICT,
         input=[
             {

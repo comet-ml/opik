@@ -43,7 +43,7 @@ def test_crewai__happyflow(
 
     EXPECTED_TRACE_TREE = TraceModel(
         end_time=ANY_BUT_NONE,
-        id=ANY_STRING(),
+        id=ANY_STRING,
         input={"topic": "AI Agents"},
         metadata={"created_from": "crewai"},
         name="kickoff",
@@ -55,7 +55,7 @@ def test_crewai__happyflow(
         spans=[
             SpanModel(
                 end_time=ANY_BUT_NONE,
-                id=ANY_STRING(),
+                id=ANY_STRING,
                 input=ANY_DICT,
                 metadata={"created_from": "crewai"},
                 name="kickoff",
@@ -67,7 +67,7 @@ def test_crewai__happyflow(
                 spans=[
                     SpanModel(
                         end_time=ANY_BUT_NONE,
-                        id=ANY_STRING(),
+                        id=ANY_STRING,
                         input=ANY_DICT,
                         metadata={"created_from": "crewai"},
                         name="Task: research_task",
@@ -78,7 +78,7 @@ def test_crewai__happyflow(
                         spans=[
                             SpanModel(
                                 end_time=ANY_BUT_NONE,
-                                id=ANY_STRING(),
+                                id=ANY_STRING,
                                 input=ANY_DICT,
                                 metadata={"created_from": "crewai"},
                                 name="AI Agents Senior Data Researcher",
@@ -90,13 +90,13 @@ def test_crewai__happyflow(
                                 spans=[
                                     SpanModel(
                                         end_time=ANY_BUT_NONE,
-                                        id=ANY_STRING(),
+                                        id=ANY_STRING,
                                         input=ANY_DICT,
                                         metadata={
                                             "created_from": "crewai",
                                             "usage": ANY_DICT,
                                         },
-                                        model=ANY_STRING(startswith="gpt-4o-mini"),
+                                        model=ANY_STRING.starting_with("gpt-4o-mini"),
                                         name="llm call",
                                         output=ANY_DICT,
                                         project_name=project_name,
@@ -113,7 +113,7 @@ def test_crewai__happyflow(
                     ),
                     SpanModel(
                         end_time=ANY_BUT_NONE,
-                        id=ANY_STRING(),
+                        id=ANY_STRING,
                         input=ANY_DICT,
                         metadata={"created_from": "crewai"},
                         name="Task: reporting_task",
@@ -124,7 +124,7 @@ def test_crewai__happyflow(
                         spans=[
                             SpanModel(
                                 end_time=ANY_BUT_NONE,
-                                id=ANY_STRING(),
+                                id=ANY_STRING,
                                 input=ANY_DICT,
                                 metadata={"created_from": "crewai"},
                                 name="AI Agents Reporting Analyst",
@@ -136,13 +136,13 @@ def test_crewai__happyflow(
                                 spans=[
                                     SpanModel(
                                         end_time=ANY_BUT_NONE,
-                                        id=ANY_STRING(),
+                                        id=ANY_STRING,
                                         input=ANY_DICT,
                                         metadata={
                                             "created_from": "crewai",
                                             "usage": ANY_DICT,
                                         },
-                                        model=ANY_STRING(startswith="gpt-4o-mini"),
+                                        model=ANY_STRING.starting_with("gpt-4o-mini"),
                                         name="llm call",
                                         output=ANY_DICT,
                                         project_name=project_name,

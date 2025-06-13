@@ -126,6 +126,7 @@ class OpikTracer:
                     metadata=trace_metadata,
                     thread_id=thread_id,
                     input=user_input,
+                    tags=self.tags,
                 )
 
                 self._start_trace(trace_data=current_trace)
@@ -134,6 +135,7 @@ class OpikTracer:
                     name=name,
                     project_name=self.project_name,
                     metadata=trace_metadata,
+                    tags=self.tags,
                     type="general",
                 )
                 _, opik_span_data = (

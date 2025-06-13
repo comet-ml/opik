@@ -270,7 +270,7 @@ def test_llama_index_chat__happyflow(
                     end_time=ANY_BUT_NONE,
                     project_name=expected_project_name,
                     spans=[],
-                    model=ANY_STRING(startswith="gpt-3.5-turbo"),
+                    model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                     provider=LLMProvider.OPENAI,
                 )
             ],
@@ -359,7 +359,7 @@ def test_llama_index_stream_chat__happyflow(
                     end_time=ANY_BUT_NONE,
                     project_name=expected_project_name,
                     spans=[],
-                    model=ANY_STRING(startswith="gpt-3.5-turbo"),
+                    model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                     provider=LLMProvider.OPENAI,
                 )
             ],
