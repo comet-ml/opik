@@ -163,6 +163,48 @@ function Send-InstallReport {
     }
 }
 
+function Fix-AllShellScriptLineEndings {
+    Write-Host '[INFO] Checking line endings for all shell scripts...'
+    $count = 0
+    
+    # Get all .sh files recursively
+    Get-ChildItem -Path $scriptDir -Recurse -Filter "*.sh" | ForEach-Object {
+        $filePath = $_.FullName
+        $content = [System.IO.File]::ReadAllText($filePath)
+        
+        # Check if file has CRLF line endings
+        if ($content -match "`r`n") {
+            Write-Host "[INFO] Converting CRLF to LF for $filePath"
+            $content = $content -replace "`r`n", "`n"
+            [System.IO.File]::WriteAllText($filePath, $content)
+            $count++
+        }
+    }
+    
+    # Also check for shell scripts without .sh extension
+    $knownScripts = @(
+        (Join-Path $scriptDir "apps\opik-backend\entrypoint.sh"),
+        (Join-Path $scriptDir "apps\opik-backend\install_rds_cert.sh"),
+        (Join-Path $scriptDir "apps\opik-backend\run_db_migrations.sh"),
+        (Join-Path $scriptDir "apps\opik-python-backend\entrypoint.sh"),
+        (Join-Path $scriptDir "apps\opik-python-backend\demo_data_entrypoint.sh")
+    )
+    
+    foreach ($scriptPath in $knownScripts) {
+        if (Test-Path $scriptPath) {
+            $content = [System.IO.File]::ReadAllText($scriptPath)
+            if ($content -match "`r`n") {
+                Write-Host "[INFO] Converting CRLF to LF for $scriptPath"
+                $content = $content -replace "`r`n", "`n"
+                [System.IO.File]::WriteAllText($scriptPath, $content)
+                $count++
+            }
+        }
+    }
+    
+    Write-Host "[INFO] Converted line endings for $count shell script files"
+}
+
 function Start-MissingContainers {
     Test-DockerStatus
 
@@ -203,6 +245,7 @@ function Start-MissingContainers {
     $dockerArgs += "up", "-d"
 
     if ($BUILD_MODE -eq "true") {
+        Fix-AllShellScriptLineEndings
         $dockerArgs += "--build"
     }
 
