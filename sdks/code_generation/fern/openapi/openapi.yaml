@@ -99,6 +99,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BiInformationResponse"
+  /v1/internal/usage/bi-spans:
+    get:
+      tags:
+      - System usage
+      summary: Get spans information for BI events
+      description: Get spans information for BI events per user per workspace
+      operationId: getSpansBiInfo
+      responses:
+        "200":
+          description: Spans BiInformationResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BiInformationResponse"
   /v1/internal/usage/workspace-span-counts:
     get:
       tags:
@@ -7115,6 +7129,18 @@ components:
           - running
           - completed
           - cancelled
+    ErrorCountWithDeviation:
+      type: object
+      properties:
+        count:
+          type: integer
+          format: int64
+        deviation:
+          type: integer
+          format: int64
+        deviation_percentage:
+          type: integer
+          format: int64
     Project:
       required:
       - name
@@ -7181,6 +7207,8 @@ components:
           type: integer
           format: int64
           readOnly: true
+        error_count:
+          $ref: "#/components/schemas/ErrorCountWithDeviation"
     Project_Write:
       required:
       - name
@@ -7367,6 +7395,21 @@ components:
         guardrails_failed_count:
           type: integer
           format: int64
+        error_count:
+          $ref: "#/components/schemas/ErrorCountWithDeviation"
+    ErrorCountWithDeviation_Detailed:
+      type: object
+      properties:
+        count:
+          type: integer
+          format: int64
+        deviation:
+          type: integer
+          format: int64
+        deviation_percentage:
+          type: integer
+          format: int64
+      readOnly: true
     FeedbackScoreAverage_Detailed:
       required:
       - name
@@ -7454,6 +7497,8 @@ components:
           type: integer
           format: int64
           readOnly: true
+        error_count:
+          $ref: "#/components/schemas/ErrorCountWithDeviation_Detailed"
     ErrorMessage_Detailed:
       type: object
       properties:
