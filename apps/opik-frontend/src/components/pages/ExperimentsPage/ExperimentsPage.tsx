@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Info, RotateCw } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
+import isObject from "lodash/isObject";
 import {
   ColumnPinningState,
   ColumnSort,
@@ -75,16 +76,19 @@ import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackSc
 import { formatNumericData } from "@/lib/utils";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import { flattie } from "flattie";
+import { uniq } from "lodash";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import ExperimentsPathsAutocomplete from "@/components/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
 import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
-import isObject from "lodash/isObject";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
 const COLUMNS_ORDER_KEY = "experiments-columns-order";
 const COLUMNS_SORT_KEY = "experiments-columns-sort";
 const COLUMNS_SCORES_ORDER_KEY = "experiments-scores-columns-order";
+const COLUMNS_CONFIGURATION_ORDER_KEY =
+  "experiments-configuration-columns-order";
 
 export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   {
@@ -330,12 +334,48 @@ const ExperimentsPage: React.FunctionComponent = () => {
   >(COLUMNS_SCORES_ORDER_KEY, {
     defaultValue: [],
   });
+  const [metadataColumnsOrder, setMetadataColumnsOrder] = useLocalStorageState<
+    string[]
+  >(COLUMNS_CONFIGURATION_ORDER_KEY, { defaultValue: [] });
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
   >(COLUMNS_WIDTH_KEY, {
     defaultValue: {},
   });
+
+  const flattenExperimentMetadataMap = useMemo(() => {
+    return experiments.reduce<Record<string, Record<string, string>>>(
+      (acc, exp) => {
+        acc[exp.id] = isObject(exp.metadata)
+          ? flattie(exp.metadata, ".", true)
+          : {};
+        return acc;
+      },
+      {},
+    );
+  }, [experiments]);
+
+  const metadataKeys = useMemo(() => {
+    return uniq(
+      Object.values(flattenExperimentMetadataMap).flatMap((metaMap) =>
+        Object.keys(metaMap),
+      ),
+    ).sort();
+  }, [flattenExperimentMetadataMap]);
+
+  const metadataColumnsData = useMemo(() => {
+    return metadataKeys.map(
+      (key) =>
+        ({
+          id: `metadata.${key}`,
+          label: key,
+          type: COLUMN_TYPE.string,
+          accessorFn: (row: GroupedExperiment) =>
+            flattenExperimentMetadataMap[row.id]?.[key],
+        }) as ColumnData<GroupedExperiment>,
+    );
+  }, [metadataKeys, flattenExperimentMetadataMap]);
 
   const dynamicScoresColumns = useMemo(() => {
     return (feedbackScoresData?.scores ?? [])
@@ -406,6 +446,14 @@ const ExperimentsPage: React.FunctionComponent = () => {
           sortableColumns: sortableBy,
         },
       ),
+      ...convertColumnDataToColumn<GroupedExperiment, GroupedExperiment>(
+        metadataColumnsData,
+        {
+          columnsOrder,
+          selectedColumns,
+          sortableColumns: sortableBy,
+        },
+      ),
       generateActionsColumDef({
         cell: ExperimentRowActionsCell,
       }),
@@ -417,6 +465,8 @@ const ExperimentsPage: React.FunctionComponent = () => {
     selectedColumns,
     scoresColumnsData,
     scoresColumnsOrder,
+    metadataColumnsData,
+    metadataColumnsOrder,
   ]);
 
   const sortConfig = useMemo(
@@ -477,8 +527,21 @@ const ExperimentsPage: React.FunctionComponent = () => {
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
       },
+      {
+        title: "Configuration values",
+        columns: metadataColumnsData,
+        order: metadataColumnsOrder,
+        onOrderChange: setMetadataColumnsOrder,
+      },
     ];
-  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+  }, [
+    scoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+    metadataColumnsData,
+    metadataColumnsOrder,
+    setMetadataColumnsOrder,
+  ]);
 
   if (isPending || isFeedbackScoresPending) {
     return <Loader />;
