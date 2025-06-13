@@ -90,14 +90,14 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
             log.warn("{} consumer already started. Ignoring start request", getSubscriberName());
             return;
         }
-        // This particular scorer implementation only consumes the respective Redis stream
+        // This particular subscriber implementation only consumes the respective Redis stream
         stream = initStream(config, redisson);
         log.info("{} consumer started successfully", getSubscriberName());
     }
 
     @Override
     public void stop() {
-        log.info("Shutting down online scorer and closing stream");
+        log.info("Shutting down '{}' and closing stream", getSubscriberName());
         if (stream != null) {
             if (streamSubscription != null && !streamSubscription.isDisposed()) {
                 log.info("Waiting for last messages to be processed before shutdown...");
@@ -109,7 +109,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                                     log.info("Processing last '{}' messages before shutdown", messages.size());
                                     return Flux.fromIterable(messages.entrySet())
                                             .publishOn(Schedulers.boundedElastic())
-                                            .doOnNext(entry -> processReceivedMessages(stream, entry))
+                                            .flatMap(entry -> processReceivedMessages(stream, entry))
                                             .collectList()
                                             .then(Mono.fromRunnable(() -> streamSubscription.dispose()));
                                 }

@@ -28,7 +28,7 @@ public interface TraceThreadService {
 
     String THREADS_LOCK = "trace-threads-process";
 
-    Mono<Void> processTraceThreads(Set<String> threadIds, UUID projectId);
+    Mono<Void> processTraceThreads(Map<String, Instant> threadIdAndLastUpdateAts, UUID projectId);
 
     Mono<List<TraceThreadModel>> getThreadsByProject(int page, int size, TraceThreadCriteria criteria);
 
@@ -43,7 +43,6 @@ public interface TraceThreadService {
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class TraceThreadServiceImpl implements TraceThreadService {
-
 
     private static final Duration LOCK_DURATION = Duration.ofSeconds(5);
 
@@ -128,8 +127,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
         return lockService.executeWithLockCustomExpire(
                 new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
                 Mono.deferContextual(contextView -> closeThreadWith(projectId, lastUpdatedUntil, contextView)),
-                Duration.ofSeconds(5))
-                .then();
+                LOCK_DURATION).then();
     }
 
     private Mono<Long> closeThreadWith(UUID projectId, Instant lastUpdatedUntil, ContextView contextView) {

@@ -1,50 +1,61 @@
 package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
+import com.comet.opik.api.resources.v1.events.TraceThreadBufferConfig;
 import com.comet.opik.domain.threads.TraceThreadService;
-import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.TraceThreadConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
-import io.dropwizard.jobs.annotations.Every;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.JobExecutionContext;
+import org.redisson.api.RSetReactive;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.api.StreamMessageId;
 import org.redisson.api.stream.StreamAddArgs;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.UUID;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
 @Singleton
 @Slf4j
-@Every("5s")
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TraceThreadsClosingJob extends Job {
 
-    private final @NonNull TraceThreadService traceThreadService;
-    private final @NonNull LockService lockService;
-    private final @NonNull OpikConfiguration opikConfiguration;
-    private final @NonNull RedissonReactiveClient redisClient;
+    private final TraceThreadService traceThreadService;
+    private final LockService lockService;
+    private final TraceThreadConfig traceThreadConfig;
+    private final RedissonReactiveClient redisClient;
+
+    @Inject
+    public TraceThreadsClosingJob(@NonNull TraceThreadService traceThreadService,
+            @NonNull LockService lockService,
+            @NonNull @Config TraceThreadConfig traceThreadConfig,
+            @NonNull RedissonReactiveClient redisClient) {
+        this.traceThreadService = traceThreadService;
+        this.lockService = lockService;
+        this.traceThreadConfig = traceThreadConfig;
+        this.redisClient = redisClient;
+    }
 
     @Override
     public void doJob(JobExecutionContext jobExecutionContext) {
         var lock = new Lock("job", TraceThreadsClosingJob.class.getSimpleName());
-        var timeoutToMarkThreadAsInactive = opikConfiguration.getTraceThreadConfig()
+        var timeoutToMarkThreadAsInactive = traceThreadConfig
                 .getTimeoutToMarkThreadAsInactive().toJavaDuration(); // This is the timeout to mark threads as inactive
-        int limit = 1000; // Limit to process in each job execution
+        int limit = 1000; // Limit to a process in each job execution
 
         lockAndProcessJob(lock, timeoutToMarkThreadAsInactive, limit)
-                .doOnError(error -> log.error("Error processing closing of trace threads", error))
-                .doOnSuccess(unused -> log.info("Successfully started closing trace threads process"));
+                .subscribe(
+                        __ -> log.info("Successfully started closing trace threads process"),
+                        error -> log.error("Error processing closing of trace threads", error));
     }
 
     private Mono<Void> lockAndProcessJob(Lock lock, Duration timeoutToMarkThreadAsInactive, int limit) {
@@ -53,7 +64,8 @@ public class TraceThreadsClosingJob extends Job {
                 Mono.defer(() -> enqueueInRedis(
                         traceThreadService
                                 .getProjectsWithPendingClosureThreads(
-                                        Instant.now().minus(timeoutToMarkThreadAsInactive),
+                                        Instant.now().minus(timeoutToMarkThreadAsInactive)
+                                                .truncatedTo(ChronoUnit.MICROS),
                                         limit))),
                 Mono.fromCallable(() -> {
                     log.info("Could not acquire lock for TraceThreadsClosingJob, skipping execution");
@@ -64,16 +76,28 @@ public class TraceThreadsClosingJob extends Job {
     }
 
     private Mono<Void> enqueueInRedis(Flux<ProjectWithPendingClosureTraceThreads> flux) {
-        TraceThreadConfig traceThreadConfig = opikConfiguration.getTraceThreadConfig();
         var stream = redisClient.getStream(traceThreadConfig.getStreamName(), traceThreadConfig.getCodec());
 
-        return flux.flatMap(message -> stream
-                .add(StreamAddArgs.entry(TraceThreadConfig.PAYLOAD_FIELD, message))
-                //Todo: Block the stream to add repetedly the same message
-                .doOnNext(id -> successLog(id, traceThreadConfig))
-                .doOnError(this::errorLog))
-                .doOnComplete(() -> log.info("All messages enqueued successfully in stream {}",
-                        traceThreadConfig.getStreamName()))
+        return flux.flatMap(message -> addToPendingList(message.projectId(), traceThreadConfig)
+                .flatMap(pending -> {
+                    if (Boolean.TRUE.equals(pending)) {
+                        return stream.add(StreamAddArgs.entry(TraceThreadConfig.PAYLOAD_FIELD, message));
+                    } else {
+                        log.info("Project {} is already in the pending closure list, skipping enqueue",
+                                message.projectId());
+                        return Mono.empty();
+                    }
+                }))
+                .doOnError(this::errorLog)
+                .collectList()
+                .doOnSuccess(ids -> {
+                    if (ids.isEmpty()) {
+                        log.info("No messages to enqueue in stream {}", traceThreadConfig.getStreamName());
+                    } else {
+                        log.info("A total of '{}' messages enqueued successfully in stream {}", ids.size(),
+                                traceThreadConfig.getStreamName());
+                    }
+                })
                 .then();
     }
 
@@ -81,8 +105,11 @@ public class TraceThreadsClosingJob extends Job {
         log.error("Error sending message", throwable);
     }
 
-    private void successLog(StreamMessageId streamMessageId, TraceThreadConfig config) {
-        log.debug("Successfully enqueued message with ID {} in stream {}", streamMessageId, config.getStreamName());
+    private Mono<Boolean> addToPendingList(UUID projectId, TraceThreadConfig config) {
+        RSetReactive<UUID> projectWithThreadsPendingClosure = redisClient
+                .getSet(TraceThreadBufferConfig.BUFFER_SET_NAME);
+        return projectWithThreadsPendingClosure.expire(config.getTimeoutToMarkThreadAsInactive().toJavaDuration())
+                .then(Mono.defer(() -> projectWithThreadsPendingClosure.add(projectId)));
     }
 
 }

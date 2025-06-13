@@ -73,7 +73,7 @@ databaseAnalytics:
   #   - failover=3
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
-  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,apply_mutations_on_fly=1}
+  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -374,7 +374,7 @@ serviceToggles:
 
 # Trace Thread configuration
 traceThreadConfig:
-  # Default: 10
+  # Default: 10min
   # Description: Inactive thread timeout in minutes. If a thread is inactive for this amount of time, it will be marked as inactive
   timeoutToMarkThreadAsInactive: ${OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE_IN_MIN:-10m}
   # Default: trace_thread_closing
@@ -389,3 +389,6 @@ traceThreadConfig:
   # Default: trace_thread_closing_stream
   # Description: The name of the Redis Stream used for trace thread closing
   streamName: ${OPIK_REDIS_TRACE_THREAD_STREAM_NAME:-'trace_thread_closing_stream'}
+  # Default: 5s
+  # Description: The interval at which the close trace thread job will run to inactive threads
+  closeTraceThreadJobInterval: ${OPIK_CLOSE_TRACE_THREAD_JOB_INTERVAL:-5s}

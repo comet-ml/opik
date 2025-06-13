@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure;
 
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MinDuration;
@@ -40,7 +41,12 @@ public class TraceThreadConfig implements StreamConfiguration {
     @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     private Duration timeoutToMarkThreadAsInactive;
 
+    @Valid @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    private Duration closeTraceThreadJobInterval;
+
     @Override
+    @JsonIgnore
     public Codec getCodec() {
         return CODEC;
     }

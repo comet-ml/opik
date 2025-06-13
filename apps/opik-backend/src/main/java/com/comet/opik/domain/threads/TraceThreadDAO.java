@@ -1,6 +1,5 @@
 package com.comet.opik.domain.threads;
 
-
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
@@ -84,19 +83,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             """;
 
-    private static final String FIND_PROJECTS_WITH_THREADS_PENDING_CLOSURE_SQL = """
-            SELECT
-                workspace_id,
-                project_id,
-                min(last_updated_at) AS last_updated_at,
-            FROM trace_threads final
-            WHERE status = 'active'
-            AND last_updated_at < parseDateTime64BestEffort(:last_updated_at, 9)
-            GROUP BY workspace_id, project_id
-            ORDER BY last_updated_at
-            LIMIT :limit
-            """;
-
     private static final String FIND_PENDING_CLOSURE_THREADS_SQL = """
             SELECT DISTINCT
                 workspace_id,
@@ -111,7 +97,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     private static final String CLOSURE_THREADS_SQL = """
             INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at)
             SELECT
-                workspace_id, project_id, thread_id, id, 'closed' AS status, created_by, :user_name, created_at, now64(9)
+                workspace_id, project_id, thread_id, id, 'inactive' AS status, created_by, :user_name, created_at, now64(9)
             FROM trace_threads final
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
@@ -201,9 +187,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                     .bind("last_updated_at", lastUpdatedUntil.toString())
                     .bind("limit", limit);
 
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .flatMap(result -> result
-                            .map((row, rowMetadata) -> this.mapToProjectWithPendingClosuseThreads(row)));
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE
+                            .mapToProjectWithPendingClosuseThreads(row)));
         });
     }
 
@@ -217,26 +203,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
         });
-    }
-
-    private ProjectWithPendingClosureTraceThreads mapToProjectWithPendingClosuseThreads(Row row) {
-        return ProjectWithPendingClosureTraceThreads.builder()
-                .projectId(row.get("project_id", UUID.class))
-                .workspaceId(row.get("workspace_id", String.class))
-                .build();
-    }
-
-    private TraceThreadModel mapFromRow(Row row) {
-        return TraceThreadModel.builder()
-                .id(row.get("id", UUID.class))
-                .threadId(row.get("thread_id", String.class))
-                .projectId(row.get("project_id", UUID.class))
-                .status(TraceThreadModel.Status.fromValue(row.get("status", String.class)))
-                .createdBy(row.get("created_by", String.class))
-                .lastUpdatedBy(row.get("last_updated_by", String.class))
-                .createdAt(row.get("created_at", Instant.class))
-                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                .build();
     }
 
     private void bindTemplateParam(TraceThreadCriteria criteria, ST template) {

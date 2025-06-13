@@ -288,7 +288,7 @@ serviceToggles:
 
 # Trace Thread configuration
 traceThreadConfig:
-  # Default: 10
+  # Default: 500ms
   # Description: Inactive thread timeout in minutes. If a thread is inactive for this amount of time, it will be marked as inactive
   timeoutToMarkThreadAsInactive: 500ms
   # Default: trace_thread_closing
@@ -303,3 +303,6 @@ traceThreadConfig:
   # Default: trace_thread_closing_stream
   # Description: The name of the Redis Stream used for trace thread closing
   streamName: 'trace_thread_closing_stream'
+  # Default: 1s
+  # Description: The interval at which the close trace thread job will run to inactive threads
+  closeTraceThreadJobInterval: 1s
