@@ -567,7 +567,7 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
         error_info={
             "exception_type": "Exception",
             "message": "some-error-message",
-            "traceback": ANY_STRING(),
+            "traceback": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -583,7 +583,7 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
                 error_info={
                     "exception_type": "Exception",
                     "message": "some-error-message",
-                    "traceback": ANY_STRING(),
+                    "traceback": ANY_STRING,
                 },
                 output=None,
                 start_time=ANY_BUT_NONE,
