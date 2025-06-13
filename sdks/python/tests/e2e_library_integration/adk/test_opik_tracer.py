@@ -20,11 +20,22 @@ ADK_SESSION = "session_113"
 
 EXPECTED_USAGE_KEYS_GOOGLE = [
     "completion_tokens",
+    "prompt_tokens",
+    "total_tokens",
     "original_usage.candidates_token_count",
     "original_usage.prompt_token_count",
     "original_usage.total_token_count",
+]
+
+EXPECTED_USAGE_KEYS_GOOGLE_REASONING = [
+    "completion_tokens",
     "prompt_tokens",
     "total_tokens",
+    "thoughts_tokens",
+    "original_usage.candidates_token_count",
+    "original_usage.prompt_token_count",
+    "original_usage.total_token_count",
+    "original_usage.thoughts_token_count",
 ]
 
 
@@ -128,6 +139,52 @@ def test_opik_tracer_with_sample_agent(
     assert spans[2].provider == adk_helpers.get_adk_provider()
     testlib.assert_dict_has_keys(spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
     testlib.assert_dict_has_keys(spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
+
+
+@pytest.mark.parametrize("start_api_server", ["sample_agent_sse"], indirect=True)
+def test_opik_tracer_with_sample_agent_sse(
+    opik_client_unique_project_name, start_api_server
+) -> None:
+    """Run the test against the SSE endpoint with streaming enabled using the gemini-2.5-flash model."""
+    base_url = start_api_server
+
+    # send the request to the ADK API server
+    json_data = {
+        "app_name": "sample_agent_sse",
+        "user_id": ADK_USER,
+        "session_id": ADK_SESSION,
+        "new_message": {
+            "role": "user",
+            "parts": [{"text": "Hey, whats the weather in New York today?"}],
+        },
+        "streaming": True,
+    }
+
+    result = requests.post(
+        f"{base_url}/run_sse",
+        json=json_data,
+    )
+    # print("Response: ", result.text)
+    assert result.status_code == 200
+
+    traces = opik_client_unique_project_name.search_traces(
+        filter_string='input contains "Hey, whats the weather in New York today?"',
+    )
+    assert len(traces) == 1
+
+    trace = traces[0]
+    assert trace.span_count == 3  # two LLM calls and one function call
+    assert trace.usage is not None
+    assert "adk_invocation_id" in trace.metadata.keys()
+    assert trace.metadata["created_from"] == "google-adk"
+    testlib.assert_dict_has_keys(trace.usage, EXPECTED_USAGE_KEYS_GOOGLE_REASONING)
+
+    spans = opik_client_unique_project_name.search_spans()
+    assert len(spans) == 3
+    assert spans[0].provider == adk_helpers.get_adk_provider()
+    assert spans[2].provider == adk_helpers.get_adk_provider()
+    testlib.assert_dict_has_keys(spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE_REASONING)
+    testlib.assert_dict_has_keys(spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE_REASONING)
 
 
 @pytest.mark.parametrize("start_api_server", ["sample_agent_openai"], indirect=True)

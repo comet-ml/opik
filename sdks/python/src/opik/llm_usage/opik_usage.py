@@ -32,6 +32,7 @@ class OpikUsage(pydantic.BaseModel):
     completion_tokens: Optional[int] = None
     prompt_tokens: Optional[int] = None
     total_tokens: Optional[int] = None
+    thoughts_tokens: Optional[int] = None
 
     provider_usage: ProviderUsage
 
@@ -48,6 +49,7 @@ class OpikUsage(pydantic.BaseModel):
                 "completion_tokens": self.completion_tokens,
                 "prompt_tokens": self.prompt_tokens,
                 "total_tokens": self.total_tokens,
+                "thoughts_tokens": self.thoughts_tokens,
             },
             value_type=int,
         )
@@ -87,6 +89,7 @@ class OpikUsage(pydantic.BaseModel):
             completion_tokens=provider_usage.candidates_token_count,
             prompt_tokens=provider_usage.prompt_token_count,
             total_tokens=provider_usage.total_token_count,
+            thoughts_tokens=provider_usage.thoughts_token_count,
             provider_usage=provider_usage,
         )
 
