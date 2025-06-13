@@ -666,14 +666,16 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
     assert_dict_has_keys(trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
-def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(fake_backend):
+def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
+    fake_backend,
+):
     opik_tracer = OpikTracer(
         tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}
     )
 
     root_agent = adk_agents.Agent(
         name="weather_time_agent",
-        model=adk_lite_llm.LiteLlm(f"openai/gpt-4o-mini"),
+        model=adk_lite_llm.LiteLlm("openai/gpt-4o-mini"),
         description=(
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
@@ -783,5 +785,9 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(fake_
         "original_usage.completion_tokens",
         "original_usage.total_tokens",
     ]
-    assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT)
-    assert_dict_has_keys(trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT)
+    assert_dict_has_keys(
+        trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT
+    )
+    assert_dict_has_keys(
+        trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT
+    )
