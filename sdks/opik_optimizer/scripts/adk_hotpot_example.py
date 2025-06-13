@@ -1,12 +1,11 @@
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
-from typing_extensions import TypedDict
+from typing import Any, Dict
 
-import os
-from dotenv import load_dotenv
 from opik_optimizer import OptimizableAgent, ChatPrompt, FewShotBayesianOptimizer
 from opik_optimizer.datasets import hotpot_300
+
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.integrations.adk import OpikTracer
+from opik.evaluation.metrics.score_result import ScoreResult
 
 import json
 import asyncio
@@ -19,7 +18,7 @@ from google.genai import types
 from pydantic import BaseModel, Field
 
 
-def levenshtein_ratio(dataset_item, llm_output):
+def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
     metric = LevenshteinRatio()
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 
@@ -66,8 +65,8 @@ class ADKAgent(OptimizableAgent):
     model = "openai/gpt-4.1"
     project_name = "adk-agent-wikipedia"
 
-    def __init__(self, agent_config):
-        prompt = agent_config["chat-prompt"].system
+    def __init__(self, agent_config: Dict[str, Any]) -> None:
+        prompt: str = agent_config["chat-prompt"].system
 
         self.opik_tracer = OpikTracer(self.project_name)
 
@@ -89,7 +88,7 @@ class ADKAgent(OptimizableAgent):
         )
 
     def invoke_dataset_item(
-        self, query_json: Dict[str, Any], input_dataset_field: str = None
+        self, query_json: Dict[str, Any], input_dataset_field: str
     ) -> Dict[str, Any]:
         query_json = {input_dataset_field: query_json[input_dataset_field]}
         query_json = json.dumps(query_json)

@@ -1,8 +1,13 @@
+from typing import Dict, Any
+
+from opik.evaluation.metrics.score_result import ScoreResult
+from opik.evaluation.metrics import LevenshteinRatio
+
 from opik_optimizer import OptimizableAgent, ChatPrompt, FewShotBayesianOptimizer
 from opik_optimizer.datasets import hotpot_300
 
 
-def levenshtein_ratio(dataset_item, llm_output):
+def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
     metric = LevenshteinRatio()
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 

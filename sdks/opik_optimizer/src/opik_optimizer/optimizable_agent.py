@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 import os
 
@@ -13,8 +13,8 @@ class OptimizableAgent:
     An agent class to subclass to make an Optimizable Agent.
     """
 
-    model = None
-    project_name = None
+    model: Optional[str] = None
+    project_name: Optional[str] = None
     fallback_prompt = "You are a helpful assistant."
 
     def __init__(self, agent_config: Dict[str, Any]) -> None:
