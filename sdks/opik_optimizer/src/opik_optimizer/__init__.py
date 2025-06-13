@@ -16,6 +16,7 @@ from .mipro_optimizer import MiproOptimizer
 from .optimization_config.chat_prompt import ChatPrompt
 from .optimization_config.configs import TaskConfig
 from .optimization_result import OptimizationResult
+from .optimizable_agent import OptimizableAgent
 
 __version__ = importlib.metadata.version("opik_optimizer")
 
@@ -31,6 +32,7 @@ __all__ = [
     "MetaPromptOptimizer",
     "MiproOptimizer",
     "EvolutionaryOptimizer",
+    "OptimizableAgent",
     "OptimizationResult",
     "setup_logging",
     "datasets",
