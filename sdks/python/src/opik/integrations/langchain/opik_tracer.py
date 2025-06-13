@@ -17,6 +17,7 @@ from . import (
     anthropic_run_helpers,
     anthropic_vertexai_run_helpers,
     opik_encoder_extension,
+    groq_run_helpers,
 )
 from ...api_objects import helpers, opik_client
 from opik import context_storage
@@ -361,6 +362,8 @@ class OpikTracer(BaseTracer):
                 usage_info = google_run_helpers.get_llm_usage_info(run_dict)
             elif anthropic_run_helpers.is_anthropic_run(run):
                 usage_info = anthropic_run_helpers.get_llm_usage_info(run_dict)
+            elif groq_run_helpers.is_groq_run(run):
+                usage_info = groq_run_helpers.get_llm_usage_info(run_dict)
 
             # workaround for `.astream()` method usage
             if span_data.input == {"input": ""}:
