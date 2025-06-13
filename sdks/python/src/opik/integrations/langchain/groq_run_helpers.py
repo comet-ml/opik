@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union, Literal
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Literal
 
 from opik import _logging as opik_logging
 from opik import llm_usage, logging_messages
@@ -92,7 +92,7 @@ def _get_provider_and_model(
 ) -> Tuple[Literal["groq"], Optional[str]]:
     """
     Fetches the provider and model information from a given run dictionary.
-   """
+    """
     model = None
     provider = LLMProvider.GROQ
     model = run_dict["extra"].get("metadata", {}).get("ls_model_name")
