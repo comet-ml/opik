@@ -31,7 +31,6 @@ EXPECTED_USAGE_KEYS_GOOGLE_REASONING = [
     "completion_tokens",
     "prompt_tokens",
     "total_tokens",
-    "thoughts_tokens",
     "original_usage.candidates_token_count",
     "original_usage.prompt_token_count",
     "original_usage.total_token_count",
