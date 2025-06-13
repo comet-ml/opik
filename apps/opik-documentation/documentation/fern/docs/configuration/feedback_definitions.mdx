@@ -18,6 +18,10 @@ Feedback definitions enable you to:
 
 ### Viewing Existing Definitions
 
+<Frame>
+  <img src="/img/configuration/feedback_definition.png" alt="Feedback Definitions Table" />
+</Frame>
+
 The Feedback Definitions page displays a table of all configured feedback types with the following columns:
 
 - **Feedback score**: The name of the feedback definition
@@ -28,16 +32,21 @@ The Feedback Definitions page displays a table of all configured feedback types 
 
 To create a new feedback definition:
 
-1. Click the **Create new feedback definition** button in the top-right corner
-2. Complete the form with the following information:
+<Frame>
+  <img src="/img/configuration/new_feedback_definition.png" alt="New Feedback Definition Modal" />
+</Frame>
+
+1. Click the **Create new feedback definition** button in the top-right corner of the Feedback Definitions page.
+2. In the modal, you will be prompted to provide:
    - **Name**: A descriptive name for your feedback definition
-   - **Type**: Select the data type (currently Categorical)
-   - **Values**: Define the possible values users can select when giving feedback
+   - **Type**: Select the data type (Categorical or Numerical)
+   - **Values / Range**: Depending on the type, either define possible labels (for Categorical) or set a minimum and maximum value (for Numerical)
 
 ### Examples of Common Feedback Types
 
 As shown in the interface, common feedback definitions include:
 
+- **Thumbs Up / Thumbs Down**: Simple binary feedback for quick human review (Values: 👍, 👎)
 - **Usefulness**: Evaluates how helpful the response is (Values: Neutral, Not useful, Useful)
 - **Knowledge Retrieval**: Assesses the accuracy of retrieved information (Values: Bad results, Good results, Unrelated results)
 - **Hallucination**: Identifies when the model invents information (Values: No, Yes)
@@ -56,9 +65,8 @@ As shown in the interface, common feedback definitions include:
 Once created, feedback definitions can be used to:
 
 1. Evaluate outputs in experiments
-2. Filter and analyze results in the Explore view
-3. Build custom evaluations and reports
-4. Train and fine-tune models based on collected feedback
+2. Build custom evaluations and reports
+3. Train and fine-tune models based on collected feedback
 
 ## Additional Resources
 
