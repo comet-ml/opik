@@ -2,6 +2,7 @@ import os
 import subprocess
 import time
 
+import certifi
 import pytest
 import requests
 
@@ -9,6 +10,9 @@ from opik import synchronization
 from opik.integrations.adk import helpers as adk_helpers
 from opik.llm_usage.openai_chat_completions_usage import OpenAICompletionsUsage
 from ... import testlib
+
+# needed for OpenAI agents tests
+os.environ["SSL_CERT_FILE"] = certifi.where()
 
 ADK_SERVER_PORT = 21345
 ADK_USER = "user_113"

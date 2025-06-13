@@ -55,10 +55,11 @@ def pop_llm_usage_data(result_dict: Dict[str, Any]) -> Optional[LLMUsageData]:
 
     # in streaming mode ADK returns the usage metadata in the result dict as the last call
     # to the after_model_callback bypassing our patching (no opik_usage)
-    if opik_usage_metadata is None and "usage_metadata" not in result_dict:
-        return None
-
-    opik_usage_metadata = result_dict["usage_metadata"]
+    if opik_usage_metadata is None:
+        if "usage_metadata" in result_dict:
+            opik_usage_metadata = result_dict["usage_metadata"]
+        else:
+            return None
 
     if provider in [LLMProvider.GOOGLE_AI, LLMProvider.GOOGLE_VERTEXAI]:
         usage = llm_usage.try_build_opik_usage_or_log_error(
