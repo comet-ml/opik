@@ -1,4 +1,4 @@
-package com.comet.opik.domain.threads;
+package com.comet.opik.api.events;
 
 import lombok.Builder;
 

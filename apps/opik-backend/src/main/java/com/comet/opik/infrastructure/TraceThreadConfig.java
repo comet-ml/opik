@@ -7,7 +7,6 @@ import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Positive;
 import lombok.Data;
 import org.redisson.client.codec.Codec;
 import org.redisson.codec.CompositeCodec;

@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.domain.threads.ProjectWithPendingClosureTraceThreads;
+import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.TraceThreadConfig;
 import jakarta.inject.Inject;
@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
 
@@ -24,7 +25,7 @@ class ClosingTraceThreadSubscriber extends BaseRedisSubscriber<ProjectWithPendin
     private final TraceThreadConfig config;
 
     @Inject
-    protected ClosingTraceThreadSubscriber(@NonNull TraceThreadConfig config,
+    protected ClosingTraceThreadSubscriber(@NonNull @Config TraceThreadConfig config,
             @NonNull RedissonReactiveClient redisson, TraceThreadService traceThreadService) {
         super(config, redisson, "project_with_threads_pending_closure", TraceThreadConfig.PAYLOAD_FIELD);
         this.traceThreadService = traceThreadService;
@@ -41,10 +42,6 @@ class ClosingTraceThreadSubscriber extends BaseRedisSubscriber<ProjectWithPendin
         var lastUpdatedUntil = Instant.now().minus(config.getTimeoutToMarkThreadAsInactive().toJavaDuration());
 
         return traceThreadService.processProjectWithTraceThreadsPendingClosure(message.projectId(), lastUpdatedUntil)
-                .doOnError(ex -> log.error(
-                        "Error when processing closure of pending trace threads  for project: '%s'"
-                                .formatted(message.projectId()),
-                        ex))
                 .contextWrite(context -> context.put(USER_NAME, DEFAULT_USER)
                         .put(WORKSPACE_ID, message.workspaceId()));
     }

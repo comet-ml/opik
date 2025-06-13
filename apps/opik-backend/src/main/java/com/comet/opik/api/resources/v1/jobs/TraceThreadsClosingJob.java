@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.v1.jobs;
 
-import com.comet.opik.domain.threads.ProjectWithPendingClosureTraceThreads;
+import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.TraceThreadConfig;
@@ -40,8 +40,9 @@ public class TraceThreadsClosingJob extends Job {
         var lock = new Lock("job", TraceThreadsClosingJob.class.getSimpleName());
         var timeoutToMarkThreadAsInactive = opikConfiguration.getTraceThreadConfig()
                 .getTimeoutToMarkThreadAsInactive().toJavaDuration(); // This is the timeout to mark threads as inactive
+        int limit = 1000; // Limit to process in each job execution
 
-        lockAndProcessJob(lock, timeoutToMarkThreadAsInactive, 1000)
+        lockAndProcessJob(lock, timeoutToMarkThreadAsInactive, limit)
                 .doOnError(error -> log.error("Error processing closing of trace threads", error))
                 .doOnSuccess(unused -> log.info("Successfully started closing trace threads process"));
     }
@@ -59,7 +60,7 @@ public class TraceThreadsClosingJob extends Job {
                     return null;
                 }),
                 Duration.ofSeconds(4), // Timeout to release the lock
-                Duration.ofMillis(500)); // Timeout to acquiring the lock
+                Duration.ofMillis(300)); // Timeout to acquiring the lock
     }
 
     private Mono<Void> enqueueInRedis(Flux<ProjectWithPendingClosureTraceThreads> flux) {
