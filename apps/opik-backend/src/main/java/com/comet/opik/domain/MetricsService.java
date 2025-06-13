@@ -4,6 +4,8 @@ import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
+import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
+import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -17,23 +19,27 @@ import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
-@ImplementedBy(ProjectMetricsServiceImpl.class)
-public interface ProjectMetricsService {
+@ImplementedBy(MetricsServiceImpl.class)
+public interface MetricsService {
     String ERR_START_BEFORE_END = "'start_time' must be before 'end_time'";
 
     Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request);
+
+    Mono<WorkspaceMetricsSummaryResponse> getWorkspaceFeedbackScoresSummary(WorkspaceMetricsSummaryRequest request);
 }
 
 @Slf4j
 @Singleton
-class ProjectMetricsServiceImpl implements ProjectMetricsService {
-    private final @NonNull Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> metricHandler;
+class MetricsServiceImpl implements MetricsService {
+    private final @NonNull Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> projectMetricHandler;
     private final @NonNull ProjectService projectService;
+    private final @NonNull WorkspaceMetricsDAO workspaceMetricsDAO;
 
     @Inject
-    public ProjectMetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO,
+    public MetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO,
+            @NonNull WorkspaceMetricsDAO workspaceMetricsDAO,
             @NonNull ProjectService projectService) {
-        metricHandler = Map.of(
+        projectMetricHandler = Map.of(
                 MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
                 MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores,
                 MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage,
@@ -41,6 +47,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 MetricType.DURATION, projectMetricsDAO::getDuration,
                 MetricType.GUARDRAILS_FAILED_COUNT, projectMetricsDAO::getGuardrailsFailedCount);
         this.projectService = projectService;
+        this.workspaceMetricsDAO = workspaceMetricsDAO;
     }
 
     @Override
@@ -55,6 +62,16 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                         .interval(request.interval())
                         .results(entriesToResults(dataPoints))
                         .build());
+    }
+
+    @Override
+    public Mono<WorkspaceMetricsSummaryResponse> getWorkspaceFeedbackScoresSummary(
+            WorkspaceMetricsSummaryRequest request) {
+        return workspaceMetricsDAO.getFeedbackScoresSummary(request)
+                .map(metrics -> WorkspaceMetricsSummaryResponse.builder()
+                        .results(metrics)
+                        .build());
+
     }
 
     private List<ProjectMetricResponse.Results<Number>> entriesToResults(List<ProjectMetricsDAO.Entry> entries) {
@@ -82,6 +99,6 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
 
     private BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>> getMetricHandler(
             MetricType metricType) {
-        return metricHandler.get(metricType);
+        return projectMetricHandler.get(metricType);
     }
 }
