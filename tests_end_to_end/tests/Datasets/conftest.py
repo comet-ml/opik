@@ -1,6 +1,6 @@
 import pytest
 from opik import Opik
-from Datasets.datasets_utils import TEST_ITEMS
+from .datasets_utils import TEST_ITEMS
 
 
 @pytest.fixture

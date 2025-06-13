@@ -1,8 +1,8 @@
 import os
 import pytest
 from opik import opik_context, track, Attachment
-from Traces.traces_config import PREFIX
-from sdk_helpers import wait_for_number_of_traces_to_be_visible
+from .traces_config import PREFIX
+from tests.sdk_helpers import wait_for_number_of_traces_to_be_visible
 
 attachments = [
     {"path": "test_files/attachments/audio01.wav", "name": "audio01.wav"},

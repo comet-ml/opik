@@ -1,6 +1,6 @@
 import pytest
 from playwright.sync_api import Page
-from sdk_helpers import (
+from tests.sdk_helpers import (
     find_project_by_name_sdk,
     delete_project_by_name_sdk,
     wait_for_project_to_be_visible,

@@ -2,7 +2,7 @@ import pytest
 from playwright.sync_api import Page
 from page_objects.ExperimentsPage import ExperimentsPage
 from page_objects.ExperimentItemsPage import ExperimentItemsPage
-from sdk_helpers import (
+from tests.sdk_helpers import (
     get_experiment_by_id,
     delete_experiment_items_by_id,
     experiment_items_stream,

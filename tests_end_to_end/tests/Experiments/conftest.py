@@ -2,7 +2,7 @@ import pytest
 from opik import Opik
 from opik.evaluation.metrics import Contains
 from opik.evaluation import evaluate
-from sdk_helpers import delete_experiment_by_id
+from tests.sdk_helpers import delete_experiment_by_id
 
 
 def eval_task(item: dict):

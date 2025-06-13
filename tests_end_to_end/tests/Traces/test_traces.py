@@ -2,9 +2,9 @@ import pytest
 from playwright.sync_api import Page, expect
 from page_objects.ProjectsPage import ProjectsPage
 from page_objects.TracesPage import TracesPage
-from Traces.traces_config import PREFIX
+from .traces_config import PREFIX
 from collections import Counter
-from sdk_helpers import (
+from tests.sdk_helpers import (
     get_traces_of_project_sdk,
     delete_list_of_traces_sdk,
     wait_for_traces_to_be_visible,
