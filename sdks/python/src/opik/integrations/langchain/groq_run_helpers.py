@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Literal
 
 from opik import _logging as opik_logging
 from opik import llm_usage, logging_messages
-from sdks.python.src.opik.types import LLMProvider
+from opik.types import LLMProvider
 
 if TYPE_CHECKING:
     from langchain_core.tracers.schemas import Run
