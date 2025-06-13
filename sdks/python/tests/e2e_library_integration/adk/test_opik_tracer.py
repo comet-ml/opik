@@ -1,5 +1,6 @@
 import os
 import subprocess
+import sys
 import time
 
 import certifi
@@ -141,6 +142,9 @@ def test_opik_tracer_with_sample_agent(
     testlib.assert_dict_has_keys(spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
+@pytest.mark.skipif(
+    sys.version_info[:2] == (3, 9), reason="Test not supported on Python 3.9"
+)
 @pytest.mark.parametrize("start_api_server", ["sample_agent_sse"], indirect=True)
 def test_opik_tracer_with_sample_agent_sse(
     opik_client_unique_project_name, start_api_server
