@@ -8429,10 +8429,10 @@ class TracesResourceTest {
                     .orElseThrow();
         }
 
-        private TraceThreadModel createTraceThreadModel(String threadId1, UUID projectId, Instant expectedCreatedAt,
+        private TraceThreadModel createTraceThreadModel(String threadId, UUID projectId, Instant expectedCreatedAt,
                 Instant expectedLastUpdatedAt) {
             return TraceThreadModel.builder()
-                    .threadId(threadId1)
+                    .threadId(threadId)
                     .projectId(projectId)
                     .createdBy(USER)
                     .createdAt(expectedCreatedAt)
