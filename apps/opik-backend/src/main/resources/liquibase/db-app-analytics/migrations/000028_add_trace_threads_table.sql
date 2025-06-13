@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.trace_threads ON CLUSTE
     project_id          FixedString(36),
     workspace_id        String,
     status              ENUM('unknown' = 0 , 'active' = 1, 'inactive' = 2),
-    created_at          DateTime64(6, 'UTC') DEFAULT now64(6),
+    created_at          DateTime64(9, 'UTC') DEFAULT now64(9),
     last_updated_at     DateTime64(6, 'UTC') DEFAULT now64(6),
     created_by          String,
     last_updated_by     String
