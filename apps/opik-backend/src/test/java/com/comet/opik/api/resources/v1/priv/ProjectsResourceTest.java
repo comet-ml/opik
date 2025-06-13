@@ -1625,7 +1625,7 @@ class ProjectsResourceTest {
                 .toList();
     }
 
-    private double getTotalEstimatedCost(List<Trace> traces) {
+    private Double getTotalEstimatedCost(List<Trace> traces) {
         long count = traces.stream()
                 .map(Trace::totalEstimatedCost)
                 .filter(Objects::nonNull)
@@ -1707,10 +1707,11 @@ class ProjectsResourceTest {
         int traceCount = 5;
         List<Trace> traces = new ArrayList<>(traceCount);
         for (int i = 0; i < traceCount; i++) {
+            Instant now = Instant.now();
             Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
-                    .startTime(Instant.now().minus(i, ChronoUnit.DAYS))
-                    .endTime(Instant.now().minus(i, ChronoUnit.DAYS).plusSeconds(1))
+                    .startTime(now.minus(i, ChronoUnit.DAYS))
+                    .endTime(now.minus(i, ChronoUnit.DAYS).plusSeconds(1))
                     .errorInfo(null)
                     .totalEstimatedCost(null)
                     .usage(null)

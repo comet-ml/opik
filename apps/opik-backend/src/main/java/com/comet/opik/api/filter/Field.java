@@ -29,6 +29,7 @@ public interface Field {
     String LAST_UPDATED_AT_QUERY_PARAM = "last_updated_at";
     String GUARDRAILS_QUERY_PARAM = "guardrails";
     String VISIBILITY_MODE_QUERY_PARAM = "visibility_mode";
+    String ERROR_INFO_QUERY_PARAM = "error_info";
 
     @JsonValue
     String getQueryParamField();
