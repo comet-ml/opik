@@ -6,7 +6,6 @@ import com.comet.opik.utils.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
-import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -18,9 +17,7 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -147,22 +144,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             bindStatementParam(criteria, statement);
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .flatMap(result -> result.map((row, rowMetadata) -> this.mapFromRow(row)))
+                    .flatMap(result -> result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE.mapFromRow(row)))
                     .collectList();
         });
-    }
-
-    private TraceThreadModel mapFromRow(Row row) {
-        return TraceThreadModel.builder()
-                .id(row.get("id", UUID.class))
-                .threadId(row.get("thread_id", String.class))
-                .projectId(row.get("project_id", UUID.class))
-                .status(TraceThreadModel.Status.fromValue(row.get("status", String.class)))
-                .createdBy(row.get("created_by", String.class))
-                .lastUpdatedBy(row.get("last_updated_by", String.class))
-                .createdAt(row.get("created_at", Instant.class))
-                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                .build();
     }
 
     private void bindTemplateParam(TraceThreadCriteria criteria, ST template) {

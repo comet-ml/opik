@@ -8328,12 +8328,15 @@ class TracesResourceTest {
 
             var createdAt = Instant.now();
 
-            var expectedTraceThreadModel = createTraceThreadModel(threadId, projectId, createdAt);
+            Instant expectedLastUpdatedAt = getExpectedLastUpdatedAt(traces);
 
-            // When:  Creating trace threads
+            var expectedTraceThreadModel = createTraceThreadModel(threadId, projectId, createdAt,
+                    expectedLastUpdatedAt);
+
+            // When: Creating trace threads
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-            // Then:  Assert that trace thread is created
+            // Then: Assert that trace thread is created
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
                 var criteria = TraceThreadCriteria.builder()
                         .projectId(projectId)
@@ -8377,19 +8380,33 @@ class TracesResourceTest {
                             .toList())
                     .toList();
 
+            Instant expectedLastUpdatedAt1 = getExpectedLastUpdatedAt(
+                    traces.stream()
+                            .flatMap(List::stream)
+                            .filter(it -> it.threadId().equals(threadId1))
+                            .toList());
+
+            Instant expectedLastUpdatedAt2 = getExpectedLastUpdatedAt(
+                    traces.stream()
+                            .flatMap(List::stream)
+                            .filter(it -> it.threadId().equals(threadId2))
+                            .toList());
+
             Instant expectedCreatedAt = Instant.now();
 
-            var expectedTraceThreadModel1 = createTraceThreadModel(threadId1, projectId, expectedCreatedAt);
-            var expectedTraceThreadModel2 = createTraceThreadModel(threadId2, projectId, expectedCreatedAt);
+            var expectedTraceThreadModel1 = createTraceThreadModel(threadId1, projectId, expectedCreatedAt,
+                    expectedLastUpdatedAt1);
+            var expectedTraceThreadModel2 = createTraceThreadModel(threadId2, projectId, expectedCreatedAt,
+                    expectedLastUpdatedAt2);
 
-            // When:  Creating trace thread concurrently
+            // When: Creating trace thread concurrently
             traces.parallelStream()
                     .forEach(traceList -> traceResourceClient.batchCreateTraces(traceList, apiKey, workspaceName));
 
             List<TraceThreadModel> expectedTraceThreadModels = List.of(expectedTraceThreadModel1,
                     expectedTraceThreadModel2);
 
-            // Then:  Assert that trace threads are created only once
+            // Then: Assert that trace threads are created only once
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
                 var criteria = TraceThreadCriteria.builder()
                         .projectId(projectId)
@@ -8404,14 +8421,23 @@ class TracesResourceTest {
             });
         }
 
-        private TraceThreadModel createTraceThreadModel(String threadId1, UUID projectId, Instant expectedCreatedAt) {
+        private Instant getExpectedLastUpdatedAt(List<Trace> traces) {
+            return traces
+                    .stream()
+                    .map(Trace::lastUpdatedAt)
+                    .max(Comparator.naturalOrder())
+                    .orElseThrow();
+        }
+
+        private TraceThreadModel createTraceThreadModel(String threadId1, UUID projectId, Instant expectedCreatedAt,
+                Instant expectedLastUpdatedAt) {
             return TraceThreadModel.builder()
                     .threadId(threadId1)
                     .projectId(projectId)
                     .createdBy(USER)
                     .createdAt(expectedCreatedAt)
                     .lastUpdatedBy(USER)
-                    .lastUpdatedAt(expectedCreatedAt)
+                    .lastUpdatedAt(expectedLastUpdatedAt)
                     .status(TraceThreadModel.Status.ACTIVE)
                     .build();
         }
@@ -8422,13 +8448,11 @@ class TracesResourceTest {
             assertThat(actualTraceThreadModels).hasSize(expectedTraceThreadModels.size());
 
             assertThat(actualTraceThreadModels)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id", "createdAt", "lastUpdatedAt")
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id", "createdAt")
                     .containsExactlyInAnyOrderElementsOf(expectedTraceThreadModels);
 
             assertThat(actualTraceThreadModels.stream().map(TraceThreadModel::createdAt))
                     .allMatch(createdAt -> createdAt.isAfter(expectedCreatedAt));
-            assertThat(actualTraceThreadModels.stream().map(TraceThreadModel::lastUpdatedAt))
-                    .allMatch(lastUpdatedAt -> lastUpdatedAt.isAfter(expectedCreatedAt));
             assertThat(actualTraceThreadModels.stream().map(TraceThreadModel::id))
                     .allMatch(Objects::nonNull);
         }
