@@ -63,8 +63,7 @@ jobs:
         shell: bash
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
-          export OPIK_FRONTEND_FLAVOR=guardrails
-          docker compose --profile guardrails up -d --build
+          docker compose up -d --build
 
       - name: Check Opik server availability
         shell: bash
