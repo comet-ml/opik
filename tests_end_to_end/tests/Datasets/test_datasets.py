@@ -3,7 +3,7 @@ from playwright.sync_api import Page
 from page_objects.DatasetsPage import DatasetsPage
 from page_objects.ProjectsPage import ProjectsPage
 from page_objects.TracesPage import TracesPage
-from sdk_helpers import (
+from tests.sdk_helpers import (
     delete_dataset_by_name_if_exists,
     update_dataset_name,
     get_dataset_by_name,

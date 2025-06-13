@@ -2,7 +2,7 @@ import pytest
 from playwright.sync_api import Page, expect
 from page_objects.DatasetsPage import DatasetsPage
 from page_objects.DatasetItemsPage import DatasetItemsPage
-from Datasets.datasets_utils import (
+from .datasets_utils import (
     TEST_ITEMS,
     TEST_ITEMS_UPDATE,
     compare_item_lists,
