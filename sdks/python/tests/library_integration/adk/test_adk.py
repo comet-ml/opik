@@ -49,13 +49,18 @@ def _build_runner(root_agent: adk_agents.Agent) -> adk_runners.Runner:
     return runner
 
 
-def _extract_final_response(events: Iterator[adk_events.Event]) -> Optional[str]:
+def _extract_final_response_text(events: Iterator[adk_events.Event]) -> Optional[str]:
+    """
+    Exhausts the iterator of ADK events and returns the response text
+    from the last event (presumably the final root agent response).
+    """
     events = list(events)
     if len(events) == 0:
+        # As the error might occur in the background, we raise an exception here
         raise Exception("Agent failed to execute.")
 
-    last_event: adk_events.Event = events[-1]  # supposed to be the last agent response
-    # Don't use event.is_final_response() only because it may be true for nested agents!
+    last_event: adk_events.Event = events[-1]
+    # Don't use only event.is_final_response() because it may be true for nested agents as well!
     assert (
         last_event.is_final_response()
         and last_event.content
@@ -66,7 +71,9 @@ def _extract_final_response(events: Iterator[adk_events.Event]) -> Optional[str]
 
 def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
     opik_tracer = OpikTracer(
-        tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}
+        project_name="adk-test",
+        tags=["adk-test"],
+        metadata={"adk-metadata-key": "adk-metadata-value"},
     )
 
     root_agent = adk_agents.Agent(
@@ -97,7 +104,7 @@ def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = _extract_final_response(events)
+    final_response = _extract_final_response_text(events)
 
     opik.flush_tracker()
 
@@ -126,6 +133,7 @@ def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
             "parts": [{"text": "What is the weather in New York?"}],
         },
         thread_id=SESSION_ID,
+        project_name="adk-test",
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -140,6 +148,7 @@ def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                project_name="adk-test",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -154,6 +163,7 @@ def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
                     "status": "success",
                     "report": "The weather in New York is sunny with a temperature of 25 degrees Celsius (41 degrees Fahrenheit).",
                 },
+                project_name="adk-test",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -168,6 +178,7 @@ def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                project_name="adk-test",
             ),
         ],
     )
@@ -213,7 +224,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    weather_question_response = _extract_final_response(events)
+    weather_question_response = _extract_final_response_text(events)
 
     events = runner.run(
         user_id=USER_ID,
@@ -222,7 +233,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             role="user", parts=[genai_types.Part(text="What is the time in New York?")]
         ),
     )
-    time_question_response = _extract_final_response(events)
+    time_question_response = _extract_final_response_text(events)
 
     opik.flush_tracker()
 
@@ -434,7 +445,7 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
             role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
         ),
     )
-    final_response = _extract_final_response(events)
+    final_response = _extract_final_response_text(events)
 
     opik.flush_tracker()
     assert len(fake_backend.trace_trees) > 0
@@ -574,7 +585,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = _extract_final_response(events)
+    final_response = _extract_final_response_text(events)
 
     opik.flush_tracker()
 
@@ -701,7 +712,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = _extract_final_response(events)
+    final_response = _extract_final_response_text(events)
 
     opik.flush_tracker()
 
