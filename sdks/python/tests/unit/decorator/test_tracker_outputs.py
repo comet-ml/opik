@@ -354,7 +354,7 @@ def test_track__one_function__error_raised__trace_and_span_finished_correctly__o
         error_info={
             "exception_type": "Exception",
             "message": "error message",
-            "traceback": ANY_STRING(),
+            "traceback": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -367,7 +367,7 @@ def test_track__one_function__error_raised__trace_and_span_finished_correctly__o
                 error_info={
                     "exception_type": "Exception",
                     "message": "error message",
-                    "traceback": ANY_STRING(),
+                    "traceback": ANY_STRING,
                 },
                 spans=[],
             )
@@ -424,7 +424,7 @@ def test_track__nested_function__error_raised_in_inner_span_but_caught_in_outer_
                         error_info={
                             "exception_type": "Exception",
                             "message": "error message",
-                            "traceback": ANY_STRING(),
+                            "traceback": ANY_STRING,
                         },
                         spans=[],
                     )
@@ -462,7 +462,7 @@ def test_track__one_async_function__error_raised__trace_and_span_finished_correc
         error_info={
             "exception_type": "Exception",
             "message": "error message",
-            "traceback": ANY_STRING(),
+            "traceback": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -475,7 +475,7 @@ def test_track__one_async_function__error_raised__trace_and_span_finished_correc
                 error_info={
                     "exception_type": "Exception",
                     "message": "error message",
-                    "traceback": ANY_STRING(),
+                    "traceback": ANY_STRING,
                 },
                 spans=[],
             )
@@ -673,7 +673,7 @@ def test_track__single_generator_function_tracked__error_raised_during_the_gener
         error_info={
             "exception_type": "Exception",
             "message": "error message",
-            "traceback": ANY_STRING(),
+            "traceback": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -686,7 +686,7 @@ def test_track__single_generator_function_tracked__error_raised_during_the_gener
                 error_info={
                     "exception_type": "Exception",
                     "message": "error message",
-                    "traceback": ANY_STRING(),
+                    "traceback": ANY_STRING,
                 },
                 spans=[],
             )
@@ -1534,8 +1534,8 @@ def test_track__function_called_with_wrong_arguments__trace_is_still_created_wit
         last_updated_at=ANY_BUT_NONE,
         error_info={
             "exception_type": "TypeError",
-            "traceback": ANY_STRING(),
-            "message": ANY_STRING(),
+            "traceback": ANY_STRING,
+            "message": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -1547,8 +1547,8 @@ def test_track__function_called_with_wrong_arguments__trace_is_still_created_wit
                 end_time=ANY_BUT_NONE,
                 error_info={
                     "exception_type": "TypeError",
-                    "traceback": ANY_STRING(),
-                    "message": ANY_STRING(),
+                    "traceback": ANY_STRING,
+                    "message": ANY_STRING,
                 },
                 spans=[],
             )

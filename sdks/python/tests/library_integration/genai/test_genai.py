@@ -86,7 +86,7 @@ def test_genai_client__generate_content__happyflow(
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name=ANY_STRING(startswith=f"generate_content: {MODEL}"),
+        name=ANY_STRING.starting_with(f"generate_content: {MODEL}"),
         input={"contents": "What is the capital of Belarus?", "config": ANY_BUT_NONE},
         output={"candidates": ANY_LIST},
         tags=["genai"],
@@ -99,7 +99,7 @@ def test_genai_client__generate_content__happyflow(
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="llm",
-                name=ANY_STRING(startswith=f"generate_content: {MODEL}"),
+                name=ANY_STRING.starting_with(f"generate_content: {MODEL}"),
                 input={
                     "contents": "What is the capital of Belarus?",
                     "config": ANY_BUT_NONE,
@@ -112,7 +112,7 @@ def test_genai_client__generate_content__happyflow(
                 usage=EXPECTED_GOOGLE_USAGE_LOGGED_FORMAT,
                 project_name=expected_project_name,
                 spans=[],
-                model=ANY_STRING(startswith=MODEL),
+                model=ANY_STRING.starting_with(MODEL),
                 provider="google_vertexai",
             )
         ],
@@ -145,7 +145,7 @@ def test_genai_client__async_generate_content__happyflow(fake_backend):
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name=ANY_STRING(startswith=f"async_generate_content: {MODEL}"),
+        name=ANY_STRING.starting_with(f"async_generate_content: {MODEL}"),
         input={"contents": "What is the capital of Belarus?"},
         output={"candidates": ANY_LIST},
         tags=["genai"],
@@ -157,7 +157,7 @@ def test_genai_client__async_generate_content__happyflow(fake_backend):
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="llm",
-                name=ANY_STRING(startswith=f"async_generate_content: {MODEL}"),
+                name=ANY_STRING.starting_with(f"async_generate_content: {MODEL}"),
                 input={"contents": "What is the capital of Belarus?"},
                 output={"candidates": ANY_LIST},
                 tags=["genai"],
@@ -166,7 +166,7 @@ def test_genai_client__async_generate_content__happyflow(fake_backend):
                 end_time=ANY_BUT_NONE,
                 usage=EXPECTED_GOOGLE_USAGE_LOGGED_FORMAT,
                 spans=[],
-                model=ANY_STRING(startswith=MODEL),
+                model=ANY_STRING.starting_with(MODEL),
                 provider="google_vertexai",
             )
         ],
@@ -228,7 +228,7 @@ def test_genai_client__generate_content_called_inside_another_tracked_function__
                     SpanModel(
                         id=ANY_BUT_NONE,
                         type="llm",
-                        name=ANY_STRING(startswith=f"generate_content: {MODEL}"),
+                        name=ANY_STRING.starting_with(f"generate_content: {MODEL}"),
                         input={"contents": "What is the capital of Belarus?"},
                         output={"candidates": ANY_LIST},
                         tags=["genai"],
@@ -238,7 +238,7 @@ def test_genai_client__generate_content_called_inside_another_tracked_function__
                         usage=EXPECTED_GOOGLE_USAGE_LOGGED_FORMAT,
                         project_name=expected_project_name,
                         spans=[],
-                        model=ANY_STRING(startswith=MODEL),
+                        model=ANY_STRING.starting_with(MODEL),
                         provider="google_vertexai",
                     )
                 ],
@@ -293,7 +293,7 @@ def test_genai_client__async_generate_content_called_inside_another_tracked_func
                     SpanModel(
                         id=ANY_BUT_NONE,
                         type="llm",
-                        name=ANY_STRING(startswith=f"async_generate_content: {MODEL}"),
+                        name=ANY_STRING.starting_with(f"async_generate_content: {MODEL}"),
                         input={"contents": "What is the capital of Belarus?"},
                         output={"candidates": ANY_LIST},
                         tags=["genai"],
@@ -302,7 +302,7 @@ def test_genai_client__async_generate_content_called_inside_another_tracked_func
                         end_time=ANY_BUT_NONE,
                         usage=EXPECTED_GOOGLE_USAGE_LOGGED_FORMAT,
                         spans=[],
-                        model=ANY_STRING(startswith=MODEL),
+                        model=ANY_STRING.starting_with(MODEL),
                         provider="google_vertexai",
                     )
                 ],
@@ -338,7 +338,7 @@ def test_genai_client__generate_content_stream__happyflow(fake_backend):
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name=ANY_STRING(startswith=f"generate_content_stream: {MODEL}"),
+        name=ANY_STRING.starting_with(f"generate_content_stream: {MODEL}"),
         input={"contents": "What is the capital of Belarus?"},
         output={"candidates": ANY_LIST},
         tags=["genai"],
@@ -351,7 +351,7 @@ def test_genai_client__generate_content_stream__happyflow(fake_backend):
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="llm",
-                name=ANY_STRING(startswith=f"generate_content_stream: {MODEL}"),
+                name=ANY_STRING.starting_with(f"generate_content_stream: {MODEL}"),
                 input={"contents": "What is the capital of Belarus?"},
                 output={"candidates": ANY_LIST},
                 tags=["genai"],
@@ -361,7 +361,7 @@ def test_genai_client__generate_content_stream__happyflow(fake_backend):
                 usage=EXPECTED_GOOGLE_USAGE_LOGGED_FORMAT,
                 project_name="genai-integration-test",
                 spans=[],
-                model=ANY_STRING(startswith=MODEL),
+                model=ANY_STRING.starting_with(MODEL),
                 provider="google_vertexai",
             )
         ],
@@ -397,7 +397,7 @@ def test_genai_client__async_generate_content_stream__happyflow(fake_backend):
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
-        name=ANY_STRING(startswith=f"async_generate_content_stream: {MODEL}"),
+        name=ANY_STRING.starting_with(f"async_generate_content_stream: {MODEL}"),
         input={"contents": "What is the capital of Belarus?"},
         output={"candidates": ANY_LIST},
         tags=["genai"],
@@ -409,7 +409,7 @@ def test_genai_client__async_generate_content_stream__happyflow(fake_backend):
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="llm",
-                name=ANY_STRING(startswith=f"async_generate_content_stream: {MODEL}"),
+                name=ANY_STRING.starting_with(f"async_generate_content_stream: {MODEL}"),
                 input={"contents": "What is the capital of Belarus?"},
                 output={"candidates": ANY_LIST},
                 tags=["genai"],
@@ -418,7 +418,7 @@ def test_genai_client__async_generate_content_stream__happyflow(fake_backend):
                 end_time=ANY_BUT_NONE,
                 usage=EXPECTED_GOOGLE_USAGE_LOGGED_FORMAT,
                 spans=[],
-                model=ANY_STRING(startswith=MODEL),
+                model=ANY_STRING.starting_with(MODEL),
                 provider="google_vertexai",
             )
         ],
@@ -477,7 +477,7 @@ def test_genai_client__generate_content_stream_called_inside_another_tracked_fun
                     SpanModel(
                         id=ANY_BUT_NONE,
                         type="llm",
-                        name=ANY_STRING(startswith=f"generate_content_stream: {MODEL}"),
+                        name=ANY_STRING.starting_with(f"generate_content_stream: {MODEL}"),
                         input={"contents": "What is the capital of Belarus?"},
                         output={"candidates": ANY_LIST},
                         tags=["genai"],
@@ -486,7 +486,7 @@ def test_genai_client__generate_content_stream_called_inside_another_tracked_fun
                         end_time=ANY_BUT_NONE,
                         usage=EXPECTED_GOOGLE_USAGE_LOGGED_FORMAT,
                         spans=[],
-                        model=ANY_STRING(startswith=MODEL),
+                        model=ANY_STRING.starting_with(MODEL),
                         provider="google_vertexai",
                     )
                 ],
@@ -550,8 +550,8 @@ def test_genai_client__async_generate_content_stream_called_inside_another_track
                     SpanModel(
                         id=ANY_BUT_NONE,
                         type="llm",
-                        name=ANY_STRING(
-                            startswith=f"async_generate_content_stream: {MODEL}"
+                        name=ANY_STRING.starting_with(
+                            f"async_generate_content_stream: {MODEL}"
                         ),
                         input={"contents": "What is the capital of Belarus?"},
                         output={"candidates": ANY_LIST},
@@ -561,7 +561,7 @@ def test_genai_client__async_generate_content_stream_called_inside_another_track
                         end_time=ANY_BUT_NONE,
                         usage=EXPECTED_GOOGLE_USAGE_LOGGED_FORMAT,
                         spans=[],
-                        model=ANY_STRING(startswith=MODEL),
+                        model=ANY_STRING.starting_with(MODEL),
                         provider="google_vertexai",
                     )
                 ],

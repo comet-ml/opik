@@ -120,7 +120,7 @@ def test_adk__single_agent__multiple_tools__happyflow(fake_backend):
         metadata={
             "created_from": "google-adk",
             "adk-metadata-key": "adk-metadata-value",
-            "adk_invocation_id": ANY_STRING(),
+            "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
         },
@@ -245,7 +245,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
         last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "google-adk",
-            "adk_invocation_id": ANY_STRING(),
+            "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
         },
@@ -316,7 +316,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
         last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "google-adk",
-            "adk_invocation_id": ANY_STRING(),
+            "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
         },
@@ -354,7 +354,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 input={"city": "New York"},
                 output={
                     "status": "success",
-                    "report": ANY_STRING(startswith="The current time in New York is"),
+                    "report": ANY_STRING.starting_with("The current time in New York is"),
                 },
             ),
             SpanModel(
@@ -459,7 +459,7 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
         last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "google-adk",
-            "adk_invocation_id": ANY_STRING(),
+            "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
         },
@@ -601,7 +601,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
         metadata={
             "created_from": "google-adk",
             "adk-metadata-key": "adk-metadata-value",
-            "adk_invocation_id": ANY_STRING(),
+            "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
         },
@@ -728,7 +728,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
         metadata={
             "created_from": "google-adk",
             "adk-metadata-key": "adk-metadata-value",
-            "adk_invocation_id": ANY_STRING(),
+            "adk_invocation_id": ANY_STRING,
             "app_name": APP_NAME,
             "user_id": USER_ID,
         },
@@ -753,7 +753,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
                 input=ANY_DICT,
                 output=ANY_DICT,
                 provider="openai",  # not necessary supported by opik, just taken from the prefix of litellm model
-                model=ANY_STRING(startswith="gpt-4o-mini"),
+                model=ANY_STRING.starting_with("gpt-4o-mini"),
                 usage=ANY_DICT,
             ),
             SpanModel(
@@ -781,7 +781,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
                 input=ANY_DICT,
                 output=ANY_DICT,
                 provider="openai",  # not necessary supported by opik, just taken from the prefix of litellm model
-                model=ANY_STRING(startswith="gpt-4o-mini"),
+                model=ANY_STRING.starting_with("gpt-4o-mini"),
                 usage=ANY_DICT,
             ),
         ],
