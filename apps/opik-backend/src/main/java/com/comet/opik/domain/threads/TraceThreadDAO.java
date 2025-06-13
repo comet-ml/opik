@@ -1,5 +1,6 @@
 package com.comet.opik.domain.threads;
 
+
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
@@ -7,7 +8,6 @@ import com.comet.opik.utils.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
-import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -62,7 +62,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                          :created_by<item.index>,
                          :last_updated_by<item.index>,
                          parseDateTime64BestEffort(:created_at<item.index> , 9),
-                         parseDateTime64BestEffort(:last_updated_at<item.index> , 9)
+                         parseDateTime64BestEffort(:last_updated_at<item.index> , 6)
                      )
                      <if(item.hasNext)>
                         ,
@@ -188,7 +188,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             bindStatementParam(criteria, statement);
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .flatMap(result -> result.map((row, rowMetadata) -> this.mapFromRow(row)))
+                    .flatMap(result -> result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE.mapFromRow(row)))
                     .collectList();
         });
     }

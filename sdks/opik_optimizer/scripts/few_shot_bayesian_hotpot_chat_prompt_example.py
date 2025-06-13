@@ -1,15 +1,16 @@
 from opik.evaluation.metrics import LevenshteinRatio
-
+from opik.evaluation.metrics.score_result import ScoreResult
+from typing import Any, Dict
 from opik_optimizer import ChatPrompt, FewShotBayesianOptimizer
 from opik_optimizer.datasets import hotpot_300
 
 hot_pot_dataset = hotpot_300()
 
 # For chat prompts instruction doesn't need to contain input parameters from dataset examples.
-prompt  = ChatPrompt(
-    messages= [
+prompt = ChatPrompt(
+    messages=[
         {"role": "system", "content": "Answer the question."},
-        {"role": "user", "content": "{question}"}
+        {"role": "user", "content": "{question}"},
     ]
 )
 project_name = "optimize-few-shot-bayesian-hotpot"
@@ -23,7 +24,8 @@ optimizer = FewShotBayesianOptimizer(
     seed=42,
 )
 
-def levenshtein_ratio(dataset_item, llm_output):
+
+def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
     metric = LevenshteinRatio()
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 

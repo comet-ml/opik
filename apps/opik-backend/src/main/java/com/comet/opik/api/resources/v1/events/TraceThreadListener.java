@@ -13,10 +13,9 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 
+import java.time.Instant;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 @EagerSingleton
@@ -40,20 +39,29 @@ public class TraceThreadListener {
                 event.workspaceId(),
                 event.projectIds());
 
-        Map<UUID, Set<String>> projectThreadIds = new HashMap<>();
+        Map<UUID, Map<String, Instant>> projectThreadIds = new HashMap<>();
 
         event.traces().forEach(trace -> {
             UUID projectId = trace.projectId();
             String threadId = trace.threadId();
 
             if (StringUtils.isNotBlank(threadId)) {
-                projectThreadIds.computeIfAbsent(projectId, key -> new HashSet<>()).add(threadId);
+                Map<String, Instant> threadIdAndLastUpdatedAt = projectThreadIds
+                        .computeIfAbsent(projectId, id -> new HashMap<>());
+
+                threadIdAndLastUpdatedAt.computeIfPresent(threadId,
+                        (id, existingTime) -> trace.lastUpdatedAt().isAfter(existingTime)
+                                ? trace.lastUpdatedAt()
+                                : existingTime);
+
+                threadIdAndLastUpdatedAt.computeIfAbsent(threadId, id -> trace.lastUpdatedAt());
             }
         });
 
         processEvent(event, projectThreadIds)
                 .doOnError(error -> {
-                    log.info("Fail to process TracesCreated event for workspace: '{}', projectIds: '[{}]', error: '{}'",
+                    log.error(
+                            "Fail to process TracesCreated event for workspace: '{}', projectIds: '[{}]', error: '{}'",
                             event.workspaceId(), event.projectIds(), error.getMessage());
                     log.error("Error processing trace thread ingestion", error);
                 })
@@ -63,24 +71,26 @@ public class TraceThreadListener {
                 .subscribe();
     }
 
-    private Flux<Void> processEvent(TracesCreated event, Map<UUID, Set<String>> projectThreadIds) {
-        return Flux.fromIterable(projectThreadIds.entrySet())
+    private Flux<Void> processEvent(TracesCreated event,
+            Map<UUID, Map<String, Instant>> projectThreadIdAndLastUpdateAts) {
+        return Flux.fromIterable(projectThreadIdAndLastUpdateAts.entrySet())
                 .flatMap(entry -> {
                     UUID projectId = entry.getKey();
-                    Set<String> threadIds = entry.getValue();
+                    Map<String, Instant> threadIdAndLastUpdateAts = entry.getValue();
 
-                    return processProjectTraceThread(event, projectId, threadIds);
+                    return processProjectTraceThread(event, projectId, threadIdAndLastUpdateAts);
                 })
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, event.workspaceId())
                         .put(RequestContext.USER_NAME, event.userName()));
     }
 
-    private Mono<Void> processProjectTraceThread(TracesCreated event, UUID projectId, Set<String> threadIds) {
+    private Mono<Void> processProjectTraceThread(TracesCreated event, UUID projectId,
+            Map<String, Instant> threadIdAndLastUpdateAts) {
 
         log.info("Processing trace threads for workspace: '{}', projectId: '{}', threadIds: '[{}]'",
-                event.workspaceId(), projectId, threadIds);
+                event.workspaceId(), projectId, threadIdAndLastUpdateAts.keySet());
 
-        return traceThreadService.processTraceThreads(threadIds, projectId);
+        return traceThreadService.processTraceThreads(threadIdAndLastUpdateAts, projectId);
     }
 
 }
