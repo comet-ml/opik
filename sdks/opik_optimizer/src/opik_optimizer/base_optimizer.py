@@ -1,7 +1,8 @@
+from typing import Any, Callable, Dict, List, Optional, Type
+
 import logging
 import time
 from abc import abstractmethod
-from typing import Any, Callable, Dict, List, Optional
 
 import litellm
 import opik
@@ -12,6 +13,7 @@ from pydantic import BaseModel
 from . import _throttle, optimization_result
 from .cache_config import initialize_cache
 from .optimization_config import chat_prompt
+from .optimizable_agent import OptimizableAgent
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -37,28 +39,22 @@ class OptimizationRound(BaseModel):
 class BaseOptimizer:
     def __init__(
         self,
-        model: str,
-        project_name: Optional[str] = None,
+        agent_class: Type[OptimizableAgent],
         verbose: int = 1,
-        **model_kwargs: Any,
+        seed: Optional[int] = None,
     ) -> None:
         """
         Base class for optimizers.
 
         Args:
-           model: LiteLLM model name
-           project_name: Opik project name
+           agent_class: the Agent class to evaluate
            verbose: Controls internal logging/progress bars (0=off, 1=on).
-           model_kwargs: additional args for model (eg, temperature)
         """
-        self.model = model
-        self.reasoning_model = model
-        self.model_kwargs = model_kwargs
-        self.project_name = project_name
+        self.agent_class = agent_class
         self.verbose = verbose
+        self.seed = seed
         self._history: List[OptimizationRound] = []
         self.experiment_config = None
-        self.llm_call_counter = 0
 
         # Initialize shared cache
         initialize_cache()
@@ -66,7 +62,7 @@ class BaseOptimizer:
     @abstractmethod
     def optimize_prompt(
         self,
-        prompt: chat_prompt.ChatPrompt,
+        agent_config: Dict[str, Any],
         dataset: opik.Dataset,
         metric: Callable,
         experiment_config: Optional[Dict] = None,
@@ -76,10 +72,11 @@ class BaseOptimizer:
         Optimize a prompt.
 
         Args:
+           agent_config: An Agent config
            dataset: Opik dataset name, or Opik dataset
            metric: A metric function, this function should have two arguments:
                dataset_item and llm_output
-           prompt: the prompt to optimize
+           agent_class: the agent to optimize
            input_key: input field of dataset
            output_key: output field of dataset
            experiment_config: Optional configuration for the experiment
@@ -88,9 +85,9 @@ class BaseOptimizer:
         pass
 
     @abstractmethod
-    def evaluate_prompt(
+    def evaluate_agent(
         self,
-        prompt: chat_prompt.ChatPrompt,
+        agent_config,
         dataset: opik.Dataset,
         metric: Callable,
         n_samples: Optional[int] = None,
@@ -99,10 +96,10 @@ class BaseOptimizer:
         **kwargs: Any,
     ) -> float:
         """
-        Evaluate a prompt.
+        Evaluate an Agent
 
         Args:
-           prompt: the prompt to evaluate
+           agent_config: the prompt to evaluate
            dataset: Opik dataset name, or Opik dataset
            metrics: A list of metric functions, these functions should have two arguments:
                dataset_item and llm_output

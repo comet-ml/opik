@@ -1,11 +1,9 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 import os
 
 import litellm
 from litellm.integrations.opik.opik import OpikLogger
-
-from .optimization_config.chat_prompt import ChatPrompt
 
 
 class OptimizableAgent:
@@ -15,7 +13,7 @@ class OptimizableAgent:
 
     model: Optional[str] = None
     project_name: Optional[str] = None
-    fallback_prompt = "You are a helpful assistant."
+    input_dataset_field: Optional[str] = None
 
     def __init__(self, agent_config: Dict[str, Any]) -> None:
         if self.project_name is None:
@@ -24,39 +22,58 @@ class OptimizableAgent:
         self.init_agent(agent_config)
 
     def init_llm(self) -> None:
+        # Replace if you want to use a different LLM than LiteLLM
         # Litellm bug requires this (maybe problematic if multi-threaded)
         os.environ["OPIK_PROJECT_NAME"] = str(self.project_name)
         self.opik_logger = OpikLogger()
         litellm.callbacks = [self.opik_logger]
 
     def init_agent(self, agent_config: Dict[str, Any]) -> None:
-        self.chat_prompt = agent_config.get(
-            "chat-prompt", ChatPrompt(system=self.fallback_prompt)
-        )
+        self.agent_config = agent_config
 
-    def llm_invoke(self, query: str) -> str:
-        messages = []
-        if self.chat_prompt.system:
-            messages.append({"role": "system", "content": self.chat_prompt.system})
-        if self.chat_prompt.messages:
-            messages.extend(self.chat_prompt.messages)
+    @classmethod
+    def llm_invoke(
+        cls,
+        query: Optional[str] = None,
+        messages: Optional[List[Dict[str, str]]] = None,
+        seed: Optional[int] = None,
+    ) -> str:
+        # Replace if you want to use a different LLM than LiteLLM
+        all_messages = []
+        if query:
+            all_messages.append({"role": "user", "content": query})
 
-        messages.append({"role": "user", "content": query})
+        if messages:
+            all_messages.extend(messages)
 
         response = litellm.completion(
-            model=self.model,
-            messages=messages,
+            model=cls.model,
+            messages=all_messages,
+            seed=seed,
         )
         result = response.choices[0].message.content
         return result
 
     def invoke(self, query: str) -> str:
-        # Replace with agent invocation:
-        return self.llm_invoke(query)
+        return self.invoke_dataset_item({"question": query})
 
     def invoke_dataset_item(
-        self, dataset_item: Dict[str, Any], dataset_input_field: str
+        self,
+        dataset_item: Dict[str, Any],
+        seed: Optional[int] = None,
     ) -> Dict[str, Any]:
+        messages = []
+        if self.agent_config["chat-prompt"].system:
+            messages.append(
+                {"role": "system", "content": self.agent_config["chat-prompt"].system}
+            )
+        if self.agent_config["chat-prompt"].messages:
+            messages.extend(self.agent_config["chat-prompt"].messages)
+
+        messages.append(
+            {"role": "user", "content": dataset_item[self.input_dataset_field]}
+        )
+
         # Replace with agent invocation:
-        result = self.llm_invoke(dataset_item[dataset_input_field])
-        return {"output": result}
+        result = self.llm_invoke(messages=messages, seed=seed)
+        return result

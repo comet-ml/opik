@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from opik_optimizer import OptimizableAgent, ChatPrompt, FewShotBayesianOptimizer
 from opik_optimizer.datasets import hotpot_300
@@ -52,21 +52,14 @@ class SearchInput(BaseModel):
 
 dataset = hotpot_300()
 
-prompt = """
-You are a helpful assistant. Use the `search_wikipedia` tool to find factual information when appropriate.
-The user will provide a question string like "Who is Barack Obama?".
-1. Extract the item to look up
-2. Use the `search_wikipedia` tool to find details
-3. Respond clearly to the user, stating the answer found by the tool.
-"""
-
 
 class ADKAgent(OptimizableAgent):
     model = "openai/gpt-4.1"
     project_name = "adk-agent-wikipedia"
+    input_dataset_field = "question"
 
     def __init__(self, agent_config: Dict[str, Any]) -> None:
-        prompt: str = agent_config["chat-prompt"].system
+        prompt: ChatPrompt = agent_config["chat-prompt"].get_system_prompt()
 
         self.opik_tracer = OpikTracer(self.project_name)
 
@@ -88,9 +81,9 @@ class ADKAgent(OptimizableAgent):
         )
 
     def invoke_dataset_item(
-        self, query_json: Dict[str, Any], input_dataset_field: str
+        self, query_json: Dict[str, Any], seed: Optional[int] = None
     ) -> Dict[str, Any]:
-        query_json = {input_dataset_field: query_json[input_dataset_field]}
+        query_json = {self.input_dataset_field: query_json[self.input_dataset_field]}
         query_json = json.dumps(query_json)
         session_service = InMemorySessionService()
         # Create separate sessions for clarity, though not strictly necessary if context is managed
@@ -132,42 +125,39 @@ class ADKAgent(OptimizableAgent):
             )
             stored_output = current_session.state.get(self.agent.output_key)
 
-            return {"output": stored_output}
+            return stored_output
 
         return asyncio.run(_invoke())
 
 
-agent_config = {
-    "chat-prompt": ChatPrompt(system=prompt),
-    "Wikipedia Search": {
-        "type": "tool",
-        "value": "Search wikipedia for abstracts. Gives a brief paragraph about a topic.",
-        "function": search_wikipedia,
-    },
-}
+prompt = """
+You are a helpful assistant. Use the `search_wikipedia` tool to find factual information when appropriate.
+The user will provide a question string like "Who is Barack Obama?".
+1. Extract the item to look up
+2. Use the `search_wikipedia` tool to find details
+3. Respond clearly to the user, stating the answer found by the tool.
+"""
+
+agent_config = {"chat-prompt": ChatPrompt(system=prompt)}
 
 # Test it:
 agent = ADKAgent(agent_config)
-
 result = agent.invoke_dataset_item(
-    {"question": "Which is heavier: a newborn elephant, or a motor boat?"},
-    "question",
+    {"question": "Which is heavier: a newborn elephant, or a motor boat?"}
 )
 print(result)
 
-metaprompt = """Refine this prompt template to make it better.
-Just give me the better prompt, nothing else.
-Here is the prompt:
-
-%r
-"""
-
-optimizer = FewShotBayesianOptimizer(metaprompt)
-
-optimizer.optimize_agent(
+# Optimize it:
+optimizer = FewShotBayesianOptimizer(
     agent_class=ADKAgent,
+    min_examples=3,
+    max_examples=8,
+    n_threads=16,
+    seed=42,
+)
+result = optimizer.optimize_agent(
+    agent_config=agent_config,
     dataset=dataset,
     metric=levenshtein_ratio,
     n_samples=10,
-    num_threads=16,
 )
