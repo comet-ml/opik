@@ -152,6 +152,11 @@ class BaseTrackDecorator(abc.ABC):
         So these spans can't be parents for other spans. This is usually the case LLM API calls
         with `stream=True`.
         """
+        from .. import config
+        # Check if tracing is active at runtime
+        if self.disabled or not config.is_tracing_active():
+            return func
+
         if inspect.isgeneratorfunction(func):
             return self._tracked_sync_generator(func=func, track_options=track_options)
 
@@ -273,6 +278,11 @@ class BaseTrackDecorator(abc.ABC):
     ) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:  # type: ignore
+            from .. import config
+            # Check if tracing is active at runtime
+            if self.disabled or not config.is_tracing_active():
+                return func(*args, **kwargs)
+            
             self._before_call(
                 func=func,
                 track_options=track_options,
@@ -326,6 +336,12 @@ class BaseTrackDecorator(abc.ABC):
     ) -> Callable:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> Any:  # type: ignore
+            # Check if tracing is active at runtime
+            from .. import config
+            if self.disabled or not config.is_tracing_active():
+                # Skip tracing if disabled
+                return await func(*args, **kwargs)
+            
             self._before_call(
                 func=func,
                 track_options=track_options,
