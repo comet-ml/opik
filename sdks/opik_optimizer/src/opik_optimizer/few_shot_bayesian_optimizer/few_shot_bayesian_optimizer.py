@@ -234,6 +234,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             few_shot_examples = "\n\n".join(processed_demo_examples)
 
             llm_task = self._build_task_from_messages(
+                agent_config,
                 messages=fewshot_prompt_template.message_list_with_placeholder,
                 few_shot_examples=few_shot_examples,
             )
@@ -557,7 +558,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "A ChatPrompt must be a list of dictionaries with 'role' and 'content' keys."
             )
 
-        llm_task = self._build_task_from_messages(prompt.formatted_messages)
+        llm_task = self._build_task_from_messages(
+            agent_config, prompt.formatted_messages
+        )
 
         experiment_config = experiment_config or {}
         experiment_config = {
@@ -596,7 +599,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         return score
 
     def _build_task_from_messages(
-        self, messages: List[Dict[str, str]], few_shot_examples: Optional[str] = None
+        self,
+        agent_config,
+        messages: List[Dict[str, str]],
+        few_shot_examples: Optional[str] = None,
     ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
         def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, Any]:
             prompt_ = copy.deepcopy(messages)
@@ -612,8 +618,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                         FEW_SHOT_EXAMPLE_PLACEHOLDER, few_shot_examples
                     )
 
-            agent_config = {"chat-prompt": ChatPrompt(messages=prompt_)}
-            agent = self.agent_class(agent_config)
+            new_agent_config = copy.deepcopy(agent_config)
+            new_agent_config["chat-prompt"] = ChatPrompt(messages=prompt_)
+            agent = self.agent_class(new_agent_config)
             response = agent.invoke_dataset_item(dataset_item, seed=self.seed)
 
             return {mappers.EVALUATED_LLM_TASK_OUTPUT: response}

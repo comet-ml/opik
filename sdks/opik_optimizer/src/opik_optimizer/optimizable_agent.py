@@ -12,6 +12,7 @@ class OptimizableAgent:
     """
 
     model: Optional[str] = None
+    model_kwargs: Dict[str, Any] = {}
     project_name: Optional[str] = None
     input_dataset_field: Optional[str] = None
 
@@ -47,9 +48,7 @@ class OptimizableAgent:
             all_messages.extend(messages)
 
         response = litellm.completion(
-            model=cls.model,
-            messages=all_messages,
-            seed=seed,
+            model=cls.model, messages=all_messages, seed=seed, **cls.model_kwargs
         )
         result = response.choices[0].message.content
         return result
