@@ -1625,7 +1625,7 @@ class ProjectsResourceTest {
                 .toList();
     }
 
-    private Double getTotalEstimatedCost(List<Trace> traces) {
+    private double getTotalEstimatedCost(List<Trace> traces) {
         long count = traces.stream()
                 .map(Trace::totalEstimatedCost)
                 .filter(Objects::nonNull)

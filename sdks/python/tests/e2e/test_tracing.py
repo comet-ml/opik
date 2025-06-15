@@ -166,7 +166,7 @@ def test_tracked_function__error_inside_inner_function__caught_in_top_level_span
         error_info=ErrorInfoDict(
             exception_type="ValueError",
             message="inner span error message",
-            traceback=ANY_STRING(),
+            traceback=ANY_STRING,
         ),
     )
 
@@ -205,7 +205,7 @@ def test_tracked_function__error_inside_inner_function__error_not_caught__trace_
         error_info=ErrorInfoDict(
             exception_type="ValueError",
             message="inner span error message",
-            traceback=ANY_STRING(),
+            traceback=ANY_STRING,
         ),
     )
 
@@ -221,7 +221,7 @@ def test_tracked_function__error_inside_inner_function__error_not_caught__trace_
         error_info=ErrorInfoDict(
             exception_type="ValueError",
             message="inner span error message",
-            traceback=ANY_STRING(),
+            traceback=ANY_STRING,
         ),
     )
 
@@ -237,7 +237,7 @@ def test_tracked_function__error_inside_inner_function__error_not_caught__trace_
         error_info=ErrorInfoDict(
             exception_type="ValueError",
             message="inner span error message",
-            traceback=ANY_STRING(),
+            traceback=ANY_STRING,
         ),
     )
 
