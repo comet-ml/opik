@@ -61,6 +61,19 @@ class ChatPrompt:
 
         return standardize_messages
 
+    def get_system_prompt(self):
+        if self.system is not None:
+            return self.system
+
+        elif self.prompt is not None:
+            return self.prompt
+
+        elif self.messages is not None:
+            return self.messages[0]["content"]
+
+        else:
+            raise Exception("Unable to find a system prompt in ChatPrompt")
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert ChatPrompt to a dictionary for JSON serialization.
 
