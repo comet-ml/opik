@@ -1,5 +1,6 @@
 package com.comet.opik.domain.threads;
 
+import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import io.r2dbc.spi.Row;
 import org.mapstruct.Mapper;
 import org.mapstruct.factory.Mappers;
@@ -27,6 +28,13 @@ interface TraceThreadMapper {
                 .lastUpdatedBy(row.get("last_updated_by", String.class))
                 .createdAt(row.get("created_at", Instant.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
+                .build();
+    }
+
+    default ProjectWithPendingClosureTraceThreads mapToProjectWithPendingClosuseThreads(Row row) {
+        return ProjectWithPendingClosureTraceThreads.builder()
+                .projectId(row.get("project_id", UUID.class))
+                .workspaceId(row.get("workspace_id", String.class))
                 .build();
     }
 }

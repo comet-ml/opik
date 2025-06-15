@@ -19,7 +19,14 @@ public class DummyLockService implements LockService {
     }
 
     @Override
+    public <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<T> failToAcquireLockAction,
+            Duration actionTimeout, Duration lockTimeout) {
+        return null;
+    }
+
+    @Override
     public <T> Mono<T> executeWithLockCustomExpire(LockService.Lock lock, Mono<T> action, Duration duration) {
         return action;
     }
+
 }

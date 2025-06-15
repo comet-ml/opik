@@ -128,7 +128,6 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -8348,7 +8347,8 @@ class TracesResourceTest {
                                 .put(RequestContext.WORKSPACE_ID, workspaceId))
                         .block();
 
-                assertThreadModels(actualTraceThreadModels, List.of(expectedTraceThreadModel), createdAt);
+                TraceAssertions.assertOpenThreads(actualTraceThreadModels, List.of(expectedTraceThreadModel),
+                        createdAt);
             });
         }
 
@@ -8419,7 +8419,8 @@ class TracesResourceTest {
                                 .put(RequestContext.WORKSPACE_ID, workspaceId))
                         .block();
 
-                assertThreadModels(actualTraceThreadModels, expectedTraceThreadModels, expectedCreatedAt);
+                TraceAssertions.assertOpenThreads(actualTraceThreadModels, expectedTraceThreadModels,
+                        expectedCreatedAt);
             });
         }
 
@@ -8443,22 +8444,6 @@ class TracesResourceTest {
                     .status(TraceThreadModel.Status.ACTIVE)
                     .build();
         }
-
-        private void assertThreadModels(List<TraceThreadModel> actualTraceThreadModels,
-                List<TraceThreadModel> expectedTraceThreadModels, Instant expectedCreatedAt) {
-
-            assertThat(actualTraceThreadModels).hasSize(expectedTraceThreadModels.size());
-
-            assertThat(actualTraceThreadModels)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id", "createdAt")
-                    .containsExactlyInAnyOrderElementsOf(expectedTraceThreadModels);
-
-            assertThat(actualTraceThreadModels.stream().map(TraceThreadModel::createdAt))
-                    .allMatch(createdAt -> createdAt.isAfter(expectedCreatedAt));
-            assertThat(actualTraceThreadModels.stream().map(TraceThreadModel::id))
-                    .allMatch(Objects::nonNull);
-        }
-
     }
 
     private void assertErrorResponse(Response actualResponse, String message, int expected) {
