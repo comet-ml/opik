@@ -125,12 +125,13 @@ class RedissonLockService implements LockService {
                 //Try to acquire the lock until the lockWaitTime expires if the lock is not available it will return Mono.empty()
                 // If the lock is acquired, it sets the expiration time using the actionTimeout
                 .then(Mono.defer(() -> semaphore.tryAcquire(lockWaitTime.toMillis(), actionTimeout.toMillis(),
-                        TimeUnit.MILLISECONDS)))
-                .flatMap(locked -> expire(actionTimeout, locked, semaphore)))
-                .flatMap(lockInstance -> runAction(lock, action, lockInstance))
+                        TimeUnit.MILLISECONDS))
+                        // If the lock is not acquired, it executes the fallback action and returns empty to make sure the main action is not executed
+                        .switchIfEmpty(failToAcquireLockAction.then(Mono.empty()))
+                        .flatMap(locked -> expire(actionTimeout, locked, semaphore))
+                        .flatMap(lockInstance -> runAction(lock, action, lockInstance))))
                 .onErrorResume(RedisException.class, e -> handleError(lock, failToAcquireLockAction, e))
-                .onErrorResume(IllegalStateException.class, e -> handleError(lock, failToAcquireLockAction, e))
-                .switchIfEmpty(failToAcquireLockAction);
+                .onErrorResume(IllegalStateException.class, e -> handleError(lock, failToAcquireLockAction, e));
     }
 
     private <T> Mono<T> runAction(Lock lock, Mono<T> action, LockInstance lockInstance) {

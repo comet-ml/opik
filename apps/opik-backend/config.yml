@@ -383,9 +383,9 @@ traceThreadConfig:
   # Default: 100
   # Description: Maximum number of messages returned within a Redis Stream get
   consumerBatchSize: ${OPIK_REDIS_TRACE_THREAD_CONSUMER_BATCH_SIZE:-100}
-  # Default: 200 ms
+  # Default: 200 milliseconds
   # Description: How often the trace thread consumer will check Redis for new messages (in milliseconds)
-  poolingInterval: ${OPIK_REDIS_TRACE_THREAD_POOLING_INTERVAL:-200ms};
+  poolingInterval: ${OPIK_REDIS_TRACE_THREAD_POOLING_INTERVAL:-200 milliseconds}
   # Default: trace_thread_closing_stream
   # Description: The name of the Redis Stream used for trace thread closing
   streamName: ${OPIK_REDIS_TRACE_THREAD_STREAM_NAME:-'trace_thread_closing_stream'}
