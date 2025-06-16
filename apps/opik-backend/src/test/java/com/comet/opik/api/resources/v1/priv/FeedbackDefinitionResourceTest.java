@@ -10,6 +10,7 @@ import com.comet.opik.api.resources.utils.FeedbackScoreDefinitionAssertions;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.TestConfigUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
@@ -28,7 +29,6 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import org.apache.hc.core5.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
-import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -103,6 +103,8 @@ class FeedbackDefinitionResourceTest {
 
         wireMock = WireMockUtils.startWireMock();
 
+        MigrationUtils.runMysqlDbMigration(MYSQL);
+
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(MYSQL.getJdbcUrl(), null,
                 wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
@@ -115,11 +117,8 @@ class FeedbackDefinitionResourceTest {
     private FeedbackDefinitionResourceClient feedbackDefinitionResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) {
-
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+    void setUpAll(ClientSupport client) {
+        this.baseURI = TestConfigUtils.getBaseUrl(client);
         this.client = client;
 
         ClientSupportUtils.config(client);
