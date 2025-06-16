@@ -60,7 +60,7 @@ class ADKAgent(OptimizableAgent):
     input_dataset_field = "question"
 
     def init_agent(self, agent_config: AgentConfig) -> None:
-        prompt: ChatPrompt = agent_config["chat_prompt"].get_system_prompt()
+        prompt: ChatPrompt = agent_config.chat_prompt.get_system_prompt()
 
         self.opik_tracer = OpikTracer(self.project_name)
 
@@ -143,7 +143,7 @@ The user will provide a question string like "Who is Barack Obama?".
 3. Respond clearly to the user, stating the answer found by the tool.
 """
 
-agent_config = {"chat_prompt": ChatPrompt(system=prompt)}
+agent_config = AgentConfig(chat_prompt=ChatPrompt(system=prompt))
 
 # Test it:
 agent = ADKAgent(agent_config)
@@ -163,10 +163,11 @@ optimizer = MetaPromptOptimizer(
     num_threads=12,  # Number of threads for parallel evaluation
     subsample_size=10,  # Fixed subsample size of 10 items
 )
-result = optimizer.optimize_agent(
+optimization_result = optimizer.optimize_agent(
     agent_class=ADKAgent,
     agent_config=agent_config,
     dataset=dataset,
     metric=levenshtein_ratio,
     n_samples=10,
 )
+optimization_result.display()
