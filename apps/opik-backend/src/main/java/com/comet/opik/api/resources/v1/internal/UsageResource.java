@@ -83,4 +83,14 @@ public class UsageResource {
     public Response getDatasetBiInfo() {
         return Response.ok(datasetService.getDatasetBIInformation()).build();
     }
+
+    @GET
+    @Path("/bi-spans")
+    @Operation(operationId = "getSpansBiInfo", summary = "Get spans information for BI events", description = "Get spans information for BI events per user per workspace", responses = {
+            @ApiResponse(responseCode = "200", description = "Spans BiInformationResponse resource", content = @Content(schema = @Schema(implementation = BiInformationResponse.class)))})
+    public Response getSpansBiInfo() {
+        return spanService.getSpanBIInformation()
+                .map(spanBiInfoResponse -> Response.ok(spanBiInfoResponse).build())
+                .block();
+    }
 }

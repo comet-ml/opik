@@ -1,16 +1,22 @@
 from opik.evaluation import metrics
 from opik.evaluation.metrics import score_result
+from typing import Any, Dict
 
 from opik_optimizer import ChatPrompt, FewShotBayesianOptimizer
 from opik_optimizer.datasets import halu_eval_300
 
 
 class HaluEvalObjective(metrics.BaseMetric):
-    def __init__(self, name: str = "halu_eval_objective", track: bool = True, **kwargs):
+    def __init__(
+        self,
+        name: str = "halu_eval_objective",
+        track: bool = True,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(name=name, track=track, **kwargs)
 
     def score(
-        self, ground_truth: str, output: str, **ignored_kwargs
+        self, ground_truth: str, output: str, **ignored_kwargs: Any
     ) -> score_result.ScoreResult:
         ground_truth = ground_truth.lower()
         output = output.lower()
@@ -36,7 +42,6 @@ class HaluEvalObjective(metrics.BaseMetric):
 
 
 project_name = "optimize-few-shot-bayesian-halueval"
-halu_eval_accuracy = HaluEvalObjective(project_name=project_name)
 halu_eval_dataset = halu_eval_300()
 
 
@@ -63,9 +68,15 @@ optimizer = FewShotBayesianOptimizer(
     seed=42,
 )
 
-def halu_eval_accuracy(dataset_item, llm_output):
+
+def halu_eval_accuracy(
+    dataset_item: Dict[str, Any], llm_output: str
+) -> score_result.ScoreResult:
     metric = HaluEvalObjective()
-    return metric.score(ground_truth=dataset_item["expected_hallucination_label"], output=llm_output)
+    return metric.score(
+        ground_truth=dataset_item["expected_hallucination_label"], output=llm_output
+    )
+
 
 result = optimizer.optimize_prompt(
     prompt=prompt,

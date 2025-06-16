@@ -4,7 +4,7 @@ from typing_extensions import override
 
 from opik.api_objects import opik_client, span
 from opik.decorator import arguments_helpers, base_track_decorator, inspect_helpers
-from tests.testlib import ANY_BUT_NONE, ANY_STRING, SpanModel, TraceModel, assert_equal
+from ...testlib import ANY_BUT_NONE, ANY_STRING, SpanModel, TraceModel, assert_equal
 
 
 class BrokenOpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
@@ -97,16 +97,17 @@ def test_broken_decorator__start_span_preprocessor__no_error(fake_backend):
 
     EXPECTED_TRACE_TREE = TraceModel(
         end_time=ANY_BUT_NONE,
-        id=ANY_STRING(),
+        id=ANY_STRING,
         input=None,
         name="f_inner",
         output={"output": 42},
         start_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         error_info=None,
         spans=[
             SpanModel(
                 end_time=ANY_BUT_NONE,
-                id=ANY_STRING(),
+                id=ANY_STRING,
                 input=None,
                 name="f_inner",
                 output={"output": 42},
@@ -121,7 +122,7 @@ def test_broken_decorator__start_span_preprocessor__no_error(fake_backend):
     assert len(fake_backend.trace_trees) == 1
     assert len(fake_backend.span_trees) == 1
 
-    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+    assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
 
 
 def test_broken_decorator__end_span_preprocessor__no_error(fake_backend):
@@ -137,16 +138,17 @@ def test_broken_decorator__end_span_preprocessor__no_error(fake_backend):
 
     EXPECTED_TRACE_TREE = TraceModel(
         end_time=ANY_BUT_NONE,
-        id=ANY_STRING(),
+        id=ANY_STRING,
         input={"num": 42},
         name="f_inner",
         output={"output": 42},
         start_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         error_info=None,
         spans=[
             SpanModel(
                 end_time=ANY_BUT_NONE,
-                id=ANY_STRING(),
+                id=ANY_STRING,
                 input={"num": 42},
                 name="f_inner",
                 output={"output": 42},
@@ -161,4 +163,4 @@ def test_broken_decorator__end_span_preprocessor__no_error(fake_backend):
     assert len(fake_backend.trace_trees) == 1
     assert len(fake_backend.span_trees) == 1
 
-    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+    assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])

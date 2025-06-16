@@ -3,7 +3,9 @@ import logging
 
 from opik.evaluation.models.litellm import warning_filters
 
-from opik_optimizer.evolutionary_optimizer.evolutionary_optimizer import EvolutionaryOptimizer
+from opik_optimizer.evolutionary_optimizer.evolutionary_optimizer import (
+    EvolutionaryOptimizer,
+)
 
 from . import datasets
 from .base_optimizer import BaseOptimizer
@@ -32,5 +34,5 @@ __all__ = [
     "OptimizationResult",
     "setup_logging",
     "datasets",
-    "TaskConfig"
+    "TaskConfig",
 ]

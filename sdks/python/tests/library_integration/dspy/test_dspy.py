@@ -52,17 +52,18 @@ def test_dspy__happyflow(
     opik_callback.flush()
 
     EXPECTED_TRACE_TREE = TraceModel(
-        id=ANY_STRING(),
+        id=ANY_STRING,
         name="ChainOfThought",
         input={"args": [], "kwargs": {"question": "What is the meaning of life?"}},
         output=None,
         metadata={"created_from": "dspy"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=expected_project_name,
         spans=[
             SpanModel(
-                id=ANY_STRING(),
+                id=ANY_STRING,
                 type="llm",
                 name="Predict",
                 provider=None,
@@ -75,9 +76,9 @@ def test_dspy__happyflow(
                 project_name=expected_project_name,
                 spans=[
                     SpanModel(
-                        id=ANY_STRING(),
+                        id=ANY_STRING,
                         type="llm",
-                        name=ANY_STRING(startswith="LM"),
+                        name=ANY_STRING.starting_with("LM"),
                         provider="openai",
                         model="gpt-4o-mini",
                         input=ANY_DICT,
@@ -124,17 +125,18 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
     opik_callback.flush()
 
     EXPECTED_TRACE_TREE = TraceModel(
-        id=ANY_STRING(),
+        id=ANY_STRING,
         name="ChainOfThought",
         input={"args": [], "kwargs": {"question": "What is the meaning of life?"}},
         output=None,
         metadata={"created_from": "dspy"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=project_name,
         spans=[
             SpanModel(
-                id=ANY_STRING(),
+                id=ANY_STRING,
                 type="llm",
                 name="Predict",
                 provider=None,
@@ -146,15 +148,15 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
                 end_time=ANY_BUT_NONE,
                 project_name=project_name,
                 error_info={
-                    "exception_type": ANY_STRING(),
-                    "message": ANY_STRING(),
-                    "traceback": ANY_STRING(),
+                    "exception_type": ANY_STRING,
+                    "message": ANY_STRING,
+                    "traceback": ANY_STRING,
                 },
                 spans=[
                     SpanModel(
-                        id=ANY_STRING(),
+                        id=ANY_STRING,
                         type="llm",
-                        name=ANY_STRING(startswith="LM: "),
+                        name=ANY_STRING.starting_with("LM: "),
                         provider="openai",
                         model="gpt-3.5-turbo",
                         input=ANY_DICT,
@@ -165,15 +167,15 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
                         project_name=project_name,
                         spans=[],
                         error_info={
-                            "exception_type": ANY_STRING(),
-                            "message": ANY_STRING(),
-                            "traceback": ANY_STRING(),
+                            "exception_type": ANY_STRING,
+                            "message": ANY_STRING,
+                            "traceback": ANY_STRING,
                         },
                     ),
                     SpanModel(
-                        id=ANY_STRING(),
+                        id=ANY_STRING,
                         type="llm",
-                        name=ANY_STRING(startswith="LM: "),
+                        name=ANY_STRING.starting_with("LM: "),
                         provider="openai",
                         model="gpt-3.5-turbo",
                         input=ANY_DICT,
@@ -184,9 +186,9 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
                         project_name=project_name,
                         spans=[],
                         error_info={
-                            "exception_type": ANY_STRING(),
-                            "message": ANY_STRING(),
-                            "traceback": ANY_STRING(),
+                            "exception_type": ANY_STRING,
+                            "message": ANY_STRING,
+                            "traceback": ANY_STRING,
                         },
                     ),
                 ],
@@ -236,6 +238,7 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
         output={"output": "the-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=project_name,
         spans=[
             SpanModel(
@@ -249,7 +252,7 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
                 project_name=project_name,
                 spans=[
                     SpanModel(
-                        id=ANY_STRING(),
+                        id=ANY_STRING,
                         name="ChainOfThought",
                         input={
                             "args": [],
@@ -262,7 +265,7 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
                         project_name=project_name,
                         spans=[
                             SpanModel(
-                                id=ANY_STRING(),
+                                id=ANY_STRING,
                                 type="llm",
                                 name="Predict",
                                 provider=None,
@@ -275,9 +278,9 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
                                 project_name=project_name,
                                 spans=[
                                     SpanModel(
-                                        id=ANY_STRING(),
+                                        id=ANY_STRING,
                                         type="llm",
-                                        name=ANY_STRING(startswith="LM: openai"),
+                                        name=ANY_STRING.starting_with("LM: openai"),
                                         provider="openai",
                                         model="gpt-3.5-turbo",
                                         input=ANY_DICT,
@@ -345,16 +348,17 @@ def test_dspy_callback__used_when_there_was_already_existing_trace_without_span_
     opik.flush_tracker()
 
     EXPECTED_TRACE_TREE = TraceModel(
-        id=ANY_STRING(),
+        id=ANY_STRING,
         name="manually-created-trace",
         input={"input": "input-of-manually-created-trace"},
         output={"output": "output-of-manually-created-trace"},
         metadata=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
-                id=ANY_STRING(),
+                id=ANY_STRING,
                 name="ChainOfThought",
                 input={
                     "args": [],
@@ -367,7 +371,7 @@ def test_dspy_callback__used_when_there_was_already_existing_trace_without_span_
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
                 spans=[
                     SpanModel(
-                        id=ANY_STRING(),
+                        id=ANY_STRING,
                         type="llm",
                         name="Predict",
                         provider=None,
@@ -379,9 +383,9 @@ def test_dspy_callback__used_when_there_was_already_existing_trace_without_span_
                         end_time=ANY_BUT_NONE,
                         spans=[
                             SpanModel(
-                                id=ANY_STRING(),
+                                id=ANY_STRING,
                                 type="llm",
-                                name=ANY_STRING(startswith="LM: openai"),
+                                name=ANY_STRING.starting_with("LM: openai"),
                                 provider="openai",
                                 model="gpt-3.5-turbo",
                                 input=ANY_DICT,
@@ -443,7 +447,7 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
     opik.flush_tracker()
 
     EXPECTED_SPANS_TREE = SpanModel(
-        id=ANY_STRING(),
+        id=ANY_STRING,
         name="manually-created-span",
         input={"input": "input-of-manually-created-span"},
         output={"output": "output-of-manually-created-span"},
@@ -452,7 +456,7 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
         end_time=ANY_BUT_NONE,
         spans=[
             SpanModel(
-                id=ANY_STRING(),
+                id=ANY_STRING,
                 name="ChainOfThought",
                 input={
                     "args": [],
@@ -465,7 +469,7 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
                 spans=[
                     SpanModel(
-                        id=ANY_STRING(),
+                        id=ANY_STRING,
                         type="llm",
                         name="Predict",
                         provider=None,
@@ -477,9 +481,9 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
                         end_time=ANY_BUT_NONE,
                         spans=[
                             SpanModel(
-                                id=ANY_STRING(),
+                                id=ANY_STRING,
                                 type="llm",
-                                name=ANY_STRING(startswith="LM"),
+                                name=ANY_STRING.starting_with("LM"),
                                 provider="openai",
                                 model="gpt-3.5-turbo",
                                 input=ANY_DICT,

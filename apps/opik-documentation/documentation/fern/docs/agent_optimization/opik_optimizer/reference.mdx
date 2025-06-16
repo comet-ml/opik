@@ -514,6 +514,8 @@ OptimizationResult(
     prompt: List[Dict[Literal['role', 'content'], str]],
     score: <class 'float'>,
     metric_name: <class 'str'>,
+    initial_prompt: Optional[List[Dict[Literal['role', 'content'], str]]] = None,
+    initial_score: Optional[float] = None,
     details: Dict[str, Any] = PydanticUndefined,
     history: List[Dict[str, Any]] = [],
     llm_calls: Optional[int] = None,
@@ -529,6 +531,8 @@ OptimizationResult(
 <ParamField path="prompt" type="List[Dict[Literal['role', 'content'], str]]" defaultValue="PydanticUndefined" />
 <ParamField path="score" type="<class 'float'>" defaultValue="PydanticUndefined" />
 <ParamField path="metric_name" type="<class 'str'>" defaultValue="PydanticUndefined" />
+<ParamField path="initial_prompt" type="Optional[List[Dict[Literal['role', 'content'], str]]]" optional={true} />
+<ParamField path="initial_score" type="Optional[float]" optional={true} />
 <ParamField path="details" type="Dict[str, Any]" optional={true} defaultValue="PydanticUndefined" />
 <ParamField path="history" type="List[Dict[str, Any]]" optional={true} defaultValue="[]" />
 <ParamField path="llm_calls" type="Optional[int]" optional={true} />

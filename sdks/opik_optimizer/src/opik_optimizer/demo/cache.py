@@ -4,7 +4,7 @@ import shutil
 import os
 import litellm
 from litellm.caching import Cache
-import requests
+import requests  # type: ignore
 
 NAMED_CACHES = {
     "test": "https://drive.google.com/file/d/1RifNtpN-pl0DW49daRaAMJwW7MCsOh6y/view?usp=sharing",
@@ -14,7 +14,7 @@ NAMED_CACHES = {
 CACHE_DIR = os.path.expanduser("~/.litellm_cache")
 
 
-def get_litellm_cache(name: str):
+def get_litellm_cache(name: str) -> None:
     """
     Get a LiteLLM cache from a remote location, and add it to the
     local cache
@@ -52,7 +52,7 @@ def get_litellm_cache(name: str):
     litellm.cache = Cache(type="disk", disk_cache_dir=CACHE_DIR)
 
 
-def _copy_cache(source_path, dest_path):
+def _copy_cache(source_path: str, dest_path: str) -> None:
     """
     Copy cached items from a source to a destination cache.
     """
@@ -63,7 +63,7 @@ def _copy_cache(source_path, dest_path):
     dest_conn = sqlite3.connect(dest_path)
     dest_cursor = dest_conn.cursor()
 
-    source_cursor.execute(f"PRAGMA table_info(Cache)")
+    source_cursor.execute("PRAGMA table_info(Cache)")
     columns_info = source_cursor.fetchall()
     column_names = [info[1] for info in columns_info[1:]]  # Skip rowid
     placeholders = ", ".join(["?"] * len(column_names))
@@ -91,14 +91,14 @@ def _copy_cache(source_path, dest_path):
     dest_conn.commit()
 
 
-def _get_google_drive_file(file_url):
+def _get_google_drive_file(file_url: str) -> str:
     """
     Given a common google drive URL with id=ID
     get it, or use cache.
     """
     parsed_url = urlparse(file_url)
     query_params = parse_qs(parsed_url.query)
-    id_value = query_params.get("id")[0]
+    id_value = query_params.get("id")[0]  # type: ignore
 
     cache_file_path = os.path.join(CACHE_DIR, id_value)
 
