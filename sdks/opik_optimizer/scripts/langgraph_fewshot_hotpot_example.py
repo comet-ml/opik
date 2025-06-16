@@ -5,7 +5,12 @@ from opik.evaluation.metrics.score_result import ScoreResult
 from opik.integrations.langchain import OpikTracer
 from opik.evaluation.metrics import LevenshteinRatio
 
-from opik_optimizer import OptimizableAgent, ChatPrompt, FewShotBayesianOptimizer
+from opik_optimizer import (
+    OptimizableAgent,
+    ChatPrompt,
+    FewShotBayesianOptimizer,
+    AgentConfig,
+)
 from opik_optimizer.datasets import hotpot_300
 
 from langgraph.graph import StateGraph
@@ -89,7 +94,7 @@ class LangGraphAgent(OptimizableAgent):
     project_name = "langgraph-agent-wikipedia"
     input_dataset_field = "question"
 
-    def init_agent(self, agent_config: dict) -> None:
+    def init_agent(self, agent_config: AgentConfig) -> None:
         self.llm = ChatOpenAI(model=self.model, temperature=0, stream_usage=True)
         self.agent_config = agent_config
         prompt_template = self.agent_config["chat_prompt"].get_system_prompt()
