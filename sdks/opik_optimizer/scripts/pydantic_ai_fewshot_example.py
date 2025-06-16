@@ -1,11 +1,17 @@
 from typing import Dict, Any, Optional
 
 from pydantic_ai import Agent
+from pydantic_ai.tools import RunContext
 
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics import LevenshteinRatio
 
-from opik_optimizer import OptimizableAgent, ChatPrompt, FewShotBayesianOptimizer
+from opik_optimizer import (
+    OptimizableAgent,
+    ChatPrompt,
+    FewShotBayesianOptimizer,
+    AgentConfig,
+)
 from opik_optimizer.datasets import hotpot_300
 
 # Tools:
@@ -15,7 +21,7 @@ import dspy
 dataset = hotpot_300()
 
 
-def search_wikipedia(ctx: Any, query: str) -> list[str]:
+def search_wikipedia(ctx: RunContext, query: str) -> list[str]:
     """
     This agent is used to search wikipedia. It can retrieve additional details
     about a topic.
@@ -43,7 +49,7 @@ class PydanticAIAgent(OptimizableAgent):
     project_name: str = "pydantic-ai-agent-wikipedia"
     input_dataset_field: str = "question"
 
-    def init_agent(self, agent_config: Dict[str, Any]) -> None:
+    def init_agent(self, agent_config: AgentConfig) -> None:
         """Initialize the agent with the provided configuration."""
         self.agent = Agent(
             self.model,
@@ -70,10 +76,10 @@ tools = {
     },
 }
 
-agent_config = {
-    "chat_prompt": ChatPrompt(system=prompt_template),
-    "tools": tools,
-}
+agent_config = AgentConfig(
+    chat_prompt=ChatPrompt(system=prompt_template),
+    tools=tools,
+)
 
 # Test it:
 agent = PydanticAIAgent(agent_config)
