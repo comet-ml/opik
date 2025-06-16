@@ -971,7 +971,7 @@ Return only the new prompt list object.
             auto_continue: Whether to automatically continue optimization
             **kwargs: Additional keyword arguments
         """
-        prompt = agent_config["chat_prompt"]
+        prompt = agent_config.chat_prompt
         if not isinstance(prompt, chat_prompt.ChatPrompt):
             raise ValueError("Prompt must be a ChatPrompt object")
 
@@ -1554,7 +1554,7 @@ Return only the new prompt list object.
 
             # FIXME: move out of here is possible:
             new_agent_config = copy.deepcopy(agent_config)
-            new_agent_config["chat_prompt"] = chat_prompt.ChatPrompt(messages=messages)
+            new_agent_config.chat_prompt = chat_prompt.ChatPrompt(messages=messages)
             agent = agent_class(new_agent_config)
             model_output = agent.invoke_dataset_item(dataset_item)
             # model_output = self._call_model(messages=messages, is_reasoning=False)
