@@ -61,7 +61,7 @@ class ADKAgent(OptimizableAgent):
     input_dataset_field = "question"
 
     def __init__(self, agent_config: AgentConfig) -> None:
-        prompt: ChatPrompt = agent_config["chat_prompt"].get_system_prompt()
+        prompt: ChatPrompt = agent_config.chat_prompt.get_system_prompt()
 
         self.opik_tracer = OpikTracer(self.project_name)
 
@@ -144,7 +144,7 @@ The user will provide a question string like "Who is Barack Obama?".
 3. Respond clearly to the user, stating the answer found by the tool.
 """
 
-agent_config = {"chat_prompt": ChatPrompt(system=prompt)}
+agent_config = AgentConfig(chat_prompt=ChatPrompt(system=prompt))
 
 # Test it:
 agent = ADKAgent(agent_config)
