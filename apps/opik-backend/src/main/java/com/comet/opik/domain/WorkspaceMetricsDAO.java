@@ -38,23 +38,17 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             WITH parseDateTime64BestEffort(:timestamp_start, 9) AS timestamp_start,
             parseDateTime64BestEffort(:timestamp_end, 9) AS timestamp_end,
             parseDateTime64BestEffort(:timestamp_prior_start, 9) AS timestamp_prior_start,
-            feedback_scores_deduplication AS (
-                SELECT created_at,
-                       name,
-                       value
+            feedback_scores_aggregated AS (
+                SELECT
+                    AVGIf(value, created_at >= timestamp_start AND created_at \\<= timestamp_end) AS current,
+                    AVGIf(value, created_at >= timestamp_prior_start AND created_at \\< timestamp_start) AS previous,
+                    name
                 FROM feedback_scores fs final
                 WHERE workspace_id = :workspace_id
                   <if(project_ids)> AND project_id IN :project_ids <endif>
                   AND created_at >= timestamp_prior_start
                   AND created_at \\<= timestamp_end
                   AND entity_type = 'trace'
-            ),
-            feedback_scores_aggregated AS (
-                SELECT
-                    AVGIf(value, created_at >= timestamp_start AND created_at \\<= timestamp_end) AS current,
-                    AVGIf(value, created_at >= timestamp_prior_start AND created_at \\< timestamp_start) AS previous,
-                    name
-                FROM feedback_scores_deduplication
                 GROUP BY name
             )
             SELECT
