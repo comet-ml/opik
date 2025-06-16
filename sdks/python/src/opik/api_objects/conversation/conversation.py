@@ -40,5 +40,5 @@ class Conversation(pydantic.BaseModel):
     def add_system_message(self, message: str) -> None:
         self.add_item(ConversationItem(role="system", content=message))
 
-    def as_json_list(self) -> List[Dict]:
+    def as_json_list(self) -> List[Dict[str, str]]:
         return [item.model_dump() for item in self.discussion]

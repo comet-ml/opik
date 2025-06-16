@@ -36,5 +36,3 @@ def test_create_conversation_from_traces(traces, expected_discussion):
         traces, input_transform, output_transform
     )
     assert discussion.as_json_list() == expected_discussion
-
-    print(discussion)
