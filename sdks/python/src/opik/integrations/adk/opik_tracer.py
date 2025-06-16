@@ -71,7 +71,7 @@ class OpikTracer:
         trace_data = self._context_storage.pop_trace_data()
         assert trace_data is not None
         trace_data.init_end_time()
-        self._opik_client.trace(**trace_data.__dict__)
+        self._opik_client.trace(**trace_data.as_parameters)
 
     def _end_current_span(
         self,
@@ -79,7 +79,21 @@ class OpikTracer:
         span_data = self._context_storage.pop_span_data()
         assert span_data is not None
         span_data.init_end_time()
-        self._opik_client.span(**span_data.__dict__)
+        self._opik_client.span(**span_data.as_parameters)
+
+    def _start_span(self, span_data: span.SpanData) -> None:
+        self._context_storage.add_span_data(span_data)
+        self._opik_created_spans.add(span_data.id)
+
+        if self._opik_client.config.log_start_trace_span:
+            self._opik_client.span(**span_data.as_start_parameters)
+
+    def _start_trace(self, trace_data: trace.TraceData) -> None:
+        self._context_storage.set_trace_data(trace_data)
+        self._current_trace_created_by_opik_tracer.set(trace_data.id)
+
+        if self._opik_client.config.log_start_trace_span:
+            self._opik_client.trace(**trace_data.as_start_parameters)
 
     def _set_current_context_data(self, value: SpanOrTraceData) -> None:
         if isinstance(value, span.SpanData):
@@ -99,9 +113,12 @@ class OpikTracer:
             trace_metadata["adk_invocation_id"] = callback_context.invocation_id
             trace_metadata.update(session_metadata)
 
-            user_input = adk_helpers.convert_adk_base_model_to_dict(
-                callback_context.user_content
-            )
+            if callback_context.user_content is not None:
+                user_input = adk_helpers.convert_adk_base_model_to_dict(
+                    callback_context.user_content
+                )
+            else:
+                user_input = None
             name = self.name or callback_context.agent_name
 
             current_trace_data = self._context_storage.get_trace_data()
@@ -112,14 +129,16 @@ class OpikTracer:
                     metadata=trace_metadata,
                     thread_id=thread_id,
                     input=user_input,
+                    tags=self.tags,
                 )
-                self._context_storage.set_trace_data(current_trace)
-                self._current_trace_created_by_opik_tracer.set(current_trace.id)
+
+                self._start_trace(trace_data=current_trace)
             else:
                 start_span_arguments = arguments_helpers.StartSpanParameters(
                     name=name,
                     project_name=self.project_name,
                     metadata=trace_metadata,
+                    tags=self.tags,
                     type="general",
                 )
                 _, opik_span_data = (
@@ -129,8 +148,8 @@ class OpikTracer:
                         opik_context_storage=self._context_storage,
                     )
                 )
-                self._context_storage.add_span_data(opik_span_data)
-                self._opik_created_spans.add(opik_span_data.id)
+
+                self._start_span(span_data=opik_span_data)
         except Exception as e:
             LOGGER.error(f"Failed during before_agent_callback(): {e}", exc_info=True)
 
@@ -185,8 +204,7 @@ class OpikTracer:
                 opik_context_storage=self._context_storage,
             )
 
-            self._context_storage.add_span_data(span_data)
-            self._opik_created_spans.add(span_data.id)
+            self._start_span(span_data=span_data)
 
         except Exception as e:
             LOGGER.error(f"Failed during before_model_callback(): {e}", exc_info=True)
@@ -199,12 +217,16 @@ class OpikTracer:
         **kwargs: Any,
     ) -> None:
         try:
-            # Ignore partial chunks, ADK will call this method with the full
-            # response at the end
+            # Ignore partial chunks, ADK will call this method with the full response at the end
             if llm_response.partial is True:
                 return
         except Exception:
             LOGGER.debug("Error checking for partial chunks", exc_info=True)
+
+        if adk_helpers.has_empty_text_part_content(llm_response):
+            # fix for gemini-2.5-flash-preview which in streaming mode can return responses with empty content:
+            # {"candidates":[{"content":{"parts":[{"text":""}],"role":"model"}}],...}}
+            return
 
         model = None
         provider = None
@@ -218,9 +240,9 @@ class OpikTracer:
                 model = usage_data.model
                 provider = usage_data.provider
                 usage = usage_data.opik_usage
-        except Exception:
+        except Exception as e:
             LOGGER.debug(
-                "Error converting LlmResponse to dict or extracting usage data",
+                f"Error converting LlmResponse to dict or extracting usage data, reason: {e}",
                 exc_info=True,
             )
 
@@ -267,8 +289,9 @@ class OpikTracer:
                 distributed_trace_headers=None,
                 opik_context_storage=self._context_storage,
             )
-            self._context_storage.add_span_data(span_data)
-            self._opik_created_spans.add(span_data.id)
+
+            self._start_span(span_data=span_data)
+
         except Exception as e:
             LOGGER.error(f"Failed during before_tool_callback(): {e}", exc_info=True)
 

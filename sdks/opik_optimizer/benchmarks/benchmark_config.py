@@ -8,20 +8,23 @@ from opik.evaluation.metrics import (
     Hallucination,
     LevenshteinRatio,
 )
+from opik.evaluation.metrics.score_result import ScoreResult
 from pydantic import BaseModel
 
 
 class BenchmarkDatasetConfig(BaseModel):
-    model_config = {"arbitrary_types_allowed":True}
-    
+    model_config = {"arbitrary_types_allowed": True}
+
     name: str
     display_name: str
     metrics: List[Callable]
+
 
 class BenchmarkProjectConfig(BaseModel):
     name: str
     workspace: str
     test_mode: bool
+
 
 class BenchmarkOptimizerConfig(BaseModel):
     class_name: str
@@ -38,76 +41,90 @@ class BenchmarkExperimentConfig(BaseModel):
     parameters: Dict[str, Any]
     metrics: List[str]
 
-def levenshtein_ratio(dataset_item, llm_output):
-    return LevenshteinRatio().score(reference=dataset_item['answer'], output=llm_output)
 
-def equals(dataset_item, llm_output):
-    return Equals().score(reference=dataset_item['answer'], output=llm_output)
+def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+    return LevenshteinRatio().score(reference=dataset_item["answer"], output=llm_output)
 
-def create_answer_relevance_metric(name_input_col):
-    def answer_relevance(dataset_item, llm_output):
-        return AnswerRelevance(require_context=False).score(input=dataset_item[name_input_col], output=llm_output)
+
+def equals(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+    return Equals().score(reference=dataset_item["answer"], output=llm_output)
+
+
+def create_answer_relevance_metric(name_input_col: str) -> Callable:
+    def answer_relevance(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+        return AnswerRelevance(require_context=False).score(
+            input=dataset_item[name_input_col], output=llm_output
+        )
+
     return answer_relevance
 
-def create_context_precision(name_input_col):
-    def context_precision(dataset_item, llm_output):
-        return ContextPrecision().score(input=dataset_item[name_input_col], output=llm_output)
+
+def create_context_precision(name_input_col: str) -> Callable:
+    def context_precision(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+        return ContextPrecision().score(
+            input=dataset_item[name_input_col], output=llm_output
+        )
+
     return context_precision
 
-def create_context_recall(name_input_col):
-    def context_recall(dataset_item, llm_output):
-        return ContextRecall().score(input=dataset_item[name_input_col], output=llm_output)
+
+def create_context_recall(name_input_col: str) -> Callable:
+    def context_recall(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+        return ContextRecall().score(
+            input=dataset_item[name_input_col], output=llm_output
+        )
+
     return context_recall
 
-def hallucination(dataset_item, llm_output):
+
+def hallucination(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
     return Hallucination().score(input=dataset_item["question"], output=llm_output)
 
 
 DATASET_CONFIG = {
     "gsm8k": BenchmarkDatasetConfig(
-        name="gsm8k",
-        display_name="GSM8K",
-        metrics=[levenshtein_ratio]
+        name="gsm8k", display_name="GSM8K", metrics=[levenshtein_ratio]
     ),
     "ragbench_sentence_relevance": BenchmarkDatasetConfig(
         name="ragbench_sentence_relevance",
         display_name="RAGBench Sentence Relevance",
-        metrics=[create_answer_relevance_metric("question")]
+        metrics=[create_answer_relevance_metric("question")],
     ),
     "election_questions": BenchmarkDatasetConfig(
         name="election_questions",
         display_name="Election Questions",
-        metrics=[hallucination]
+        metrics=[hallucination],
     ),
     "medhallu": BenchmarkDatasetConfig(
         name="MedHallu",
         display_name="MedHallu",
-        metrics=[hallucination, create_answer_relevance_metric("question")]
+        metrics=[hallucination, create_answer_relevance_metric("question")],
     ),
     "rag_hallucinations": BenchmarkDatasetConfig(
         name="rag_hallucinations",
         display_name="RAG Hallucinations",
-        metrics=[hallucination, create_context_precision("question")]
+        metrics=[hallucination, create_context_precision("question")],
     ),
     "hotpot_300": BenchmarkDatasetConfig(
         name="hotpot_300",
         display_name="HotpotQA",
-        metrics=[create_answer_relevance_metric("question"), create_context_precision("question")]
+        metrics=[
+            create_answer_relevance_metric("question"),
+            create_context_precision("question"),
+        ],
     ),
     "ai2_arc": BenchmarkDatasetConfig(
-        name="ai2_arc",
-        display_name="ARC",
-        metrics=[equals]
+        name="ai2_arc", display_name="ARC", metrics=[equals]
     ),
     "truthful_qa": BenchmarkDatasetConfig(
         name="TruthfulQA",
         display_name="TruthfulQA",
-        metrics=[hallucination, create_answer_relevance_metric("question")]
+        metrics=[hallucination, create_answer_relevance_metric("question")],
     ),
     "cnn_dailymail": BenchmarkDatasetConfig(
         name="cnn_dailymail",
         display_name="CNN/Daily Mail",
-        metrics=[levenshtein_ratio, create_context_recall("article")]
+        metrics=[levenshtein_ratio, create_context_recall("article")],
     ),
 }
 
@@ -144,12 +161,12 @@ OPTIMIZER_CONFIGS: Dict[str, BenchmarkOptimizerConfig] = {
             "tournament_size": 4,
             "num_threads": 4,
             "elitism_size": 2,
-             "adaptive_mutation": True,
+            "adaptive_mutation": True,
             "enable_moo": False,
             "enable_llm_crossover": False,
             "seed": 42,
-            "infer_output_style": True
-        }
+            "infer_output_style": True,
+        },
     ),
 }
 
@@ -166,13 +183,61 @@ MODELS = [
 ]
 
 INITIAL_PROMPTS = {
-    "gsm8k": [{"role": "system", "content": "Solve the following math problem step by step."}, {"role": "user", "content": "{question}"}],
-    "ragbench_sentence_relevance": [{"role": "system", "content": "Evaluate whether the given sentence is relevant to answering the question."}, {"role": "user", "content": "Question: {question}\nSentence: {sentence}"}],
-    "election_questions": [{"role": "system", "content": "Classify whether the following question about US elections is harmful or harmless."}, {"role": "user", "content": "{question}"}],
-    "medhallu": [{"role": "system", "content": "Answer the medical question accurately based on the given knowledge, avoiding any hallucinations."}, {"role": "user", "content": "{question}"}],
-    "rag_hallucinations": [{"role": "system", "content": "Answer the question based on the given context, ensuring all information is supported by the context."}, {"role": "user", "content": "{question}"}],
-    "hotpot_300": [{"role": "system", "content": "Answer the question based on the given context."}, {"role": "user", "content": "{question}"}],
-    "ai2_arc": [{"role": "system", "content": "Select the correct answer from the given options."}, {"role": "user", "content": "Question: {question}\nChoices: {choices}"}],
-    "truthful_qa": [{"role": "system", "content": "Provide a truthful and accurate answer to the question."}, {"role": "user", "content": "{question}"}],
-    "cnn_dailymail": [{"role": "system", "content": "Summarize the following article concisely."}, {"role": "user", "content": "{article}"}],
+    "gsm8k": [
+        {"role": "system", "content": "Solve the following math problem step by step."},
+        {"role": "user", "content": "{question}"},
+    ],
+    "ragbench_sentence_relevance": [
+        {
+            "role": "system",
+            "content": "Evaluate whether the given sentence is relevant to answering the question.",
+        },
+        {"role": "user", "content": "Question: {question}\nSentence: {sentence}"},
+    ],
+    "election_questions": [
+        {
+            "role": "system",
+            "content": "Classify whether the following question about US elections is harmful or harmless.",
+        },
+        {"role": "user", "content": "{question}"},
+    ],
+    "medhallu": [
+        {
+            "role": "system",
+            "content": "Answer the medical question accurately based on the given knowledge, avoiding any hallucinations.",
+        },
+        {"role": "user", "content": "{question}"},
+    ],
+    "rag_hallucinations": [
+        {
+            "role": "system",
+            "content": "Answer the question based on the given context, ensuring all information is supported by the context.",
+        },
+        {"role": "user", "content": "{question}"},
+    ],
+    "hotpot_300": [
+        {
+            "role": "system",
+            "content": "Answer the question based on the given context.",
+        },
+        {"role": "user", "content": "{question}"},
+    ],
+    "ai2_arc": [
+        {
+            "role": "system",
+            "content": "Select the correct answer from the given options.",
+        },
+        {"role": "user", "content": "Question: {question}\nChoices: {choices}"},
+    ],
+    "truthful_qa": [
+        {
+            "role": "system",
+            "content": "Provide a truthful and accurate answer to the question.",
+        },
+        {"role": "user", "content": "{question}"},
+    ],
+    "cnn_dailymail": [
+        {"role": "system", "content": "Summarize the following article concisely."},
+        {"role": "user", "content": "{article}"},
+    ],
 }
