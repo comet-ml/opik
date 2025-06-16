@@ -348,7 +348,7 @@
         <dependency>
             <groupId>com.clickhouse</groupId>
             <artifactId>clickhouse-jdbc</artifactId>
-            <version>0.8.6</version>
+            <version>0.9.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
