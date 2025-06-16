@@ -79,7 +79,9 @@ public class OpikApplication extends Application<OpikConfiguration> {
                 .dataSourceFactoryFunction(OpikConfiguration::getDatabaseAnalyticsMigrations)
                 .build());
         bootstrap.addBundle(GuiceBundle.builder()
-                .bundles(JdbiBundle.<OpikConfiguration>forDatabase((conf, env) -> DatabaseUtils.filterProperties(conf.getDatabase()))
+                .bundles(JdbiBundle
+                        .<OpikConfiguration>forDatabase(
+                                (conf, env) -> DatabaseUtils.filterProperties(conf.getDatabase()))
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),

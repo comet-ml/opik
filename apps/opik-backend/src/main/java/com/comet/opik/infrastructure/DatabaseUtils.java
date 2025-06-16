@@ -12,14 +12,13 @@ import java.util.stream.Collectors;
 public class DatabaseUtils {
     public static DataSourceFactory filterProperties(DataSourceFactory dataSourceFactory) {
         log.info("Initial MySQL properties: {}", dataSourceFactory.getProperties());
-        var  filteredProperties = dataSourceFactory.getProperties()
+        var filteredProperties = dataSourceFactory.getProperties()
                 .entrySet()
                 .stream()
                 .filter(entry -> StringUtils.isNotBlank(entry.getValue()))
                 .collect(Collectors.toMap(
                         java.util.Map.Entry::getKey,
-                        java.util.Map.Entry::getValue
-                ));
+                        java.util.Map.Entry::getValue));
         dataSourceFactory.setProperties(filteredProperties);
         log.info("Filtered MySQL properties: {}", filteredProperties);
 
