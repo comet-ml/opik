@@ -16,7 +16,7 @@ from .mipro_optimizer import MiproOptimizer
 from .optimization_config.chat_prompt import ChatPrompt
 from .optimization_config.configs import TaskConfig
 from .optimization_result import OptimizationResult
-from .optimizable_agent import OptimizableAgent
+from .optimizable_agent import OptimizableAgent, AgentConfig
 
 __version__ = importlib.metadata.version("opik_optimizer")
 
@@ -26,6 +26,7 @@ setup_logging(level=logging.WARNING)
 warning_filters.add_warning_filters()
 
 __all__ = [
+    "AgentConfig",
     "BaseOptimizer",
     "ChatPrompt",
     "FewShotBayesianOptimizer",
