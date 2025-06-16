@@ -125,11 +125,10 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
-import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -5004,10 +5003,16 @@ class TracesResourceTest {
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-            if (Objects.equals(sorting.field(), SortableFields.SPAN_COUNT) || sorting.field().startsWith("usage.")) {
+            if (Objects.equals(sorting.field(), SortableFields.SPAN_COUNT)
+                    || Objects.equals(sorting.field(), SortableFields.LLM_SPAN_COUNT)
+                    || sorting.field().startsWith("usage.")) {
+                var generalSpanCount = PodamUtils.getIntegerInRange(1, 5);
+                var llmSpanCount = PodamUtils.getIntegerInRange(1, 5);
+
                 traces = traces.stream().map(t -> t
                         .toBuilder()
-                        .spanCount(PodamUtils.getIntegerInRange(1, 3))
+                        .spanCount(generalSpanCount + llmSpanCount)
+                        .llmSpanCount(llmSpanCount)
                         .build())
                         .collect(Collectors.toCollection(ArrayList::new));
 
@@ -5019,12 +5024,21 @@ class TracesResourceTest {
                 }
 
                 for (Trace trace : traces) {
-                    for (int i = 0; i < trace.spanCount(); i++) {
+                    for (int i = 0; i < generalSpanCount; i++) {
                         spans.add(factory.manufacturePojo(Span.class).toBuilder()
                                 .usage(usage)
                                 .projectName(projectName)
                                 .traceId(trace.id())
                                 .type(SpanType.general)
+                                .build());
+                    }
+
+                    for (int i = 0; i < llmSpanCount; i++) {
+                        spans.add(factory.manufacturePojo(Span.class).toBuilder()
+                                .usage(usage)
+                                .projectName(projectName)
+                                .traceId(trace.id())
+                                .type(SpanType.llm)
                                 .build());
                     }
                 }
@@ -5152,9 +5166,9 @@ class TracesResourceTest {
                     .thenComparing(Comparator.comparing(Trace::id).reversed());
 
             Comparator<Trace> usageComparatorDesc = Comparator.comparing(
-                            (Trace t) -> Optional.ofNullable(t.usage()).map(u -> u.get("completion_tokens"))
-                                    .orElse(null),
-                            Comparator.nullsLast(Comparator.reverseOrder()))
+                    (Trace t) -> Optional.ofNullable(t.usage()).map(u -> u.get("completion_tokens"))
+                            .orElse(null),
+                    Comparator.nullsLast(Comparator.reverseOrder()))
                     .thenComparing(Comparator.comparing(Trace::id).reversed());
 
             return Stream.of(
@@ -5207,11 +5221,19 @@ class TracesResourceTest {
                     Arguments.of(Comparator.comparing(Trace::threadId).reversed(), SortingField.builder()
                             .field(SortableFields.THREAD_ID).direction(Direction.DESC).build()),
                     Arguments.of(Comparator.comparing(Trace::spanCount)
-                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            .thenComparing(Comparator.comparing(Trace::id).reversed()),
                             SortingField.builder().field(SortableFields.SPAN_COUNT).direction(Direction.ASC).build()),
                     Arguments.of(Comparator.comparing(Trace::spanCount).reversed()
-                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            .thenComparing(Comparator.comparing(Trace::id).reversed()),
                             SortingField.builder().field(SortableFields.SPAN_COUNT).direction(Direction.DESC).build()),
+                    Arguments.of(Comparator.comparing(Trace::llmSpanCount)
+                            .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field(SortableFields.LLM_SPAN_COUNT).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(Comparator.comparing(Trace::llmSpanCount).reversed()
+                            .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field(SortableFields.LLM_SPAN_COUNT).direction(Direction.DESC)
+                                    .build()),
                     Arguments.of(usageComparatorAsc,
                             new SortingField("usage.completion_tokens", Direction.ASC)),
                     Arguments.of(usageComparatorDesc,
