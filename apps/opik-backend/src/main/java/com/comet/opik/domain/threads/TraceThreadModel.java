@@ -27,10 +27,6 @@ public record TraceThreadModel(
         Instant createdAt,
         Instant lastUpdatedAt) {
 
-    public boolean isInactive() {
-        return status == Status.INACTIVE;
-    }
-
     @Getter
     @RequiredArgsConstructor
     public enum Status {

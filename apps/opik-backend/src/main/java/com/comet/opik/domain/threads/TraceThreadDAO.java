@@ -81,19 +81,15 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         if (traceThreads.isEmpty()) {
             return Mono.just(0L);
         }
-
         return asyncTemplate.nonTransaction(connection -> mapAndInsert(traceThreads, connection, INSERT_THREADS_SQL));
     }
 
     private Mono<Long> mapAndInsert(List<TraceThreadModel> items, Connection connection, String sqlTemplate) {
 
         List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(items.size());
-
-        var template = new ST(sqlTemplate)
-                .add("items", queryItems);
+        var template = new ST(sqlTemplate).add("items", queryItems);
 
         String sql = template.render();
-
         var statement = connection.createStatement(sql);
 
         return makeMonoContextAware((userName, workspaceId) -> {
@@ -128,11 +124,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             @NonNull TraceThreadCriteria criteria) {
 
         ST template = new ST(FIND_THREADS_BY_PROJECT_SQL);
-
         bindTemplateParam(criteria, template);
 
         int offset = (page - 1) * size;
-
         template.add("limit", size);
         template.add("offset", offset);
 
