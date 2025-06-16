@@ -17,7 +17,6 @@ public record WorkspaceMetricsSummaryResponse(
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record Result(String name,
-            Number current,
-            Number previous) {
+            Double current, Double previous) {
     }
 }

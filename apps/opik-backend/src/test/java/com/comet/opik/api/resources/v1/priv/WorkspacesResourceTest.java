@@ -60,7 +60,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Workspace Metrics Resource Test")
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class WorkspaceResourceTest {
+class WorkspacesResourceTest {
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();

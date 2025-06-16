@@ -4,8 +4,6 @@ import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
-import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
-import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -19,24 +17,22 @@ import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
-@ImplementedBy(MetricsServiceImpl.class)
-public interface MetricsService {
+@ImplementedBy(ProjectMetricsServiceImpl.class)
+public interface ProjectMetricsService {
     String ERR_START_BEFORE_END = "'start_time' must be before 'end_time'";
 
     Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request);
-
-    Mono<WorkspaceMetricsSummaryResponse> getWorkspaceFeedbackScoresSummary(WorkspaceMetricsSummaryRequest request);
 }
 
 @Slf4j
 @Singleton
-class MetricsServiceImpl implements MetricsService {
+class ProjectMetricsServiceImpl implements ProjectMetricsService {
     private final @NonNull Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> projectMetricHandler;
     private final @NonNull ProjectService projectService;
     private final @NonNull WorkspaceMetricsDAO workspaceMetricsDAO;
 
     @Inject
-    public MetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO,
+    public ProjectMetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO,
             @NonNull WorkspaceMetricsDAO workspaceMetricsDAO,
             @NonNull ProjectService projectService) {
         projectMetricHandler = Map.of(
@@ -62,16 +58,6 @@ class MetricsServiceImpl implements MetricsService {
                         .interval(request.interval())
                         .results(entriesToResults(dataPoints))
                         .build());
-    }
-
-    @Override
-    public Mono<WorkspaceMetricsSummaryResponse> getWorkspaceFeedbackScoresSummary(
-            WorkspaceMetricsSummaryRequest request) {
-        return workspaceMetricsDAO.getFeedbackScoresSummary(request)
-                .map(metrics -> WorkspaceMetricsSummaryResponse.builder()
-                        .results(metrics)
-                        .build());
-
     }
 
     private List<ProjectMetricResponse.Results<Number>> entriesToResults(List<ProjectMetricsDAO.Entry> entries) {

@@ -4,7 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
-import com.comet.opik.domain.MetricsService;
+import com.comet.opik.domain.WorkspaceMetricsService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -27,32 +28,32 @@ import lombok.extern.slf4j.Slf4j;
 
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
-@Path("/v1/private/workspace")
+@Path("/v1/private/workspaces")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-@Tag(name = "Workspace", description = "Workspace related resources")
-public class WorkspaceResource {
+@Tag(name = "Workspaces", description = "Workspace related resources")
+public class WorkspacesResource {
 
-    private final @NonNull MetricsService metricsService;
+    private final @NonNull WorkspaceMetricsService workspaceMetricsService;
     private final @NonNull Provider<RequestContext> requestContext;
 
     @POST
-    @Path("/metrics/summary")
+    @Path("/metrics/summaries")
     @Operation(operationId = "metricsSummary", summary = "Get metrics summary", description = "Get metrics summary", responses = {
             @ApiResponse(responseCode = "200", description = "Workspace Metrics", content = @Content(schema = @Schema(implementation = WorkspaceMetricsSummaryResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response metricsSummary(
-            @RequestBody(content = @Content(schema = @Schema(implementation = WorkspaceMetricsSummaryRequest.class))) @Valid WorkspaceMetricsSummaryRequest request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = WorkspaceMetricsSummaryRequest.class))) @NotNull @Valid WorkspaceMetricsSummaryRequest request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Retrieve workspace metrics summary for projectIds '{}', on workspace_id '{}'", request.projectIds(),
                 workspaceId);
-        WorkspaceMetricsSummaryResponse response = metricsService.getWorkspaceFeedbackScoresSummary(request)
+        WorkspaceMetricsSummaryResponse response = workspaceMetricsService.getWorkspaceFeedbackScoresSummary(request)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Retrieved workspace metrics summary for projectIds '{}', on workspace_id '{}'", request.projectIds(),

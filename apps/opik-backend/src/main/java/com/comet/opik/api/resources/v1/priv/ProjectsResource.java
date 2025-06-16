@@ -16,7 +16,7 @@ import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.FeedbackScoreService;
-import com.comet.opik.domain.MetricsService;
+import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -57,7 +57,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static com.comet.opik.domain.MetricsService.ERR_START_BEFORE_END;
+import static com.comet.opik.domain.ProjectMetricsService.ERR_START_BEFORE_END;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
 @Path("/v1/private/projects")
@@ -73,7 +73,7 @@ public class ProjectsResource {
     private final @NonNull ProjectService projectService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull SortingFactoryProjects sortingFactory;
-    private final @NonNull MetricsService metricsService;
+    private final @NonNull ProjectMetricsService projectMetricsService;
     private final @NonNull FeedbackScoreService feedbackScoreService;
 
     @GET
@@ -231,7 +231,7 @@ public class ProjectsResource {
 
         log.info("Retrieve project metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,
                 workspaceId, request.metricType());
-        ProjectMetricResponse<? extends Number> response = metricsService.getProjectMetrics(projectId, request)
+        ProjectMetricResponse<? extends Number> response = projectMetricsService.getProjectMetrics(projectId, request)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Retrieved project id metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,

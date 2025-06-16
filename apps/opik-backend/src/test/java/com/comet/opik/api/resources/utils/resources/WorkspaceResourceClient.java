@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @RequiredArgsConstructor
 public class WorkspaceResourceClient {
 
-    private static final String RESOURCE_PATH = "%s/v1/private/workspace";
+    private static final String RESOURCE_PATH = "%s/v1/private/workspaces";
 
     private final ClientSupport client;
     private final String baseURI;
@@ -24,7 +24,7 @@ public class WorkspaceResourceClient {
     public WorkspaceMetricsSummaryResponse getMetricsSummary(WorkspaceMetricsSummaryRequest request, String apiKey,
             String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("/metrics/summary")
+                .path("/metrics/summaries")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)

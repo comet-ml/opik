@@ -68,7 +68,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
     @Override
     public Mono<List<WorkspaceMetricsSummaryResponse.Result>> getFeedbackScoresSummary(
-            WorkspaceMetricsSummaryRequest request) {
+            @NonNull WorkspaceMetricsSummaryRequest request) {
         return getMetricsSummary(request, GET_FEEDBACK_SCORES_SUMMARY);
     }
 
