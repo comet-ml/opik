@@ -3,7 +3,12 @@ from typing import Dict, Any
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics import LevenshteinRatio
 
-from opik_optimizer import OptimizableAgent, ChatPrompt, FewShotBayesianOptimizer
+from opik_optimizer import (
+    OptimizableAgent,
+    ChatPrompt,
+    FewShotBayesianOptimizer,
+    AgentConfig,
+)
 from opik_optimizer.datasets import hotpot_300
 
 
@@ -29,7 +34,7 @@ The user will provide a question string like "Who is Barack Obama?".
 3. Respond clearly to the user, stating the answer found by the tool.
 """
 
-agent_config = {"chat_prompt": ChatPrompt(system=prompt)}
+agent_config = AgentConfig(chat_prompt=ChatPrompt(system=prompt))
 
 # Test it:
 agent = LiteLLMAgent(agent_config)
@@ -46,7 +51,7 @@ optimizer = FewShotBayesianOptimizer(
     n_threads=16,
     seed=42,
 )
-result = optimizer.optimize_agent(
+optimization_result = optimizer.optimize_agent(
     agent_class=LiteLLMAgent,
     agent_config=agent_config,
     dataset=dataset,
@@ -54,3 +59,4 @@ result = optimizer.optimize_agent(
     n_trials=10,
     n_samples=50,
 )
+optimization_result.display()
