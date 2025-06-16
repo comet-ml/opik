@@ -1,17 +1,18 @@
 import logging
 import time
 from abc import abstractmethod
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Type
 
 import litellm
-import opik
 from opik.rest_api.core import ApiError
 from opik.api_objects import optimization
+from opik import Dataset
 from pydantic import BaseModel
 
 from . import _throttle, optimization_result
 from .cache_config import initialize_cache
 from .optimization_config import chat_prompt
+from .optimizable_agent import OptimizableAgent, AgentConfig
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -61,10 +62,11 @@ class BaseOptimizer:
         initialize_cache()
 
     @abstractmethod
-    def optimize_prompt(
+    def optimize_agent(
         self,
-        prompt: chat_prompt.ChatPrompt,
-        dataset: opik.Dataset,
+        agent_class: Type[OptimizableAgent],
+        agent_config: AgentConfig,
+        dataset: Dataset,
         metric: Callable,
         experiment_config: Optional[Dict] = None,
         **kwargs: Any,
@@ -81,35 +83,6 @@ class BaseOptimizer:
            output_key: output field of dataset
            experiment_config: Optional configuration for the experiment
            **kwargs: Additional arguments for optimization
-        """
-        pass
-
-    @abstractmethod
-    def evaluate_prompt(
-        self,
-        prompt: chat_prompt.ChatPrompt,
-        dataset: opik.Dataset,
-        metric: Callable,
-        n_samples: Optional[int] = None,
-        dataset_item_ids: Optional[List[str]] = None,
-        experiment_config: Optional[Dict] = None,
-        **kwargs: Any,
-    ) -> float:
-        """
-        Evaluate a prompt.
-
-        Args:
-           prompt: the prompt to evaluate
-           dataset: Opik dataset name, or Opik dataset
-           metrics: A list of metric functions, these functions should have two arguments:
-               dataset_item and llm_output
-           n_samples: number of items to test in the dataset
-           dataset_item_ids: Optional list of dataset item IDs to evaluate
-           experiment_config: Optional configuration for the experiment
-           **kwargs: Additional arguments for evaluation
-
-        Returns:
-            float: The evaluation score
         """
         pass
 

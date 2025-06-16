@@ -18,7 +18,7 @@ from opik_optimizer.optimization_config import mappers
 
 from .. import _throttle, optimization_result, task_evaluator, utils
 from ..optimization_config import chat_prompt
-from ..optimizable_agent import OptimizableAgent
+from ..optimizable_agent import OptimizableAgent, AgentConfig
 from . import reporting
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -233,7 +233,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     def _run_optimization(
         self,
         agent_class: Type[OptimizableAgent],
-        agent_config: Dict[str, Any],
+        agent_config: AgentConfig,
         # initial_prompt: chat_prompt.ChatPrompt,
         fewshot_prompt_template: FewShotPromptTemplate,
         dataset: Dataset,
@@ -478,8 +478,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
     def optimize_agent(  # type: ignore
         self,
-        agent_class,
-        agent_config,
+        agent_class: Type[OptimizableAgent],
+        agent_config: AgentConfig,
         dataset: Dataset,
         metric: Callable,
         n_trials: int = 10,
@@ -609,7 +609,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     def evaluate_prompt(
         self,
         agent_class: Type[OptimizableAgent],
-        agent_config: Dict[str, Any],
+        agent_config: AgentConfig,
         dataset: opik.Dataset,
         metric: Callable,
         n_samples: Optional[int] = None,
@@ -682,8 +682,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
     def _build_task_from_messages(
         self,
-        agent_class: type,
-        agent_config: Dict[str, Any],
+        agent_class: Type[OptimizableAgent],
+        agent_config: AgentConfig,
         messages: List[Dict[str, str]],
         few_shot_examples: Optional[str] = None,
     ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
