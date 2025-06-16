@@ -26,9 +26,22 @@ def search_wikipedia(query: str) -> list[str]:
         query, k=1
     )
     return results[0]["text"]
+    """
+    This agent is used to search wikipedia. It can retrieve additional details
+    about a topic.
+    """
+    results = dspy.ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")(
+        query, k=1
+    )
+    return results[0]["text"]
 
 
 def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+    """
+    Calculate the Levenshtein ratio score between dataset answer and LLM output.
+    """
+    metric = LevenshteinRatio()
+    return metric.score(reference=dataset_item["answer"], output=llm_output)
     metric = LevenshteinRatio()
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 
@@ -76,10 +89,10 @@ class LangGraphAgent(OptimizableAgent):
     project_name = "langgraph-agent-wikipedia"
     input_dataset_field = "question"
 
-    def init_agent(self, agent_config):
+    def init_agent(self, agent_config: dict) -> None:
         self.llm = ChatOpenAI(model=self.model, temperature=0, stream_usage=True)
         self.agent_config = agent_config
-        prompt_template = self.agent_config["chat-prompt"].get_system_prompt()
+        prompt_template = self.agent_config["chat_prompt"].get_system_prompt()
         prompt = PromptTemplate.from_template(prompt_template)
 
         agent_tools = []
@@ -101,7 +114,7 @@ class LangGraphAgent(OptimizableAgent):
         )
         self.workflow = StateGraph(OverallState, input=InputState, output=OutputState)
 
-        def run_agent_node(state: InputState):
+        def run_agent_node(state: InputState) -> OutputState:
             # "input" is from the State
             user_input = state["input"]
             # "input" is from the State
@@ -109,7 +122,7 @@ class LangGraphAgent(OptimizableAgent):
                 {"input": user_input}, config={"callbacks": [self.opik_tracer]}
             )
             # "input", "output" are from the State
-            return {"input": user_input, "output": result["output"]}
+            return {"output": result["output"]}
 
         self.workflow.add_node("agent", run_agent_node)
         self.workflow.set_entry_point("agent")
@@ -122,9 +135,9 @@ class LangGraphAgent(OptimizableAgent):
             graph=self.graph.get_graph(xray=True),
         )
 
-    def invoke_dataset_item(self, item: Dict[str, Any], seed=None) -> Dict[str, Any]:
+    def invoke_dataset_item(self, item: Dict[str, Any], seed: int | None = None) -> str:
         # "input" and "output" are Agent State fields
-        messages = self.agent_config["chat-prompt"].messages or []
+        messages = self.agent_config["chat_prompt"].messages or []
         state = {"input": item[self.input_dataset_field]}
         messages.append(state)
         result = self.graph.invoke(state)
@@ -132,7 +145,7 @@ class LangGraphAgent(OptimizableAgent):
 
 
 agent_config = {
-    "chat-prompt": ChatPrompt(system=prompt_template),
+    "chat_prompt": ChatPrompt(system=prompt_template),
     "tools": {
         "Wikipedia Search": {
             "type": "tool",

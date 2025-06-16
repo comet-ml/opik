@@ -7,7 +7,6 @@ from opik.evaluation.metrics import LevenshteinRatio
 from opik.integrations.adk import OpikTracer
 from opik.evaluation.metrics.score_result import ScoreResult
 
-import json
 import asyncio
 
 from google.adk.agents import LlmAgent
@@ -17,10 +16,8 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 from pydantic import BaseModel, Field
 
-
-def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
-    metric = LevenshteinRatio()
-    return metric.score(reference=dataset_item["answer"], output=llm_output)
+# For wikipedia tool:
+import dspy
 
 
 # --- 1. Define Constants ---
@@ -29,9 +26,12 @@ USER_ID = "test_user_456"
 SESSION_ID_TOOL_AGENT = "session_tool_agent_xyz"
 SESSION_ID_SCHEMA_AGENT = "session_schema_agent_xyz"
 MODEL = LiteLlm(model="openai/gpt-4.1")
+dataset = hotpot_300()
 
-# Tools:
-import dspy
+
+def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+    metric = LevenshteinRatio()
+    return metric.score(reference=dataset_item["answer"], output=llm_output)
 
 
 def search_wikipedia(query: str) -> list[str]:
@@ -50,16 +50,13 @@ class SearchInput(BaseModel):
     query: str = Field(description="The query to use in the search.")
 
 
-dataset = hotpot_300()
-
-
 class ADKAgent(OptimizableAgent):
     model = "openai/gpt-4.1"
     project_name = "adk-agent-wikipedia"
     input_dataset_field = "question"
 
     def __init__(self, agent_config: Dict[str, Any]) -> None:
-        prompt: ChatPrompt = agent_config["chat-prompt"].get_system_prompt()
+        prompt: ChatPrompt = agent_config["chat_prompt"].get_system_prompt()
 
         self.opik_tracer = OpikTracer(self.project_name)
 
@@ -83,8 +80,8 @@ class ADKAgent(OptimizableAgent):
     def invoke_dataset_item(
         self, query_json: Dict[str, Any], seed: Optional[int] = None
     ) -> Dict[str, Any]:
-        query_json = {self.input_dataset_field: query_json[self.input_dataset_field]}
-        query_json = json.dumps(query_json)
+        query = SearchInput(query=query_json[self.input_dataset_field])
+        query_json = query.json()
         session_service = InMemorySessionService()
         # Create separate sessions for clarity, though not strictly necessary if context is managed
         session_service.create_session(
@@ -95,7 +92,8 @@ class ADKAgent(OptimizableAgent):
             agent=self.agent, app_name=APP_NAME, session_service=session_service
         )
 
-        async def _invoke():
+        async def _invoke() -> Dict[str, Any]:
+            """Invoke the agent and return the stored output."""
             user_content = types.Content(
                 role="user", parts=[types.Part(text=query_json)]
             )
@@ -118,6 +116,9 @@ class ADKAgent(OptimizableAgent):
             except Exception:
                 final_response_content = "Error"
 
+            if final_response_content == "Error":
+                print("Error in runner")
+
             current_session = session_service.get_session(
                 app_name=APP_NAME,
                 user_id=USER_ID,
@@ -138,7 +139,7 @@ The user will provide a question string like "Who is Barack Obama?".
 3. Respond clearly to the user, stating the answer found by the tool.
 """
 
-agent_config = {"chat-prompt": ChatPrompt(system=prompt)}
+agent_config = {"chat_prompt": ChatPrompt(system=prompt)}
 
 # Test it:
 agent = ADKAgent(agent_config)

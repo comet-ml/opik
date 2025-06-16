@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import random
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, cast
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, cast, Type
 
 import rapidfuzz.distance.Indel
 import litellm
@@ -24,6 +24,7 @@ from opik_optimizer import _throttle, task_evaluator
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
 from opik_optimizer.optimization_config import chat_prompt, mappers
 from opik_optimizer.optimization_result import OptimizationResult
+from opik_optimizer.optimizable_agent import OptimizableAgent, AgentConfig
 
 from .. import utils
 from . import reporting
@@ -951,8 +952,8 @@ Return only the new prompt list object.
 
     def optimize_prompt(
         self,
-        agent_class,
-        agent_config,
+        agent_class: Type[OptimizableAgent],
+        agent_config: AgentConfig,
         dataset: opik.Dataset,
         metric: Callable,
         experiment_config: Optional[Dict] = None,
@@ -970,7 +971,7 @@ Return only the new prompt list object.
             auto_continue: Whether to automatically continue optimization
             **kwargs: Additional keyword arguments
         """
-        prompt = agent_config["chat-prompt"]
+        prompt = agent_config["chat_prompt"]
         if not isinstance(prompt, chat_prompt.ChatPrompt):
             raise ValueError("Prompt must be a ChatPrompt object")
 
@@ -1043,6 +1044,7 @@ Return only the new prompt list object.
                 )
                 prompt_length = float(len(str(json.dumps(messages))))
                 return (primary_fitness_score, prompt_length)
+
         else:
             # Single-objective
             def _deap_evaluate_individual_fitness(
@@ -1067,9 +1069,9 @@ Return only the new prompt list object.
         with reporting.baseline_performance(
             verbose=self.verbose
         ) as report_baseline_performance:
-            initial_eval_result = (
-                _deap_evaluate_individual_fitness(prompt.formatted_messages)  # type: ignore
-            )
+            initial_eval_result = _deap_evaluate_individual_fitness(
+                prompt.formatted_messages
+            )  # type: ignore
             initial_primary_score = initial_eval_result[0]
             initial_length = (
                 initial_eval_result[1]
@@ -1261,10 +1263,12 @@ Return only the new prompt list object.
                     ],
                     best_prompt=best_prompt_overall,
                     best_score=best_primary_score_overall,
-                    improvement=(best_primary_score_overall - initial_primary_score)
-                    / abs(initial_primary_score)
-                    if initial_primary_score and initial_primary_score != 0
-                    else (1.0 if best_primary_score_overall > 0 else 0.0),
+                    improvement=(
+                        (best_primary_score_overall - initial_primary_score)
+                        / abs(initial_primary_score)
+                        if initial_primary_score and initial_primary_score != 0
+                        else (1.0 if best_primary_score_overall > 0 else 0.0)
+                    ),
                 )
                 self._add_to_history(gen_round_data)
 
@@ -1304,16 +1308,18 @@ Return only the new prompt list object.
                         "final_prompt_representative": final_best_prompt,
                         "final_primary_score_representative": final_primary_score,
                         "final_length_representative": final_length,
-                        "pareto_front_solutions": [
-                            {
-                                "prompt": str(ind),
-                                "score": ind.fitness.values[0],
-                                "length": ind.fitness.values[1],
-                            }
-                            for ind in hof
-                        ]
-                        if hof
-                        else [],
+                        "pareto_front_solutions": (
+                            [
+                                {
+                                    "prompt": str(ind),
+                                    "score": ind.fitness.values[0],
+                                    "length": ind.fitness.values[1],
+                                }
+                                for ind in hof
+                            ]
+                            if hof
+                            else []
+                        ),
                     }
                 )
             else:
@@ -1370,9 +1376,11 @@ Return only the new prompt list object.
                 "population_size": self.population_size,
                 "mutation_probability": self.mutation_rate,
                 "crossover_probability": self.crossover_rate,
-                "elitism_size": self.elitism_size
-                if not self.enable_moo
-                else "N/A (MOO uses NSGA-II)",
+                "elitism_size": (
+                    self.elitism_size
+                    if not self.enable_moo
+                    else "N/A (MOO uses NSGA-II)"
+                ),
                 "adaptive_mutation": self.adaptive_mutation,
                 "metric_name": metric.__name__,
                 "model": self.model,
@@ -1482,8 +1490,8 @@ Return only the new prompt list object.
 
     def evaluate_agent(
         self,
-        agent_class,
-        agent_config,
+        agent_class: Type[OptimizableAgent],
+        agent_config: AgentConfig,
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
         metric: Callable,
@@ -1512,20 +1520,19 @@ Return only the new prompt list object.
         """
         total_items = len(dataset.get_items())
 
-        current_experiment_config = experiment_config or {}
-        current_experiment_config = {
-            **current_experiment_config,
-            **{
-                "optimizer": self.__class__.__name__,
-                "metric": metric.__name__,
-                "dataset": dataset.name,
-                "configuration": {
-                    "prompt": prompt.formatted_messages,
-                    "n_samples_for_eval": len(dataset_item_ids)
-                    if dataset_item_ids is not None
-                    else n_samples,
-                    "total_dataset_items": total_items,
-                },
+        experiment_config = experiment_config or {}
+        experiment_config["project_name"] = agent_class.__name__
+        experiment_config = {
+            **experiment_config,
+            "optimizer": self.__class__.__name__,
+            "metric": metric.__name__,
+            "dataset": dataset.name,
+            "configuration": {
+                "prompt": prompt.formatted_messages,
+                "n_samples_for_eval": (
+                    len(dataset_item_ids) if dataset_item_ids is not None else n_samples
+                ),
+                "total_dataset_items": total_items,
             },
         }
 
@@ -1547,7 +1554,7 @@ Return only the new prompt list object.
 
             # FIXME: move out of here is possible:
             new_agent_config = copy.deepcopy(agent_config)
-            new_agent_config["chat-prompt"] = chat_prompt.ChatPrompt(messages=messages)
+            new_agent_config["chat_prompt"] = chat_prompt.ChatPrompt(messages=messages)
             agent = agent_class(new_agent_config)
             model_output = agent.invoke_dataset_item(dataset_item)
             # model_output = self._call_model(messages=messages, is_reasoning=False)
@@ -1561,9 +1568,9 @@ Return only the new prompt list object.
             metric=metric,
             evaluated_task=llm_task,
             num_threads=self.num_threads,
-            project_name=self.project_name,
+            project_name=experiment_config["project_name"],
             n_samples=n_samples if dataset_item_ids is None else None,
-            experiment_config=current_experiment_config,
+            experiment_config=experiment_config,
             optimization_id=optimization_id,
             verbose=verbose,
         )

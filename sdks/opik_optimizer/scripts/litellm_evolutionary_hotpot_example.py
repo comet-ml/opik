@@ -1,5 +1,6 @@
-from opik_optimizer import EvolutionaryOptimizer
 from typing import Dict, Any
+
+from opik_optimizer import EvolutionaryOptimizer
 
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics import LevenshteinRatio
@@ -8,18 +9,24 @@ from opik_optimizer import OptimizableAgent, ChatPrompt
 from opik_optimizer.datasets import hotpot_300
 
 
+dataset = hotpot_300()
+
+
 def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
     metric = LevenshteinRatio()
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 
 
-dataset = hotpot_300()
-
-
 class LiteLLMAgent(OptimizableAgent):
-    model = "openai/gpt-4o-mini"
-    project_name = "litellm-agent-wikipedia"
-    input_dataset_field = "question"
+    """Agent using LiteLLM for optimization."""
+
+    model: str = "openai/gpt-4o-mini"
+    project_name: str = "litellm-agent-wikipedia"
+    input_dataset_field: str = "question"
+
+    def init_agent(self, agent_config: Dict[str, Any]) -> None:
+        """Initialize the agent with the provided configuration."""
+        self.agent_config = agent_config
 
 
 prompt = """
@@ -30,7 +37,7 @@ The user will provide a question string like "Who is Barack Obama?".
 3. Respond clearly to the user, stating the answer found by the tool.
 """
 
-agent_config = {"chat-prompt": ChatPrompt(system=prompt)}
+agent_config = {"chat_prompt": ChatPrompt(system=prompt)}
 
 # Test it:
 agent = LiteLLMAgent(agent_config)

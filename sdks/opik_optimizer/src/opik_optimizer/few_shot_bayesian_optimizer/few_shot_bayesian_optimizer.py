@@ -3,7 +3,7 @@ import json
 import logging
 import random
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 import litellm
 import opik
@@ -18,6 +18,7 @@ from opik_optimizer.optimization_config import mappers
 
 from .. import _throttle, optimization_result, task_evaluator, utils
 from ..optimization_config import chat_prompt
+from ..optimizable_agent import OptimizableAgent
 from . import reporting
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -80,7 +81,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         seed: int = 42,
         n_threads: int = 8,
         verbose: int = 1,
-        **model_kwargs: Any,
+        **model_kwargs: Dict[str, Any],
     ) -> None:
         """
         Args:
@@ -116,6 +117,16 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         seed: int,
         model_kwargs: Dict[str, Any],
     ) -> Dict[str, Any]:
+        """
+        Args:
+            model: The model to use for the call
+            messages: List of message dictionaries with 'role' and 'content' keys
+            seed: Random seed for reproducibility
+            model_kwargs: Additional model parameters
+
+        Returns:
+            Dict containing the model's response
+        """
         self.llm_call_counter += 1
 
         current_model_kwargs = self.model_kwargs.copy()
@@ -144,6 +155,16 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     def _split_dataset(
         self, dataset: List[Dict[str, Any]], train_ratio: float
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """
+        Split the dataset into training and validation sets.
+
+        Args:
+            dataset: List of dataset items
+            train_ratio: Ratio of items to use for training
+
+        Returns:
+            Tuple of (train_set, validation_set)
+        """
         """Split the dataset into training and validation sets.
 
         Args:
@@ -169,6 +190,17 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         prompt: chat_prompt.ChatPrompt,
         few_shot_examples: List[Dict[str, Any]],
     ) -> FewShotPromptTemplate:
+        """
+        Generate a few-shot prompt template that can be used to insert examples into the prompt.
+
+        Args:
+            model: The model to use for generating the template
+            prompt: The base prompt to modify
+            few_shot_examples: List of example pairs with input and output fields
+
+        Returns:
+            FewShotPromptTemplate containing the modified message list and example template
+        """
         """
         During this step we update the system prompt to include few-shot examples.
         """
@@ -200,8 +232,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
     def _run_optimization(
         self,
-        agent_class,
-        agent_config,
+        agent_class: Type[OptimizableAgent],
+        agent_config: Dict[str, Any],
         # initial_prompt: chat_prompt.ChatPrompt,
         fewshot_prompt_template: FewShotPromptTemplate,
         dataset: Dataset,
@@ -214,7 +246,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     ) -> optimization_result.OptimizationResult:
         reporting.start_optimization_run(verbose=self.verbose)
 
-        initial_prompt = agent_config["chat-prompt"]
+        initial_prompt = agent_config["chat_prompt"]
         random.seed(self.seed)
         self.llm_call_counter = 0
 
@@ -374,9 +406,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
                 iter_detail = {
                     "iteration": trial.number + 1,
-                    "timestamp": trial.datetime_start.isoformat()
-                    if trial.datetime_start
-                    else datetime.now().isoformat(),
+                    "timestamp": (
+                        trial.datetime_start.isoformat()
+                        if trial.datetime_start
+                        else datetime.now().isoformat()
+                    ),
                     "prompt_candidate": prompt_cand_display,
                     "parameters_used": {
                         "optuna_params": trial.user_attrs.get("config", {}),
@@ -465,7 +499,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         Returns:
             OptimizationResult: Result of the optimization
         """
-        prompt = agent_config["chat-prompt"]
+        prompt = agent_config["chat_prompt"]
         if not isinstance(prompt, chat_prompt.ChatPrompt):
             raise ValueError("Prompt must be a ChatPrompt object")
 
@@ -524,9 +558,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     dataset=dataset,
                     metric=metric,
                     n_samples=n_samples,
-                    optimization_id=optimization.id
-                    if optimization is not None
-                    else None,
+                    optimization_id=(
+                        optimization.id if optimization is not None else None
+                    ),
                 )
 
                 eval_report.set_score(baseline_score)
@@ -574,8 +608,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
     def evaluate_prompt(
         self,
-        agent_class,
-        agent_config,
+        agent_class: Type[OptimizableAgent],
+        agent_config: Dict[str, Any],
         dataset: opik.Dataset,
         metric: Callable,
         n_samples: Optional[int] = None,
@@ -595,7 +629,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         Returns:
             float: The evaluation score
         """
-        prompt = agent_config["chat-prompt"]
+        prompt = agent_config["chat_prompt"]
         # Ensure prompt is correctly formatted
         if not all(
             isinstance(item, dict) and "role" in item and "content" in item
@@ -610,6 +644,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         )
 
         experiment_config = experiment_config or {}
+        experiment_config["project_name"] = agent_class.__name__
         experiment_config = {
             **experiment_config,
             **{
@@ -647,19 +682,28 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
     def _build_task_from_messages(
         self,
-        agent_class,
-        agent_config,
+        agent_class: type,
+        agent_config: Dict[str, Any],
         messages: List[Dict[str, str]],
         few_shot_examples: Optional[str] = None,
     ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
         prompt_ = copy.deepcopy(messages)
         # Copy tools, etc:
         new_agent_config = copy.deepcopy(agent_config)
-        # Replace new chat-prompt:
-        new_agent_config["chat-prompt"] = chat_prompt.ChatPrompt(messages=prompt_)
+        # Replace new chat_prompt:
+        new_agent_config["chat_prompt"] = chat_prompt.ChatPrompt(messages=prompt_)
         agent = agent_class(agent_config)
 
         def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, Any]:
+            """
+            Process a single dataset item through the LLM task.
+
+            Args:
+                dataset_item: Dictionary containing the dataset item data
+
+            Returns:
+                Dictionary containing the LLM's response
+            """
             for key, value in dataset_item.items():
                 for item in prompt_:
                     item["content"] = item["content"].replace(

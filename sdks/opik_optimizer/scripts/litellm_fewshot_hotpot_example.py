@@ -29,7 +29,7 @@ The user will provide a question string like "Who is Barack Obama?".
 3. Respond clearly to the user, stating the answer found by the tool.
 """
 
-agent_config = {"chat-prompt": ChatPrompt(system=prompt)}
+agent_config = {"chat_prompt": ChatPrompt(system=prompt)}
 
 # Test it:
 agent = LiteLLMAgent(agent_config)
