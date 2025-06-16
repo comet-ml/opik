@@ -334,6 +334,15 @@ navigation:
           - page: Guardrails
             path: docs/production/guardrails.mdx
             slug: guardrails
+      - section: Configuration
+        slug: /configuration
+        contents:
+          - page: Feedback definitions
+            path: docs/configuration/feedback_definitions.mdx
+            slug: /configuration/feedback_definitions
+          - page: AI Providers
+            path: docs/configuration/ai_providers.mdx
+            slug: ai_providers
   - tab: agent-optimization
     layout:
       - page: Opik Agent Optimizer
