@@ -54,10 +54,10 @@ class PydanticAIAgent(OptimizableAgent):
         self.agent = Agent(
             self.model,
             output_type=str,
-            system_prompt=agent_config["chat_prompt"].get_system_prompt(),
+            system_prompt=agent_config.chat_prompt.get_system_prompt(),
         )
-        for tool_name in agent_config.get("tools", []):
-            tool = agent_config["tools"][tool_name]["function"]
+        for tool_name in agent_config.tools:
+            tool = agent_config.tools[tool_name]["function"]
             self.agent.tool(tool)
 
     def invoke_dataset_item(
@@ -76,10 +76,7 @@ tools = {
     },
 }
 
-agent_config = AgentConfig(
-    chat_prompt=ChatPrompt(system=prompt_template),
-    tools=tools,
-)
+agent_config = AgentConfig(chat_prompt=ChatPrompt(system=prompt_template), tools=tools)
 
 # Test it:
 agent = PydanticAIAgent(agent_config)
@@ -96,7 +93,7 @@ optimizer = FewShotBayesianOptimizer(
     n_threads=16,
     seed=42,
 )
-result = optimizer.optimize_agent(
+optimization_result = optimizer.optimize_agent(
     agent_class=PydanticAIAgent,
     agent_config=agent_config,
     dataset=dataset,
@@ -104,3 +101,4 @@ result = optimizer.optimize_agent(
     n_trials=10,
     n_samples=50,
 )
+optimization_result.display()
