@@ -2,7 +2,7 @@ import copy
 import json
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 import litellm
 import opik
@@ -19,6 +19,7 @@ from .. import _throttle
 from ..base_optimizer import BaseOptimizer, OptimizationRound
 from ..optimization_config import chat_prompt, mappers
 from ..optimization_result import OptimizationResult
+from ..optimizable_agent import OptimizableAgent, AgentConfig
 from . import reporting
 
 tqdm = get_tqdm_for_current_environment()
@@ -211,8 +212,8 @@ class MetaPromptOptimizer(BaseOptimizer):
 
     def evaluate_agent(
         self,
-        agent_class: Any,
-        agent_config: Dict[str, Any],
+        agent_class: Type[OptimizableAgent],
+        agent_config: AgentConfig,
         dataset: opik.Dataset,
         metric: Callable,
         n_samples: Optional[int] = None,
@@ -337,8 +338,8 @@ class MetaPromptOptimizer(BaseOptimizer):
 
     def optimize_agent(
         self,
-        agent_class: Any,
-        agent_config: Dict[str, Any],
+        agent_class: Type[OptimizableAgent],
+        agent_config: AgentConfig,
         dataset: Dataset,
         metric: Callable,
         experiment_config: Optional[Dict] = None,
@@ -437,8 +438,8 @@ class MetaPromptOptimizer(BaseOptimizer):
     def _optimize_agent(
         self,
         optimization_id: Optional[str],
-        agent_class: Any,
-        agent_config: Dict[str, Any],
+        agent_class: Type[OptimizableAgent],
+        agent_config: AgentConfig,
         dataset: Dataset,
         metric: Callable,
         experiment_config: Optional[Dict],
@@ -695,13 +696,13 @@ class MetaPromptOptimizer(BaseOptimizer):
 
     def _generate_candidate_prompts(
         self,
-        project_name: str,
         current_prompt: chat_prompt.ChatPrompt,
         best_score: float,
         round_num: int,
         previous_rounds: List[OptimizationRound],
         metric: Callable,
         optimization_id: Optional[str] = None,
+        project_name: Optional[str] = None,
     ) -> List[chat_prompt.ChatPrompt]:
         """Generate candidate prompts using meta-prompting."""
         with reporting.display_candidate_generation_report(

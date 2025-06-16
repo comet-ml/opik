@@ -1,6 +1,11 @@
 from typing import Any, Dict, Optional
 
-from opik_optimizer import OptimizableAgent, ChatPrompt, MetaPromptOptimizer
+from opik_optimizer import (
+    OptimizableAgent,
+    ChatPrompt,
+    MetaPromptOptimizer,
+    AgentConfig,
+)
 from opik_optimizer.datasets import hotpot_300
 
 from opik.evaluation.metrics import LevenshteinRatio
@@ -54,7 +59,7 @@ class ADKAgent(OptimizableAgent):
     project_name = "adk-agent-wikipedia"
     input_dataset_field = "question"
 
-    def init_agent(self, agent_config: Dict[str, Any]) -> None:
+    def init_agent(self, agent_config: AgentConfig) -> None:
         prompt: ChatPrompt = agent_config["chat_prompt"].get_system_prompt()
 
         self.opik_tracer = OpikTracer(self.project_name)
@@ -80,8 +85,8 @@ class ADKAgent(OptimizableAgent):
         self, query_json: Dict[str, Any], seed: Optional[int] = None
     ) -> Dict[str, Any]:
         # Extract the question and wrap it in the expected format
-        question = query_json[self.input_dataset_field]
-        query_json = {self.input_dataset_field: question}
+        query = SearchInput(query=query_json[self.input_dataset_field])
+        query_json = query.model_dump_json()
         session_service = InMemorySessionService()
         # Create separate sessions for clarity, though not strictly necessary if context is managed
         session_service.create_session(
