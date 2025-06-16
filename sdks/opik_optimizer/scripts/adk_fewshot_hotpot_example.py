@@ -161,7 +161,7 @@ optimizer = FewShotBayesianOptimizer(
     n_threads=16,
     seed=42,
 )
-result = optimizer.optimize_agent(
+optimization_result = optimizer.optimize_agent(
     agent_class=ADKAgent,
     agent_config=agent_config,
     dataset=dataset,
@@ -169,3 +169,4 @@ result = optimizer.optimize_agent(
     n_trials=10,
     n_samples=50,
 )
+optimization_result.display()
