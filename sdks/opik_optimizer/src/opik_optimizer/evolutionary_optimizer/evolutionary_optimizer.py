@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import os
@@ -96,7 +97,6 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
     def __init__(
         self,
         model: str,
-        project_name: str = "Optimization",
         population_size: int = DEFAULT_POPULATION_SIZE,
         num_generations: int = DEFAULT_NUM_GENERATIONS,
         mutation_rate: float = DEFAULT_MUTATION_RATE,
@@ -116,7 +116,6 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
         """
         Args:
             model: The model to use for evaluation
-            project_name: Optional project name for tracking
             population_size: Number of prompts in the population
             num_generations: Number of generations to run
             mutation_rate: Mutation rate for genetic operations
@@ -134,7 +133,7 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
             **model_kwargs: Additional model parameters
         """
         # Initialize base class first
-        super().__init__(model=model, project_name=project_name, **model_kwargs)
+        super().__init__(model=model, verbose=verbose, **model_kwargs)
         self.population_size = population_size
         self.num_generations = num_generations
         self.mutation_rate = mutation_rate
@@ -162,7 +161,6 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
         self._generations_without_overall_improvement = 0
         self._best_primary_score_history: List[float] = []
         self._gens_since_pop_improvement: int = 0
-        self.verbose = verbose
 
         if self.seed is not None:
             random.seed(self.seed)
@@ -953,7 +951,8 @@ Return only the new prompt list object.
 
     def optimize_prompt(
         self,
-        prompt: chat_prompt.ChatPrompt,
+        agent_class,
+        agent_config,
         dataset: opik.Dataset,
         metric: Callable,
         experiment_config: Optional[Dict] = None,
@@ -971,6 +970,7 @@ Return only the new prompt list object.
             auto_continue: Whether to automatically continue optimization
             **kwargs: Additional keyword arguments
         """
+        prompt = agent_config["chat-prompt"]
         if not isinstance(prompt, chat_prompt.ChatPrompt):
             raise ValueError("Prompt must be a ChatPrompt object")
 
@@ -981,6 +981,8 @@ Return only the new prompt list object.
             raise ValueError(
                 "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
             )
+
+        self.project_name = agent_class.project_name
 
         # Step 0. Start Opik optimization run
         opik_optimization_run: Optional[optimization.Optimization] = None
@@ -1029,6 +1031,8 @@ Return only the new prompt list object.
                 messages: List[Dict[str, str]],
             ) -> Tuple[float, float]:
                 primary_fitness_score: float = self.evaluate_prompt(
+                    agent_class,
+                    agent_config,
                     prompt=chat_prompt.ChatPrompt(messages=messages),  # type: ignore
                     dataset=dataset,
                     metric=metric,
@@ -1044,7 +1048,9 @@ Return only the new prompt list object.
             def _deap_evaluate_individual_fitness(
                 messages: List[Dict[str, str]],
             ) -> Tuple[float, float]:
-                fitness_score: float = self.evaluate_prompt(
+                fitness_score: float = self.evaluate_agent(
+                    agent_class,
+                    agent_config,
                     prompt=chat_prompt.ChatPrompt(messages=messages),  # type: ignore
                     dataset=dataset,
                     metric=metric,
@@ -1474,8 +1480,10 @@ Return only the new prompt list object.
             )
             raise
 
-    def evaluate_prompt(
+    def evaluate_agent(
         self,
+        agent_class,
+        agent_config,
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
         metric: Callable,
@@ -1490,7 +1498,7 @@ Return only the new prompt list object.
         Evaluate a single prompt (individual) against the dataset.
 
         Args:
-            prompt: The prompt to evaluate
+            prompt:
             dataset: The dataset to use for evaluation
             metric: Metric function to evaluate on, should have the arguments `dataset_item` and `llm_output`
             n_samples: Optional number of samples to use
@@ -1523,6 +1531,7 @@ Return only the new prompt list object.
 
         def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
             try:
+                # FIXME: what is this about? Removing items?
                 messages = [
                     {
                         "role": item["role"],
@@ -1536,7 +1545,12 @@ Return only the new prompt list object.
                 )
                 return {mappers.EVALUATED_LLM_TASK_OUTPUT: ""}
 
-            model_output = self._call_model(messages=messages, is_reasoning=False)
+            # FIXME: move out of here is possible:
+            new_agent_config = copy.deepcopy(agent_config)
+            new_agent_config["chat-prompt"] = chat_prompt.ChatPrompt(messages=messages)
+            agent = agent_class(new_agent_config)
+            model_output = agent.invoke_dataset_item(dataset_item)
+            # model_output = self._call_model(messages=messages, is_reasoning=False)
 
             return {mappers.EVALUATED_LLM_TASK_OUTPUT: model_output}
 
