@@ -97,12 +97,12 @@ class LangGraphAgent(OptimizableAgent):
     def init_agent(self, agent_config: AgentConfig) -> None:
         self.llm = ChatOpenAI(model=self.model, temperature=0, stream_usage=True)
         self.agent_config = agent_config
-        prompt_template = self.agent_config["chat_prompt"].get_system_prompt()
+        prompt_template = self.agent_config.chat_prompt.get_system_prompt()
         prompt = PromptTemplate.from_template(prompt_template)
 
         agent_tools = []
-        for key in self.agent_config["tools"]:
-            item = self.agent_config["tools"][key]
+        for key in self.agent_config.tools:
+            item = self.agent_config.tools[key]
             agent_tools.append(
                 Tool(
                     name=key,
@@ -142,23 +142,23 @@ class LangGraphAgent(OptimizableAgent):
 
     def invoke_dataset_item(self, item: Dict[str, Any], seed: int | None = None) -> str:
         # "input" and "output" are Agent State fields
-        messages = self.agent_config["chat_prompt"].messages or []
+        messages = self.agent_config.chat_prompt.messages or []
         state = {"input": item[self.input_dataset_field]}
         messages.append(state)
         result = self.graph.invoke(state)
         return result["output"]
 
 
-agent_config = {
-    "chat_prompt": ChatPrompt(system=prompt_template),
-    "tools": {
+agent_config = AgentConfig(
+    chat_prompt=ChatPrompt(system=prompt_template),
+    tools={
         "Wikipedia Search": {
             "type": "tool",
             "description": "Search wikipedia for abstracts. Gives a brief paragraph about a topic.",
             "function": search_wikipedia,
         },
     },
-}
+)
 
 # Test it:
 agent = LangGraphAgent(agent_config)
@@ -175,7 +175,7 @@ optimizer = FewShotBayesianOptimizer(
     n_threads=16,
     seed=42,
 )
-result = optimizer.optimize_agent(
+optimization_result = optimizer.optimize_agent(
     agent_class=LangGraphAgent,
     agent_config=agent_config,
     dataset=dataset,
@@ -183,3 +183,5 @@ result = optimizer.optimize_agent(
     n_trials=10,
     n_samples=50,
 )
+
+optimization_result.display()
