@@ -2,6 +2,12 @@
 
 Opik provides seamless integration with [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) allowing you to trace, monitor, and debug your Cloudflare Workers AI applications.
 
+## Features
+
+- **Comprehensive Tracing**: Automatically trace Cloudflare Workers AI requests
+- **Hierarchical Visualization**: View your Cloudflare Workers AI requests as structured traces with parent-child relationships
+- **Custom Tagging**: Add custom tags to organize and filter your traces
+
 ## Installation
 
 ### Option 1: Using npm
@@ -40,7 +46,7 @@ See the [Cloudflare documentation](https://developers.cloudflare.com/workers/run
 
 ### Using with LLM Calls
 
-You can add the OpikCallbackHandler in two ways in LangChain: at construction time and at execution time. Here's how to use both approaches:
+Here is an example of how to use the Opik SDK with Cloudflare Workers AI:
 
 ```typescript
 /**
