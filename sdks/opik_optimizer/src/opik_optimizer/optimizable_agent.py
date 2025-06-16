@@ -1,7 +1,8 @@
 from typing import Dict, Any, Optional, List
-from typing_extensions import TypedDict
+from pydantic import BaseModel, Field
 
 import os
+import copy
 
 import litellm
 from litellm.integrations.opik.opik import OpikLogger
@@ -12,11 +13,51 @@ from .optimization_config.chat_prompt import ChatPrompt
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 
-class AgentConfig(TypedDict):
-    """Configuration dictionary for the agent"""
+class AgentConfig(BaseModel):
+    """Configuration model for the agent"""
 
-    chat_prompt: ChatPrompt
-    tools: Optional[Dict[str, Any]]
+    chat_prompt: Optional[ChatPrompt] = Field(
+        default=None, description="The chat prompt configuration for the agent"
+    )
+    tools: Optional[Dict[str, Any]] = Field(
+        default=None, description="Optional dictionary of tools available to the agent"
+    )
+
+    class Config:
+        arbitrary_types_allowed = True  # Allow ChatPrompt type
+
+    def copy(self, **kwargs: Any) -> "AgentConfig":
+        """
+        Create a deep copy of this AgentConfig instance.
+
+        Args:
+            **kwargs: Additional arguments to pass to the BaseModel.copy() method
+
+        Returns:
+            AgentConfig: A new instance with deep copied chat_prompt and tools
+        """
+        # Create a copy of the base model
+        base_copy = super().copy(**kwargs)
+
+        # Create a new ChatPrompt instance with deep copied messages if it exists
+        if self.chat_prompt:
+            # Deep copy the messages list and its contents if it exists
+            messages = (
+                copy.deepcopy(self.chat_prompt.messages)
+                if self.chat_prompt.messages
+                else None
+            )
+            base_copy.chat_prompt = ChatPrompt(
+                system=self.chat_prompt.system,
+                prompt=self.chat_prompt.prompt,
+                messages=messages,
+            )
+
+        # Deep copy tools dictionary and its contents if it exists
+        if self.tools:
+            base_copy.tools = copy.deepcopy(self.tools)
+
+        return base_copy
 
 
 class OptimizableAgent:
@@ -118,12 +159,12 @@ class OptimizableAgent:
             Dict[str, Any]: The agent's response
         """
         messages = []
-        if self.agent_config["chat_prompt"].system:
+        if self.agent_config.chat_prompt.system:
             messages.append(
-                {"role": "system", "content": self.agent_config["chat_prompt"].system}
+                {"role": "system", "content": self.agent_config.chat_prompt.system}
             )
-        if self.agent_config["chat_prompt"].messages:
-            messages.extend(self.agent_config["chat_prompt"].messages)
+        if self.agent_config.chat_prompt.messages:
+            messages.extend(self.agent_config.chat_prompt.messages)
 
         if self.input_dataset_field in dataset_item:
             messages.append(

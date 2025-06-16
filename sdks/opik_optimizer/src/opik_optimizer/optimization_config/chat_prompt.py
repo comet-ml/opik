@@ -20,8 +20,8 @@ class ChatPrompt:
         self,
         system: Optional[str] = None,
         prompt: Optional[str] = None,
-        messages: Optional[List[Dict[str, str]]] = None,
-        tools: Optional[List[Tool]] = None,
+        messages: Optional[List[Dict[str, str]]] = [],
+        tools: Optional[List[Tool]] = [],
     ):
         self.system = system
         self.prompt = prompt

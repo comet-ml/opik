@@ -1,4 +1,3 @@
-import copy
 import json
 import logging
 import os
@@ -265,7 +264,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "metric": getattr(metric, "__name__", str(metric)),
                 "dataset": dataset.name,
                 "configuration": {
-                    "prompt": agent_config["chat_prompt"].formatted_messages,
+                    "prompt": agent_config.chat_prompt.formatted_messages,
                     "n_samples": subset_size,
                     "use_full_dataset": use_full_dataset,
                 },
@@ -281,11 +280,11 @@ class MetaPromptOptimizer(BaseOptimizer):
                     "role": item["role"],
                     "content": item["content"].format(**dataset_item),
                 }
-                for item in agent_config["chat_prompt"].formatted_messages
+                for item in agent_config.chat_prompt.formatted_messages
             ]
             # Step 1: create the agent
-            new_agent_config = copy.deepcopy(agent_config)
-            new_agent_config["chat_prompt"] = chat_prompt.ChatPrompt(messages=messages)
+            new_agent_config = agent_config.copy()
+            new_agent_config.chat_prompt = chat_prompt.ChatPrompt(messages=messages)
             agent = agent_class(new_agent_config)
 
             # --- Step 2: Call the model ---
@@ -361,7 +360,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         Returns:
             OptimizationResult: Structured result containing optimization details
         """
-        prompt = agent_config["chat_prompt"]
+        prompt = agent_config.chat_prompt
         if not isinstance(prompt, chat_prompt.ChatPrompt):
             raise ValueError("Prompt must be a ChatPrompt object")
 
@@ -449,11 +448,11 @@ class MetaPromptOptimizer(BaseOptimizer):
     ) -> OptimizationResult:
         self.auto_continue = auto_continue
         self.dataset = dataset
-        self.prompt = agent_config["chat_prompt"]
+        self.prompt = agent_config.chat_prompt
         self.llm_call_counter = 0  # Reset counter for run
-        initial_prompt = agent_config["chat_prompt"]
+        initial_prompt = agent_config.chat_prompt
 
-        current_prompt = agent_config["chat_prompt"]
+        current_prompt = agent_config.chat_prompt
         experiment_config = experiment_config or {}
         experiment_config = {
             **experiment_config,
@@ -462,7 +461,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "metric": getattr(metric, "__name__", str(metric)),
                 "dataset": dataset.name,
                 "configuration": {
-                    "prompt": agent_config["chat_prompt"].formatted_messages,
+                    "prompt": agent_config.chat_prompt.formatted_messages,
                     "rounds": self.rounds,
                     "num_prompts_per_round": self.num_prompts_per_round,
                 },
@@ -518,8 +517,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                     ) as eval_report:
                         eval_report.set_generated_prompts(candidate_count, prompt)
 
-                        new_agent_config = copy.deepcopy(agent_config)
-                        new_agent_config["chat_prompt"] = prompt
+                        new_agent_config = agent_config.copy()
+                        new_agent_config.chat_prompt = prompt
 
                         try:
                             prompt_score = self.evaluate_agent(

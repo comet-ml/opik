@@ -246,7 +246,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     ) -> optimization_result.OptimizationResult:
         reporting.start_optimization_run(verbose=self.verbose)
 
-        initial_prompt = agent_config["chat_prompt"]
+        initial_prompt = agent_config.chat_prompt
         random.seed(self.seed)
         self.llm_call_counter = 0
 
@@ -499,7 +499,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         Returns:
             OptimizationResult: Result of the optimization
         """
-        prompt = agent_config["chat_prompt"]
+        prompt = agent_config.chat_prompt
         if not isinstance(prompt, chat_prompt.ChatPrompt):
             raise ValueError("Prompt must be a ChatPrompt object")
 
@@ -629,7 +629,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         Returns:
             float: The evaluation score
         """
-        prompt = agent_config["chat_prompt"]
+        prompt = agent_config.chat_prompt
         # Ensure prompt is correctly formatted
         if not all(
             isinstance(item, dict) and "role" in item and "content" in item
@@ -689,9 +689,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
         prompt_ = copy.deepcopy(messages)
         # Copy tools, etc:
-        new_agent_config = copy.deepcopy(agent_config)
+        new_agent_config = agent_config.copy()
         # Replace new chat_prompt:
-        new_agent_config["chat_prompt"] = chat_prompt.ChatPrompt(messages=prompt_)
+        new_agent_config.chat_prompt = chat_prompt.ChatPrompt(messages=prompt_)
         agent = agent_class(agent_config)
 
         def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, Any]:

@@ -1,4 +1,3 @@
-import copy
 import json
 import logging
 import os
@@ -1553,7 +1552,7 @@ Return only the new prompt list object.
                 return {mappers.EVALUATED_LLM_TASK_OUTPUT: ""}
 
             # FIXME: move out of here is possible:
-            new_agent_config = copy.deepcopy(agent_config)
+            new_agent_config = agent_config.copy()
             new_agent_config.chat_prompt = chat_prompt.ChatPrompt(messages=messages)
             agent = agent_class(new_agent_config)
             model_output = agent.invoke_dataset_item(dataset_item)
