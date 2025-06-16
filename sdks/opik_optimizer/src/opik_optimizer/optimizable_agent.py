@@ -32,6 +32,12 @@ class AgentConfig(BaseModel):
         else:
             return []
 
+    def get_system_prompt(self) -> str:
+        if self.chat_prompt is not None:
+            return self.chat_prompt.get_system_prompt()
+        else:
+            return ""
+
     def copy(self, **kwargs: Any) -> "AgentConfig":
         """
         Create a deep copy of this AgentConfig instance.

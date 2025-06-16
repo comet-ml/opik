@@ -97,7 +97,7 @@ class LangGraphAgent(OptimizableAgent):
     def init_agent(self, agent_config: AgentConfig) -> None:
         self.llm = ChatOpenAI(model=self.model, temperature=0, stream_usage=True)
         self.agent_config = agent_config
-        prompt_template = self.agent_config.chat_prompt.get_system_prompt()
+        prompt_template = self.agent_config.get_system_prompt()
         prompt = PromptTemplate.from_template(prompt_template)
 
         agent_tools = []
