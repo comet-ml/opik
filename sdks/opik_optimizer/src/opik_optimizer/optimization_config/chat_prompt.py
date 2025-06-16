@@ -91,3 +91,16 @@ class ChatPrompt:
             prompt=obj.get("prompt", None),
             messages=obj.get("messages", None),
         )
+
+    def get_system_prompt(self):
+        if self.system is not None:
+            return self.system
+
+        elif self.prompt is not None:
+            return self.prompt
+
+        elif self.messages is not None:
+            return self.messages[0]["content"]
+
+        else:
+            raise Exception("Unable to find a system prompt in ChatPrompt")

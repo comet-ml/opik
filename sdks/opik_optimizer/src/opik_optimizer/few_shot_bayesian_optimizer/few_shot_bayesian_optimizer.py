@@ -75,7 +75,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     def __init__(
         self,
         model: str,
-        project_name: Optional[str] = "Optimization",
         min_examples: int = 2,
         max_examples: int = 8,
         seed: int = 42,
@@ -86,7 +85,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         """
         Args:
             model: The model to used to evaluate the prompt
-            project_name: Optional project name for tracking
             min_examples: Minimum number of examples to include
             max_examples: Maximum number of examples to include
             seed: Random seed for reproducibility
@@ -94,17 +92,16 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             verbose: Controls internal logging/progress bars (0=off, 1=on).
             **model_kwargs: Additional model parameters
         """
-        super().__init__(model, project_name, **model_kwargs)
+        super().__init__(model, verbose, **model_kwargs)
         self.min_examples = min_examples
         self.max_examples = max_examples
         self.seed = seed
         self.n_threads = n_threads
-        self.verbose = verbose
-        if verbose == 0:
+        if self.verbose == 0:
             logger.setLevel(logging.WARNING)
-        elif verbose == 1:
+        elif self.verbose == 1:
             logger.setLevel(logging.INFO)
-        elif verbose == 2:
+        elif self.verbose == 2:
             logger.setLevel(logging.DEBUG)
 
         self._opik_client = opik.Opik()
@@ -203,7 +200,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
     def _run_optimization(
         self,
-        initial_prompt: chat_prompt.ChatPrompt,
+        agent_class,
+        agent_config,
+        # initial_prompt: chat_prompt.ChatPrompt,
         fewshot_prompt_template: FewShotPromptTemplate,
         dataset: Dataset,
         metric: Callable,
@@ -215,6 +214,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     ) -> optimization_result.OptimizationResult:
         reporting.start_optimization_run(verbose=self.verbose)
 
+        initial_prompt = agent_config["chat-prompt"]
         random.seed(self.seed)
         self.llm_call_counter = 0
 
@@ -274,6 +274,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             few_shot_examples = "\n\n".join(processed_demo_examples)
 
             llm_task = self._build_task_from_messages(
+                agent_class,
+                agent_config,
                 messages=fewshot_prompt_template.message_list_with_placeholder,
                 few_shot_examples=few_shot_examples,
             )
@@ -314,7 +316,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     metric=metric,
                     evaluated_task=llm_task,
                     num_threads=self.n_threads,
-                    project_name=self.project_name,
+                    project_name=agent_class.project_name,
                     experiment_config=trial_config,
                     optimization_id=optimization_id,
                     verbose=self.verbose,
@@ -440,9 +442,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             optimization_id=optimization_id,
         )
 
-    def optimize_prompt(  # type: ignore
+    def optimize_agent(  # type: ignore
         self,
-        prompt: chat_prompt.ChatPrompt,
+        agent_class,
+        agent_config,
         dataset: Dataset,
         metric: Callable,
         n_trials: int = 10,
@@ -451,7 +454,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     ) -> optimization_result.OptimizationResult:
         """
         Args:
-            prompt: The prompt to optimize
+            agent_class:
+            agent_config:
             dataset: Opik Dataset to optimize on
             metric: Metric function to evaluate on
             n_trials: Number of trials for Bayesian Optimization
@@ -461,6 +465,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         Returns:
             OptimizationResult: Result of the optimization
         """
+        prompt = agent_config["chat-prompt"]
         if not isinstance(prompt, chat_prompt.ChatPrompt):
             raise ValueError("Prompt must be a ChatPrompt object")
 
@@ -514,7 +519,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 verbose=self.verbose,
             ) as eval_report:
                 baseline_score = self.evaluate_prompt(
-                    prompt=prompt,
+                    agent_class,
+                    agent_config,
                     dataset=dataset,
                     metric=metric,
                     n_samples=n_samples,
@@ -542,7 +548,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
             # Step 3. Start the optimization process
             result = self._run_optimization(
-                initial_prompt=prompt,
+                agent_class,
+                agent_config,
+                # initial_prompt=prompt,
                 fewshot_prompt_template=fewshot_template,
                 dataset=dataset,
                 metric=metric,
@@ -566,7 +574,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
     def evaluate_prompt(
         self,
-        prompt: chat_prompt.ChatPrompt,
+        agent_class,
+        agent_config,
         dataset: opik.Dataset,
         metric: Callable,
         n_samples: Optional[int] = None,
@@ -577,7 +586,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     ) -> float:
         """
         Args:
-            prompt: The prompt to evaluate
             dataset: Opik Dataset to evaluate the prompt on
             metric: Metric function to evaluate on, should have the arguments `dataset_item` and `llm_output`
             dataset_item_ids: Optional list of dataset item IDs to evaluate
@@ -587,6 +595,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         Returns:
             float: The evaluation score
         """
+        prompt = agent_config["chat-prompt"]
         # Ensure prompt is correctly formatted
         if not all(
             isinstance(item, dict) and "role" in item and "content" in item
@@ -596,7 +605,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "A ChatPrompt must be a list of dictionaries with 'role' and 'content' keys."
             )
 
-        llm_task = self._build_task_from_messages(prompt.formatted_messages)
+        llm_task = self._build_task_from_messages(
+            agent_class, agent_config, prompt.formatted_messages
+        )
 
         experiment_config = experiment_config or {}
         experiment_config = {
@@ -625,7 +636,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             metric=metric,
             evaluated_task=llm_task,
             num_threads=self.n_threads,
-            project_name=self.project_name,
+            project_name=agent_class.project_name,
             experiment_config=experiment_config,
             optimization_id=optimization_id,
             verbose=self.verbose,
@@ -635,10 +646,20 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         return score
 
     def _build_task_from_messages(
-        self, messages: List[Dict[str, str]], few_shot_examples: Optional[str] = None
+        self,
+        agent_class,
+        agent_config,
+        messages: List[Dict[str, str]],
+        few_shot_examples: Optional[str] = None,
     ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
+        prompt_ = copy.deepcopy(messages)
+        # Copy tools, etc:
+        new_agent_config = copy.deepcopy(agent_config)
+        # Replace new chat-prompt:
+        new_agent_config["chat-prompt"] = chat_prompt.ChatPrompt(messages=prompt_)
+        agent = agent_class(agent_config)
+
         def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, Any]:
-            prompt_ = copy.deepcopy(messages)
             for key, value in dataset_item.items():
                 for item in prompt_:
                     item["content"] = item["content"].replace(
@@ -651,15 +672,14 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                         FEW_SHOT_EXAMPLE_PLACEHOLDER, few_shot_examples
                     )
 
-            response = self._call_model(
-                model=self.model,
-                messages=prompt_,
-                seed=self.seed,
-                model_kwargs=self.model_kwargs,
-            )
+            result = agent.invoke_dataset_item(dataset_item, seed=self.seed)
+            # response = self._call_model(
+            #    model=self.model,
+            #    messages=prompt_,
+            #    seed=self.seed,
+            #    model_kwargs=self.model_kwargs,
+            # )
 
-            return {
-                mappers.EVALUATED_LLM_TASK_OUTPUT: response.choices[0].message.content
-            }
+            return {mappers.EVALUATED_LLM_TASK_OUTPUT: result}
 
         return llm_task

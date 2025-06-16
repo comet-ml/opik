@@ -38,7 +38,6 @@ class BaseOptimizer:
     def __init__(
         self,
         model: str,
-        project_name: Optional[str] = None,
         verbose: int = 1,
         **model_kwargs: Any,
     ) -> None:
@@ -47,14 +46,12 @@ class BaseOptimizer:
 
         Args:
            model: LiteLLM model name
-           project_name: Opik project name
            verbose: Controls internal logging/progress bars (0=off, 1=on).
            model_kwargs: additional args for model (eg, temperature)
         """
         self.model = model
         self.reasoning_model = model
         self.model_kwargs = model_kwargs
-        self.project_name = project_name
         self.verbose = verbose
         self._history: List[OptimizationRound] = []
         self.experiment_config = None
