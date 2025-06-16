@@ -139,6 +139,7 @@ class OpikTracer:
                     project_name=self.project_name,
                     metadata=trace_metadata,
                     tags=self.tags,
+                    input=user_input,
                     type="general",
                 )
                 _, opik_span_data = (
