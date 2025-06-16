@@ -92,7 +92,7 @@ class ChatPrompt:
             messages=obj.get("messages", None),
         )
 
-    def get_system_prompt(self):
+    def get_system_prompt(self) -> str:
         if self.system is not None:
             return self.system
 
