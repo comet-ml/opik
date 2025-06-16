@@ -950,7 +950,7 @@ Return only the new prompt list object.
         ]
         return max(valid_scores, default=0.0)
 
-    def optimize_prompt(
+    def optimize_agent(
         self,
         agent_class: Type[OptimizableAgent],
         agent_config: AgentConfig,
@@ -1031,7 +1031,7 @@ Return only the new prompt list object.
             def _deap_evaluate_individual_fitness(
                 messages: List[Dict[str, str]],
             ) -> Tuple[float, float]:
-                primary_fitness_score: float = self.evaluate_prompt(
+                primary_fitness_score: float = self.evaluate_agent(
                     agent_class,
                     agent_config,
                     prompt=chat_prompt.ChatPrompt(messages=messages),  # type: ignore

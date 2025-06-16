@@ -5,7 +5,7 @@ from opik_optimizer import EvolutionaryOptimizer
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics import LevenshteinRatio
 
-from opik_optimizer import OptimizableAgent, ChatPrompt
+from opik_optimizer import OptimizableAgent, ChatPrompt, AgentConfig
 from opik_optimizer.datasets import hotpot_300
 
 
@@ -24,7 +24,7 @@ class LiteLLMAgent(OptimizableAgent):
     project_name: str = "litellm-agent-wikipedia"
     input_dataset_field: str = "question"
 
-    def init_agent(self, agent_config: Dict[str, Any]) -> None:
+    def init_agent(self, agent_config: AgentConfig) -> None:
         """Initialize the agent with the provided configuration."""
         self.agent_config = agent_config
 
@@ -60,7 +60,7 @@ optimizer = EvolutionaryOptimizer(
 # Create the optimization configuration
 
 # Optimize the prompt using the optimization config
-result = optimizer.optimize_prompt(
+result = optimizer.optimize_agent(
     agent_class=LiteLLMAgent,
     agent_config=agent_config,
     dataset=dataset,
