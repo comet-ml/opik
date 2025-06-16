@@ -49,11 +49,13 @@ public class TraceThreadListener {
                 Map<String, Instant> threadIdAndLastUpdatedAt = projectThreadIds
                         .computeIfAbsent(projectId, id -> new HashMap<>());
 
+                // Keeps the most recent lastUpdatedAt for each threadId
                 threadIdAndLastUpdatedAt.computeIfPresent(threadId,
                         (id, existingTime) -> trace.lastUpdatedAt().isAfter(existingTime)
                                 ? trace.lastUpdatedAt()
                                 : existingTime);
 
+                // If the threadId is not present, add it with the lastUpdatedAt
                 threadIdAndLastUpdatedAt.computeIfAbsent(threadId, id -> trace.lastUpdatedAt());
             }
         });
@@ -68,6 +70,8 @@ public class TraceThreadListener {
                 .doOnComplete(
                         () -> log.info("Completed processing TracesCreated event for workspace: '{}', projectIds: '{}'",
                                 event.workspaceId(), event.projectIds()))
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, event.workspaceId())
+                        .put(RequestContext.USER_NAME, event.userName()))
                 .subscribe();
     }
 
@@ -77,19 +81,14 @@ public class TraceThreadListener {
                 .flatMap(entry -> {
                     UUID projectId = entry.getKey();
                     Map<String, Instant> threadIdAndLastUpdateAts = entry.getValue();
-
                     return processProjectTraceThread(event, projectId, threadIdAndLastUpdateAts);
-                })
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, event.workspaceId())
-                        .put(RequestContext.USER_NAME, event.userName()));
+                });
     }
 
     private Mono<Void> processProjectTraceThread(TracesCreated event, UUID projectId,
             Map<String, Instant> threadIdAndLastUpdateAts) {
-
         log.info("Processing trace threads for workspace: '{}', projectId: '{}', threadIds: '[{}]'",
                 event.workspaceId(), projectId, threadIdAndLastUpdateAts.keySet());
-
         return traceThreadService.processTraceThreads(threadIdAndLastUpdateAts, projectId);
     }
 
