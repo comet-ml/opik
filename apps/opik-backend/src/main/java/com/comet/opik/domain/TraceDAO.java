@@ -1612,6 +1612,7 @@ class TraceDAOImpl implements TraceDAO {
         }
         return sortFields.contains("usage")
                 || sortFields.contains("span_count")
+                || sortFields.contains("llm_span_count")
                 || sortFields.contains("total_estimated_cost");
     }
 
