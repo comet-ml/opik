@@ -95,7 +95,7 @@ def test_aisuite__openai_provider__client_chat_completions_create__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=PROJECT_NAME,
                 spans=[],
-                model=ANY_STRING(startswith="gpt-3.5-turbo"),
+                model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                 provider="openai",
             )
         ],
@@ -156,7 +156,7 @@ def test_aisuite__nonopenai_provider__client_chat_completions_create__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=PROJECT_NAME,
                 spans=[],
-                model=ANY_STRING(startswith="claude-3-5-sonnet"),
+                model=ANY_STRING.starting_with("claude-3-5-sonnet"),
                 provider="anthropic",
             )
         ],
@@ -201,9 +201,9 @@ def test_aisuite_client_chat_completions_create__create_raises_an_error__span_an
         last_updated_at=ANY_BUT_NONE,
         project_name=PROJECT_NAME,
         error_info={
-            "exception_type": ANY_STRING(),
-            "message": ANY_STRING(),
-            "traceback": ANY_STRING(),
+            "exception_type": ANY_STRING,
+            "message": ANY_STRING,
+            "traceback": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -222,12 +222,12 @@ def test_aisuite_client_chat_completions_create__create_raises_an_error__span_an
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=PROJECT_NAME,
-                model=ANY_STRING(startswith="gpt-3.5-turbo"),
+                model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                 provider="openai",
                 error_info={
-                    "exception_type": ANY_STRING(),
-                    "message": ANY_STRING(),
-                    "traceback": ANY_STRING(),
+                    "exception_type": ANY_STRING,
+                    "message": ANY_STRING,
+                    "traceback": ANY_STRING,
                 },
                 spans=[],
             )
@@ -301,7 +301,7 @@ def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tra
                         end_time=ANY_BUT_NONE,
                         project_name=PROJECT_NAME,
                         spans=[],
-                        model=ANY_STRING(startswith="gpt-3.5-turbo"),
+                        model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                         provider="openai",
                     )
                 ],

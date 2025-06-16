@@ -63,8 +63,7 @@ jobs:
         shell: bash
         run: |
           cd ${{ github.workspace }}/deployment/docker-compose
-          export OPIK_FRONTEND_FLAVOR=guardrails
-          docker compose --profile guardrails up -d --build
+          docker compose up -d --build
 
       - name: Check Opik server availability
         shell: bash
@@ -84,7 +83,7 @@ jobs:
       - name: ADK Tests Python ${{ matrix.python_version }}
         if: contains(fromJSON('["adk", "all"]'), env.LIBS)
         env:
-          GOOGLE_CLOUD_LOCATION: us-east1
+          GOOGLE_CLOUD_LOCATION: global
           GOOGLE_CLOUD_PROJECT: opik-sdk-tests
           GOOGLE_GENAI_USE_VERTEXAI: TRUE
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

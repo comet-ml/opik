@@ -97,7 +97,7 @@ def test_broken_decorator__start_span_preprocessor__no_error(fake_backend):
 
     EXPECTED_TRACE_TREE = TraceModel(
         end_time=ANY_BUT_NONE,
-        id=ANY_STRING(),
+        id=ANY_STRING,
         input=None,
         name="f_inner",
         output={"output": 42},
@@ -107,7 +107,7 @@ def test_broken_decorator__start_span_preprocessor__no_error(fake_backend):
         spans=[
             SpanModel(
                 end_time=ANY_BUT_NONE,
-                id=ANY_STRING(),
+                id=ANY_STRING,
                 input=None,
                 name="f_inner",
                 output={"output": 42},
@@ -138,7 +138,7 @@ def test_broken_decorator__end_span_preprocessor__no_error(fake_backend):
 
     EXPECTED_TRACE_TREE = TraceModel(
         end_time=ANY_BUT_NONE,
-        id=ANY_STRING(),
+        id=ANY_STRING,
         input={"num": 42},
         name="f_inner",
         output={"output": 42},
@@ -148,7 +148,7 @@ def test_broken_decorator__end_span_preprocessor__no_error(fake_backend):
         spans=[
             SpanModel(
                 end_time=ANY_BUT_NONE,
-                id=ANY_STRING(),
+                id=ANY_STRING,
                 input={"num": 42},
                 name="f_inner",
                 output={"output": 42},

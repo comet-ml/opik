@@ -937,6 +937,30 @@ class TraceDAOImpl implements TraceDAO {
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
             )
+            <if(project_stats)>
+            ,    error_count_current AS (
+                    SELECT
+                        project_id,
+                        count(error_info) AS recent_error_count
+                    FROM traces final
+                    WHERE workspace_id = :workspace_id
+                    AND project_id IN :project_ids
+                    AND error_info != ''
+                    AND start_time BETWEEN toStartOfDay(subtractDays(now(), 7)) AND now64(9)
+                    GROUP BY workspace_id, project_id
+                ),
+                error_count_past_period AS (
+                    SELECT
+                        project_id,
+                        count(error_info) AS past_period_error_count
+                    FROM traces final
+                    WHERE workspace_id = :workspace_id
+                    AND project_id IN :project_ids
+                    AND error_info != ''
+                    AND start_time \\< toStartOfDay(subtractDays(now(), 7))
+                    GROUP BY workspace_id, project_id
+                )
+            <endif>
             <if(feedback_scores_empty_filters)>
             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
@@ -964,7 +988,8 @@ class TraceDAOImpl implements TraceDAO {
                     if(end_time IS NOT NULL AND start_time IS NOT NULL
                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                        NULL) as duration
+                        NULL) as duration,
+                    error_info
                 FROM traces final
                 LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
                 <if(feedback_scores_empty_filters)>
@@ -1017,11 +1042,21 @@ class TraceDAOImpl implements TraceDAO {
                 toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
                 sumIf(s.total_estimated_cost, s.total_estimated_cost > 0) AS total_estimated_cost_sum_,
                 toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum,
-                sum(g.failed_count) AS guardrails_failed_count
+                sum(g.failed_count) AS guardrails_failed_count,
+                <if(project_stats)>
+                any(ec.recent_error_count) AS recent_error_count,
+                any(ecl.past_period_error_count) AS past_period_error_count
+                <else>
+                countIf(t.error_info, t.error_info != '') AS error_count
+                <endif>
             FROM trace_final t
             LEFT JOIN spans_agg AS s ON t.id = s.trace_id
             LEFT JOIN feedback_scores_agg as f ON t.id = f.entity_id
             LEFT JOIN guardrails_agg as g ON t.id = g.entity_id
+            <if(project_stats)>
+            LEFT JOIN error_count_current ec ON t.project_id = ec.project_id
+            LEFT JOIN error_count_past_period ecl ON t.project_id = ecl.project_id
+            <endif>
             GROUP BY t.workspace_id, t.project_id
             ;
             """;
@@ -1897,6 +1932,8 @@ class TraceDAOImpl implements TraceDAO {
         return asyncTemplate
                 .nonTransaction(connection -> {
                     ST template = new ST(SELECT_TRACES_STATS);
+
+                    template.add("project_stats", true);
 
                     Statement statement = connection.createStatement(template.render())
                             .bind("project_ids", projectIds)

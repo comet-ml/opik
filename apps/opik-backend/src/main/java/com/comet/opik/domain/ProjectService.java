@@ -267,6 +267,7 @@ class ProjectServiceImpl implements ProjectService {
                 .usage(StatsMapper.getStatsUsage(projectStats))
                 .traceCount(StatsMapper.getStatsTraceCount(projectStats))
                 .guardrailsFailedCount(StatsMapper.getStatsGuardrailsFailedCount(projectStats))
+                .errorCount(StatsMapper.getStatsErrorCount(projectStats))
                 .build();
     }
 
@@ -530,6 +531,7 @@ class ProjectServiceImpl implements ProjectService {
                                 .traceCount(StatsMapper.getStatsTraceCount(projectStats.get(project.id())))
                                 .guardrailsFailedCount(
                                         StatsMapper.getStatsGuardrailsFailedCount(projectStats.get(project.id())))
+                                .errorCount(StatsMapper.getStatsErrorCount(projectStats.get(project.id())))
                                 .build();
                     })
                     .orElseThrow(this::createNotFoundError);
