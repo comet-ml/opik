@@ -264,7 +264,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "metric": getattr(metric, "__name__", str(metric)),
                 "dataset": dataset.name,
                 "configuration": {
-                    "prompt": agent_config.chat_prompt.formatted_messages,
+                    "prompt": agent_config.get_formatted_messages(),
                     "n_samples": subset_size,
                     "use_full_dataset": use_full_dataset,
                 },
@@ -280,7 +280,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     "role": item["role"],
                     "content": item["content"].format(**dataset_item),
                 }
-                for item in agent_config.chat_prompt.formatted_messages
+                for item in agent_config.get_formatted_messages()
             ]
             # Step 1: create the agent
             new_agent_config = agent_config.copy()
@@ -461,7 +461,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "metric": getattr(metric, "__name__", str(metric)),
                 "dataset": dataset.name,
                 "configuration": {
-                    "prompt": agent_config.chat_prompt.formatted_messages,
+                    "prompt": agent_config.get_formatted_messages(),
                     "rounds": self.rounds,
                     "num_prompts_per_round": self.num_prompts_per_round,
                 },
@@ -573,14 +573,18 @@ class MetaPromptOptimizer(BaseOptimizer):
         reporting.display_result(
             initial_score,
             best_score,
-            best_prompt.formatted_messages,
+            best_prompt.formatted_messages if best_prompt is not None else [],
             verbose=self.verbose,
         )
 
         return self._create_result(
             metric,
-            initial_prompt=initial_prompt.formatted_messages,
-            best_prompt=best_prompt.formatted_messages,
+            initial_prompt=initial_prompt.formatted_messages
+            if initial_prompt is not None
+            else [],
+            best_prompt=best_prompt.formatted_messages
+            if best_prompt is not None
+            else [],
             best_score=best_score,
             initial_score=initial_score,
             rounds=rounds,

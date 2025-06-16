@@ -84,7 +84,7 @@ class ADKAgent(OptimizableAgent):
 
     def invoke_dataset_item(
         self, query_json: Dict[str, Any], seed: Optional[int] = None
-    ) -> Dict[str, Any]:
+    ) -> str:
         query = SearchInput(query=query_json[self.input_dataset_field])
         query_json = query.model_dump_json()
         session_service = InMemorySessionService()
@@ -133,7 +133,7 @@ class ADKAgent(OptimizableAgent):
 
             return stored_output
 
-        return asyncio.run(_invoke())
+        return str(asyncio.run(_invoke()))
 
 
 prompt = """

@@ -26,6 +26,12 @@ class AgentConfig(BaseModel):
     class Config:
         arbitrary_types_allowed = True  # Allow ChatPrompt type
 
+    def get_formatted_messages(self) -> List[Dict[str, str]]:
+        if self.chat_prompt is not None:
+            return self.chat_prompt.formatted_messages
+        else:
+            return []
+
     def copy(self, **kwargs: Any) -> "AgentConfig":
         """
         Create a deep copy of this AgentConfig instance.
@@ -159,11 +165,11 @@ class OptimizableAgent:
             Dict[str, Any]: The agent's response
         """
         messages = []
-        if self.agent_config.chat_prompt.system:
+        if self.agent_config.chat_prompt and self.agent_config.chat_prompt.system:
             messages.append(
                 {"role": "system", "content": self.agent_config.chat_prompt.system}
             )
-        if self.agent_config.chat_prompt.messages:
+        if self.agent_config.chat_prompt and self.agent_config.chat_prompt.messages:
             messages.extend(self.agent_config.chat_prompt.messages)
 
         if self.input_dataset_field in dataset_item:
