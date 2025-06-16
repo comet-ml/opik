@@ -36,57 +36,7 @@ The playground supports the following LLM providers:
   [GitHub](https://github.com/comet-ml/opik/issues).
 </Tip>
 
-### Configuring OpenAI and Anthropic
-
-To use OpenAI or Anthropic models, you will need to add your API key to Opik. You can do this by clicking on the `Configuration` tab in the sidebar
-and navigating to the `AI providers` tab. From there, you can select the provider you want to use and enter your API key.
-
-### Configuring Ollama
-
-If you are using Ollama, you will need to ensure that Ollama's security configuration is set up correctly to avoid CORS issues. If you are running Ollama
-in production, we recommend reviewing the [Ollama documentation](https://github.com/ollama/ollama/blob/main/docs/faq.md#faq) for advice on best practices.
-
-If you are simply looking at using Ollama in the Oplik playground, we have released a utility to help you access Ollama from your browser. The Python
-SDK includes a simple reverse proxy that you can run on your local machine to proxy requests to Ollama:
-
-<Steps>
-  <Step title="Install the Python SDK">
-```bash
-# Install the latest version of the SDK
-pip install opik -U
-
-````
-</Step>
-
-  <Step title="Run the reverse proxy">
-```bash
-# Run the reverse proxy
-opik proxy --ollama
-````
-
-Once the server is running, you should see the output:
-
-<Frame>
-  <img src="/img/prompt_engineering/ollama_proxy.png" />
-</Frame>
-
-</Step>
-<Step>
-You can then configure the AI providers using the `URL` and `models` parameters returned by the proxy server in the console:
-
-<Frame>
-  <img src="/img/prompt_engineering/ollama_config.png" />
-</Frame>
-
-_Don't forget to update the model list with the models supported by your proxy server!_
-
-<Note>
-  You will need to keep the proxy server running for the playground to work. If it is not running, you will see the
-  error: `Unexpected error`.
-</Note>
-
-</Step>
-</Steps>
+Go to [configuring AI Providers](/configuration/ai_providers) to learn how to configure the prompt playground.
 
 ## Running experiments in the playground
 
