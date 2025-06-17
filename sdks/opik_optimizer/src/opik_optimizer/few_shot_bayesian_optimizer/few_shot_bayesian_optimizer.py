@@ -263,6 +263,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             **experiment_config,
             **{
                 "optimizer": self.__class__.__name__,
+                "agent_class": agent_class.__name__,
                 "metric": metric.__name__,
                 "dataset": dataset.name,
                 "configuration": {},
@@ -649,6 +650,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             **experiment_config,
             **{
                 "optimizer": self.__class__.__name__,
+                "agent_class": agent_class.__name__,
                 "metric": metric.__name__,
                 "dataset": dataset.name,
                 "configuration": {

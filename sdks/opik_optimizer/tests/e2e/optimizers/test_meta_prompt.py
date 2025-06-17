@@ -5,6 +5,8 @@ from typing import Any, Dict
 from opik_optimizer import (
     MetaPromptOptimizer,
     datasets,
+    AgentConfig,
+    OptimizableAgent,
 )
 from opik_optimizer.optimization_config import chat_prompt
 
@@ -19,8 +21,10 @@ def test_metaprompt_optimizer() -> None:
         return metric.score(reference=dataset_item["label"], output=llm_output)
 
     prompt = chat_prompt.ChatPrompt(
-        system="Provide an answer to the question.", prompt="{text}"
+        system="Provide an answer to the question. The question is {text}"
     )
+
+    agent_config = AgentConfig(chat_prompt=prompt)
 
     # Initialize optimizer with reduced parameters for faster testing
     optimizer = MetaPromptOptimizer(
@@ -33,9 +37,19 @@ def test_metaprompt_optimizer() -> None:
         seed=42,
     )
 
+    class LiteLLMAgent(OptimizableAgent):
+        model = "openai/gpt-4o"
+        project_name = "test_meta_prompt"
+        input_dataset_field = "text"
+
     # Run optimization with reduced sample size
-    results = optimizer.optimize_prompt(
-        dataset=dataset, metric=levenshtein_ratio, prompt=prompt, n_samples=3
+    results = optimizer.optimize_agent(
+        agent_class=LiteLLMAgent,
+        agent_config=agent_config,
+        dataset=dataset,
+        metric=levenshtein_ratio,
+        prompt=prompt,
+        n_samples=3,
     )
 
     # Enhanced OptimizationResult validation

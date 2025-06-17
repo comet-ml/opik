@@ -261,6 +261,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             **experiment_config,
             **{
                 "optimizer": self.__class__.__name__,
+                "agent_class": agent_class.__name__,
                 "metric": getattr(metric, "__name__", str(metric)),
                 "dataset": dataset.name,
                 "configuration": {
@@ -458,6 +459,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             **experiment_config,
             **{
                 "optimizer": self.__class__.__name__,
+                "agent_class": agent_class.__name__,
                 "metric": getattr(metric, "__name__", str(metric)),
                 "dataset": dataset.name,
                 "configuration": {

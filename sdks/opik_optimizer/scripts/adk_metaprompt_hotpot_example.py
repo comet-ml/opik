@@ -83,7 +83,7 @@ class ADKAgent(OptimizableAgent):
 
     def invoke_dataset_item(
         self, query_json: Dict[str, Any], seed: Optional[int] = None
-    ) -> Dict[str, Any]:
+    ) -> str:
         # Extract the question and wrap it in the expected format
         query = SearchInput(query=query_json[self.input_dataset_field])
         query_json = query.model_dump_json()
@@ -132,7 +132,7 @@ class ADKAgent(OptimizableAgent):
 
             return stored_output
 
-        return asyncio.run(_invoke())
+        return str(asyncio.run(_invoke()))
 
 
 prompt = """

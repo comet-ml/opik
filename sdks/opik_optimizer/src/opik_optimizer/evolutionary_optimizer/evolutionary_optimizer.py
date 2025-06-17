@@ -1524,6 +1524,7 @@ Return only the new prompt list object.
         experiment_config = {
             **experiment_config,
             "optimizer": self.__class__.__name__,
+            "agent_class": agent_class.__name__,
             "metric": metric.__name__,
             "dataset": dataset.name,
             "configuration": {
