@@ -45,6 +45,38 @@ def _calculate_latency_ms(start_time):
     return (time.time() - start_time) * 1000  # Convert to milliseconds
 
 
+def _read_result_with_prefix(process, worker_id):
+    """
+    Read lines from the process stdout until a line with the RESULT= prefix is found.
+    Parse and return the JSON result from that line.
+    """
+    prefix = "RESULT="
+
+    while True:
+        line = process.stdout.readline()
+
+        # If we got an empty response, the worker has died
+        if not line:
+            logger.error(f"Worker {worker_id} died during execution")
+            raise Exception("Worker process died during execution")
+
+        # Check if the line starts with our result prefix
+        if line.startswith(prefix):
+            # Extract the JSON part after the prefix
+            json_str = line[len(prefix):].strip()
+
+            # Parse the response
+            try:
+                return json.loads(json_str)
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to decode response from worker {worker_id}: {e}")
+                logger.error(f"Response was: {json_str}")
+                raise Exception("Failed to decode worker response")
+        else:
+            # This is likely a print statement from user code, log it at debug level
+            logger.debug(f"Worker {worker_id} output: {line.strip()}")
+
+
 class ProcessExecutor(CodeExecutorBase):
     def __init__(self):
         super().__init__()
@@ -316,33 +348,19 @@ class ProcessExecutor(CodeExecutorBase):
 
             # Read the response with timeout using a thread
             with concurrent.futures.ThreadPoolExecutor() as exec_pool:
-                future = exec_pool.submit(process.stdout.readline)
+                future = exec_pool.submit(_read_result_with_prefix, process, worker_id)
                 try:
-                    response_line = future.result(timeout=self.exec_timeout)
-                    # If we got an empty response, the worker has died
-                    if not response_line:
-                        logger.error(f"Worker {worker_id} died during execution")
-                        self.terminate_worker(worker)
-                        return {"code": 500, "error": "Worker process died during execution"}
+                    result = future.result(timeout=self.exec_timeout)
+                    
+                    # Calculate and record latency
+                    latency = _calculate_latency_ms(start_time)
+                    process_execution_histogram.record(latency, attributes={"method": "run_scoring"})
+                    logger.debug(f"Worker {worker_id} executed code in {latency:.3f} milliseconds")
 
-                    # Parse the response
-                    try:
-                        result = json.loads(response_line)
+                    # Return the worker to the pool for reuse
+                    self.process_pool.put(worker)
 
-                        # Calculate and record latency
-                        latency = _calculate_latency_ms(start_time)
-                        process_execution_histogram.record(latency, attributes={"method": "run_scoring"})
-                        logger.debug(f"Worker {worker_id} executed code in {latency:.3f} milliseconds")
-
-                        # Return the worker to the pool for reuse
-                        self.process_pool.put(worker)
-
-                        return result
-                    except json.JSONDecodeError as e:
-                        logger.error(f"Failed to decode response from worker {worker_id}: {e}")
-                        logger.error(f"Response was: {response_line}")
-                        self.terminate_worker(worker)
-                        return {"code": 500, "error": "Failed to decode worker response"}
+                    return result
                 except concurrent.futures.TimeoutError:
                     logger.error(f"Execution timed out in worker {worker_id}")
                     self.terminate_worker(worker)

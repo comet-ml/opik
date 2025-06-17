@@ -81,13 +81,13 @@ def main():
                 # Execute the code
                 result = run_user_code(code, input_data)
                 
-                # Return the result
-                sys.stdout.write(json.dumps(result) + "\n")
+                # Return the result with a prefix to distinguish it from user print statements
+                sys.stdout.write("RESULT=" + json.dumps(result) + "\n")
                 sys.stdout.flush()
             except Exception as e:
-                # Report any errors
+                # Report any errors with the same prefix
                 error_msg = {"code": 500, "error": f"Worker error: {str(e)}", "traceback": traceback.format_exc()}
-                sys.stdout.write(json.dumps(error_msg) + "\n")
+                sys.stdout.write("RESULT=" + json.dumps(error_msg) + "\n")
                 sys.stdout.flush()
         
         # Exit cleanly
