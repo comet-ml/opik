@@ -18,24 +18,16 @@ from ...testlib import (
     assert_dict_has_keys,
     assert_equal,
 )
-import uuid
 
 from opik.integrations.adk import helpers as opik_adk_helpers
 
-
-APP_NAME = "ADK_app"
-USER_ID = "ADK_test_user"
-SESSION_ID = "ADK_" + str(uuid.uuid4())
-MODEL_NAME = "gemini-2.0-flash"
-
-EXPECTED_USAGE_KEYS_GOOGLE = [
-    "completion_tokens",
-    "original_usage.candidates_token_count",
-    "original_usage.prompt_token_count",
-    "original_usage.total_token_count",
-    "prompt_tokens",
-    "total_tokens",
-]
+from .constants import (
+    APP_NAME,
+    USER_ID,
+    SESSION_ID,
+    MODEL_NAME,
+    EXPECTED_USAGE_KEYS_GOOGLE,
+)
 
 
 def _build_runner(root_agent: adk_agents.Agent) -> adk_runners.Runner:
