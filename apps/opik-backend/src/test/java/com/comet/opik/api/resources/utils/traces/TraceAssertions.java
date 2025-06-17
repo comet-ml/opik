@@ -194,4 +194,22 @@ public class TraceAssertions {
         assertThat(actualTraceThreadModels.stream().map(TraceThreadModel::id))
                 .allMatch(Objects::nonNull);
     }
+
+    public static void assertOpenThreads(List<TraceThreadModel> actualTraceThreadModels,
+            List<TraceThreadModel> expectedTraceThreadModels, Instant expectedCreatedAt,
+            Instant expectedLastUpdatedAt) {
+
+        assertThat(actualTraceThreadModels).hasSize(expectedTraceThreadModels.size());
+
+        assertThat(actualTraceThreadModels)
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id", "createdAt", "lastUpdatedAt")
+                .containsExactlyInAnyOrderElementsOf(expectedTraceThreadModels);
+
+        assertThat(actualTraceThreadModels.stream().map(TraceThreadModel::createdAt))
+                .allMatch(createdAt -> createdAt.isAfter(expectedCreatedAt));
+        assertThat(actualTraceThreadModels.stream().map(TraceThreadModel::lastUpdatedAt))
+                .allMatch(lastUpdatedAt -> lastUpdatedAt.isAfter(expectedLastUpdatedAt));
+        assertThat(actualTraceThreadModels.stream().map(TraceThreadModel::id))
+                .allMatch(Objects::nonNull);
+    }
 }

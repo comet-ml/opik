@@ -156,9 +156,9 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZE
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_THREADS;
 import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
-import static com.comet.opik.api.validate.InRangeValidator.MAX_ANALYTICS_DB;
-import static com.comet.opik.api.validate.InRangeValidator.MAX_ANALYTICS_DB_PRECISION_9;
-import static com.comet.opik.api.validate.InRangeValidator.MIN_ANALYTICS_DB;
+import static com.comet.opik.api.validation.InRangeValidator.MAX_ANALYTICS_DB;
+import static com.comet.opik.api.validation.InRangeValidator.MAX_ANALYTICS_DB_PRECISION_9;
+import static com.comet.opik.api.validation.InRangeValidator.MIN_ANALYTICS_DB;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -8431,18 +8431,99 @@ class TracesResourceTest {
                     .max(Comparator.naturalOrder())
                     .orElseThrow();
         }
+    }
 
-        private TraceThreadModel createTraceThreadModel(String threadId, UUID projectId, Instant expectedCreatedAt,
-                Instant expectedLastUpdatedAt) {
-            return TraceThreadModel.builder()
+    private TraceThreadModel createTraceThreadModel(String threadId, UUID projectId, Instant expectedCreatedAt,
+            Instant expectedLastUpdatedAt) {
+        return TraceThreadModel.builder()
+                .threadId(threadId)
+                .projectId(projectId)
+                .createdBy(USER)
+                .createdAt(expectedCreatedAt)
+                .lastUpdatedBy(USER)
+                .lastUpdatedAt(expectedLastUpdatedAt)
+                .status(TraceThreadModel.Status.ACTIVE)
+                .build();
+    }
+
+    @Nested
+    @DisplayName("Trace Thread Manual Open/Close")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class TraceThreadManualOpenClose {
+
+        @Test
+        @DisplayName("when trace thread is manually closed then opened, then reopen the thread")
+        void manualCloseAndReopeningTraceThread(TraceThreadService traceThreadService) {
+            // Given: Ingestion of a trace with a thread
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            String threadId = randomUUID().toString();
+
+            // Create a trace with the thread
+            Trace trace = createTrace().toBuilder()
                     .threadId(threadId)
                     .projectId(projectId)
-                    .createdBy(USER)
-                    .createdAt(expectedCreatedAt)
-                    .lastUpdatedBy(USER)
-                    .lastUpdatedAt(expectedLastUpdatedAt)
-                    .status(TraceThreadModel.Status.ACTIVE)
+                    .projectName(projectName)
+                    .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
                     .build();
+
+            Instant expectedCreatedAt = Instant.now();
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            TraceThreadModel expectedThread = createTraceThreadModel(threadId, projectId, expectedCreatedAt,
+                    trace.lastUpdatedAt());
+
+            // Assert that the thread is created and open
+            List<TraceThreadModel> actualThreads = Awaitility.await()
+                    .until(() -> getActualThreads(traceThreadService, projectId, workspaceId),
+                            threads -> !threads.isEmpty());
+
+            TraceAssertions.assertOpenThreads(actualThreads, List.of(expectedThread), expectedCreatedAt);
+
+            // When: Manually close the thread
+            Instant expectedLastUpdated = Instant.now();
+            traceResourceClient.closeTraceThread(threadId, projectId, null, apiKey, workspaceName);
+
+            expectedThread = expectedThread.toBuilder()
+                    .status(TraceThreadModel.Status.INACTIVE)
+                    .lastUpdatedAt(expectedLastUpdated)
+                    .build();
+
+            // Then: Assert that the thread is closed
+            actualThreads = getActualThreads(traceThreadService, projectId, workspaceId);
+
+            TraceAssertions.assertClosedThreads(actualThreads, List.of(expectedThread), expectedCreatedAt,
+                    expectedLastUpdated);
+
+            // When: Manually reopen the thread
+            expectedLastUpdated = Instant.now();
+            traceResourceClient.openTraceThread(threadId, null, projectName, apiKey, workspaceName);
+
+            expectedThread = expectedThread.toBuilder()
+                    .status(TraceThreadModel.Status.ACTIVE)
+                    .lastUpdatedAt(Instant.now())
+                    .build();
+
+            // Then: Assert that the thread is reopened
+            actualThreads = getActualThreads(traceThreadService, projectId, workspaceId);
+            TraceAssertions.assertOpenThreads(actualThreads, List.of(expectedThread), expectedCreatedAt,
+                    expectedLastUpdated);
+        }
+
+        private List<TraceThreadModel> getActualThreads(TraceThreadService traceThreadService, UUID projectId,
+                String workspaceId) {
+            return traceThreadService.getThreadsByProject(1, 10,
+                    TraceThreadCriteria.builder().projectId(projectId).build())
+                    .contextWrite(context -> context.put(RequestContext.USER_NAME, USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block();
         }
     }
 

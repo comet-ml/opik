@@ -7,6 +7,7 @@ import com.comet.opik.infrastructure.lock.LockService;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
+import jakarta.validation.constraints.NotBlank;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,7 +39,11 @@ public interface TraceThreadService {
 
     Mono<Void> processProjectWithTraceThreadsPendingClosure(UUID projectId, Instant lastUpdatedUntil);
 
-    Mono<Boolean> addToPendingQueue(@NonNull UUID projectId);
+    Mono<Boolean> addToPendingQueue(UUID projectId);
+
+    Mono<Void> openThread(UUID projectId, String threadId);
+
+    Mono<Void> closeThread(UUID projectId, String threadId);
 }
 
 @Slf4j
@@ -148,6 +153,22 @@ class TraceThreadServiceImpl implements TraceThreadService {
     public Mono<Boolean> addToPendingQueue(@NonNull UUID projectId) {
         var lock = new LockService.Lock(TraceThreadBufferConfig.BUFFER_SET_NAME, projectId.toString());
         return lockService.lockUsingToken(lock, LOCK_DURATION);
+    }
+
+    @Override
+    public Mono<Void> openThread(@NonNull UUID projectId, @NonNull String threadId) {
+        return lockService.executeWithLockCustomExpire(
+                new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
+                Mono.defer(() -> traceThreadDAO.openThread(projectId, threadId)).then(),
+                LOCK_DURATION);
+    }
+
+    @Override
+    public Mono<Void> closeThread(@NonNull UUID projectId, @NotBlank String threadId) {
+        return lockService.executeWithLockCustomExpire(
+                new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
+                Mono.defer(() -> traceThreadDAO.closeThread(projectId, threadId)).then(),
+                LOCK_DURATION);
     }
 
 }

@@ -1,6 +1,6 @@
 package com.comet.opik.api;
 
-import com.comet.opik.api.validate.DatasetItemBatchValidation;
+import com.comet.opik.api.validation.DatasetItemBatchValidation;
 import com.comet.opik.infrastructure.ratelimit.RateEventContainer;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
