@@ -16,7 +16,8 @@ _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 class AgentConfig(BaseModel):
     """Configuration model for the agent"""
 
-    chat_prompt: Optional[ChatPrompt] = Field(
+    # Required:
+    chat_prompt: ChatPrompt = Field(
         default=None, description="The chat prompt configuration for the agent"
     )
     tools: Optional[Dict[str, Any]] = Field(
@@ -26,17 +27,19 @@ class AgentConfig(BaseModel):
     class Config:
         arbitrary_types_allowed = True  # Allow ChatPrompt type
 
-    def get_formatted_messages(self) -> List[Dict[str, str]]:
-        if self.chat_prompt is not None:
-            return self.chat_prompt.formatted_messages
-        else:
-            return []
+    def get_messages(
+        self, dataset_item: Optional[Dict[str, str]] = None
+    ) -> List[Dict[str, str]]:
+        return self.chat_prompt.get_messages(dataset_item)
 
     def get_system_prompt(self) -> str:
-        if self.chat_prompt is not None:
-            return self.chat_prompt.get_system_prompt()
+        return self.chat_prompt.get_system_prompt()
+
+    def get_tools(self) -> Dict[str, Any]:
+        if self.tools:
+            return self.tools
         else:
-            return ""
+            return {}
 
     def copy(self, **kwargs: Any) -> "AgentConfig":
         """
@@ -143,18 +146,6 @@ class OptimizableAgent:
         result = response.choices[0].message.content
         return result
 
-    def invoke(self, query: str) -> str:
-        """
-        Invoke the agent with a query.
-
-        Args:
-            query (str): The query to send to the agent
-
-        Returns:
-            str: The agent's response
-        """
-        return self.invoke_dataset_item({"question": query})
-
     def invoke_dataset_item(
         self,
         dataset_item: Dict[str, str],
@@ -170,23 +161,7 @@ class OptimizableAgent:
         Returns:
             Dict[str, Any]: The agent's response
         """
-        messages = []
-        if self.agent_config.chat_prompt and self.agent_config.chat_prompt.system:
-            messages.append(
-                {"role": "system", "content": self.agent_config.chat_prompt.system}
-            )
-        if self.agent_config.chat_prompt and self.agent_config.chat_prompt.messages:
-            messages.extend(self.agent_config.chat_prompt.messages)
-
-        if self.input_dataset_field in dataset_item:
-            messages.append(
-                {"role": "user", "content": str(dataset_item[self.input_dataset_field])}
-            )
-        else:
-            raise ValueError(
-                f"Input field '{self.input_dataset_field}' not found in dataset item"
-            )
-
+        all_messages = self.agent_config.chat_prompt.get_messages(dataset_item)
         # Replace with agent invocation:
-        result = self.llm_invoke(messages=messages, seed=seed)
+        result = self.llm_invoke(messages=all_messages, seed=seed)
         return result

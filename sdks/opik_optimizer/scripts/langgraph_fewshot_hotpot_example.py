@@ -36,9 +36,9 @@ def search_wikipedia(query: str) -> list[str]:
     about a topic.
     """
     results = dspy.ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")(
-        query, k=1
+        query, k=3
     )
-    return results[0]["text"]
+    return [item["text"] for item in results]
 
 
 def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
@@ -68,31 +68,9 @@ class OverallState(InputState, OutputState):
     pass
 
 
-prompt_template = """Answer the following questions as best you can. You have access to the following tools:
-
-{tools}
-
-Use the following format:
-
-Question: "the input question you must answer"
-Thought: "you should always think about what to do"
-Action: "the action to take" --- should be one of [{tool_names}]
-Action Input: "the input to the action"
-Observation: "the result of the action"
-... (this Thought/Action/Action Input/Observation can repeat N times)
-Thought: "I now know the final answer"
-Final Answer: "the final answer to the original input question"
-
-Begin!
-
-Question: {input}
-Thought: {agent_scratchpad}"""
-
-
 class LangGraphAgent(OptimizableAgent):
     model = "gpt-4o"
     project_name = "langgraph-agent-wikipedia"
-    input_dataset_field = "question"
 
     def init_agent(self, agent_config: AgentConfig) -> None:
         self.llm = ChatOpenAI(model=self.model, temperature=0, stream_usage=True)
@@ -140,17 +118,41 @@ class LangGraphAgent(OptimizableAgent):
             graph=self.graph.get_graph(xray=True),
         )
 
-    def invoke_dataset_item(self, item: Dict[str, Any], seed: int | None = None) -> str:
-        # "input" and "output" are Agent State fields
-        messages = self.agent_config.chat_prompt.messages or []
-        state = {"input": item[self.input_dataset_field]}
-        messages.append(state)
-        result = self.graph.invoke(state)
-        return result["output"]
+    def invoke_dataset_item(
+        self, dataset_item: Dict[str, Any], seed: int | None = None
+    ) -> str:
+        # First, get the agent messages, replacing parts with dataset item
+        all_messages = self.agent_config.chat_prompt.get_messages(dataset_item)
+        # Skip first message, as prompt is already part of agent:
+        messages = all_messages[1:]
+        result = None
+        for message in messages:
+            result = self.graph.invoke({"input": message["content"]})
+        return result["output"] if result else "No result from agent"
 
+
+prompt_template = """Answer the following questions as best you can. You have access to the following tools:
+
+{tools}
+
+Use the following format:
+
+Question: "the input question you must answer"
+Thought: "you should always think about what to do"
+Action: "the action to take" --- should be one of [{tool_names}]
+Action Input: "the input to the action"
+Observation: "the result of the action"
+... (this Thought/Action/Action Input/Observation can repeat N times)
+Thought: "I now know the final answer"
+Final Answer: "the final answer to the original input question"
+
+Begin!
+
+Question: {input}
+Thought: {agent_scratchpad}"""
 
 agent_config = AgentConfig(
-    chat_prompt=ChatPrompt(system=prompt_template),
+    chat_prompt=ChatPrompt(system=prompt_template, prompt="{question}"),
     tools={
         "Wikipedia Search": {
             "type": "tool",

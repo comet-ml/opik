@@ -12,7 +12,6 @@ from opik.evaluation.metrics import LevenshteinRatio
 from opik.integrations.adk import OpikTracer
 from opik.evaluation.metrics.score_result import ScoreResult
 
-import asyncio
 
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
@@ -45,9 +44,9 @@ def search_wikipedia(query: str) -> list[str]:
     about a topic.
     """
     results = dspy.ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")(
-        query, k=1
+        query, k=3
     )
-    return results[0]["text"]
+    return [item["text"] for item in results]
 
 
 # Input schema used by both agents
@@ -58,9 +57,9 @@ class SearchInput(BaseModel):
 class ADKAgent(OptimizableAgent):
     model = "openai/gpt-4.1"
     project_name = "adk-agent-wikipedia"
-    input_dataset_field = "question"
 
-    def __init__(self, agent_config: AgentConfig) -> None:
+    def init_agent(self, agent_config: AgentConfig) -> None:
+        self.agent_config = agent_config
         prompt: ChatPrompt = agent_config.chat_prompt.get_system_prompt()
 
         self.opik_tracer = OpikTracer(self.project_name)
@@ -83,10 +82,24 @@ class ADKAgent(OptimizableAgent):
         )
 
     def invoke_dataset_item(
-        self, query_json: Dict[str, Any], seed: Optional[int] = None
-    ) -> Dict[str, Any]:
-        query = SearchInput(query=query_json[self.input_dataset_field])
+        self, dataset_item: Dict[str, Any], seed: Optional[int] = None
+    ) -> str:
+        all_messages = self.agent_config.chat_prompt.get_messages(dataset_item)
+        # Skip the system prompt, as it is part of agent:
+        messages, user_prompt = all_messages[1:-1], all_messages[-1]["content"]
+
+        query = SearchInput(query=user_prompt)
         query_json = query.model_dump_json()
+        message_history = []
+        for message in messages:
+            all_messages.append(
+                types.Content(
+                    role=message["role"], parts=[types.Part(text=message["content"])]
+                )
+            )
+        user_content = types.Content(role="user", parts=[types.Part(text=query_json)])
+        message_history.append(user_content)
+
         session_service = InMemorySessionService()
         # Create separate sessions for clarity, though not strictly necessary if context is managed
         session_service.create_session(
@@ -97,46 +110,23 @@ class ADKAgent(OptimizableAgent):
             agent=self.agent, app_name=APP_NAME, session_service=session_service
         )
 
-        async def _invoke() -> Dict[str, Any]:
-            """Invoke the agent and return the stored output."""
-            user_content = types.Content(
-                role="user", parts=[types.Part(text=query_json)]
-            )
+        final_response_content = "No final response received."
 
-            final_response_content = "No final response received."
-            try:
-                async for event in runner.run_async(
-                    user_id=USER_ID,
-                    session_id=SESSION_ID_TOOL_AGENT,
-                    new_message=user_content,
-                ):
-                    # print(f"Event: {event.type}, Author: {event.author}") # Uncomment for detailed logging
-                    if (
-                        event.is_final_response()
-                        and event.content
-                        and event.content.parts
-                    ):
-                        # For output_schema, the content is the JSON string itself
-                        final_response_content = event.content.parts[0].text
-            except Exception:
-                final_response_content = "Error"
-
-            if final_response_content == "Error":
-                print("Error in runner")
-
-            current_session = session_service.get_session(
-                app_name=APP_NAME,
+        for message in message_history:
+            for event in runner.run(
                 user_id=USER_ID,
                 session_id=SESSION_ID_TOOL_AGENT,
-            )
-            stored_output = current_session.state.get(self.agent.output_key)
+                new_message=user_content,
+            ):
+                # print(f"Event: {event.type}, Author: {event.author}") # Uncomment for detailed logging
+                if event.is_final_response() and event.content and event.content.parts:
+                    # For output_schema, the content is the JSON string itself
+                    final_response_content = event.content.parts[0].text
 
-            return stored_output
-
-        return asyncio.run(_invoke())
+        return final_response_content
 
 
-prompt = """
+system_prompt = """
 You are a helpful assistant. Use the `search_wikipedia` tool to find factual information when appropriate.
 The user will provide a question string like "Who is Barack Obama?".
 1. Extract the item to look up
@@ -144,7 +134,9 @@ The user will provide a question string like "Who is Barack Obama?".
 3. Respond clearly to the user, stating the answer found by the tool.
 """
 
-agent_config = AgentConfig(chat_prompt=ChatPrompt(system=prompt))
+agent_config = AgentConfig(
+    chat_prompt=ChatPrompt(system=system_prompt, prompt="{question}")
+)
 
 # Test it:
 agent = ADKAgent(agent_config)
