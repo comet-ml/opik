@@ -40,6 +40,11 @@ process_pool_size_gauge = meter.create_gauge(
 )
 
 
+def _calculate_latency_ms(start_time):
+    """Calculate elapsed time in milliseconds."""
+    return (time.time() - start_time) * 1000  # Convert to milliseconds
+
+
 class ProcessExecutor(CodeExecutorBase):
     def __init__(self):
         super().__init__()
@@ -126,10 +131,6 @@ class ProcessExecutor(CodeExecutorBase):
         logger.debug(f"Current process pool size: {pool_size}")
         return pool_size
 
-    def _calculate_latency_ms(self, start_time):
-        """Calculate elapsed time in milliseconds."""
-        return (time.time() - start_time) * 1000  # Convert to milliseconds
-
     def create_worker_process(self):
         """Create a new worker process that can be used for execution."""
         # Record the start time for detailed process creation metrics
@@ -158,22 +159,22 @@ class ProcessExecutor(CodeExecutorBase):
                 ready_line = ""
                 # Set up a thread to read stderr in background to catch initialization errors
                 stderr_lines = []
+
                 def read_stderr():
                     while True:
                         line = process.stderr.readline()
                         if not line:
                             break
                         stderr_lines.append(line.strip())
-                
+
                 stderr_thread = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-                stderr_future = stderr_thread.submit(read_stderr)
-                
+                stderr_thread.submit(read_stderr)
+
                 # Wait for READY with timeout
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ready_pool:
                     ready_future = ready_pool.submit(process.stdout.readline)
                     try:
-                        ready_line = ready_future.result(timeout=5)  # 5 second timeout for startup
-                        ready_line = ready_line.strip()
+                        ready_line = ready_future.result(timeout=self.exec_timeout).strip()
                     except concurrent.futures.TimeoutError:
                         # If we time out waiting for READY, check if the process is still alive
                         if process.poll() is not None:
@@ -217,7 +218,7 @@ class ProcessExecutor(CodeExecutorBase):
             self.process_pool.put(worker)
 
             # Calculate and record the latency
-            latency = self._calculate_latency_ms(start_time)
+            latency = _calculate_latency_ms(start_time)
             process_creation_histogram.record(latency, attributes={"method": "create_process"})
 
             logger.info(f"Created worker process {worker_id}, pid {process.pid} in {latency:.3f} milliseconds")
@@ -329,7 +330,7 @@ class ProcessExecutor(CodeExecutorBase):
                         result = json.loads(response_line)
 
                         # Calculate and record latency
-                        latency = self._calculate_latency_ms(start_time)
+                        latency = _calculate_latency_ms(start_time)
                         process_execution_histogram.record(latency, attributes={"method": "run_scoring"})
                         logger.debug(f"Worker {worker_id} executed code in {latency:.3f} milliseconds")
 

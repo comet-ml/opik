@@ -1,11 +1,10 @@
 import json
 import sys
 import traceback
-import time
 import inspect
 import uuid
 from types import ModuleType
-from typing import Type, Union, List, Any, Dict
+from typing import Type, Union, List
 
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -28,7 +27,7 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
     return scores
 
 
-def run_scoring(code: str, data: dict) -> dict:
+def run_user_code(code: str, data: dict) -> dict:
     """
     Run the scoring logic with the provided code and data.
     """
@@ -80,7 +79,7 @@ def main():
                 input_data = data.get('data', {})
                 
                 # Execute the code
-                result = run_scoring(code, input_data)
+                result = run_user_code(code, input_data)
                 
                 # Return the result
                 sys.stdout.write(json.dumps(result) + "\n")
@@ -98,6 +97,7 @@ def main():
         sys.stderr.write(f"Worker initialization error: {str(e)}\n{traceback.format_exc()}\n")
         sys.stderr.flush()
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
