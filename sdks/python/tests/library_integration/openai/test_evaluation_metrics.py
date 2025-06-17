@@ -22,7 +22,7 @@ def assert_score_result(result: score_result.ScoreResult) -> None:
 
 
 def test__answer_relevance__context_provided_happyflow():
-    answer_relevance_metric = metrics.AnswerRelevance()
+    answer_relevance_metric = metrics.AnswerRelevance(track=False)
 
     result = answer_relevance_metric.score(
         input="What's the capital of France?",
@@ -34,7 +34,7 @@ def test__answer_relevance__context_provided_happyflow():
 
 
 def test__answer_relevance__no_context_provided__error_raised():
-    answer_relevance_metric = metrics.AnswerRelevance()
+    answer_relevance_metric = metrics.AnswerRelevance(track=False)
 
     with pytest.raises(exceptions.MetricComputationError):
         _ = answer_relevance_metric.score(
@@ -58,7 +58,9 @@ def test__answer_relevance__no_context_provided__error_raised():
 
 
 def test__answer_relevance__no_context_provided__no_context_mode_is_enabled__happyflow():
-    answer_relevance_metric = metrics.AnswerRelevance(require_context=False)
+    answer_relevance_metric = metrics.AnswerRelevance(
+        require_context=False, track=False
+    )
 
     result = answer_relevance_metric.score(
         input="What's the capital of France?",
@@ -71,7 +73,7 @@ def test__answer_relevance__no_context_provided__no_context_mode_is_enabled__hap
 def test__no_opik_configured__answer_relevance(
     configure_opik_not_configured,
 ):
-    answer_relevance_metric = metrics.AnswerRelevance()
+    answer_relevance_metric = metrics.AnswerRelevance(track=False)
 
     result = answer_relevance_metric.score(
         input="What's the capital of France?",
@@ -90,7 +92,7 @@ def test__no_opik_configured__answer_relevance(
     ],
 )
 def test__context_precision(context):
-    context_precision_metric = metrics.ContextPrecision()
+    context_precision_metric = metrics.ContextPrecision(track=False)
 
     result = context_precision_metric.score(
         input="What's the capital of France?",
@@ -110,7 +112,7 @@ def test__context_precision(context):
     ],
 )
 def test__context_recall(context):
-    context_precision_metric = metrics.ContextRecall()
+    context_precision_metric = metrics.ContextRecall(track=False)
 
     result = context_precision_metric.score(
         input="What's the capital of France?",
@@ -130,7 +132,7 @@ def test__context_recall(context):
     ],
 )
 def test__hallucination(context):
-    hallucination_metric = metrics.Hallucination()
+    hallucination_metric = metrics.Hallucination(track=False)
 
     result = hallucination_metric.score(
         input="What is the capital of France?",
@@ -142,7 +144,7 @@ def test__hallucination(context):
 
 
 def test__moderation():
-    moderation_metric = metrics.Moderation()
+    moderation_metric = metrics.Moderation(track=False)
 
     result = moderation_metric.score(
         output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage."
@@ -153,6 +155,7 @@ def test__moderation():
 
 def test__g_eval():
     g_eval_metric = metrics.GEval(
+        track=False,
         task_introduction="You are an expert judge tasked with evaluating the faithfulness of an AI-generated answer to the given context.",
         evaluation_criteria="In provided text the OUTPUT must not introduce new information beyond what's provided in the CONTEXT.",
     )

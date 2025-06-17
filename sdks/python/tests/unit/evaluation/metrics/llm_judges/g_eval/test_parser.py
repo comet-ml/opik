@@ -18,7 +18,7 @@ def test_g_eval_score_out_of_range(log_probs_supported: bool):
         exceptions.MetricComputationError,
         match=logging_messages.GEVAL_SCORE_CALC_FAILED,
     ):
-        parser.parse_model_output(
+        parser.parse_model_output_string(
             content=invalid_model_output,
             name=metric.name,
             log_probs_supported=log_probs_supported,

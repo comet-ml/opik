@@ -1,0 +1,131 @@
+import logging
+from typing import Any, Optional, Type, List, Dict
+from langchain import schema
+from langchain_core.language_models import chat_models
+from opik.evaluation.models import base_model
+
+from opik.evaluation.models.langchain import message_converters
+import pydantic
+
+LOGGER = logging.getLogger(__name__)
+
+
+class LangchainChatModel(base_model.OpikBaseModel):
+    def __init__(
+        self,
+        langchain_model: chat_models.BaseChatModel,
+        model_name: Optional[str] = None,
+    ) -> None:
+        """
+        Initializes the model with a given Langchain chat model instance.
+
+        Args:
+            langchain_model: A Langchain chat model instance to wrap
+            model_name: The name of the LLM to be used.
+                Can be omitted, in that case the model name from the Langchain model will be used.
+        """
+        model_name = model_name or langchain_model.model_name
+        super().__init__(model_name=model_name)
+
+        self._engine = langchain_model
+
+    def generate_string(
+        self,
+        input: str,
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> str:
+        """
+        Simplified interface to generate a string output from the model.
+
+        Args:
+            input: The input string based on which the model will generate the output.
+            response_format: pydantic model specifying the expected output string format.
+            kwargs: Additional arguments that may be used by the model for string generation.
+
+        Returns:
+            str: The generated string output.
+        """
+        if response_format is not None:
+            kwargs["response_format"] = response_format
+
+        request = [
+            {
+                "content": input,
+                "role": "user",
+            },
+        ]
+        response = self.generate_provider_response(messages=request, **kwargs)
+        return response.content
+
+    def generate_provider_response(
+        self,
+        messages: List[Dict[str, Any]],
+        **kwargs: Any,
+    ) -> schema.AIMessage:
+        """
+        Generate a provider-specific response using the Langchain model.
+
+        Args:
+            messages: A list of messages to be sent to the model, should be a list of dictionaries with the keys
+                "content" and "role".
+            kwargs: arguments required by the provider to generate a response.
+
+        Returns:
+            ModelResponse: The response from the model provider.
+        """
+        langchain_messages = message_converters.convert_to_langchain_messages(messages)
+
+        response = self._engine.invoke(langchain_messages, **kwargs)
+
+        return response
+
+    async def agenerate_string(
+        self,
+        input: str,
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> str:
+        """
+        Simplified interface to generate a string output from the model. Async version.
+
+        Args:
+            input: The input string based on which the model will generate the output.
+            response_format: pydantic model specifying the expected output string format.
+            kwargs: Additional arguments that may be used by the model for string generation.
+
+        Returns:
+            str: The generated string output.
+        """
+        if response_format is not None:
+            kwargs["response_format"] = response_format
+
+        request = [
+            {
+                "content": input,
+                "role": "user",
+            },
+        ]
+
+        response = await self.agenerate_provider_response(messages=request, **kwargs)
+        return response.content
+
+    async def agenerate_provider_response(
+        self, messages: List[Dict[str, Any]], **kwargs: Any
+    ) -> schema.AIMessage:
+        """
+        Generate a provider-specific response using the Langchain model. Async version.
+
+        Args:
+            messages: A list of messages to be sent to the model, should be a list of dictionaries with the keys
+                "content" and "role".
+            kwargs: arguments required by the provider to generate a response.
+
+        Returns:
+            ModelResponse: The response from the model provider.
+        """
+        langchain_messages = message_converters.convert_to_langchain_messages(messages)
+
+        response = await self._engine.ainvoke(langchain_messages, **kwargs)
+
+        return response
