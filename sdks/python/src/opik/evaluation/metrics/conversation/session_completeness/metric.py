@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Optional, Any, Union, List, Dict
 import pydantic
@@ -81,6 +82,13 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
     ) -> score_result.ScoreResult:
         return self._calculate_score(conversation=conversation)
 
+    async def ascore(
+        self,
+        conversation: List[Dict[str, str]],
+        **ignored_kwargs: Any,
+    ) -> score_result.ScoreResult:
+        return await self._a_calculate_score(conversation=conversation)
+
     def _extract_user_goals(
         self,
         conversation: List[Dict[str, str]],
@@ -125,11 +133,7 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
         if not self._include_reason:
             return None
 
-        negative_verdicts = [
-            v.reason
-            for v in verdicts
-            if v.verdict.strip().lower() == "no" and v.reason is not None
-        ]
+        negative_verdicts = _extract_negative_verdicts(verdicts)
 
         llm_query = templates.generate_reason(
             score=score, negative_verdicts=negative_verdicts, user_goals=user_goals
@@ -156,13 +160,8 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
                 self._evaluate_user_goal(conversation=conversation, user_goal=user_goal)
                 for user_goal in user_goals
             ]
-            relevant_count = sum(v.verdict.strip().lower() != "no" for v in verdicts)
 
-            if len(verdicts) == 0:
-                score = 0.0
-            else:
-                score = relevant_count / len(verdicts)
-
+            score = _score_from_verdicts(verdicts=verdicts)
             reason = self._generate_reason(
                 score=score, verdicts=verdicts, user_goals=user_goals
             )
@@ -173,3 +172,111 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
             return score_result.ScoreResult(
                 name=self.name, value=0.0, scoring_failed=True, reason=str(e)
             )
+
+    async def _a_extract_user_goals(
+        self,
+        conversation: List[Dict[str, str]],
+    ) -> List[str]:
+        llm_query = templates.extract_user_goals(conversation)
+        model_output = await self._model.agenerate_string(
+            input=llm_query, response_format=schema.UserGoalsResponse
+        )
+        try:
+            return schema.UserGoalsResponse.model_validate_json(model_output).user_goals
+        except pydantic.ValidationError as e:
+            LOGGER.warning(
+                f"Failed to parse user goals from LLM output: {model_output}, reason: {e}",
+                exc_info=True,
+            )
+            raise e
+
+    async def _a_evaluate_user_goal(
+        self, conversation: List[Dict[str, str]], user_goal: str
+    ) -> schema.EvaluateUserGoalResponse:
+        llm_query = templates.evaluate_user_goal(
+            conversation=conversation, user_goal=user_goal
+        )
+        model_output = await self._model.agenerate_string(
+            input=llm_query, response_format=schema.EvaluateUserGoalResponse
+        )
+        try:
+            return schema.EvaluateUserGoalResponse.model_validate_json(model_output)
+        except pydantic.ValidationError as e:
+            LOGGER.warning(
+                f"Failed to parse user goal evaluation results from LLM output: {model_output}, reason: {e}",
+                exc_info=True,
+            )
+            raise e
+
+    async def _a_generate_reason(
+        self,
+        score: float,
+        verdicts: List[schema.EvaluateUserGoalResponse],
+        user_goals: List[str],
+    ) -> Optional[str]:
+        if not self._include_reason:
+            return None
+
+        negative_verdicts = _extract_negative_verdicts(verdicts)
+
+        llm_query = templates.generate_reason(
+            score=score, negative_verdicts=negative_verdicts, user_goals=user_goals
+        )
+        model_output = await self._model.agenerate_string(
+            input=llm_query, response_format=schema.ScoreReasonResponse
+        )
+        try:
+            return schema.ScoreReasonResponse.model_validate_json(model_output).reason
+        except pydantic.ValidationError as e:
+            LOGGER.warning(
+                f"Failed to parse reason from LLM output: {model_output}, reason: {e}",
+                exc_info=True,
+            )
+            raise e
+
+    async def _a_calculate_score(
+        self,
+        conversation: List[Dict[str, str]],
+    ) -> score_result.ScoreResult:
+        try:
+            user_goals = await self._a_extract_user_goals(conversation)
+            verdicts = await asyncio.gather(
+                *[
+                    self._a_evaluate_user_goal(
+                        conversation=conversation, user_goal=user_goal
+                    )
+                    for user_goal in user_goals
+                ]
+            )
+
+            score = _score_from_verdicts(verdicts=verdicts)
+            reason = await self._a_generate_reason(
+                score=score, verdicts=verdicts, user_goals=user_goals
+            )
+
+            return score_result.ScoreResult(name=self.name, value=score, reason=reason)
+        except Exception as e:
+            LOGGER.warning(
+                f"Failed to calculate session completeness quality: {e}", exc_info=True
+            )
+            return score_result.ScoreResult(
+                name=self.name, value=0.0, scoring_failed=True, reason=str(e)
+            )
+
+
+def _extract_negative_verdicts(
+    verdicts: List[schema.EvaluateUserGoalResponse],
+) -> List[str]:
+    return [
+        v.reason
+        for v in verdicts
+        if v.verdict.strip().lower() == "no" and v.reason is not None
+    ]
+
+
+def _score_from_verdicts(verdicts: List[schema.EvaluateUserGoalResponse]) -> float:
+    if len(verdicts) == 0:
+        return 0.0
+
+    relevant_count = sum(v.verdict.strip().lower() != "no" for v in verdicts)
+    return relevant_count / len(verdicts)
