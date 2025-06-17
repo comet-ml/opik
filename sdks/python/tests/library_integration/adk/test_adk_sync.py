@@ -1071,3 +1071,52 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
         trace_tree.spans[1].spans[0].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE
     )
     assert_dict_has_keys(trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
+
+
+def test_adk__track_adk_agent_recursive__idempotent_calls_make_no_duplicated_callbacks():
+    opik_tracer = OpikTracer()
+
+    translator_to_english = adk_agents.Agent(
+        name="Translator",
+        model=MODEL_NAME,
+        description="Translates text to English.",
+    )
+
+    root_agent = adk_agents.Agent(
+        name="TextProcessingAssistant",
+        model=MODEL_NAME,
+        tools=[adk_agent_tool.AgentTool(agent=translator_to_english)],
+        description="Agent responsible for translating text to english by invoking a special tool for that.",
+    )
+
+    track_adk_agent_recursive(root_agent, opik_tracer)
+
+    first_translator_after_agent_callback = translator_to_english.after_agent_callback
+    first_translator_before_agent_callback = translator_to_english.before_agent_callback
+    first_translator_after_tool_callback = translator_to_english.after_tool_callback
+    first_translator_before_tool_callback = translator_to_english.before_tool_callback
+    first_translator_after_model_callback = translator_to_english.after_model_callback
+    first_translator_before_model_callback = translator_to_english.before_model_callback
+
+    first_root_after_agent_callback = root_agent.after_agent_callback
+    first_root_before_agent_callback = root_agent.before_agent_callback
+    first_root_after_tool_callback = root_agent.after_tool_callback
+    first_root_before_tool_callback = root_agent.before_tool_callback
+    first_root_after_model_callback = root_agent.after_model_callback
+    first_root_before_model_callback = root_agent.before_model_callback
+    
+    track_adk_agent_recursive(root_agent, opik_tracer)
+
+    assert translator_to_english.after_agent_callback is first_translator_after_agent_callback
+    assert translator_to_english.before_agent_callback is first_translator_before_agent_callback
+    assert translator_to_english.after_tool_callback is first_translator_after_tool_callback
+    assert translator_to_english.before_tool_callback is first_translator_before_tool_callback
+    assert translator_to_english.after_model_callback is first_translator_after_model_callback
+    assert translator_to_english.before_model_callback is first_translator_before_model_callback
+    
+    assert root_agent.after_agent_callback is first_root_after_agent_callback
+    assert root_agent.before_agent_callback is first_root_before_agent_callback
+    assert root_agent.after_tool_callback is first_root_after_tool_callback
+    assert root_agent.before_tool_callback is first_root_before_tool_callback
+    assert root_agent.after_model_callback is first_root_after_model_callback
+    assert root_agent.before_model_callback is first_root_before_model_callback
