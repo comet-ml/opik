@@ -1,9 +1,7 @@
 import logging
-from typing import Optional, Any, Union, List
-
+from typing import Optional, Any, Union, List, Dict
 import pydantic
 
-from opik.api_objects.conversation import conversation_thread
 from opik.evaluation.models import base_model, models_factory
 from . import schema, templates
 from .. import conversation_thread_metric
@@ -29,16 +27,34 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
     indicate better session completeness.
 
     Args:
-        model (str | opik.evaluation.models.OpikBaseModel): The language model to use for evaluation.
-        name (str): The name of the metric. Default is "session_completeness_quality".
-        track (bool): Whether to track the metric. Default is True.
-        project_name (str, optional): The project name to track the metric in.
+        model: The language model to use for evaluation.
+        name: The name of the metric. The default is "session_completeness_quality".
+        include_reason: Whether to include a reason for the score.
+        track: Whether to track the metric. Default is True.
+        project_name: The project name to track the metric in.
+
+    Example:
+        >>> from opik.evaluation.metrics import SessionCompletenessQuality
+        >>> conversation = [
+        >>>     {"role": "user", "content": "Hello!"},
+        >>>     {"role": "assistant", "content": "Hi there!"},
+        >>>     {"role": "user", "content": "How are you?"},
+        >>>     {"role": "assistant", "content": "I'm doing well, thank you!"},
+        >>> ]
+        >>> metric = SessionCompletenessQuality()
+        >>> result = metric.score(conversation)
+        >>> if result.scoring_failed:
+        >>>     print(f"Scoring failed: {result.reason}")
+        >>> else:
+        >>>     print(result.value)
+        0.95
     """
 
     def __init__(
         self,
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,
         name: str = "session_completeness_quality",
+        include_reason: bool = True,
         track: bool = True,
         project_name: Optional[str] = None,
     ):
@@ -48,6 +64,7 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
             project_name=project_name,
         )
         self._init_model(model)
+        self._include_reason = include_reason
 
     def _init_model(
         self, model: Optional[Union[str, base_model.OpikBaseModel]]
@@ -59,30 +76,34 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
 
     def score(
         self,
-        thread: conversation_thread.ConversationThread,
+        conversation: List[Dict[str, str]],
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
-        return self._calculate_score(thread=thread)
+        return self._calculate_score(conversation=conversation)
 
     def _extract_user_goals(
-        self, thread: conversation_thread.ConversationThread
+        self,
+        conversation: List[Dict[str, str]],
     ) -> List[str]:
-        llm_query = templates.extract_user_goals(thread=thread)
+        llm_query = templates.extract_user_goals(conversation)
         model_output = self._model.generate_string(
             input=llm_query, response_format=schema.UserGoalsResponse
         )
         try:
-            return schema.UserGoalsResponse.model_validate_json(model_output).goals
+            return schema.UserGoalsResponse.model_validate_json(model_output).user_goals
         except pydantic.ValidationError as e:
             LOGGER.warning(
-                f"Failed to parse user goals from LLM output: {model_output}, reason: {e}"
+                f"Failed to parse user goals from LLM output: {model_output}, reason: {e}",
+                exc_info=True,
             )
-            return []
+            raise e
 
     def _evaluate_user_goal(
-        self, thread: conversation_thread.ConversationThread, user_goal: str
-    ) -> Optional[schema.EvaluateUserGoalResponse]:
-        llm_query = templates.evaluate_user_goal(thread=thread, user_goal=user_goal)
+        self, conversation: List[Dict[str, str]], user_goal: str
+    ) -> schema.EvaluateUserGoalResponse:
+        llm_query = templates.evaluate_user_goal(
+            conversation=conversation, user_goal=user_goal
+        )
         model_output = self._model.generate_string(
             input=llm_query, response_format=schema.EvaluateUserGoalResponse
         )
@@ -90,23 +111,65 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
             return schema.EvaluateUserGoalResponse.model_validate_json(model_output)
         except pydantic.ValidationError as e:
             LOGGER.warning(
-                f"Failed to parse user goal evaluation results from LLM output: {model_output}, reason: {e}"
+                f"Failed to parse user goal evaluation results from LLM output: {model_output}, reason: {e}",
+                exc_info=True,
             )
+            raise e
+
+    def _generate_reason(
+        self,
+        score: float,
+        verdicts: List[schema.EvaluateUserGoalResponse],
+        user_goals: List[str],
+    ) -> Optional[str]:
+        if not self._include_reason:
             return None
 
-    def _calculate_score(
-        self, thread: conversation_thread.ConversationThread
-    ) -> score_result.ScoreResult:
-        user_goals = self._extract_user_goals(thread=thread)
-        verdicts = [
-            self._evaluate_user_goal(thread=thread, user_goal=user_goal)
-            for user_goal in user_goals
+        negative_verdicts = [
+            v.reason
+            for v in verdicts
+            if v.verdict.strip().lower() == "no" and v.reason is not None
         ]
-        relevant_count = sum(
-            v.verdict.strip().lower() != "no" for v in verdicts if v is not None
-        )
-        if relevant_count == 0:
-            return score_result.ScoreResult(name=self.name, value=0.0)
 
-        score = relevant_count / len(verdicts)
-        return score_result.ScoreResult(name=self.name, value=score)
+        llm_query = templates.generate_reason(
+            score=score, negative_verdicts=negative_verdicts, user_goals=user_goals
+        )
+        model_output = self._model.generate_string(
+            input=llm_query, response_format=schema.ScoreReasonResponse
+        )
+        try:
+            return schema.ScoreReasonResponse.model_validate_json(model_output).reason
+        except pydantic.ValidationError as e:
+            LOGGER.warning(
+                f"Failed to parse reason from LLM output: {model_output}, reason: {e}",
+                exc_info=True,
+            )
+            raise e
+
+    def _calculate_score(
+        self,
+        conversation: List[Dict[str, str]],
+    ) -> score_result.ScoreResult:
+        try:
+            user_goals = self._extract_user_goals(conversation)
+            verdicts = [
+                self._evaluate_user_goal(conversation=conversation, user_goal=user_goal)
+                for user_goal in user_goals
+            ]
+            relevant_count = sum(v.verdict.strip().lower() != "no" for v in verdicts)
+
+            if len(verdicts) == 0:
+                score = 0.0
+            else:
+                score = relevant_count / len(verdicts)
+
+            reason = self._generate_reason(
+                score=score, verdicts=verdicts, user_goals=user_goals
+            )
+
+            return score_result.ScoreResult(name=self.name, value=score, reason=reason)
+        except Exception as e:
+            LOGGER.warning(f"Failed to calculate session completeness quality: {e}")
+            return score_result.ScoreResult(
+                name=self.name, value=0.0, scoring_failed=True, reason=str(e)
+            )

@@ -10,3 +10,7 @@ class UserGoalsResponse(pydantic.BaseModel):
 class EvaluateUserGoalResponse(pydantic.BaseModel):
     verdict: str
     reason: Optional[str] = pydantic.Field(default=None)
+
+
+class ScoreReasonResponse(pydantic.BaseModel):
+    reason: str

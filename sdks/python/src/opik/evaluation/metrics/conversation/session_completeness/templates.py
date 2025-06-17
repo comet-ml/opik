@@ -1,10 +1,10 @@
-from opik.api_objects.conversation import conversation_thread
+from typing import Dict, List
 
 
-def extract_user_goals(thread: conversation_thread.ConversationThread) -> str:
+def extract_user_goals(conversation: List[Dict[str, str]]) -> str:
     return f"""Based on the given list of message exchanges between a user and an LLM, generate a JSON object to extract all user goals in the conversation.
 
-** Guidelines **
+** Guidelines: **
 - You should ONLY consider the overall intention, and not dwell too much on the specifics, as we are more concerned about the overall objective of the conversation.
 - Make sure to only return in JSON format.
 - The JSON should have 1 field: 'user_goals'.
@@ -42,18 +42,16 @@ def extract_user_goals(thread: conversation_thread.ConversationThread) -> str:
 ===== END OF EXAMPLE ======
 
 ** Turns: **
-{thread.as_json_list()}
+{conversation}
 
 ** JSON: **
 """
 
 
-def evaluate_user_goal(
-    thread: conversation_thread.ConversationThread, user_goal: str
-) -> str:
+def evaluate_user_goal(conversation: List[Dict[str, str]], user_goal: str) -> str:
     return f"""Based on the given list of message exchanges between a user and an LLM, generate a JSON object to indicate whether given user goal was satisfied from the conversation messages.
 
-** Guidelines **
+** Guidelines: **
 - You MUST USE look at all messages provided in the list of messages to make an informed judgement on satisfaction.
 - Make sure to only return in JSON format.
 - The JSON will have 2 fields: 'verdict' and 'reason'.
@@ -95,10 +93,42 @@ User wants to tell the assistant something.
 ===== END OF EXAMPLE ======
 
 ** Turns: **
-{thread.as_json_list()}
+{conversation}
 
 ** User Goal in the conversation: **
 {user_goal}
+
+** JSON: **
+"""
+
+
+def generate_reason(
+    score: float, negative_verdicts: List[str], user_goals: List[str]
+) -> str:
+    return f"""Below is a list of negative verdicts drawn from some messages in a conversation, which you have minimal knowledge of. It is a list of strings explaining why an LLM 'actual_output' is incomplete to satisfy the user `input` for a particular message.
+Given the completeness score, which is a [0, 1] score indicating how incomplete the OVERALL `actual_output`s are to the user intentions found in the `input`s of a conversation (higher the better), CONCISELY summarize the reason of the negative verdicts to justify the score.
+
+** Guidelines: **
+- Make sure to only return in JSON format, with the 'reason' key providing the reason.
+- Always quote information that are cited from messages in the negative verdicts in your final reason.
+- You should NOT mention negative verdict in your reason, and make the reason sound convincing.
+- You should mention LLM response instead of `actual_output`, and User instead of `input`.
+- Always refer to user goals, but keep it minimal and phrase it in your own words. Explain which are met with supporting reason from the provided negative verdicts.
+- Be confident in your reasoning, as if you’re aware of the `actual_output`s from the messages in a conversation that led to the negative verdicts.
+
+** Example result JSON: **
+{{
+    "reason": "The score is <completeness_score> because <your_reason>."
+}}
+
+** Completeness Score: **
+{score}
+
+** User Goals: **
+{user_goals}
+
+** Negative Verdicts from Messages in a Conversation: **
+{negative_verdicts}
 
 ** JSON: **
 """
