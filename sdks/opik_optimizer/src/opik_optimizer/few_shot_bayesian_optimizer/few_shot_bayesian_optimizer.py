@@ -439,7 +439,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         if best_score <= baseline_score:
             best_score = baseline_score
-            best_prompt = initial_prompt.formatted_messages
+            best_prompt = (
+                initial_prompt.formatted_messages
+                if initial_prompt
+                else chat_prompt.ChatPrompt(messages=[]).formatted_messages
+            )
         else:
             best_prompt = best_trial.user_attrs["config"]["message_list"]
 
@@ -453,13 +457,17 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         return optimization_result.OptimizationResult(
             optimizer=self.__class__.__name__,
             prompt=best_prompt,
-            initial_prompt=initial_prompt.formatted_messages,
+            initial_prompt=initial_prompt.formatted_messages
+            if initial_prompt
+            else chat_prompt.ChatPrompt(messages=[]).formatted_messages,
             initial_score=baseline_score,
             score=best_score,
             metric_name=metric.__name__,
             details={
                 "initial_score": baseline_score,
-                "chat_messages": best_trial.user_attrs["config"]["message_list"],
+                "chat_messages": best_trial.user_attrs["config"]["message_list"]
+                if best_trial.user_attrs["config"]
+                else chat_prompt.ChatPrompt(messages=[]).formatted_messages,
                 "prompt_parameter": best_trial.user_attrs["config"],
                 # "n_examples": best_n_examples,
                 "example_indices": best_example_indices,
@@ -536,7 +544,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 verbose=self.verbose,
             )
             reporting.display_configuration(
-                prompt.formatted_messages,
+                prompt.formatted_messages
+                if prompt
+                else chat_prompt.ChatPrompt(messages=[]).formatted_messages,
                 optimizer_config={
                     "optimizer": self.__class__.__name__,
                     "metric": metric.__name__,
@@ -634,14 +644,22 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         # Ensure prompt is correctly formatted
         if not all(
             isinstance(item, dict) and "role" in item and "content" in item
-            for item in prompt.formatted_messages
+            for item in (
+                prompt.formatted_messages
+                if prompt
+                else chat_prompt.ChatPrompt(messages=[]).formatted_messages
+            )
         ):
             raise ValueError(
                 "A ChatPrompt must be a list of dictionaries with 'role' and 'content' keys."
             )
 
         llm_task = self._build_task_from_messages(
-            agent_class, agent_config, prompt.formatted_messages
+            agent_class,
+            agent_config,
+            prompt.formatted_messages
+            if prompt
+            else chat_prompt.ChatPrompt(messages=[]).formatted_messages,
         )
 
         experiment_config = experiment_config or {}
@@ -654,7 +672,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "metric": metric.__name__,
                 "dataset": dataset.name,
                 "configuration": {
-                    "prompt": prompt.formatted_messages,
+                    "prompt": prompt.formatted_messages
+                    if prompt
+                    else chat_prompt.ChatPrompt(messages=[]).formatted_messages,
                 },
             },
         }

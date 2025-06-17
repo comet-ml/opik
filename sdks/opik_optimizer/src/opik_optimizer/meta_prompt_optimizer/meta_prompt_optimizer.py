@@ -500,7 +500,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                 try:
                     candidate_prompts = self._generate_candidate_prompts(
                         project_name=agent_class.project_name,
-                        current_prompt=best_prompt,
+                        current_prompt=best_prompt
+                        if best_prompt is not None
+                        else chat_prompt.ChatPrompt(messages=[]),
                         best_score=best_score,
                         round_num=round_num,
                         previous_rounds=rounds,
@@ -558,9 +560,13 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 round_data = self._create_round_data(
                     round_num=round_num,
-                    current_best_prompt=best_candidate_this_round,
-                    current_best_score=best_cand_score_avg,
-                    best_prompt_overall=best_prompt,
+                    current_best_prompt=best_prompt
+                    if best_prompt is not None
+                    else chat_prompt.ChatPrompt(messages=[]),
+                    current_best_score=best_score,
+                    best_prompt_overall=best_prompt
+                    if best_prompt is not None
+                    else chat_prompt.ChatPrompt(messages=[]),
                     evaluated_candidates=prompt_scores,
                     previous_best_score=previous_best_score,
                     improvement_this_round=improvement,
