@@ -67,6 +67,7 @@ class OpikTracer:
 
         _patch_adk()
 
+
     def _end_current_trace(self) -> None:
         trace_data = self._context_storage.pop_trace_data()
         assert trace_data is not None
