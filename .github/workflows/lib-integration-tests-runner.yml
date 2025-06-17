@@ -22,6 +22,7 @@ on:
           - crewai
           - genai
           - adk
+          - metrics
   schedule:
     - cron: "0 0 */1 * *"
   pull_request:
@@ -115,4 +116,10 @@ jobs:
     needs: [init_environment]
     if: contains(fromJSON('["adk", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-adk-tests.yml
+    secrets: inherit
+
+  evaluation_metrics_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["metrics", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-metrics-with-llm-judge-tests.yml
     secrets: inherit
