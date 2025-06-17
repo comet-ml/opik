@@ -563,7 +563,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 message="First we will establish the baseline performance:",
                 verbose=self.verbose,
             ) as eval_report:
-                baseline_score = self.evaluate_prompt(
+                baseline_score = self._evaluate_prompt(
                     agent_class,
                     agent_config,
                     dataset=dataset,
@@ -617,7 +617,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             utils.enable_experiment_reporting()
             raise e
 
-    def evaluate_prompt(
+    def _evaluate_prompt(
         self,
         agent_class: Type[OptimizableAgent],
         agent_config: AgentConfig,
@@ -726,6 +726,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             Returns:
                 Dictionary containing the LLM's response
             """
+            # NOTE: this alters the prompt; but ok as
+            # this is part of the fewshot process.
             for key, value in dataset_item.items():
                 for item in prompt_:
                     item["content"] = item["content"].replace(
@@ -739,12 +741,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     )
 
             result = agent.invoke_dataset_item(dataset_item, seed=self.seed)
-            # response = self._call_model(
-            #    model=self.model,
-            #    messages=prompt_,
-            #    seed=self.seed,
-            #    model_kwargs=self.model_kwargs,
-            # )
 
             return {mappers.EVALUATED_LLM_TASK_OUTPUT: result}
 
