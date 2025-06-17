@@ -556,6 +556,9 @@ navigation:
               - page: OpenAI
                 path: docs/reference/typescript-sdk/integrations/openai.mdx
                 slug: openai
+              - page: Cloudflare Workers AI
+                path: docs/reference/typescript-sdk/integrations/workers-ai.mdx
+                slug: workers-ai
           - section: Evaluation
             slug: evaluation
             contents:
