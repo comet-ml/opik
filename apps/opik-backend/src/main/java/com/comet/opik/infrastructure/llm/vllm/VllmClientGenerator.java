@@ -8,6 +8,7 @@ import dev.langchain4j.http.client.jdk.JdkHttpClientBuilder;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
+import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +19,6 @@ import java.net.http.HttpClient;
 import java.util.Optional;
 
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters;
-import static dev.langchain4j.model.openai.internal.OpenAiUtils.DEFAULT_OPENAI_URL;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -27,7 +27,12 @@ public class VllmClientGenerator implements LlmProviderClientGenerator<OpenAiCli
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
 
     public OpenAiClient newVllmClient(@NonNull LlmProviderClientApiConfig config) {
-        // Force HTTP/1.1 to avoid upgrade. vLLM is built on FastAPI and explicitly uses HTTP/1.1.
+        if (StringUtils.isEmpty(config.baseUrl())) {
+            throw new BadRequestException("vLLM baseUrl is not configured");
+        }
+
+        // Force HTTP/1.1 to avoid upgrade. vLLM is built on FastAPI and explicitly uses
+        // HTTP/1.1.
         HttpClient.Builder httpClientBuilder = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1);
 
@@ -35,30 +40,17 @@ public class VllmClientGenerator implements LlmProviderClientGenerator<OpenAiCli
                 .httpClientBuilder(httpClientBuilder);
 
         var openAiClientBuilder = OpenAiClient.builder()
-                .baseUrl(DEFAULT_OPENAI_URL)
+                .baseUrl(config.baseUrl())
                 .httpClientBuilder(jdkHttpClientBuilder)
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
 
-        String finalBaseUrl = DEFAULT_OPENAI_URL;
         Optional.ofNullable(llmProviderClientConfig.getVllmClient())
                 .map(LlmProviderClientConfig.VllmClientConfig::url)
                 .filter(StringUtils::isNotBlank)
                 .ifPresent(url -> {
                     openAiClientBuilder.baseUrl(url);
                 });
-
-        if (StringUtils.isNotEmpty(config.baseUrl())) {
-            log.info("Using vLLM provider-specific baseUrl: {}", config.baseUrl());
-            finalBaseUrl = config.baseUrl();
-            openAiClientBuilder.baseUrl(config.baseUrl());
-        }
-
-        if (finalBaseUrl.equals(DEFAULT_OPENAI_URL)) {
-            log.warn(
-                    "vLLM client is using default OpenAI URL '{}' - this may cause issues. Ensure baseUrl is properly configured.",
-                    DEFAULT_OPENAI_URL);
-        }
 
         Optional.ofNullable(config.headers())
                 .filter(MapUtils::isNotEmpty)
@@ -80,6 +72,7 @@ public class VllmClientGenerator implements LlmProviderClientGenerator<OpenAiCli
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         var builder = OpenAiChatModel.builder()
                 .modelName(modelParameters.name())
+                .baseUrl(config.baseUrl())
                 .apiKey(config.apiKey())
                 .logRequests(true)
                 .logResponses(true);
@@ -91,10 +84,6 @@ public class VllmClientGenerator implements LlmProviderClientGenerator<OpenAiCli
                 .map(LlmProviderClientConfig.VllmClientConfig::url)
                 .filter(StringUtils::isNotBlank)
                 .ifPresent(builder::baseUrl);
-
-        if (StringUtils.isNotEmpty(config.baseUrl())) {
-            builder.baseUrl(config.baseUrl());
-        }
 
         Optional.ofNullable(config.headers())
                 .filter(MapUtils::isNotEmpty)

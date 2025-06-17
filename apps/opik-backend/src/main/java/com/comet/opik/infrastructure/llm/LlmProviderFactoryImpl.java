@@ -13,7 +13,6 @@ import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.infrastructure.llm.vllm.VllmModelNameChecker;
 import dev.langchain4j.model.chat.ChatModel;
-import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
@@ -119,6 +118,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     }
 
     private boolean isModelBelongToVllm(String model, String workspaceId) {
-        return new VllmModelNameChecker(llmProviderApiKeyService).isVllmModel(model, workspaceId);
+        ProviderApiKey providerApiKey = getProviderApiKey(workspaceId, LlmProvider.VLLM);
+        return VllmModelNameChecker.isVllmModel(model, providerApiKey.baseUrl());
     }
 }

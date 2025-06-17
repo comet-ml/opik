@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.vllm;
 import com.comet.opik.infrastructure.llm.LlmProviderError;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import org.apache.commons.lang3.StringUtils;
 
 import static com.comet.opik.infrastructure.llm.vllm.VllmErrorMessage.VllmError;
 
@@ -61,20 +62,11 @@ public record VllmErrorMessage(VllmError error, String object, String message, S
             return switch (error.code()) {
                 case "invalid_api_key" -> 401;
                 case "internal_error" -> 500;
-                case "400" -> 400;
-                case "401" -> 401;
-                case "403" -> 403;
-                case "404" -> 404;
-                case "429" -> 429;
-                case "500" -> 500;
-                case "502" -> 502;
-                case "503" -> 503;
                 default -> {
-                    try {
+                    if (StringUtils.isNumeric(error.code())) {
                         yield Integer.parseInt(error.code());
-                    } catch (NumberFormatException e) {
-                        yield null;
                     }
+                    yield null;
                 }
             };
         }

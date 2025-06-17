@@ -1,8 +1,5 @@
 package com.comet.opik.infrastructure.llm.vllm;
 
-import com.comet.opik.api.LlmProvider;
-import com.comet.opik.api.ProviderApiKey;
-import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.inject.Inject;
@@ -10,7 +7,6 @@ import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -19,33 +15,19 @@ import java.util.Arrays;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class VllmModelNameChecker {
-    private final @NonNull LlmProviderApiKeyService llmProviderApiKeyService;
 
-    public boolean isVllmModel(String model, String workspaceId) {
-        ProviderApiKey providerApiKey = getProviderApiKey(workspaceId);
-        if (providerApiKey == null) {
-            return false;
-        }
-
+    public static boolean isVllmModel(String model, String baseUrl) {
         try {
-            String baseUrl = providerApiKey.baseUrl();
             String[] vllmModelNames = getVllmModelNames(baseUrl);
             return Arrays.asList(vllmModelNames).contains(model);
         } catch (Exception e) {
-            log.warn("Failed to check if model {} is VLLM model for workspace {}: {}",
-                    model, workspaceId, e.getMessage());
+            log.warn("Failed to check if model {} is VLLM model for baseUrl {}: {}",
+                    model, baseUrl, e.getMessage());
             return false;
         }
     }
 
-    private ProviderApiKey getProviderApiKey(String workspaceId) {
-        return llmProviderApiKeyService.find(workspaceId).content().stream()
-                .filter(providerApiKey -> LlmProvider.VLLM.equals(providerApiKey.provider()))
-                .findFirst()
-                .orElse(null);
-    }
-
-    private String[] getVllmModelNames(String baseUrl) {
+    private static String[] getVllmModelNames(String baseUrl) {
         Client client = ClientBuilder.newClient();
         ObjectMapper objectMapper = new ObjectMapper();
 
