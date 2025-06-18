@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { FilterIcon } from "lucide-react";
 import toLower from "lodash/toLower";
 
 import { Button } from "@/components/ui/button";
@@ -54,27 +54,11 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
 
   return (
     <div className="flex min-w-1 flex-auto flex-wrap items-center gap-2">
-      {selectedProjects.length > 0 ? (
-        selectedProjects.map((p) => (
-          <RemovableTag
-            key={p.name}
-            label={p.name}
-            size="lg"
-            className="max-w-56"
-            onDelete={() => {
-              setProjectIds(projectIds.filter((v) => v !== p.id) ?? null);
-            }}
-          />
-        ))
-      ) : (
-        <RemovableTag label="All projects" size="lg" />
-      )}
-
       <DropdownMenu onOpenChange={openStateChangeHandler}>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm">
-            More
-            <Plus className="ml-1 size-4 shrink-0" />
+            <FilterIcon className="mr-2 size-3.5" />
+            Filter projects
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
@@ -93,7 +77,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
             ></SearchInput>
             <Separator className="mt-1" />
           </div>
-          <div className="max-h-[calc(var(--radix-popper-available-height)-60px)] overflow-y-auto">
+          <div className="max-h-[calc(var(--radix-popper-available-height)-60px)] overflow-y-auto overflow-x-hidden pb-1">
             {hasMoreProjects && (
               <div className="comet-body-xs px-4 py-2 text-muted-slate">
                 Presenting the latest {LOADED_PROJECTS_COUNT} projects, sorted
@@ -120,6 +104,12 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
                 {name}
               </DropdownMenuCustomCheckboxItem>
             ))}
+            {filteredProjects.length === 0 && Boolean(search) && (
+              <div className="comet-body-s flex h-32 w-56 items-center justify-center text-muted-slate">
+                No search results
+              </div>
+            )}
+
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setProjectIds([])}>
               All projects
@@ -127,6 +117,22 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
           </div>
         </DropdownMenuContent>
       </DropdownMenu>
+      <Separator orientation="vertical" className="mx-1 h-4" />
+      {selectedProjects.length > 0 ? (
+        selectedProjects.map((p) => (
+          <RemovableTag
+            key={p.name}
+            label={p.name}
+            size="lg"
+            className="max-w-56"
+            onDelete={() => {
+              setProjectIds(projectIds.filter((v) => v !== p.id) ?? null);
+            }}
+          />
+        ))
+      ) : (
+        <RemovableTag label="All projects" size="lg" />
+      )}
     </div>
   );
 };

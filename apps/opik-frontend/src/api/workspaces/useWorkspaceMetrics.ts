@@ -1,7 +1,6 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { QueryConfig, WORKSPACES_REST_ENDPOINT } from "@/api/api";
 import { WorkspaceMetric } from "@/types/workspaces";
-import dayjs from "dayjs";
 
 type UseWorkspaceMetricsParams = {
   projectIds: string[];
@@ -28,55 +27,8 @@ const getWorkspaceMetrics = async (
     },
     {
       signal,
-      validateStatus: (status) => status === 200 || status === 404, // TODO lala delete this line when backend is ready
     },
   );
-
-  // TODO lala remove mock data
-
-  // Simulate network delay for demo purposes
-  await new Promise((resolve) =>
-    setTimeout(resolve, Math.floor(Math.random() * (3000 - 200 + 1)) + 200),
-  );
-
-  const generateData = () => {
-    const retVal = [];
-    const days = dayjs(intervalEnd).diff(dayjs(intervalStart), "day");
-
-    // Randomly return empty array to simulate BE response
-    if (Math.random() < 0.1) {
-      return [];
-    }
-
-    for (let i = 0; i <= days; i++) {
-      if (Math.random() > 0.05) {
-        retVal.push({
-          time: dayjs(intervalStart).add(i, "day").toISOString(),
-          value: Math.random() * 100,
-        });
-      }
-    }
-
-    return retVal;
-  };
-
-  if (projectIds.length === 0) {
-    return [
-      {
-        project_id: null,
-        name,
-        data: generateData(),
-      },
-    ];
-  } else {
-    return projectIds.map((projectId) => {
-      return {
-        project_id: projectId,
-        name,
-        data: generateData(),
-      };
-    });
-  }
 
   return data?.results;
 };
