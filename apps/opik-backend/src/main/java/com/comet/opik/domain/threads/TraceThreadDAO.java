@@ -173,32 +173,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         });
     }
 
-    @Override
-    public Flux<ProjectWithPendingClosureTraceThreads> findProjectsWithPendingClosureThreads(
-            @NonNull Instant lastUpdatedUntil, int limit) {
-        return asyncTemplate.stream(connection -> {
-            var statement = connection.createStatement(FIND_PENDING_CLOSURE_THREADS_SQL)
-                    .bind("last_updated_at", lastUpdatedUntil.toString())
-                    .bind("limit", limit);
-
-            return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE
-                            .mapToProjectWithPendingClosuseThreads(row)));
-        });
-    }
-
-    @Override
-    public Mono<Long> closeThreadWith(@NonNull UUID projectId, @NonNull Instant lastUpdatedUntil) {
-        return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(CLOSURE_THREADS_SQL)
-                    .bind("project_id", projectId)
-                    .bind("last_updated_at", lastUpdatedUntil.toString());
-
-            return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
-                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
-        });
-    }
-
     private void bindTemplateParam(TraceThreadCriteria criteria, ST template) {
         if (CollectionUtils.isNotEmpty(criteria.ids())) {
             template.add("ids", criteria.ids());
@@ -233,6 +207,32 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         if (criteria.status() != null) {
             statement.bind("status", criteria.status().getValue());
         }
+    }
+
+    @Override
+    public Flux<ProjectWithPendingClosureTraceThreads> findProjectsWithPendingClosureThreads(
+            @NonNull Instant lastUpdatedUntil, int limit) {
+        return asyncTemplate.stream(connection -> {
+            var statement = connection.createStatement(FIND_PENDING_CLOSURE_THREADS_SQL)
+                    .bind("last_updated_at", lastUpdatedUntil.toString())
+                    .bind("limit", limit);
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE
+                            .mapToProjectWithPendingClosureThreads(row)));
+        });
+    }
+
+    @Override
+    public Mono<Long> closeThreadWith(@NonNull UUID projectId, @NonNull Instant lastUpdatedUntil) {
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(CLOSURE_THREADS_SQL)
+                    .bind("project_id", projectId)
+                    .bind("last_updated_at", lastUpdatedUntil.toString());
+
+            return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
+        });
     }
 
 }

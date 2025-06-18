@@ -113,9 +113,12 @@ class OpikTracer:
             trace_metadata["adk_invocation_id"] = callback_context.invocation_id
             trace_metadata.update(session_metadata)
 
-            user_input = adk_helpers.convert_adk_base_model_to_dict(
-                callback_context.user_content
-            )
+            if callback_context.user_content is not None:
+                user_input = adk_helpers.convert_adk_base_model_to_dict(
+                    callback_context.user_content
+                )
+            else:
+                user_input = None
             name = self.name or callback_context.agent_name
 
             current_trace_data = self._context_storage.get_trace_data()
@@ -126,6 +129,7 @@ class OpikTracer:
                     metadata=trace_metadata,
                     thread_id=thread_id,
                     input=user_input,
+                    tags=self.tags,
                 )
 
                 self._start_trace(trace_data=current_trace)
@@ -134,6 +138,8 @@ class OpikTracer:
                     name=name,
                     project_name=self.project_name,
                     metadata=trace_metadata,
+                    tags=self.tags,
+                    input=user_input,
                     type="general",
                 )
                 _, opik_span_data = (
@@ -212,12 +218,16 @@ class OpikTracer:
         **kwargs: Any,
     ) -> None:
         try:
-            # Ignore partial chunks, ADK will call this method with the full
-            # response at the end
+            # Ignore partial chunks, ADK will call this method with the full response at the end
             if llm_response.partial is True:
                 return
         except Exception:
             LOGGER.debug("Error checking for partial chunks", exc_info=True)
+
+        if adk_helpers.has_empty_text_part_content(llm_response):
+            # fix for gemini-2.5-flash-preview which in streaming mode can return responses with empty content:
+            # {"candidates":[{"content":{"parts":[{"text":""}],"role":"model"}}],...}}
+            return
 
         model = None
         provider = None
@@ -231,9 +241,9 @@ class OpikTracer:
                 model = usage_data.model
                 provider = usage_data.provider
                 usage = usage_data.opik_usage
-        except Exception:
+        except Exception as e:
             LOGGER.debug(
-                "Error converting LlmResponse to dict or extracting usage data",
+                f"Error converting LlmResponse to dict or extracting usage data, reason: {e}",
                 exc_info=True,
             )
 
