@@ -1,5 +1,7 @@
 from typing import Any, Dict, List, Optional
 
+import copy
+
 from pydantic import BaseModel, Field
 
 
@@ -27,23 +29,23 @@ class ChatPrompt:
     """
 
     system: Optional[str]
-    prompt: Optional[str]
+    user: Optional[str]
     messages: Optional[List[Dict[str, str]]]
 
     def __init__(
         self,
         system: Optional[str] = None,
-        prompt: Optional[str] = None,
+        user: Optional[str] = None,
         messages: Optional[List[Dict[str, str]]] = None,
         tools: Optional[List[Tool]] = None,
     ):
-        if system is None and prompt is None and messages is None:
+        if system is None and user is None and messages is None:
             raise ValueError(
-                "At least one of `system`, `prompt`, or `messages` must be provided"
+                "At least one of `system`, `user`, or `messages` must be provided"
             )
 
-        if prompt is not None and messages is not None:
-            raise ValueError("`prompt` and `messages` cannot be provided together")
+        if user is not None and messages is not None:
+            raise ValueError("`user` and `messages` cannot be provided together")
 
         if system is not None and messages is not None:
             raise ValueError("`system` and `messages` cannot be provided together")
@@ -51,8 +53,8 @@ class ChatPrompt:
         if system is not None and not isinstance(system, str):
             raise ValueError("`system` must be a string")
 
-        if prompt is not None and not isinstance(prompt, str):
-            raise ValueError("`prompt` must be a string")
+        if user is not None and not isinstance(user, str):
+            raise ValueError("`user` must be a string")
 
         if messages is not None:
             if not isinstance(messages, list):
@@ -67,24 +69,12 @@ class ChatPrompt:
                         )
 
         self.system = system
-        self.prompt = prompt
+        self.user = user
         self.messages = messages
 
-    def get_system_prompt(self) -> str:
-        """
-        Get a system prompt from the ChatPrompt
-        """
-        if self.system is not None:
-            return self.system
-
-        elif self.messages is not None:
-            return self.messages[0]["content"]
-
-        else:
-            raise Exception("Unable to find a system prompt in ChatPrompt")
-
     def get_messages(
-        self, dataset_item: Optional[Dict[str, str]] = None
+        self,
+        dataset_item: Optional[Dict[str, str]] = None,
     ) -> List[Dict[str, str]]:
         # This is a copy, so we can alter the messages:
         messages = self._standardize_prompts()
@@ -93,9 +83,10 @@ class ChatPrompt:
             for key, value in dataset_item.items():
                 for message in messages:
                     # Only replace user message content:
-                    if message["role"] == "user":
+                    label = "{" + key + "}"
+                    if label in message["content"]:
                         message["content"] = message["content"].replace(
-                            "{" + key + "}", str(value)
+                            label, str(value)
                         )
         return messages
 
@@ -105,14 +96,14 @@ class ChatPrompt:
         if self.system is not None:
             standardize_messages.append({"role": "system", "content": self.system})
 
-        if self.prompt is not None:
-            standardize_messages.append({"role": "user", "content": self.prompt})
+        if self.user is not None:
+            standardize_messages.append({"role": "user", "content": self.user})
 
         if self.messages is not None:
             for message in self.messages:
                 standardize_messages.append(message)
 
-        return standardize_messages
+        return copy.deepcopy(standardize_messages)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert ChatPrompt to a dictionary for JSON serialization.
@@ -122,7 +113,7 @@ class ChatPrompt:
         """
         return {
             "system": self.system,
-            "prompt": self.prompt,
+            "user": self.user,
             "messages": self.messages,
         }
 
@@ -140,6 +131,15 @@ class ChatPrompt:
         """Custom validation method to handle nested objects during deserialization."""
         return ChatPrompt(
             system=obj.get("system", None),
-            prompt=obj.get("prompt", None),
+            user=obj.get("user", None),
             messages=obj.get("messages", None),
+        )
+
+    def copy(self) -> "ChatPrompt":
+        # Deep copy the messages list and its contents
+        messages = copy.deepcopy(self.messages) if self.messages else None
+        return ChatPrompt(
+            system=self.system,
+            user=self.user,
+            messages=messages,
         )

@@ -1,43 +1,63 @@
 from typing import Any, Dict
-from adk_agent import ADKAgent
+
+from opik.evaluation.metrics import LevenshteinRatio
+from opik.evaluation.metrics.score_result import ScoreResult
+
+from opik_optimizer.datasets import hotpot_300
 
 from opik_optimizer import (
     ChatPrompt,
     MetaPromptOptimizer,
     AgentConfig,
 )
-from opik_optimizer.datasets import hotpot_300
 
-from opik.evaluation.metrics import LevenshteinRatio
-from opik.evaluation.metrics.score_result import ScoreResult
-
-
-dataset = hotpot_300()
+from langgraph_agent import LangGraphAgent
 
 
 def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+    """
+    Calculate the Levenshtein ratio score between dataset answer and LLM output.
+    """
+    metric = LevenshteinRatio()
+    return metric.score(reference=dataset_item["answer"], output=llm_output)
     metric = LevenshteinRatio()
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 
 
-system_prompt = """
-You are a helpful assistant. Use the `search_wikipedia` tool to find factual information when appropriate.
-The user will provide a question string like "Who is Barack Obama?".
-1. Extract the item to look up
-2. Use the `search_wikipedia` tool to find details
-3. Respond clearly to the user, stating the answer found by the tool.
-"""
+dataset = hotpot_300()
+
+prompt_template = """Answer the following questions as best you can. You have access to the following tools:
+
+{tools}
+
+Use the following format:
+
+Question: "the input question you must answer"
+Thought: "you should always think about what to do"
+Action: "the action to take" --- should be one of [{tool_names}]
+Action Input: "the input to the action"
+Observation: "the result of the action"
+... (this Thought/Action/Action Input/Observation can repeat N times)
+Thought: "I now know the final answer"
+Final Answer: "the final answer to the original input question"
+
+Begin!
+
+Question: {input}
+Thought: {agent_scratchpad}"""
 
 agent_config = AgentConfig(
-    chat_prompt=ChatPrompt(system=system_prompt, user="{question}")
+    chat_prompt=ChatPrompt(system=prompt_template, user="{question}"),
 )
 
 # Test it:
-agent = ADKAgent(agent_config)
+agent = LangGraphAgent(agent_config)
 result = agent.invoke_dataset_item(
     {"question": "Which is heavier: a newborn elephant, or a motor boat?"}
 )
 print(result)
+
+# Optimize it:
 
 # Optimize it:
 optimizer = MetaPromptOptimizer(
@@ -51,7 +71,7 @@ optimizer = MetaPromptOptimizer(
     subsample_size=10,  # Fixed subsample size of 10 items
 )
 optimization_result = optimizer.optimize_agent(
-    agent_class=ADKAgent,
+    agent_class=LangGraphAgent,
     agent_config=agent_config,
     dataset=dataset,
     metric=levenshtein_ratio,

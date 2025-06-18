@@ -1,30 +1,24 @@
 from typing import Any, Dict
 
+from opik_optimizer import (
+    ChatPrompt,
+    EvolutionaryOptimizer,
+    AgentConfig,
+)
+from opik_optimizer.datasets import hotpot_300
+
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 
-from opik_optimizer.datasets import hotpot_300
-
-from opik_optimizer import (
-    ChatPrompt,
-    FewShotBayesianOptimizer,
-    AgentConfig,
-)
-
 from langgraph_agent import LangGraphAgent
+
+dataset = hotpot_300()
 
 
 def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
-    """
-    Calculate the Levenshtein ratio score between dataset answer and LLM output.
-    """
-    metric = LevenshteinRatio()
-    return metric.score(reference=dataset_item["answer"], output=llm_output)
     metric = LevenshteinRatio()
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 
-
-dataset = hotpot_300()
 
 prompt_template = """Answer the following questions as best you can. You have access to the following tools:
 
@@ -47,7 +41,7 @@ Question: {input}
 Thought: {agent_scratchpad}"""
 
 agent_config = AgentConfig(
-    chat_prompt=ChatPrompt(system=prompt_template, user="{question}"),
+    chat_prompt=ChatPrompt(system=prompt_template, user="{question}")
 )
 
 # Test it:
@@ -58,20 +52,22 @@ result = agent.invoke_dataset_item(
 print(result)
 
 # Optimize it:
-optimizer = FewShotBayesianOptimizer(
-    model="openai/gpt-4o",
-    min_examples=3,
-    max_examples=8,
-    n_threads=16,
-    seed=42,
+optimizer = EvolutionaryOptimizer(
+    model="openai/gpt-4o-mini",
+    population_size=10,
+    num_generations=3,
+    enable_moo=False,
+    enable_llm_crossover=True,
+    infer_output_style=True,
+    verbose=1,
+    num_threads=1,
 )
 optimization_result = optimizer.optimize_agent(
     agent_class=LangGraphAgent,
     agent_config=agent_config,
     dataset=dataset,
     metric=levenshtein_ratio,
-    n_trials=10,
-    n_samples=50,
+    n_samples=10,
 )
 
 optimization_result.display()

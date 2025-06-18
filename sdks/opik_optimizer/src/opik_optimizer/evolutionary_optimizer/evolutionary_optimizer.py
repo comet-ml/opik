@@ -394,7 +394,7 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
                 "      Mutation successful, prompt has been edited by randomizing words (word-level mutation).",
                 verbose=self.verbose,
             )
-            return creator.Individual(mutated_prompt.formatted_messages)
+            return creator.Individual(mutated_prompt.get_messages())
         elif mutation_choice > semantic_threshold:
             # This corresponds to the original 'elif' (structural_mutation)
             mutated_prompt = self._structural_mutation(prompt)
@@ -402,7 +402,7 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
                 "      Mutation successful, prompt has been edited by reordering, combining, or splitting sentences (structural mutation).",
                 verbose=self.verbose,
             )
-            return creator.Individual(mutated_prompt.formatted_messages)
+            return creator.Individual(mutated_prompt.get_messages())
         else:
             # This corresponds to the original 'if' (semantic_mutation)
             mutated_prompt = self._semantic_mutation(prompt, initial_prompt)
@@ -410,7 +410,7 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
                 "      Mutation successful, prompt has been edited using an LLM (semantic mutation).",
                 verbose=self.verbose,
             )
-            return creator.Individual(mutated_prompt.formatted_messages)
+            return creator.Individual(mutated_prompt.get_messages())
 
     def _semantic_mutation(
         self, prompt: chat_prompt.ChatPrompt, initial_prompt: chat_prompt.ChatPrompt
@@ -472,7 +472,7 @@ Return only the modified prompt message list, nothing else. Make sure to return 
         """Perform structural mutation (reordering, combining, splitting)."""
         mutated_messages: List[Dict[str, str]] = []
 
-        for message in prompt.formatted_messages:
+        for message in prompt.get_messages():
             content = message["content"]
             role = message["role"]
 
@@ -524,7 +524,7 @@ Return only the modified prompt message list, nothing else. Make sure to return 
         self, prompt: chat_prompt.ChatPrompt
     ) -> chat_prompt.ChatPrompt:
         mutated_messages: List[Dict[str, str]] = []
-        for message in prompt.formatted_messages:
+        for message in prompt.get_messages():
             mutated_messages.append(
                 {
                     "role": message["role"],
@@ -603,7 +603,7 @@ Return only the modified prompt message list, nothing else. Make sure to return 
     ) -> chat_prompt.ChatPrompt:
         """Attempts to generate a significantly improved and potentially very different prompt using an LLM."""
         logger.debug(
-            f"Attempting radical innovation for prompt: {json.dumps(prompt.formatted_messages)[:70]}..."
+            f"Attempting radical innovation for prompt: {json.dumps(prompt.get_messages())[:70]}..."
         )
         task_desc_for_llm = self._get_task_description_for_llm(initial_prompt)
         current_output_style_guidance = self.output_style_guidance
@@ -613,7 +613,7 @@ Return only the modified prompt message list, nothing else. Make sure to return 
 Desired output style from target LLM: '{current_output_style_guidance}'
 
 Existing Prompt (which may be underperforming):
-'''{prompt.formatted_messages}'''
+'''{prompt.get_messages()}'''
 
 Please generate a new, significantly improved, and potentially very different prompt for this task.
 Focus on alternative approaches, better clarity, or more effective guidance for the language model, aiming for the desired output style.
@@ -631,12 +631,12 @@ Return only the new prompt list object.
                 is_reasoning=True,
             )
             logger.info(
-                f"Radical innovation generated: {new_prompt_str[:70]}... from: {json.dumps(prompt.formatted_messages)[:70]}..."
+                f"Radical innovation generated: {new_prompt_str[:70]}... from: {json.dumps(prompt.get_messages())[:70]}..."
             )
             return chat_prompt.ChatPrompt(messages=json.loads(new_prompt_str))
         except Exception as e:
             logger.warning(
-                f"Radical innovation mutation failed for prompt '{json.dumps(prompt.formatted_messages)[:50]}...': {e}. Returning original."
+                f"Radical innovation mutation failed for prompt '{json.dumps(prompt.get_messages())[:50]}...': {e}. Returning original."
             )
             return prompt
 
@@ -740,7 +740,7 @@ Return only the new prompt list object.
                 # TODO: We need to split this into batches as the model will not return enough tokens
                 # to generate all the candidates
                 user_prompt_for_variation = f"""Initial prompt:
-    '''{prompt.formatted_messages}'''
+    '''{prompt.get_messages()}'''
 
     Task context:
     {task_desc_for_llm}
@@ -815,8 +815,8 @@ Return only the new prompt list object.
             final_population_set: Set[str] = set()
             final_population_list: List[chat_prompt.ChatPrompt] = []
             for p in population:
-                if json.dumps(p.formatted_messages) not in final_population_set:
-                    final_population_set.add(json.dumps(p.formatted_messages))
+                if json.dumps(p.get_messages()) not in final_population_set:
+                    final_population_set.add(json.dumps(p.get_messages()))
                     final_population_list.append(p)
 
             init_pop_report.end(final_population_list)
@@ -860,7 +860,7 @@ Return only the new prompt list object.
         )
 
         prompt_variants = self._initialize_population(seed_prompt)
-        new_pop = [creator.Individual(p.formatted_messages) for p in prompt_variants]
+        new_pop = [creator.Individual(p.get_messages()) for p in prompt_variants]
 
         for ind, fit in zip(new_pop, map(self.toolbox.evaluate, new_pop)):
             ind.fitness.values = fit
@@ -1005,7 +1005,7 @@ Return only the new prompt list object.
         )
 
         reporting.display_configuration(
-            prompt.formatted_messages,
+            prompt.get_messages(),
             {
                 "optimizer": f"{ 'DEAP MOO' if self.enable_moo else 'DEAP SO' } Evolutionary Optimization",
                 "population_size": self.population_size,
@@ -1030,7 +1030,7 @@ Return only the new prompt list object.
             def _deap_evaluate_individual_fitness(
                 messages: List[Dict[str, str]],
             ) -> Tuple[float, float]:
-                primary_fitness_score: float = self.evaluate_agent(
+                primary_fitness_score: float = self._evaluate_agent(
                     agent_class,
                     agent_config,
                     prompt=chat_prompt.ChatPrompt(messages=messages),  # type: ignore
@@ -1049,7 +1049,7 @@ Return only the new prompt list object.
             def _deap_evaluate_individual_fitness(
                 messages: List[Dict[str, str]],
             ) -> Tuple[float, float]:
-                fitness_score: float = self.evaluate_agent(
+                fitness_score: float = self._evaluate_agent(
                     agent_class,
                     agent_config,
                     prompt=chat_prompt.ChatPrompt(messages=messages),  # type: ignore
@@ -1069,13 +1069,13 @@ Return only the new prompt list object.
             verbose=self.verbose
         ) as report_baseline_performance:
             initial_eval_result = _deap_evaluate_individual_fitness(
-                prompt.formatted_messages
+                prompt.get_messages()
             )  # type: ignore
             initial_primary_score = initial_eval_result[0]
             initial_length = (
                 initial_eval_result[1]
                 if self.enable_moo
-                else float(len(json.dumps(prompt.formatted_messages)))
+                else float(len(json.dumps(prompt.get_messages())))
             )
 
             best_primary_score_overall = initial_primary_score
@@ -1111,7 +1111,7 @@ Return only the new prompt list object.
         )
 
         deap_population = [
-            creator.Individual(p.formatted_messages) for p in initial_prompts
+            creator.Individual(p.get_messages()) for p in initial_prompts
         ]
         deap_population = deap_population[: self.population_size]
 
@@ -1161,7 +1161,7 @@ Return only the new prompt list object.
 
             if self.enable_moo:
                 logger.info(
-                    f"Gen {0}: New best primary score: {best_primary_score_overall:.4f}, Prompt: {json.dumps(best_prompt_overall.formatted_messages)[:100]}..."
+                    f"Gen {0}: New best primary score: {best_primary_score_overall:.4f}, Prompt: {json.dumps(best_prompt_overall.get_messages())[:100]}..."
                 )
             else:
                 logger.info(
@@ -1326,9 +1326,7 @@ Return only the new prompt list object.
                 logger.warning("MOO: ParetoFront is empty. Reporting last known best.")
                 final_best_prompt = best_prompt_overall
                 final_primary_score = best_primary_score_overall
-                final_length = float(
-                    len(json.dumps(final_best_prompt.formatted_messages))
-                )
+                final_length = float(len(json.dumps(final_best_prompt.get_messages())))
                 final_details.update(
                     {
                         "initial_primary_score": initial_primary_score,
@@ -1349,7 +1347,7 @@ Return only the new prompt list object.
             )
             final_details.update(
                 {
-                    "initial_prompt": prompt.formatted_messages,
+                    "initial_prompt": prompt.get_messages(),
                     "initial_score": initial_primary_score,
                     "initial_score_for_display": initial_primary_score,
                     "final_prompt": final_best_prompt,
@@ -1402,14 +1400,14 @@ Return only the new prompt list object.
         reporting.display_result(
             initial_score=initial_score_for_display,
             best_score=final_primary_score,
-            best_prompt=final_best_prompt.formatted_messages,
+            best_prompt=final_best_prompt.get_messages(),
             verbose=self.verbose,
         )
         return OptimizationResult(
             optimizer=self.__class__.__name__,
-            prompt=final_best_prompt.formatted_messages,
+            prompt=final_best_prompt.get_messages(),
             score=final_primary_score,
-            initial_prompt=prompt.formatted_messages,
+            initial_prompt=prompt.get_messages(),
             initial_score=initial_primary_score,
             metric_name=metric.__name__,
             details=final_details,
@@ -1487,7 +1485,7 @@ Return only the new prompt list object.
             )
             raise
 
-    def evaluate_agent(
+    def _evaluate_agent(
         self,
         agent_class: Type[OptimizableAgent],
         agent_config: AgentConfig,
@@ -1520,7 +1518,7 @@ Return only the new prompt list object.
         total_items = len(dataset.get_items())
 
         experiment_config = experiment_config or {}
-        experiment_config["project_name"] = agent_class.__name__
+        experiment_config["project_name"] = agent_class.project_name
         experiment_config = {
             **experiment_config,
             "optimizer": self.__class__.__name__,
@@ -1528,7 +1526,7 @@ Return only the new prompt list object.
             "metric": metric.__name__,
             "dataset": dataset.name,
             "configuration": {
-                "prompt": prompt.formatted_messages,
+                "prompt": prompt.get_messages(),
                 "n_samples_for_eval": (
                     len(dataset_item_ids) if dataset_item_ids is not None else n_samples
                 ),
@@ -1536,29 +1534,18 @@ Return only the new prompt list object.
             },
         }
 
-        def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
-            try:
-                # FIXME: what is this about? Removing items?
-                messages = [
-                    {
-                        "role": item["role"],
-                        "content": item["content"].format(**dataset_item),
-                    }
-                    for item in prompt.formatted_messages
-                ]
-            except Exception as e:
-                logger.warning(
-                    f"Error in llm_task, this is usually a parsing error: {e}"
-                )
-                return {mappers.EVALUATED_LLM_TASK_OUTPUT: ""}
-
-            # FIXME: move out of here is possible:
-            new_agent_config = agent_config.copy()
-            new_agent_config.chat_prompt = chat_prompt.ChatPrompt(messages=messages)
+        new_agent_config = agent_config.copy()
+        new_agent_config.chat_prompt = prompt.copy()
+        try:
             agent = agent_class(new_agent_config)
-            model_output = agent.invoke_dataset_item(dataset_item)
-            # model_output = self._call_model(messages=messages, is_reasoning=False)
+        except Exception:
+            return 0.0
 
+        def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
+            # print("MESSAGES:", agent.agent_config.chat_prompt.messages)
+            messages = new_agent_config.chat_prompt.get_messages(dataset_item)
+            model_output = agent.invoke(messages)
+            # print("OUTPUT:", model_output)
             return {mappers.EVALUATED_LLM_TASK_OUTPUT: model_output}
 
         # Evaluate the prompt
@@ -1645,7 +1632,7 @@ Follow the instructions provided in the system prompt regarding the JSON output 
     def _get_task_description_for_llm(self, prompt: chat_prompt.ChatPrompt) -> str:
         """Generates a concise task description for use in LLM prompts for fresh generation or radical innovation."""
         description = "Task: Given a list of AI messages with placeholder values, generate an effective prompt. "
-        description += f"The original high-level instruction being optimized is: '{prompt.formatted_messages}'. "
+        description += f"The original high-level instruction being optimized is: '{prompt.get_messages()}'. "
         description += "The goal is to create an effective prompt that guides a language model to perform this task well."
         return description
 

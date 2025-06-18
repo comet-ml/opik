@@ -265,7 +265,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "metric": getattr(metric, "__name__", str(metric)),
                 "dataset": dataset.name,
                 "configuration": {
-                    "prompt": agent_config.get_formatted_messages(),
+                    "prompt": agent_config.get_messages(),
                     "n_samples": subset_size,
                     "use_full_dataset": use_full_dataset,
                 },
@@ -276,15 +276,16 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
             # --- Step 1: Prepare the prompt for the LLM ---
-            messages = [
-                {
-                    "role": item["role"],
-                    "content": item["content"].format(**dataset_item),
-                }
-                for item in agent_config.get_formatted_messages()
-            ]
+            # messages = [
+            #    {
+            #        "role": item["role"],
+            #        "content": item["content"].format(**dataset_item),
+            #    }
+            #    for item in agent_config.get_messages()
+            # ]
             # Step 1: create the agent
             new_agent_config = agent_config.copy()
+            messages = new_agent_config.chat_prompt.get_messages(dataset_item)
             new_agent_config.chat_prompt = chat_prompt.ChatPrompt(messages=messages)
             agent = agent_class(new_agent_config)
 
@@ -293,12 +294,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 logger.debug(
                     f"Calling LLM with prompt length: {sum(len(msg['content']) for msg in messages)}"
                 )
-                raw_model_output = agent.invoke_dataset_item(dataset_item)
-                # raw_model_output = self._call_model(
-                #    messages=messages,
-                #    is_reasoning=False,
-                #    optimization_id=optimization_id,
-                # )
+                raw_model_output = agent.invoke(messages)
                 logger.debug(f"LLM raw response length: {len(raw_model_output)}")
                 logger.debug(f"LLM raw output: {raw_model_output}")
             except Exception as e:
@@ -401,7 +397,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             verbose=self.verbose,
         )
         reporting.display_configuration(
-            messages=prompt.formatted_messages,
+            messages=prompt.get_messages(),
             optimizer_config={
                 "optimizer": self.__class__.__name__,
                 "n_samples": n_samples,
@@ -463,7 +459,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "metric": getattr(metric, "__name__", str(metric)),
                 "dataset": dataset.name,
                 "configuration": {
-                    "prompt": agent_config.get_formatted_messages(),
+                    "prompt": agent_config.get_messages(),
                     "rounds": self.rounds,
                     "num_prompts_per_round": self.num_prompts_per_round,
                 },
@@ -581,18 +577,16 @@ class MetaPromptOptimizer(BaseOptimizer):
         reporting.display_result(
             initial_score,
             best_score,
-            best_prompt.formatted_messages if best_prompt is not None else [],
+            best_prompt.get_messages() if best_prompt is not None else [],
             verbose=self.verbose,
         )
 
         return self._create_result(
             metric,
-            initial_prompt=initial_prompt.formatted_messages
+            initial_prompt=initial_prompt.get_messages()
             if initial_prompt is not None
             else [],
-            best_prompt=best_prompt.formatted_messages
-            if best_prompt is not None
-            else [],
+            best_prompt=best_prompt.get_messages() if best_prompt is not None else [],
             best_score=best_score,
             initial_score=initial_score,
             rounds=rounds,
@@ -628,7 +622,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             )
             generated_prompts_log.append(
                 {
-                    "prompt": prompt.formatted_messages,
+                    "prompt": prompt.get_messages(),
                     "score": score,
                     "improvement": improvement_vs_prev,
                 }
@@ -720,7 +714,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             self.num_prompts_per_round, verbose=self.verbose
         ) as candidate_generation_report:
             logger.debug(f"\nGenerating candidate prompts for round {round_num + 1}")
-            logger.debug(f"Generating from prompt: {current_prompt.formatted_messages}")
+            logger.debug(f"Generating from prompt: {current_prompt.get_messages()}")
             logger.debug(f"Current best score: {best_score:.4f}")
 
             history_context = self._build_history_context(previous_rounds)
@@ -747,7 +741,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     "Task context and metric-specific instructions disabled for reasoning prompt."
                 )
 
-            user_prompt = f"""Current prompt: {current_prompt.formatted_messages}
+            user_prompt = f"""Current prompt: {current_prompt.get_messages()}
             Current score: {best_score}
             {history_context}
             {task_context_str}

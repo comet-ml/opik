@@ -32,9 +32,6 @@ class AgentConfig(BaseModel):
     ) -> List[Dict[str, str]]:
         return self.chat_prompt.get_messages(dataset_item)
 
-    def get_system_prompt(self) -> str:
-        return self.chat_prompt.get_system_prompt()
-
     def get_tools(self) -> Dict[str, Any]:
         if self.tools:
             return self.tools
@@ -56,17 +53,7 @@ class AgentConfig(BaseModel):
 
         # Create a new ChatPrompt instance with deep copied messages if it exists
         if self.chat_prompt:
-            # Deep copy the messages list and its contents if it exists
-            messages = (
-                copy.deepcopy(self.chat_prompt.messages)
-                if self.chat_prompt.messages
-                else None
-            )
-            base_copy.chat_prompt = ChatPrompt(
-                system=self.chat_prompt.system,
-                prompt=self.chat_prompt.prompt,
-                messages=messages,
-            )
+            base_copy.chat_prompt = self.chat_prompt.copy()
 
         # Deep copy tools dictionary and its contents if it exists
         if self.tools:
@@ -134,11 +121,11 @@ class OptimizableAgent:
             str: The LLM's response
         """
         all_messages = []
-        if query is not None:
-            all_messages.append({"role": "user", "content": query})
-
         if messages is not None:
             all_messages.extend(messages)
+
+        if query is not None:
+            all_messages.append({"role": "user", "content": query})
 
         response = litellm.completion(
             model=self.model, messages=all_messages, seed=seed, **self.model_kwargs
@@ -146,9 +133,13 @@ class OptimizableAgent:
         result = response.choices[0].message.content
         return result
 
-    def invoke_dataset_item(
+    def invoke_dataset_item(self, dataset_item: Dict[str, str]) -> str:
+        messages = self.agent_config.chat_prompt.get_messages(dataset_item)
+        return self.invoke(messages)
+
+    def invoke(
         self,
-        dataset_item: Dict[str, str],
+        messages: List[Dict[str, str]],
         seed: Optional[int] = None,
     ) -> str:
         """
@@ -161,7 +152,6 @@ class OptimizableAgent:
         Returns:
             Dict[str, Any]: The agent's response
         """
-        all_messages = self.agent_config.chat_prompt.get_messages(dataset_item)
         # Replace with agent invocation:
-        result = self.llm_invoke(messages=all_messages, seed=seed)
+        result = self.llm_invoke(messages=messages, seed=seed)
         return result

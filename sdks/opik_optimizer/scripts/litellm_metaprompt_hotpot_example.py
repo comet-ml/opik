@@ -2,15 +2,15 @@ from typing import Any, Dict
 
 from opik_optimizer import (
     ChatPrompt,
-    FewShotBayesianOptimizer,
+    MetaPromptOptimizer,
     AgentConfig,
+    OptimizableAgent,
 )
 from opik_optimizer.datasets import hotpot_300
 
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 
-from adk_agent import ADKAgent
 
 dataset = hotpot_300()
 
@@ -32,28 +32,35 @@ agent_config = AgentConfig(
     chat_prompt=ChatPrompt(system=system_prompt, user="{question}")
 )
 
+
+class LiteLLMAgent(OptimizableAgent):
+    model = "openai/gpt-4o-mini"  # Using gpt-4o-mini for evaluation for speed
+    project_name = "litellm-agent"
+
+
 # Test it:
-agent = ADKAgent(agent_config)
-# "question" is the dataset input field that matches above prompt
+agent = LiteLLMAgent(agent_config)
 result = agent.invoke_dataset_item(
     {"question": "Which is heavier: a newborn elephant, or a motor boat?"}
 )
 print(result)
 
 # Optimize it:
-optimizer = FewShotBayesianOptimizer(
-    model="openai/gpt-4o-mini",
-    min_examples=3,
-    max_examples=8,
-    n_threads=16,
-    seed=42,
+optimizer = MetaPromptOptimizer(
+    model="openai/gpt-4o-mini",  # Using gpt-4o-mini for evaluation for speed
+    max_rounds=3,  # Number of optimization rounds
+    num_prompts_per_round=4,  # Number of prompts to generate per round
+    improvement_threshold=0.01,  # Minimum improvement required to continue
+    temperature=0.1,  # Lower temperature for more focused responses
+    max_completion_tokens=5000,  # Maximum tokens for model completion
+    num_threads=1,  # Number of threads for parallel evaluation
+    subsample_size=10,  # Fixed subsample size of 10 items
 )
 optimization_result = optimizer.optimize_agent(
-    agent_class=ADKAgent,
+    agent_class=LiteLLMAgent,
     agent_config=agent_config,
     dataset=dataset,
     metric=levenshtein_ratio,
-    n_trials=10,
-    n_samples=50,
+    n_samples=10,
 )
 optimization_result.display()

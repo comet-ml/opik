@@ -22,19 +22,16 @@ dataset = hotpot_300()
 
 class LiteLLMAgent(OptimizableAgent):
     model = "openai/gpt-4o-mini"
-    project_name = "litellm-agent-wikipedia"
+    project_name = "litellm-agent"
 
 
 system_prompt = """
-You are a helpful assistant. Use the `search_wikipedia` tool to find factual information when appropriate.
-The user will provide a question string like "Who is Barack Obama?".
-1. Extract the item to look up
-2. Use the `search_wikipedia` tool to find details
-3. Respond clearly to the user, stating the answer found by the tool.
+You are a helpful assistant. Answer with specific
+words or phrases, without explanation.
 """
 
 agent_config = AgentConfig(
-    chat_prompt=ChatPrompt(system=system_prompt, prompt="{question}")
+    chat_prompt=ChatPrompt(system=system_prompt, user="{question}")
 )
 
 # Test it:

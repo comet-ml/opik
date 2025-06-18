@@ -679,7 +679,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         new_agent_config = agent_config.copy()
         # Replace new chat_prompt:
         new_agent_config.chat_prompt = chat_prompt.ChatPrompt(messages=prompt_)
-        agent = agent_class(agent_config)
+        agent = agent_class(new_agent_config)
 
         def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, Any]:
             """
@@ -691,7 +691,15 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             Returns:
                 Dictionary containing the LLM's response
             """
-            result = agent.invoke_dataset_item(dataset_item, seed=self.seed)
+            messages = new_agent_config.chat_prompt.get_messages(dataset_item)
+
+            if few_shot_examples:
+                for message in messages:
+                    message["content"] = message["content"].replace(
+                        FEW_SHOT_EXAMPLE_PLACEHOLDER, few_shot_examples
+                    )
+
+            result = agent.invoke(messages, seed=self.seed)
 
             return {mappers.EVALUATED_LLM_TASK_OUTPUT: result}
 

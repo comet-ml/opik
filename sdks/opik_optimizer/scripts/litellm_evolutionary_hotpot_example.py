@@ -20,24 +20,18 @@ def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreRes
 class LiteLLMAgent(OptimizableAgent):
     """Agent using LiteLLM for optimization."""
 
-    model: str = "openai/gpt-4o-mini"
-    project_name: str = "litellm-agent-wikipedia"
-    input_dataset_field: str = "question"
-
-    def init_agent(self, agent_config: AgentConfig) -> None:
-        """Initialize the agent with the provided configuration."""
-        self.agent_config = agent_config
+    model = "openai/gpt-4o-mini"
+    project_name = "litellm-agent"
 
 
-prompt = """
-You are a helpful assistant. Use the `search_wikipedia` tool to find factual information when appropriate.
-The user will provide a question string like "Who is Barack Obama?".
-1. Extract the item to look up
-2. Use the `search_wikipedia` tool to find details
-3. Respond clearly to the user, stating the answer found by the tool.
+system_prompt = """
+You are a helpful assistant. Answer with specific
+words or phrases, without explanation.
 """
 
-agent_config = AgentConfig(chat_prompt=ChatPrompt(system=prompt))
+agent_config = AgentConfig(
+    chat_prompt=ChatPrompt(system=system_prompt, user="{question}")
+)
 
 # Test it:
 agent = LiteLLMAgent(agent_config)

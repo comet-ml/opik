@@ -29,7 +29,7 @@ The user will provide a question string like "Who is Barack Obama?".
 """
 
 agent_config = AgentConfig(
-    chat_prompt=ChatPrompt(system=system_prompt, prompt="{question}")
+    chat_prompt=ChatPrompt(system=system_prompt, user="{question}")
 )
 
 # Test it:
@@ -48,6 +48,7 @@ optimizer = EvolutionaryOptimizer(
     enable_llm_crossover=True,
     infer_output_style=True,
     verbose=1,
+    num_threads=1,
 )
 optimization_result = optimizer.optimize_agent(
     agent_class=ADKAgent,
