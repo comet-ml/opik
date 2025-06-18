@@ -68,6 +68,8 @@ tags:
   description: Span related resources
 - name: Traces
   description: Trace related resources
+- name: Workspaces
+  description: Workspace related resources
 - name: Redirect
   description: Redirects for SDK generated links
 paths:
@@ -95,6 +97,20 @@ paths:
       responses:
         "200":
           description: Experiments BiInformationResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BiInformationResponse"
+  /v1/internal/usage/bi-spans:
+    get:
+      tags:
+      - System usage
+      summary: Get spans information for BI events
+      description: Get spans information for BI events per user per workspace
+      operationId: getSpansBiInfo
+      responses:
+        "200":
+          description: Spans BiInformationResponse resource
           content:
             application/json:
               schema:
@@ -3323,6 +3339,31 @@ paths:
           description: No Content
         "404":
           description: Not found
+  /v1/private/workspaces/metrics/summaries:
+    post:
+      tags:
+      - Workspaces
+      summary: Get metrics summary
+      description: Get metrics summary
+      operationId: metricsSummary
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceMetricsSummaryRequest"
+      responses:
+        "200":
+          description: Workspace Metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceMetricsSummaryResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/session/redirect/datasets:
     get:
       tags:
@@ -7115,6 +7156,18 @@ components:
           - running
           - completed
           - cancelled
+    ErrorCountWithDeviation:
+      type: object
+      properties:
+        count:
+          type: integer
+          format: int64
+        deviation:
+          type: integer
+          format: int64
+        deviation_percentage:
+          type: integer
+          format: int64
     Project:
       required:
       - name
@@ -7181,6 +7234,8 @@ components:
           type: integer
           format: int64
           readOnly: true
+        error_count:
+          $ref: "#/components/schemas/ErrorCountWithDeviation"
     Project_Write:
       required:
       - name
@@ -7367,6 +7422,21 @@ components:
         guardrails_failed_count:
           type: integer
           format: int64
+        error_count:
+          $ref: "#/components/schemas/ErrorCountWithDeviation"
+    ErrorCountWithDeviation_Detailed:
+      type: object
+      properties:
+        count:
+          type: integer
+          format: int64
+        deviation:
+          type: integer
+          format: int64
+        deviation_percentage:
+          type: integer
+          format: int64
+      readOnly: true
     FeedbackScoreAverage_Detailed:
       required:
       - name
@@ -7454,6 +7524,8 @@ components:
           type: integer
           format: int64
           readOnly: true
+        error_count:
+          $ref: "#/components/schemas/ErrorCountWithDeviation_Detailed"
     ErrorMessage_Detailed:
       type: object
       properties:
@@ -8690,3 +8762,39 @@ components:
           $ref: "#/components/schemas/ErrorInfo"
         thread_id:
           type: string
+    Result:
+      type: object
+      properties:
+        name:
+          type: string
+        current:
+          type: number
+          format: double
+        previous:
+          type: number
+          format: double
+    WorkspaceMetricsSummaryResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Result"
+    WorkspaceMetricsSummaryRequest:
+      required:
+      - interval_end
+      - interval_start
+      type: object
+      properties:
+        project_ids:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time

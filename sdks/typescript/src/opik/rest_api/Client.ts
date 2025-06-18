@@ -23,6 +23,7 @@ import { Prompts } from "./api/resources/prompts/client/Client";
 import { ServiceToggles } from "./api/resources/serviceToggles/client/Client";
 import { Spans } from "./api/resources/spans/client/Client";
 import { Traces } from "./api/resources/traces/client/Client";
+import { Workspaces } from "./api/resources/workspaces/client/Client";
 import { Redirect } from "./api/resources/redirect/client/Client";
 
 export declare namespace OpikApiClient {
@@ -70,6 +71,7 @@ export class OpikApiClient {
     protected _serviceToggles: ServiceToggles | undefined;
     protected _spans: Spans | undefined;
     protected _traces: Traces | undefined;
+    protected _workspaces: Workspaces | undefined;
     protected _redirect: Redirect | undefined;
 
     constructor(protected readonly _options: OpikApiClient.Options = {}) {}
@@ -140,6 +142,10 @@ export class OpikApiClient {
 
     public get traces(): Traces {
         return (this._traces ??= new Traces(this._options));
+    }
+
+    public get workspaces(): Workspaces {
+        return (this._workspaces ??= new Workspaces(this._options));
     }
 
     public get redirect(): Redirect {

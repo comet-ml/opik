@@ -9,6 +9,7 @@ import org.redisson.api.RPermitExpirableSemaphoreReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.options.CommonOptions;
 import org.redisson.client.RedisException;
+import org.redisson.config.ConstantDelay;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -51,7 +52,7 @@ class RedissonLockService implements LockService {
         return acquireLock(semaphore, Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
                 .flatMap(lockInstance -> runAction(lock, action, lockInstance.locked())
                         .subscribeOn(Schedulers.boundedElastic())
-                        .doFinally(signalType -> lockInstance.release(lock)));
+                        .doFinally(__ -> lockInstance.release(lock)));
     }
 
     @Override
@@ -64,7 +65,7 @@ class RedissonLockService implements LockService {
         return acquireLock(semaphore, duration)
                 .flatMap(lockInstance -> runAction(lock, action, lockInstance.locked())
                         .subscribeOn(Schedulers.boundedElastic())
-                        .doFinally(signalType -> lockInstance.release(lock)));
+                        .doFinally(__ -> lockInstance.release(lock)));
     }
 
     private RPermitExpirableSemaphoreReactive getSemaphore(Lock lock) {
@@ -72,7 +73,7 @@ class RedissonLockService implements LockService {
                 CommonOptions
                         .name(lock.key())
                         .timeout(Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
-                        .retryInterval(Duration.ofMillis(10))
+                        .retryDelay(new ConstantDelay(Duration.ofMillis(10)))
                         .retryAttempts(distributedLockConfig.getLockTimeoutMS() / 10));
     }
 
@@ -112,17 +113,17 @@ class RedissonLockService implements LockService {
         return acquireLock(semaphore, Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
                 .flatMapMany(lockInstance -> stream(lock, stream, lockInstance.locked())
                         .subscribeOn(Schedulers.boundedElastic())
-                        .doFinally(signalType -> lockInstance.release(lock)));
+                        .doFinally(__ -> lockInstance.release(lock)));
     }
 
     @Override
-    public <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<T> failToAcquireLockAction,
+    public <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<Void> failToAcquireLockAction,
             Duration actionTimeout, Duration lockWaitTime) {
         RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock);
         log.debug(TRYING_TO_LOCK_WITH, lock);
 
         return Mono.defer(() -> semaphore.setPermits(1)
-                //Try to acquire the lock until the lockWaitTime expires if the lock is not available it will return Mono.empty()
+                //Try to acquire the lock until the lockWaitTime if the lock is not available it will return Mono.empty()
                 // If the lock is acquired, it sets the expiration time using the actionTimeout
                 .then(Mono.defer(() -> semaphore.tryAcquire(lockWaitTime.toMillis(), actionTimeout.toMillis(),
                         TimeUnit.MILLISECONDS))
@@ -130,8 +131,10 @@ class RedissonLockService implements LockService {
                         .switchIfEmpty(failToAcquireLockAction.then(Mono.empty()))
                         .flatMap(locked -> expire(actionTimeout, locked, semaphore))
                         .flatMap(lockInstance -> runAction(lock, action, lockInstance))))
-                .onErrorResume(RedisException.class, e -> handleError(lock, failToAcquireLockAction, e))
-                .onErrorResume(IllegalStateException.class, e -> handleError(lock, failToAcquireLockAction, e));
+                .onErrorResume(RedisException.class,
+                        e -> handleError(lock, failToAcquireLockAction, e).then(Mono.empty()))
+                .onErrorResume(IllegalStateException.class,
+                        e -> handleError(lock, failToAcquireLockAction, e).then(Mono.empty()));
     }
 
     private <T> Mono<T> runAction(Lock lock, Mono<T> action, LockInstance lockInstance) {
@@ -142,8 +145,7 @@ class RedissonLockService implements LockService {
 
     private Mono<LockInstance> expire(Duration actionTimeout, String locked,
             RPermitExpirableSemaphoreReactive semaphore) {
-        return semaphore.expire(actionTimeout)
-                .thenReturn(new LockInstance(semaphore, locked));
+        return semaphore.expire(actionTimeout).thenReturn(new LockInstance(semaphore, locked));
     }
 
     private static <T> Mono<T> handleError(Lock lock, Mono<T> failToAcquireLockAction, Exception e) {

@@ -7,6 +7,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
@@ -20,7 +21,6 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -36,7 +36,6 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -46,7 +45,6 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
@@ -66,7 +64,7 @@ class TraceThreadsClosingJobTest {
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
-    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
+    private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils
             .newClickHouseContainer(ZOOKEEPER_CONTAINER);
 
     private final WireMockUtils.WireMockRuntime wireMock;
@@ -75,12 +73,15 @@ class TraceThreadsClosingJobTest {
     private final TestDropwizardAppExtension APP;
 
     {
-        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
+        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICKHOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
-                CLICK_HOUSE_CONTAINER, DATABASE_NAME);
+                CLICKHOUSE_CONTAINER, DATABASE_NAME);
+
+        MigrationUtils.runMysqlDbMigration(MYSQL_CONTAINER);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE_CONTAINER);
 
         APP = newTestDropwizardAppExtension(
                 AppContextConfig.builder()
@@ -99,15 +100,9 @@ class TraceThreadsClosingJobTest {
     private TraceResourceClient traceResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
+    void setUpAll(ClientSupport client) {
 
-        try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
-
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
 
         ClientSupportUtils.config(client);
