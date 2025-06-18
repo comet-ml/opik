@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.metrics.WorkspaceMetricRequest;
@@ -47,6 +48,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Collection;
@@ -354,7 +356,7 @@ class WorkspacesResourceTest {
                     .build());
         }
 
-        private List<WorkspaceMetricResponse.Result.MetricsData> prepareMetricsDailyData(Collection<Double> scores) {
+        private List<DataPoint<Double>> prepareMetricsDailyData(Collection<Double> scores) {
 
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mmX");
 
@@ -374,12 +376,12 @@ class WorkspacesResourceTest {
                     .average()
                     .orElse(0.0);
 
-            return List.of(WorkspaceMetricResponse.Result.MetricsData.builder()
-                    .time(yesterdayTime)
+            return List.of(DataPoint.<Double>builder()
+                    .time(OffsetDateTime.parse(yesterdayTime, formatter).toInstant())
                     .value(null)
                     .build(),
-                    WorkspaceMetricResponse.Result.MetricsData.builder()
-                            .time(todayTime)
+                    DataPoint.<Double>builder()
+                            .time(OffsetDateTime.parse(todayTime, formatter).toInstant())
                             .value(scores.isEmpty() ? null : avgValue)
                             .build());
         }

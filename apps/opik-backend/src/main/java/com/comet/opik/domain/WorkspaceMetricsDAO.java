@@ -1,11 +1,11 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.metrics.WorkspaceMetricRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
@@ -22,6 +22,8 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -59,8 +61,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                   <if(project_ids)> AND project_id IN :project_ids <endif>
-                  AND start_time >= timestamp_prior_start
-                  AND start_time \\<= timestamp_end
+                  AND start_time BETWEEN timestamp_prior_start AND timestamp_end
             ) t ON t.id = fs.entity_id
             WHERE workspace_id = :workspace_id
                 <if(project_ids)> AND project_id IN :project_ids <endif>
@@ -81,8 +82,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                     FROM traces final
                     WHERE workspace_id = :workspace_id
                       AND project_id IN :project_ids
-                      AND start_time >= parseDateTime64BestEffort(:timestamp_start, 9)
-                      AND start_time <= parseDateTime64BestEffort(:timestamp_end, 9)
+                      AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 ) t ON t.id = fs.entity_id
                 WHERE workspace_id = :workspace_id
                   AND project_id IN :project_ids
@@ -115,8 +115,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                         start_time
                     FROM traces final
                     WHERE workspace_id = :workspace_id
-                      AND start_time >= parseDateTime64BestEffort(:timestamp_start, 9)
-                      AND start_time <= parseDateTime64BestEffort(:timestamp_end, 9)
+                      AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 ) t ON t.id = fs.entity_id
                 WHERE workspace_id = :workspace_id
                   AND entity_type = 'trace'
@@ -138,8 +137,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
     private final @NonNull TransactionTemplateAsync template;
 
-    private static final TypeReference<List<WorkspaceMetricResponse.Result.MetricsData>> LIST_DAILY_DATA_TYPE_REFERENCE = new TypeReference<>() {
-    };
+    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mmX");
 
     @Override
     public Mono<List<WorkspaceMetricsSummaryResponse.Result>> getFeedbackScoresSummary(
@@ -229,15 +227,15 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 .build()));
     }
 
-    private List<WorkspaceMetricResponse.Result.MetricsData> getDailyData(List[] dataArray) {
+    private List<DataPoint<Double>> getDailyData(List[] dataArray) {
         if (ArrayUtils.isEmpty(dataArray)) {
             return null;
         }
 
         var dataItems = Arrays.stream(dataArray)
                 .filter(CollectionUtils::isNotEmpty)
-                .map(dataItem -> WorkspaceMetricResponse.Result.MetricsData.builder()
-                        .time(dataItem.get(0).toString())
+                .map(dataItem -> DataPoint.<Double>builder()
+                        .time(OffsetDateTime.parse(dataItem.get(0).toString(), DATE_TIME_FORMATTER).toInstant())
                         .value(Optional.ofNullable(dataItem.get(1)).map(Object::toString)
                                 .map(Double::parseDouble)
                                 .orElse(null))

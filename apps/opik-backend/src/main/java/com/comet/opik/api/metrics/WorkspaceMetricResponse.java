@@ -1,7 +1,7 @@
 package com.comet.opik.api.metrics;
 
+import com.comet.opik.api.DataPoint;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
@@ -19,13 +19,6 @@ public record WorkspaceMetricResponse(
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record Result(UUID projectId, String name,
-            List<MetricsData> data) {
-
-        @Builder(toBuilder = true)
-        @JsonIgnoreProperties(ignoreUnknown = true)
-        @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-        public record MetricsData(String time,
-                @JsonInclude(JsonInclude.Include.ALWAYS) Double value) {
-        }
+            List<DataPoint<Double>> data) {
     }
 }
