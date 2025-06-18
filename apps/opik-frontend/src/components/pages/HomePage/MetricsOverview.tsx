@@ -26,8 +26,6 @@ import MetricOverviewChart, {
 import { Project } from "@/types/projects";
 import useAppStore from "@/store/AppStore";
 
-// TODO lala horizontal scroll in projects selector
-
 const METRIC_NAME_TO_EXPLAINER_ID_MAP: Record<
   string,
   { explainerId: EXPLAINER_ID; trend: PercentageTrendType }
@@ -103,6 +101,7 @@ const ALL_PROJECTS_PROJECT = {
 
 type MetricsOverviewProps = {
   projects: Project[];
+  totalProjects: number;
   projectsPending: boolean;
   intervalStart: string;
   intervalEnd: string;
@@ -110,6 +109,7 @@ type MetricsOverviewProps = {
 
 export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
   projects,
+  totalProjects,
   projectsPending,
   intervalStart,
   intervalEnd,
@@ -175,7 +175,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
   }, [metricsChartData, projects]);
 
   const noMetricsData = !data || data?.length === 0;
-  const noMetricsAndProjectsData = noMetricsData && projects.length === 0;
+  const noMetricsAndProjectsData = noMetricsData && totalProjects === 0;
   const noChartData =
     !metricsChartData ||
     metricsChartData?.length === 0 ||
@@ -218,9 +218,9 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
             <li
               key={metric.name}
               className={cn(
-                "border-l-[3px] border-l-transparent cursor-pointer pl-[21px] pr-6 py-1 min-h-16",
+                "border-l-[3px] border-l-transparent cursor-pointer pl-[21px] pr-6 py-1 min-h-16 hover:bg-primary-foreground",
                 {
-                  "border-l-primary": isSelected,
+                  "border-l-primary bg-primary-foreground": isSelected,
                 },
               )}
               onClick={() => setSelectedMetric(metric.name)}
@@ -291,22 +291,17 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
       return (
         <div className="relative size-full overflow-hidden">
           <img
-            className="absolute inset-0 bg-cover bg-center blur-sm"
+            className="absolute inset-0 size-full object-fill blur-sm"
             src={noDataMetricChartImageUrl}
             alt="no data image"
           ></img>
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-10">
-            <h1 className="comet-title-m text-center">
-              Integrate to unlock <br /> {selectedMetric} analytics!
-            </h1>
-            <div className="comet-body mt-4 text-center text-muted-slate">
-              This is a preview. Integrate your {selectedMetric} <br />
-              metrics to see real data
+            <h1 className="comet-title-m text-center">Unlock your metrics!</h1>
+            <div className="comet-body mt-2 text-center text-muted-slate">
+              Integrate your project with Opik to evaluate your AI.
+              <br /> Metrics will appear here once data starts flowing.
             </div>
-            <Button
-              className="mt-6 min-w-[190px]"
-              onClick={() => setQuickstartOpened(true)}
-            >
+            <Button className="mt-4" onClick={() => setQuickstartOpened(true)}>
               Get started <ChevronRight className="ml-2 size-4 shrink-0" />
             </Button>
           </div>
@@ -319,24 +314,23 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
 
   const renderNoMetricsData = () => {
     const description = noMetricsAndProjectsData
-      ? "Log your first project metrics to see them here."
-      : "Please select a different time period or projects.";
+      ? "Log your first project metrics to see them here"
+      : "No metrics found for your current filters. This may happen if there are no traces or metrics in the selected range. Try adjusting your filters to explore available data";
 
     return (
       <div className="relative size-full overflow-hidden">
         <img
-          className="absolute inset-0 bg-cover bg-center blur-sm"
+          className="absolute inset-0 size-full object-fill blur-sm"
           src={noDataMetricsImageUrl}
           alt="no data image"
         ></img>
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-10">
-          <h1 className="comet-title-m">No metrics data available</h1>
-          <div className="comet-body mt-4 text-muted-slate">{description}</div>
+          <h1 className="comet-title-m">No metrics available</h1>
+          <div className="comet-body mt-2 max-w-[60%] text-center text-muted-slate">
+            {description}
+          </div>
           {noMetricsAndProjectsData && (
-            <Button
-              className="mt-6 min-w-[190px]"
-              onClick={() => setQuickstartOpened(true)}
-            >
+            <Button className="mt-4" onClick={() => setQuickstartOpened(true)}>
               Get started <ChevronRight className="ml-2 size-4 shrink-0" />
             </Button>
           )}

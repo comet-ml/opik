@@ -13,7 +13,7 @@ const WelcomeBanner: React.FC<WelcomeBannerProps> = ({ setOpen }) => {
 
   return (
     <div
-      className="relative mb-4 flex min-h-[200px] items-center rounded-xxl bg-cover bg-center bg-no-repeat p-8"
+      className="relative mb-4 flex min-h-[200px] items-center rounded-md bg-cover bg-center bg-no-repeat p-8"
       style={{
         backgroundImage: `url(${welcomeBannerUrl}), linear-gradient(180deg, #060A28 0%, #604FFF 100%)`,
       }}
@@ -28,20 +28,13 @@ const WelcomeBanner: React.FC<WelcomeBannerProps> = ({ setOpen }) => {
       </Button>
       <div className="p-7">
         <div className="comet-title-xl text-white">Welcome to Opik 👋</div>
-        <div className="comet-body mt-4 text-white/70">
-          Opik helps you build{" "}
-          <span className="comet-body-accented text-white">
-            safer, more reliable AI systems through advanced tracing, experiment
-            management, evaluation
-          </span>
-          , and{" "}
-          <span className="comet-body-accented text-white">
-            real-time monitoring
-          </span>
+        <div className="comet-body mt-4 text-white/80">
+          Opik helps you build safer, more reliable AI systems through advanced
+          tracing, experiment management, evaluation , and real-time monitoring
         </div>
         <Button
           variant="secondary"
-          className="mt-6 min-w-[190px]"
+          className="mt-6"
           onClick={() => setQuickstartOpened(true)}
         >
           Get started <ChevronRight className="ml-2 size-4 shrink-0" />

@@ -50,6 +50,7 @@ const OverallPerformanceSection = () => {
   );
 
   const projects = useMemo(() => projectData?.content || [], [projectData]);
+  const totalProjects = projectData?.total || 0;
 
   const selectedProjects = useMemo(() => {
     if (!projectsIds || projectsIds.length === 0) {
@@ -64,7 +65,7 @@ const OverallPerformanceSection = () => {
         .subtract(Number(period), "days")
         .startOf("day")
         .format(),
-      intervalEnd: nowUTC.format(),
+      intervalEnd: nowUTC.endOf("day").format(),
     };
   }, [period]);
 
@@ -80,16 +81,16 @@ const OverallPerformanceSection = () => {
           projectsIds={projectsIds}
           setProjectsIds={setProjectsIds}
           projects={projects}
-          totalProjects={projectData?.total || 0}
+          totalProjects={totalProjects}
         />
       </div>
       <MetricsOverview
         projects={selectedProjects}
+        totalProjects={totalProjects}
         projectsPending={isPending}
         intervalStart={intervalStart}
         intervalEnd={intervalEnd}
       />
-      <div className="mt-6 min-h-72">COST</div>
     </div>
   );
 };
