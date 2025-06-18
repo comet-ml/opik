@@ -1,7 +1,9 @@
-from typing import Dict, List
+from typing import List
+
+from . import metric
 
 
-def extract_user_goals(conversation: List[Dict[str, str]]) -> str:
+def extract_user_goals(conversation: metric.Conversation) -> str:
     return f"""Based on the given list of message exchanges between a user and an LLM, generate a JSON object to extract all user goals in the conversation.
 
 ** Guidelines: **
@@ -48,7 +50,7 @@ def extract_user_goals(conversation: List[Dict[str, str]]) -> str:
 """
 
 
-def evaluate_user_goal(conversation: List[Dict[str, str]], user_goal: str) -> str:
+def evaluate_user_goal(conversation: metric.Conversation, user_goal: str) -> str:
     return f"""Based on the given list of message exchanges between a user and an LLM, generate a JSON object to indicate whether given user goal was satisfied from the conversation messages.
 
 ** Guidelines: **
