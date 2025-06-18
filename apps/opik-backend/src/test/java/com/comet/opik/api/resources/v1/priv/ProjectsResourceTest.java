@@ -29,7 +29,6 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.ProjectStatsSummaryItemMapper;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
-import com.comet.opik.api.resources.utils.TestConfigUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
@@ -185,7 +184,7 @@ class ProjectsResourceTest {
     @BeforeAll
     void setUpAll(ClientSupport client, ProjectService projectService) {
 
-        this.baseURI = TestConfigUtils.getBaseUrl(client);
+        this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
         this.projectService = projectService;
 
