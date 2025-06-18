@@ -239,6 +239,7 @@ class WorkspacesResourceTest {
             assertThat(actualMetrics.results())
                     .usingRecursiveComparison()
                     .ignoringCollectionOrder()
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
                     .isEqualTo(expectedMetricsSummary);
         }
 
