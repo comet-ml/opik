@@ -57,15 +57,14 @@ class GEval(base_metric.BaseMetric):
             evaluation_criteria=self.evaluation_criteria,
         )
         return self._model.generate_string(input=prompt)
-        
-    @a.cached_property    
-    def allm_chain_of_thought(self) -> str:
+
+    @a.cached_property
+    async def allm_chain_of_thought(self) -> str:
         prompt = template.G_EVAL_COT_TEMPLATE.format(
             task_introduction=self.task_introduction,
             evaluation_criteria=self.evaluation_criteria,
         )
         return await self._model.agenerate_string(input=prompt)
-
 
     def _init_model(
         self, model: Optional[Union[str, base_model.OpikBaseModel]]
