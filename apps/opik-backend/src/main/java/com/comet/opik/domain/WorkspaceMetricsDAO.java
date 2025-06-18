@@ -24,6 +24,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
@@ -45,40 +46,33 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     private static final String GET_FEEDBACK_SCORES_SUMMARY = """
             WITH parseDateTime64BestEffort(:timestamp_start, 9) AS timestamp_start,
             parseDateTime64BestEffort(:timestamp_end, 9) AS timestamp_end,
-            parseDateTime64BestEffort(:timestamp_prior_start, 9) AS timestamp_prior_start,
-            feedback_scores_aggregated AS (
-                SELECT
-                    AVGIf(fs.value, t.start_time >= timestamp_start AND t.start_time \\<= timestamp_end) AS current,
-                    AVGIf(fs.value, t.start_time >= timestamp_prior_start AND t.start_time \\< timestamp_start) AS previous,
-                    fs.name
-                FROM feedback_scores fs final
-                JOIN (
-                    SELECT
-                        id,
-                        start_time
-                    FROM traces final
-                    WHERE workspace_id = :workspace_id
-                      <if(project_ids)> AND project_id IN :project_ids <endif>
-                      AND start_time >= timestamp_prior_start
-                      AND start_time \\<= timestamp_end
-                ) t ON t.id = fs.entity_id
-                WHERE workspace_id = :workspace_id
-                    <if(project_ids)> AND project_id IN :project_ids <endif>
-                    AND entity_type = 'trace'
-                GROUP BY fs.name
-            )
+            parseDateTime64BestEffort(:timestamp_prior_start, 9) AS timestamp_prior_start
             SELECT
-                IF(isNaN(current), 0, current) AS current,
-                IF(isNaN(previous), 0, previous) AS previous,
-                name
-            FROM feedback_scores_aggregated;
+                AVGIf(fs.value, t.start_time >= timestamp_start AND t.start_time \\<= timestamp_end) AS current,
+                AVGIf(fs.value, t.start_time >= timestamp_prior_start AND t.start_time \\< timestamp_start) AS previous,
+                fs.name
+            FROM feedback_scores fs final
+            JOIN (
+                SELECT
+                    id,
+                    start_time
+                FROM traces final
+                WHERE workspace_id = :workspace_id
+                  <if(project_ids)> AND project_id IN :project_ids <endif>
+                  AND start_time >= timestamp_prior_start
+                  AND start_time \\<= timestamp_end
+            ) t ON t.id = fs.entity_id
+            WHERE workspace_id = :workspace_id
+                <if(project_ids)> AND project_id IN :project_ids <endif>
+                AND entity_type = 'trace'
+            GROUP BY fs.name;
             """;
 
     private static final String GET_FEEDBACK_SCORES_DAILY_BY_PROJECT = """
             WITH feedback_scores_daily AS (
                 SELECT fs.project_id AS project_id,
                        toStartOfInterval(t.start_time, toIntervalDay(1)) AS bucket,
-                       avg(fs.value) AS value
+                       nullIf(avg(fs.value), 0) AS value
                 FROM feedback_scores fs final
                 JOIN (
                     SELECT
@@ -113,7 +107,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     private static final String GET_FEEDBACK_SCORES_DAILY = """
             WITH feedback_scores_daily AS (
                 SELECT toStartOfInterval(t.start_time, toIntervalDay(1)) AS bucket,
-                       avg(fs.value) AS value
+                       nullIf(avg(fs.value), 0) AS value
                 FROM feedback_scores fs final
                 JOIN (
                     SELECT
@@ -190,9 +184,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
         return template.nonTransaction(connection -> getFeedbackScoresSummary(connection, request, query)
                 .flatMapMany(result -> result.map((row, rowMetadata) -> WorkspaceMetricsSummaryResponse.Result.builder()
                         .name(row.get("name", String.class))
-                        .current(row.get("current", Double.class))
-                        .previous(row.get("previous", Double.class))
+                        .current(filterNan(row.get("current", Double.class)))
+                        .previous(filterNan(row.get("previous", Double.class)))
                         .build()))
+                .filter(result -> result.current() != null)
                 .collectList());
     }
 
@@ -243,10 +238,20 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 .filter(CollectionUtils::isNotEmpty)
                 .map(dataItem -> WorkspaceMetricResponse.Result.MetricsData.builder()
                         .time(dataItem.get(0).toString())
-                        .value(Double.parseDouble(dataItem.get(1).toString()))
+                        .value(Optional.ofNullable(dataItem.get(1)).map(Object::toString)
+                                .map(Double::parseDouble)
+                                .orElse(null))
                         .build())
                 .toList();
 
         return dataItems.isEmpty() ? null : dataItems;
+    }
+
+    Double filterNan(Double value) {
+        if (value == null) {
+            return null;
+        }
+
+        return value.isNaN() ? null : value;
     }
 }

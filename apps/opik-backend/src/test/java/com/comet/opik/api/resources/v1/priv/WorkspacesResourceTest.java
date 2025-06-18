@@ -318,9 +318,10 @@ class WorkspacesResourceTest {
                     .distinct()
                     .map(name -> WorkspaceMetricsSummaryResponse.Result.builder()
                             .name(name)
-                            .current(currentScores.getOrDefault(name, 0D))
-                            .previous(previousScores.getOrDefault(name, 0D))
+                            .current(currentScores.get(name))
+                            .previous(previousScores.get(name))
                             .build())
+                    .filter(result -> result.current() != null)
                     .toList();
         }
 
@@ -375,11 +376,11 @@ class WorkspacesResourceTest {
 
             return List.of(WorkspaceMetricResponse.Result.MetricsData.builder()
                     .time(yesterdayTime)
-                    .value(0D)
+                    .value(null)
                     .build(),
                     WorkspaceMetricResponse.Result.MetricsData.builder()
                             .time(todayTime)
-                            .value(avgValue)
+                            .value(scores.isEmpty() ? null : avgValue)
                             .build());
         }
     }
