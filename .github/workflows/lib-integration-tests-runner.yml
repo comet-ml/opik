@@ -2,6 +2,8 @@
 #
 name: SDK Library Integration Tests Runner
 run-name: "SDK Library Integration Tests Runner ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
 on:
   workflow_dispatch:
     inputs:
