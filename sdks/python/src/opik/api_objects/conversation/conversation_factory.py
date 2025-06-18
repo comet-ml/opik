@@ -1,14 +1,14 @@
 from typing import List, Callable
 
 from opik.rest_api import TracePublic, JsonListStringPublic
-from . import conversation
+from . import conversation_thread
 
 
 def create_conversation_from_traces(
     traces: List[TracePublic],
     input_transform: Callable[[JsonListStringPublic], str],
     output_transform: Callable[[JsonListStringPublic], str],
-) -> conversation.Conversation:
+) -> conversation_thread.ConversationThread:
     """
     Creates a conversation object from given traces, transforming inputs and outputs using
     provided transformation functions. The method processes each trace to compose a complete
@@ -26,7 +26,7 @@ def create_conversation_from_traces(
         A Conversation object that contains user and assistant message
         sequences derived from the provided traces.
     """
-    discussion = conversation.Conversation()
+    discussion = conversation_thread.ConversationThread()
     for trace in traces:
         trace_input = input_transform(trace.input)
         discussion.add_user_message(trace_input)

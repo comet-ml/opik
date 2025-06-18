@@ -21,7 +21,7 @@ class CustomTokenizer:
 
 def test_evaluation__equals():
     metric_param = "some metric"
-    metric = equals.Equals(case_sensitive=True)
+    metric = equals.Equals(case_sensitive=True, track=False)
 
     assert metric.score(output=metric_param, reference=metric_param) == ScoreResult(
         name=metric.name, value=1.0, reason=None, metadata=None
@@ -34,7 +34,7 @@ def test_evaluation__equals():
 def test_evaluation__regex_match():
     # everything that ends with 'metric'
     metric_param = ".+metric$"
-    metric = regex_match.RegexMatch(metric_param)
+    metric = regex_match.RegexMatch(metric_param, track=False)
 
     assert metric.score("some metric") == ScoreResult(
         name=metric.name, value=1.0, reason=None, metadata=None
@@ -46,7 +46,7 @@ def test_evaluation__regex_match():
 
 def test_evaluation__levenshtein_ratio():
     metric_param = "apple"
-    metric = levenshtein_ratio.LevenshteinRatio()
+    metric = levenshtein_ratio.LevenshteinRatio(track=False)
 
     assert metric.score("apple", metric_param) == ScoreResult(
         name=metric.name, value=1.0, reason=None, metadata=None
@@ -83,7 +83,7 @@ def test_evaluation__levenshtein_ratio():
     ],
 )
 def test_sentence_bleu_score(candidate, reference, expected_min, expected_max):
-    metric = SentenceBLEU()
+    metric = SentenceBLEU(track=False)
     result = metric.score(output=candidate, reference=reference)
     assert isinstance(result, ScoreResult)
 
@@ -101,7 +101,7 @@ def test_sentence_bleu_score(candidate, reference, expected_min, expected_max):
     ],
 )
 def test_sentence_bleu_score_empty_inputs(candidate, reference):
-    metric = SentenceBLEU()
+    metric = SentenceBLEU(track=False)
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(candidate, reference)
     assert "empty" in str(exc_info.value).lower()
@@ -119,7 +119,7 @@ def test_sentence_bleu_score_empty_inputs(candidate, reference):
     ],
 )
 def test_sentence_bleu_score_different_smoothing(candidate, reference, method):
-    metric = SentenceBLEU(smoothing_method=method)
+    metric = SentenceBLEU(smoothing_method=method, track=False)
     res = metric.score(output=candidate, reference=reference)
     assert res.value >= 0.0
     assert metric.name == "sentence_bleu_metric"
@@ -161,7 +161,7 @@ def test_sentence_bleu_score_different_smoothing(candidate, reference, method):
     ],
 )
 def test_corpus_bleu_score(outputs, references, expected_min, expected_max):
-    metric = CorpusBLEU()
+    metric = CorpusBLEU(track=False)
     res = metric.score(output=outputs, reference=references)
     assert isinstance(res, ScoreResult)
 
@@ -190,7 +190,7 @@ def test_corpus_bleu_score(outputs, references, expected_min, expected_max):
     ],
 )
 def test_corpus_bleu_score_empty_inputs(outputs, references):
-    metric = CorpusBLEU()
+    metric = CorpusBLEU(track=False)
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(output=outputs, reference=references)
     assert "empty" in str(exc_info.value).lower()
@@ -206,7 +206,7 @@ def test_rouge_score_invalid_rouge_type():
 
 
 def test_rouge_score_for_invalid_reference_type():
-    metric = rouge.ROUGE()
+    metric = rouge.ROUGE(track=False)
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score("candidate", [1, False, -3, 4])
     assert (
@@ -224,7 +224,7 @@ def test_rouge_score_for_invalid_reference_type():
     ],
 )
 def test_rouge_score_for_empty_inputs(candidate, reference):
-    metric = rouge.ROUGE()
+    metric = rouge.ROUGE(track=False)
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(candidate, reference)
     assert "empty" in str(exc_info.value).lower()
@@ -261,7 +261,7 @@ def test_rouge_score_for_empty_inputs(candidate, reference):
     ],
 )
 def test_rouge1_score(candidate, reference, expected_min, expected_max):
-    metric = rouge.ROUGE(rouge_type="rouge1")
+    metric = rouge.ROUGE(rouge_type="rouge1", track=False)
     result = metric.score(output=candidate, reference=reference)
     assert isinstance(result, ScoreResult)
 
@@ -304,7 +304,7 @@ def test_rouge1_score(candidate, reference, expected_min, expected_max):
     ],
 )
 def test_rouge2_score(candidate, reference, expected_min, expected_max):
-    metric = rouge.ROUGE(rouge_type="rouge2")
+    metric = rouge.ROUGE(rouge_type="rouge2", track=False)
     result = metric.score(output=candidate, reference=reference)
     assert isinstance(result, ScoreResult)
 
@@ -349,7 +349,7 @@ def test_rouge2_score(candidate, reference, expected_min, expected_max):
     ],
 )
 def test_rougeL_score(candidate, reference, expected_min, expected_max):
-    metric = rouge.ROUGE(rouge_type="rougeL")
+    metric = rouge.ROUGE(rouge_type="rougeL", track=False)
     result = metric.score(output=candidate, reference=reference)
     assert isinstance(result, ScoreResult)
     assert expected_min <= result.value <= expected_max, (
@@ -387,7 +387,7 @@ def test_rougeL_score(candidate, reference, expected_min, expected_max):
     ],
 )
 def test_rougeLsum_score(candidate, reference, expected_min, expected_max):
-    metric = rouge.ROUGE(rouge_type="rougeLsum")
+    metric = rouge.ROUGE(rouge_type="rougeLsum", track=False)
     result = metric.score(output=candidate, reference=reference)
     assert isinstance(result, ScoreResult)
     assert expected_min <= result.value <= expected_max, (
@@ -423,7 +423,7 @@ def test_rougeLsum_score(candidate, reference, expected_min, expected_max):
 def test_rouge_score_for_multiple_references(
     candidate, reference, expected_min, expected_max
 ):
-    metric = rouge.ROUGE()
+    metric = rouge.ROUGE(track=False)
     result = metric.score(output=candidate, reference=reference)
     assert isinstance(result, ScoreResult)
 
@@ -455,7 +455,7 @@ def test_rouge_score_for_multiple_references(
     ],
 )
 def test_rouge_score_using_stemmer(candidate, reference, expected_min, expected_max):
-    metric = rouge.ROUGE(use_stemmer=True)
+    metric = rouge.ROUGE(use_stemmer=True, track=False)
     result = metric.score(output=candidate, reference=reference)
     assert isinstance(result, ScoreResult)
 
@@ -489,7 +489,7 @@ def test_rouge_score_using_stemmer(candidate, reference, expected_min, expected_
 def test_rouge_score_using_custom_tokenizer(
     candidate, reference, expected_min, expected_max, tokenizer
 ):
-    metric = rouge.ROUGE(tokenizer=tokenizer)
+    metric = rouge.ROUGE(tokenizer=tokenizer, track=False)
     result = metric.score(output=candidate, reference=reference)
     assert isinstance(result, ScoreResult)
 

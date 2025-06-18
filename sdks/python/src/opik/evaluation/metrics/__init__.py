@@ -1,4 +1,5 @@
 from .aggregated_metric import AggregatedMetric
+from .conversation.session_completeness.metric import SessionCompletenessQuality
 from .heuristics.contains import Contains
 from .heuristics.equals import Equals
 from .heuristics.is_json import IsJson
@@ -40,4 +41,5 @@ __all__ = [
     "CorpusBLEU",
     "ROUGE",
     "Sentiment",
+    "SessionCompletenessQuality",
 ]
