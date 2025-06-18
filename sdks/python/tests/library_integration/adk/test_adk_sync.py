@@ -1141,20 +1141,123 @@ def test_adk__track_adk_agent_recursive__idempotent_calls_make_no_duplicated_cal
     assert root_agent.before_model_callback is first_root_before_model_callback
 
 
-def test_adk__opik_tracer__pickled__happyflow(fake_backend):
+def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
     opik_tracer = OpikTracer(
-        name="test-name",
-        project_name="test-project",
-        tags=["test-tag"],
-        metadata={"test-key": "test-value"},
-        distributed_headers={"test-header": "test-value"},
+        project_name="adk-test",
+        tags=["adk-test"],
+        metadata={"adk-metadata-key": "adk-metadata-value"},
     )
 
     pickled_opik_tracer = pickle.dumps(opik_tracer)
     opik_tracer = pickle.loads(pickled_opik_tracer)
 
-    assert opik_tracer.name == "test-name"
-    assert opik_tracer.project_name == "test-project"
-    assert opik_tracer.tags == ["test-tag"]
-    assert opik_tracer.metadata == {"created_from": "google-adk", "test-key": "test-value"}
-    assert opik_tracer.distributed_headers == {"test-header": "test-value"}
+    root_agent = adk_agents.Agent(
+        name="weather_time_agent",
+        model=MODEL_NAME,
+        description=(
+            "Agent to answer questions about the weather in a city (only 'New York' supported)."
+        ),
+        instruction=(
+            "I can answer your questions about the weather in a city (only 'New York' supported)."
+        ),
+        tools=[agent_tools.get_weather],
+        before_agent_callback=opik_tracer.before_agent_callback,
+        after_agent_callback=opik_tracer.after_agent_callback,
+        before_model_callback=opik_tracer.before_model_callback,
+        after_model_callback=opik_tracer.after_model_callback,
+        before_tool_callback=opik_tracer.before_tool_callback,
+        after_tool_callback=opik_tracer.after_tool_callback,
+    )
+
+    runner = _build_runner(root_agent)
+
+    events = runner.run(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        new_message=genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text="What is the weather in New York?")],
+        ),
+    )
+    final_response = _extract_final_response_text(events)
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) > 0
+    trace_tree = fake_backend.trace_trees[0]
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="weather_time_agent",
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        metadata={
+            "created_from": "google-adk",
+            "adk-metadata-key": "adk-metadata-value",
+            "adk_invocation_id": ANY_STRING,
+            "app_name": APP_NAME,
+            "user_id": USER_ID,
+        },
+        tags=["adk-test"],
+        output=ANY_DICT.containing(
+            {"content": {"parts": [{"text": final_response}], "role": "model"}}
+        ),
+        input={
+            "role": "user",
+            "parts": [{"text": "What is the weather in New York?"}],
+        },
+        thread_id=SESSION_ID,
+        project_name="adk-test",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name=MODEL_NAME,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="llm",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                provider=opik_adk_helpers.get_adk_provider(),
+                model=MODEL_NAME,
+                usage=ANY_DICT,
+                project_name="adk-test",
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="get_weather",
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="tool",
+                input={"city": "New York"},
+                output={
+                    "status": "success",
+                    "report": "The weather in New York is sunny with a temperature of 25 degrees Celsius (41 degrees Fahrenheit).",
+                },
+                project_name="adk-test",
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name=MODEL_NAME,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="llm",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                provider=opik_adk_helpers.get_adk_provider(),
+                model=MODEL_NAME,
+                usage=ANY_DICT,
+                project_name="adk-test",
+            ),
+        ],
+    )
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+    assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
+    assert_dict_has_keys(trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
