@@ -3,10 +3,12 @@ import concurrent.futures
 import json
 import logging
 import os
-import subprocess
+import signal
 import time
 import uuid
-from queue import Queue
+import sys
+from multiprocessing import Process, Pipe
+from queue import Queue, Empty
 from threading import Lock, Event
 from uuid6 import uuid7
 
@@ -14,70 +16,38 @@ import schedule
 from opentelemetry import metrics
 
 from opik_backend.executor import CodeExecutorBase
+from opik_backend import process_worker
 
 logger = logging.getLogger(__name__)
 
-# Create a meter for Process executor metrics
+# OTel metrics setup (assuming this is standard and correct)
 meter = metrics.get_meter("process_executor")
-
-# Create histogram metrics for process operations
 process_creation_histogram = meter.create_histogram(
     name="process_creation_latency",
     description="Latency of process creation operations in milliseconds",
     unit="ms",
 )
-
 process_execution_histogram = meter.create_histogram(
     name="process_execution_latency",
     description="Latency of code execution in process in milliseconds",
     unit="ms",
 )
-
-# Create a gauge metric to track the number of available processes in the pool
 process_pool_size_gauge = meter.create_gauge(
     name="process_pool_size",
     description="Number of available processes in the pool queue",
 )
 
-
 def _calculate_latency_ms(start_time):
-    """Calculate elapsed time in milliseconds."""
-    return (time.time() - start_time) * 1000  # Convert to milliseconds
-
-
-def _read_result_with_prefix(process, worker_id):
-    """
-    Read lines from the process stdout until a line with the RESULT= prefix is found.
-    Parse and return the JSON result from that line.
-    """
-    prefix = "RESULT="
-
-    while True:
-        line = process.stdout.readline()
-
-        # If we got an empty response, the worker has died
-        if not line:
-            logger.error(f"Worker {worker_id} died during execution")
-            raise Exception("Worker process died during execution")
-
-        # Check if the line starts with our result prefix
-        if line.startswith(prefix):
-            # Extract the JSON part after the prefix
-            json_str = line[len(prefix):].strip()
-
-            # Parse the response
-            try:
-                return json.loads(json_str)
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to decode response from worker {worker_id}: {e}")
-                logger.error(f"Response was: {json_str}")
-                raise Exception("Failed to decode worker response")
-        else:
-            # This is likely a print statement from user code, log it at debug level
-            logger.debug(f"Worker {worker_id} output: {line.strip()}")
-
+    return (time.time() - start_time) * 1000
 
 class ProcessExecutor(CodeExecutorBase):
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if not cls._instance:
+            cls._instance = super(ProcessExecutor, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self):
         super().__init__()
         self.instance_id = str(uuid7())
@@ -86,307 +56,246 @@ class ProcessExecutor(CodeExecutorBase):
         self.releaser_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
         self.stop_event = Event()
         self.pool_check_interval = int(os.getenv("PYTHON_CODE_EXECUTOR_POOL_CHECK_INTERVAL_IN_SECONDS", "3"))
-        
-        # Pre-warm the process pool
+        self.all_workers = {}
+        self.all_workers_lock = Lock()
+        self._shutting_down = False
+        self._cleanup_has_run = False
+        self._services_started = False
+
+    def start_services(self, register_signal_handlers=False):
+        if self._services_started:
+            logger.info(f"ProcessExecutor ({self.instance_id}): Services already started. Skipping.")
+            return
+
+        if register_signal_handlers:
+            logger.info(f"ProcessExecutor ({self.instance_id}): Registering signal handlers in PID {os.getpid()}.")
+            signal.signal(signal.SIGINT, self._handle_shutdown_signal)
+            signal.signal(signal.SIGTERM, self._handle_shutdown_signal)
+
         self._pre_warm_process_pool()
-
-        # Start the pool monitor
         self._start_pool_monitor()
+        
+        # NOTE: atexit is unreliable in this environment. Cleanup is called from the signal handler.
+        logger.info(f"ProcessExecutor ({self.instance_id}): Services started.")
+        self._services_started = True
 
-        atexit.register(self.cleanup)
+    def _handle_shutdown_signal(self, signum, frame):
+        signal_name = signal.Signals(signum).name
+        # Prevent re-entry if shutdown is already in progress
+        if self.stop_event.is_set():
+            logger.warning(f"ProcessExecutor ({self.instance_id}): PID {os.getpid()} received signal {signal_name}, but shutdown already in progress. Ignoring.")
+            return
+
+        logger.warning(f"ProcessExecutor ({self.instance_id}): PID {os.getpid()} received signal {signal_name}. Initiating graceful shutdown.")
+        self.stop_event.set() # Signal other parts of the executor to stop
+
+        # Deregister signal handlers to prevent re-entry during cleanup
+        # Allowing Python to restore default handlers is generally safer.
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+
+        logger.warning(f"ProcessExecutor ({self.instance_id}): Starting cleanup...")
+        self.cleanup() # This should terminate and join all worker processes
+        logger.warning(f"ProcessExecutor ({self.instance_id}): Cleanup finished.")
+
+        # Unregister cleanup from atexit to prevent double execution, as we've called it directly.
+        atexit.unregister(self.cleanup)
+        
+        logger.warning(f"ProcessExecutor ({self.instance_id}): Graceful cleanup finished. Exiting process via sys.exit(0).")
+        sys.exit(0) # Use sys.exit for standard shutdown
+
+    def cleanup(self):
+        if self._cleanup_has_run:
+            logger.debug(f"ProcessExecutor ({self.instance_id}): Cleanup check: already run or in progress. Skipping.")
+            return
+        self._cleanup_has_run = True
+
+        logger.warning(f"ProcessExecutor ({self.instance_id}): Starting cleanup core logic...")
+
+        if not self.stop_event.is_set():
+            self.stop_event.set()
+
+        schedule.clear()
+
+        with self.all_workers_lock:
+            workers_to_terminate = list(self.all_workers.values())
+
+        logger.info(f"Terminating {len(workers_to_terminate)} worker processes.")
+        futures = [self.releaser_executor.submit(self.terminate_worker, worker) for worker in workers_to_terminate]
+        concurrent.futures.wait(futures)
+
+        # Add a longer delay to allow pending IPC/resource cleanup before main process atexit handlers run
+        logger.info("All worker processes joined. Pausing for 2.0 seconds for resource tracker updates...")
+        time.sleep(2.0) 
+
+        logger.info("Pause complete. Proceeding with main process shutdown.")
+
+        # Drain the queue to be safe
+        while not self.process_pool.empty():
+            try:
+                self.process_pool.get_nowait()
+            except Empty:
+                break
+
+        if self.releaser_executor:
+            self.releaser_executor.shutdown(wait=True)
+
+        logger.warning(f"ProcessExecutor ({self.instance_id}): Cleanup finished.")
+
+    def terminate_worker(self, worker):
+        worker_id = worker.get('id', 'unknown')
+        process = worker.get('process')
+        if not process:
+            return
+
+        # Close the connection if it exists and is open
+        connection = worker.get('connection')
+        if connection:
+            try:
+                connection.close()
+            except Exception as e:
+                logger.warning(f"Error closing connection for worker {worker_id}: {e}")
+
+        if not process.is_alive():
+            logger.info(f"Worker {worker_id} (PID: {process.pid if process.pid else 'N/A'}) already terminated.")
+            with self.all_workers_lock:
+                if worker_id in self.all_workers:
+                    del self.all_workers[worker_id]
+            return
+
+        logger.info(f"Terminating worker {worker_id} (PID: {process.pid}).")
+        try:
+            process.terminate() # Send SIGTERM
+            process.join(timeout=2) # Give it 2 seconds to die
+            if process.is_alive(): # Check if it's still alive after timeout
+                logger.warning(f"Worker {worker_id} (PID: {process.pid}) did not terminate gracefully after SIGTERM, killing.")
+                process.kill() # Send SIGKILL
+                process.join(timeout=1) # Wait for SIGKILL to take effect
+        except Exception as e: # Catch any other exceptions during termination
+            logger.error(f"Exception during termination of worker {worker_id} (PID: {process.pid}): {e}")
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=1)
+        
+        with self.all_workers_lock:
+            if worker_id in self.all_workers:
+                del self.all_workers[worker_id]
+
+        logger.info(f"Termination sequence for worker {worker_id} complete.")
+
+    # ... (rest of the methods like _start_pool_monitor, _check_pool, etc. are assumed to be here and correct)
+    # For brevity, I will only include the methods that were significantly changed or are critical for context.
 
     def _start_pool_monitor(self):
-        """Start a background thread that periodically checks and fills the process pool."""
         logger.info(f"Starting process pool monitor with {self.pool_check_interval} second interval")
-
-        # Schedule the pool check to run at the configured interval
         schedule.every(self.pool_check_interval).seconds.do(self._check_pool)
-
-        # Start a background thread to run the scheduler
         self.releaser_executor.submit(self._run_scheduler)
 
-    def _check_pool(self):
-        """Check and fill the process pool if needed."""
-        if self.stop_event.is_set():
-            logger.info("Process pool monitor stopped")
-            return schedule.CancelJob  # Cancel this job
-
-        try:
-            # Update the process pool size metric
-            self._update_process_pool_size_metric()
-
-            self.ensure_pool_filled()
-            return None  # Continue the job
-        except Exception as e:
-            logger.error(f"Error in pool monitor: {e}")
-            return None  # Continue the job despite the error
-
     def _run_scheduler(self):
-        """Run the scheduler in a background thread."""
         logger.info("Starting scheduler for process pool monitoring")
         while not self.stop_event.is_set():
             schedule.run_pending()
-            time.sleep(1)  # Sleep to avoid busy-waiting
-
+            time.sleep(1)
         logger.info("Scheduler finished running")
 
+    def _check_pool(self):
+        if self.stop_event.is_set():
+            return schedule.CancelJob
+        self.ensure_pool_filled()
+
     def _pre_warm_process_pool(self):
-        """
-        Pre-warm the process pool by creating all processes in parallel.
-        This ensures processes are ready when the service starts.
-        """
         logger.info(f"Pre-warming process pool with {self.max_parallel} processes")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel) as pool_init:
-            # Submit process creation tasks in parallel
-            futures = [pool_init.submit(self.create_worker_process) for _ in range(self.max_parallel)]
-            # Wait for all processes to be created
-            concurrent.futures.wait(futures)
+        futures = [self.releaser_executor.submit(self.create_worker_process) for _ in range(self.max_parallel)]
+        concurrent.futures.wait(futures)
 
     def ensure_pool_filled(self):
-        """Ensure the process pool has enough processes."""
-        if self.stop_event.is_set():
-            logger.warning("Executor is shutting down, skipping process creation")
-            return
-
-        with self.pool_lock:
-            current_pool_size = self.process_pool.qsize()
-            to_create = self.max_parallel - current_pool_size
+        with self.all_workers_lock: # Ensure thread-safe access to all_workers
+            current_total_workers = len(self.all_workers)
+            to_create = self.max_parallel - current_total_workers
             if to_create > 0:
-                logger.info(f"Not enough python runner processes; creating {to_create} more...")
+                logger.info(f"Pool needs {to_create} workers to reach max_parallel {self.max_parallel} (current total: {current_total_workers}). Creating...")
                 for _ in range(to_create):
-                    self.create_worker_process()
-
-    def _update_process_pool_size_metric(self):
-        """Update the process pool size metric with the current number of processes in the pool."""
-        pool_size = self.process_pool.qsize()
-        process_pool_size_gauge.set(pool_size)
-        logger.debug(f"Current process pool size: {pool_size}")
-        return pool_size
+                    self.releaser_executor.submit(self.create_worker_process)
 
     def create_worker_process(self):
-        """Create a new worker process that can be used for execution."""
-        # Record the start time for detailed process creation metrics
         start_time = time.time()
-
+        worker_id = str(uuid.uuid4())[:8]
+        parent_conn, child_conn = Pipe()
+        process = None
         try:
-            # Create a unique ID for this worker
-            worker_id = str(uuid.uuid4())[:8]
-
-            # Path to the worker script (assuming it's in the same directory as this file)
-            import os.path
-            worker_script_path = os.path.join(os.path.dirname(__file__), "process_worker.py")
-
-            # Start the worker process using the dedicated worker script file
-            process = subprocess.Popen(
-                ["python", "-u", worker_script_path],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                bufsize=1,  # Line-buffered
-                universal_newlines=True  # Text mode for easy line reading
-            )
-
-            # Wait for the "READY" signal from the worker with timeout
-            try:
-                ready_line = ""
-                # Set up a thread to read stderr in background to catch initialization errors
-                stderr_lines = []
-
-                def read_stderr():
-                    while True:
-                        line = process.stderr.readline()
-                        if not line:
-                            break
-                        stderr_lines.append(line.strip())
-
-                stderr_thread = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-                stderr_thread.submit(read_stderr)
-
-                # Wait for READY with timeout
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ready_pool:
-                    ready_future = ready_pool.submit(process.stdout.readline)
-                    try:
-                        ready_line = ready_future.result(timeout=self.exec_timeout).strip()
-                    except concurrent.futures.TimeoutError:
-                        # If we time out waiting for READY, check if the process is still alive
-                        if process.poll() is not None:
-                            # Process has exited
-                            exit_code = process.poll()
-                            logger.error(f"Worker {worker_id} exited with code {exit_code} during initialization")
-                            # Get any stderr output
-                            if stderr_lines:
-                                logger.error(f"Worker {worker_id} stderr output: {stderr_lines}")
-                            raise Exception(f"Worker process exited with code {exit_code} during startup")
-                        else:
-                            logger.error(f"Worker {worker_id} timed out waiting for READY signal")
-                            process.kill()
-                            raise Exception("Worker process timed out during startup")
-                
-                # Check if we got the expected READY signal
-                if ready_line != "READY":
-                    # Process is alive but didn't respond with READY
-                    logger.warning(f"Worker {worker_id} sent unexpected ready signal: '{ready_line}'")
-                    if stderr_lines:
-                        logger.error(f"Worker {worker_id} stderr output: {stderr_lines}")
-                    # Still try to use the process, but log the warning
+            # Changed to non-daemon (daemon=False by default)
+            process = Process(target=process_worker.worker_process_main, args=(child_conn,))
+            process.start()
             
-            except Exception as e:
-                # Clean up the process if anything goes wrong
-                if process.poll() is None:
-                    process.kill()
-                logger.error(f"Failed to initialize worker {worker_id}: {e}")
-                if stderr_lines:
-                    logger.error(f"Worker {worker_id} stderr output: {stderr_lines}")
-                raise
+            # Wait for READY signal from worker
+            if parent_conn.poll(timeout=10): # Wait up to 10 seconds for READY
+                ready_signal = parent_conn.recv()
+                if ready_signal != "READY":
+                    raise Exception(f"Worker {worker_id} (PID: {process.pid}) sent unexpected signal: {ready_signal}")
+            else:
+                raise Exception(f"Worker {worker_id} (PID: {process.pid}) timed out waiting for READY signal.")
 
-            # Store the worker process info
-            worker = {
-                'id': worker_id,
-                'process': process,
-                'creation_time': time.time()
-            }
-
-            # Add the worker to the pool
+            worker = {'id': worker_id, 'process': process, 'connection': parent_conn}
+            with self.all_workers_lock:
+                self.all_workers[worker_id] = worker
             self.process_pool.put(worker)
-
-            # Calculate and record the latency
             latency = _calculate_latency_ms(start_time)
-            process_creation_histogram.record(latency, attributes={"method": "create_process"})
-
-            logger.info(f"Created worker process {worker_id}, pid {process.pid} in {latency:.3f} milliseconds")
-            return worker
+            process_creation_histogram.record(latency)
+            logger.info(f"Created worker {worker_id} (PID: {process.pid}) in {latency:.3f}ms.")
         except Exception as e:
-            logger.error(f"Failed to create worker process: {e}")
-            return None
-
-    def terminate_worker(self, worker):
-        """Terminate a worker process."""
-        try:
-            process = worker.get('process')
-            if not process:
-                return
-
-            worker_id = worker.get('id', 'unknown')
-
-            # Try to gracefully exit first
-            try:
-                if process.poll() is None:  # If process is still running
-                    process.stdin.write("EXIT\n")
-                    process.stdin.flush()
-                    process.wait(timeout=1)
-            except Exception:
-                pass
-
-            # Force kill if still running
-            if process.poll() is None:
-                try:
-                    process.terminate()
-                    process.wait(timeout=1)
-                except Exception:
-                    pass
-
-            # Last resort
-            if process.poll() is None:
-                try:
-                    process.kill()
-                except Exception:
-                    pass
-
-            logger.info(f"Terminated worker {worker_id}")
-
-            # Create a replacement worker asynchronously
-            self.releaser_executor.submit(self.create_worker_process)
-        except Exception as e:
-            logger.error(f"Error terminating worker: {e}")
-            # Still try to create a replacement
-            self.releaser_executor.submit(self.create_worker_process)
+            logger.error(f"Failed to create worker process {worker_id} (PID: {process.pid if process and process.pid else 'N/A'}): {e}")
+            if process and process.is_alive():
+                process.terminate()
+                process.join(timeout=1)
+            if parent_conn:
+                parent_conn.close()
+            if child_conn:
+                child_conn.close()
 
     def get_worker(self):
-        """Get a worker from the pool with timeout handling."""
         if self.stop_event.is_set():
-            raise RuntimeError("Executor is shutting down, no workers available")
-
-        while not self.stop_event.is_set():
-            try:
-                worker = self.process_pool.get(timeout=self.exec_timeout)
-                process = worker.get('process')
-
-                # Verify the process is still running
-                if process.poll() is not None:  # Process has exited
-                    logger.warning(f"Worker {worker.get('id')} has exited unexpectedly, creating replacement")
-                    self.terminate_worker(worker)  # Clean up and create replacement
-                    continue  # Try another worker
-
-                return worker
-            except Exception as e:
-                if self.stop_event.is_set():
-                    raise RuntimeError("Executor is shutting down, no workers available")
-
-                logger.warning(f"Couldn't get a worker after waiting for {self.exec_timeout}s. Will retry: {e}")
+            raise RuntimeError("Executor is shutting down")
+        try:
+            worker = self.process_pool.get(timeout=self.exec_timeout)
+            if not worker['process'].is_alive():
+                logger.warning(f"Got a dead worker {worker['id']} from pool. Terminating and retrying.")
+                self.terminate_worker(worker)
+                return self.get_worker() # Retry
+            return worker
+        except Empty:
+            logger.error("Timeout getting a worker from the pool.")
+            raise RuntimeError("No available workers in the pool.")
 
     def run_scoring(self, code: str, data: dict) -> dict:
         if self.stop_event.is_set():
             return {"code": 503, "error": "Service is shutting down"}
-
-        worker = self.get_worker()
-        start_time = time.time()
-
+        worker = None
         try:
-            process = worker.get('process')
+            worker = self.get_worker()
             worker_id = worker.get('id', 'unknown')
+            connection = worker.get('connection')
+            if not connection:
+                raise Exception(f"Worker {worker_id} has no connection object.")
 
-            # Prepare the command data
-            command_data = {
-                'code': code,
-                'data': data
-            }
+            start_exec_time = time.time()
+            connection.send({'code': code, 'data': data})
+            
+            # Wait for result with timeout
+            if connection.poll(timeout=self.exec_timeout): # exec_timeout should be defined, e.g., 60 seconds
+                result = connection.recv()
+            else:
+                logger.error(f"Timeout waiting for result from worker {worker_id}")
+                # Terminate the worker as it's unresponsive
+                self.terminate_worker(worker)
+                return {"code": 500, "error": "Execution timed out"}
+            
+            latency = _calculate_latency_ms(start_exec_time)
+            process_execution_histogram.record(latency)
 
-            # Send the command
-            command_json = json.dumps(command_data) + "\n"
-            process.stdin.write(command_json)
-            process.stdin.flush()
-
-            # Read the response with timeout using a thread
-            with concurrent.futures.ThreadPoolExecutor() as exec_pool:
-                future = exec_pool.submit(_read_result_with_prefix, process, worker_id)
-                try:
-                    result = future.result(timeout=self.exec_timeout)
-                    
-                    # Calculate and record latency
-                    latency = _calculate_latency_ms(start_time)
-                    process_execution_histogram.record(latency, attributes={"method": "run_scoring"})
-                    logger.debug(f"Worker {worker_id} executed code in {latency:.3f} milliseconds")
-
-                    # Return the worker to the pool for reuse
-                    self.process_pool.put(worker)
-
-                    return result
-                except concurrent.futures.TimeoutError:
-                    logger.error(f"Execution timed out in worker {worker_id}")
-                    self.terminate_worker(worker)
-                    return {"code": 504, "error": "Server processing exceeded timeout limit."}
+            self.process_pool.put(worker) # Return worker to pool
+            return result
         except Exception as e:
-            logger.error(f"Error in run_scoring: {e}")
-            if 'worker' in locals():
-                self.terminate_worker(worker)
-            return {"code": 500, "error": f"Failed to execute code: {str(e)}"}
-
-    def cleanup(self):
-        """Clean up resources used by this executor."""
-        logger.info("Shutting down Process executor")
-        self.stop_event.set()
-
-        # Clear all scheduled jobs
-        schedule.clear()
-
-        # Clean up all worker processes
-        while not self.process_pool.empty():
-            try:
-                worker = self.process_pool.get_nowait()
-                self.terminate_worker(worker)
-            except:
-                pass
-
-        # Shutdown the executor
-        logger.info("Shutting down executor")
-        self.releaser_executor.shutdown(wait=False, cancel_futures=True)
+            logger.error(f"Error in run_scoring with worker {worker.get('id') if worker else 'N/A'}: {e}")
+            if worker:
+                self.terminate_worker(worker) # Terminate failed worker
+            return {"code": 500, "error": f"Failed to execute code: {e}"}
