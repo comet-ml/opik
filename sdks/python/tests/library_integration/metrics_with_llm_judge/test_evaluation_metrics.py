@@ -1,24 +1,9 @@
 import pytest
 from opik.evaluation import metrics
-from opik.evaluation.metrics import score_result
 from opik import exceptions
-from ...testlib import patch_environ
+from ...testlib import assert_helpers
 
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
-
-
-@pytest.fixture(autouse=True)
-def ensure_litellm_monitoring_disabled():
-    with patch_environ(add_keys={"OPIK_ENABLE_LITELLM_MODELS_MONITORING": "False"}):
-        yield
-
-
-def assert_score_result(result: score_result.ScoreResult) -> None:
-    assert result.scoring_failed is False
-    assert isinstance(result.value, float)
-    assert 0.0 <= result.value <= 1.0
-    assert isinstance(result.reason, str)
-    assert len(result.reason) > 0
 
 
 def test__answer_relevance__context_provided_happyflow():
@@ -30,7 +15,7 @@ def test__answer_relevance__context_provided_happyflow():
         context=["France is a country in Europe."],
     )
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
 
 
 def test__answer_relevance__no_context_provided__error_raised():
@@ -65,7 +50,7 @@ def test__answer_relevance__no_context_provided__no_context_mode_is_enabled__hap
         output="The capital of France is Paris.",
     )
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
 
 
 def test__no_opik_configured__answer_relevance(
@@ -79,7 +64,7 @@ def test__no_opik_configured__answer_relevance(
         context=["France is a country in Europe."],
     )
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
 
 
 @pytest.mark.parametrize(
@@ -99,7 +84,7 @@ def test__context_precision(context):
         context=context,
     )
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
 
 
 @pytest.mark.parametrize(
@@ -119,7 +104,7 @@ def test__context_recall(context):
         context=context,
     )
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
 
 
 @pytest.mark.parametrize(
@@ -138,7 +123,7 @@ def test__hallucination(context):
         context=context,
     )
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
 
 
 def test__moderation():
@@ -148,7 +133,7 @@ def test__moderation():
         output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage."
     )
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
 
 
 def test__g_eval():
@@ -164,4 +149,4 @@ def test__g_eval():
                """
     )
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
