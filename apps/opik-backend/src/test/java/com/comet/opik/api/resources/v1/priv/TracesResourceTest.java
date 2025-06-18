@@ -85,6 +85,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.junit.jupiter.api.AfterAll;
@@ -130,7 +131,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -5081,10 +5081,7 @@ class TracesResourceTest {
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
 
-            List<Trace> traces;
-            List<Span> spans = new ArrayList<>();
-
-            traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .map(trace -> trace.toBuilder()
                             .projectId(null)
@@ -5093,51 +5090,33 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
                             .comments(null)
+                            .spanCount(RandomUtils.secure().randomInt(1, 11))
                             .build())
                     .map(trace -> trace.toBuilder()
                             .duration(trace.startTime().until(trace.endTime(), ChronoUnit.MICROS) / 1000.0)
                             .build())
-                    .collect(Collectors.toCollection(ArrayList::new));
+                    .toList();
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-            if (Objects.equals(sorting.field(), SortableFields.SPAN_COUNT) || sorting.field().startsWith("usage.")) {
-                traces = traces.stream().map(t -> t
-                        .toBuilder()
-                        .spanCount(PodamUtils.getIntegerInRange(1, 3))
-                        .build())
-                        .collect(Collectors.toCollection(ArrayList::new));
+            var spans = traces.stream()
+                    .flatMap(trace -> IntStream.range(0, trace.spanCount())
+                            .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                                    .usage(Map.of("completion_tokens", RandomUtils.secure().randomInt()))
+                                    .projectName(projectName)
+                                    .traceId(trace.id())
+                                    .type(SpanType.general)
+                                    .build()))
+                    .toList();
 
-                Map<String, Integer> usage = null;
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
 
-                if (sorting.field().startsWith("usage.")) {
-                    int tokens = Math.abs(factory.manufacturePojo(Integer.class));
-                    usage = Map.of("completion_tokens", tokens);
-                }
-
-                for (Trace trace : traces) {
-                    for (int i = 0; i < trace.spanCount(); i++) {
-                        spans.add(factory.manufacturePojo(Span.class).toBuilder()
-                                .usage(usage)
-                                .projectName(projectName)
-                                .traceId(trace.id())
-                                .type(SpanType.general)
-                                .build());
-                    }
-                }
-
-                spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
-
-                if (sorting.field().startsWith("usage.")) {
-                    Map<UUID, List<Span>> spansByTrace = spans.stream().collect(Collectors.groupingBy(Span::traceId));
-                    traces = traces.stream()
-                            .map(t -> t.toBuilder()
-                                    .usage(aggregateSpansUsage(spansByTrace.get(t.id())))
-                                    .build())
-                            .collect(Collectors.toCollection(ArrayList::new));
-                }
-            }
-
+            var spansByTrace = spans.stream().collect(Collectors.groupingBy(Span::traceId));
+            traces = traces.stream()
+                    .map(t -> t.toBuilder()
+                            .usage(aggregateSpansUsage(spansByTrace.get(t.id())))
+                            .build())
+                    .toList();
 
             var expectedTraces = traces.stream()
                     .sorted(comparator)
@@ -5241,18 +5220,7 @@ class TracesResourceTest {
             Comparator<Trace> metadataComparator = Comparator.comparing(trace -> trace.metadata().toString());
             Comparator<Trace> tagsComparator = Comparator.comparing(trace -> trace.tags().toString());
             Comparator<Trace> errorInfoComparator = Comparator.comparing(trace -> trace.errorInfo().toString());
-
-            Comparator<Trace> usageComparatorAsc = Comparator.comparing(
-                    (Trace t) -> Optional.ofNullable(t.usage()).map(u -> u.get("completion_tokens"))
-                            .orElse(null),
-                    Comparator.nullsFirst(Comparator.naturalOrder()))
-                    .thenComparing(Comparator.comparing(Trace::id).reversed());
-
-            Comparator<Trace> usageComparatorDesc = Comparator.comparing(
-                            (Trace t) -> Optional.ofNullable(t.usage()).map(u -> u.get("completion_tokens"))
-                                    .orElse(null),
-                            Comparator.nullsLast(Comparator.reverseOrder()))
-                    .thenComparing(Comparator.comparing(Trace::id).reversed());
+            Comparator<Trace> usageComparator = Comparator.comparing(trace -> trace.usage().get("completion_tokens"));
 
             return Stream.of(
                     Arguments.of(Comparator.comparing(Trace::name),
@@ -5304,15 +5272,15 @@ class TracesResourceTest {
                     Arguments.of(Comparator.comparing(Trace::threadId).reversed(), SortingField.builder()
                             .field(SortableFields.THREAD_ID).direction(Direction.DESC).build()),
                     Arguments.of(Comparator.comparing(Trace::spanCount)
-                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            .thenComparing(Comparator.comparing(Trace::id).reversed()),
                             SortingField.builder().field(SortableFields.SPAN_COUNT).direction(Direction.ASC).build()),
                     Arguments.of(Comparator.comparing(Trace::spanCount).reversed()
-                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            .thenComparing(Comparator.comparing(Trace::id).reversed()),
                             SortingField.builder().field(SortableFields.SPAN_COUNT).direction(Direction.DESC).build()),
-                    Arguments.of(usageComparatorAsc,
-                            new SortingField("usage.completion_tokens", Direction.ASC)),
-                    Arguments.of(usageComparatorDesc,
-                            new SortingField("usage.completion_tokens", Direction.DESC)));
+                    Arguments.of(usageComparator,
+                            SortingField.builder().field("usage.completion_tokens").direction(Direction.ASC).build()),
+                    Arguments.of(usageComparator.reversed(),
+                            SortingField.builder().field("usage.completion_tokens").direction(Direction.DESC).build()));
         }
 
         @Test
