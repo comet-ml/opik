@@ -289,7 +289,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
       return (
         <div className="relative size-full overflow-hidden">
           <img
-            className="absolute inset-0 bg-cover bg-center blur-sm"
+            className="absolute inset-0 size-full object-fill blur-sm"
             src={noDataMetricChartImageUrl}
             alt="no data image"
           ></img>
@@ -323,7 +323,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
     return (
       <div className="relative size-full overflow-hidden">
         <img
-          className="absolute inset-0 bg-cover bg-center blur-sm"
+          className="absolute inset-0 size-full object-fill blur-sm"
           src={noDataMetricsImageUrl}
           alt="no data image"
         ></img>
