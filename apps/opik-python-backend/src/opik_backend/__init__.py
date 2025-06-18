@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 
 from flask import Flask, make_response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -15,9 +16,21 @@ from opentelemetry.sdk.resources import Resource
 def create_app(test_config=None):
     app = Flask(__name__, instance_relative_config=True)
 
+    # Configure logging
     gunicorn_logger = logging.getLogger('gunicorn.error')
-    app.logger.handlers = gunicorn_logger.handlers
-    app.logger.setLevel(gunicorn_logger.level)
+    if gunicorn_logger.handlers and len(gunicorn_logger.handlers) > 0:
+        app.logger.handlers = gunicorn_logger.handlers
+        app.logger.setLevel(gunicorn_logger.level)
+    else:
+        # Fallback basic logging if not running under Gunicorn
+        if not app.logger.handlers:
+            console_handler = logging.StreamHandler(sys.stderr)
+            formatter = logging.Formatter(
+                '%(asctime)s %(levelname)s [%(name)s] [%(filename)s:%(lineno)d] - %(message)s'
+            )
+            console_handler.setFormatter(formatter)
+            app.logger.addHandler(console_handler)
+        app.logger.setLevel(logging.DEBUG if app.debug else logging.INFO)
 
     if test_config is None:
         # load the instance config, if it exists, when not testing
@@ -59,7 +72,7 @@ def setup_telemetry(app):
         metric_readers.append(otlp_reader)
     else:
         app.logger.info("No OTLP endpoint configured. Will not push metrics.")
-    
+
     # Create MeterProvider with all readers
     resource = Resource.create({"service.name": os.getenv("OTEL_SERVICE_NAME", "opik-python-backend")})
     provider = MeterProvider(resource=resource, metric_readers=metric_readers)
