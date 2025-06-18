@@ -248,7 +248,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         initial_prompt = agent_config.chat_prompt
         random.seed(self.seed)
-        self.llm_call_counter = 0
 
         # Load the dataset
         dataset_items = dataset.get_items()
