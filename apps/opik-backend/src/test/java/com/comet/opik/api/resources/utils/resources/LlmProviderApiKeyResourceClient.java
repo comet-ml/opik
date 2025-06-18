@@ -5,6 +5,7 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
+import com.comet.opik.api.resources.utils.TestConfigUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
@@ -28,7 +29,7 @@ public class LlmProviderApiKeyResourceClient {
 
     public LlmProviderApiKeyResourceClient(ClientSupport client) {
         this.client = client;
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURI = TestConfigUtils.getBaseUrl(client);
     }
 
     public ProviderApiKey createProviderApiKey(

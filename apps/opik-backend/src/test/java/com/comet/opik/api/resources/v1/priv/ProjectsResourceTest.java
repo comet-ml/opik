@@ -29,6 +29,7 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.ProjectStatsSummaryItemMapper;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
+import com.comet.opik.api.resources.utils.TestConfigUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
@@ -59,7 +60,6 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
-import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -87,7 +87,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -108,7 +107,6 @@ import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
@@ -166,6 +164,9 @@ class ProjectsResourceTest {
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
                 .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, DATABASE_NAME);
 
+        MigrationUtils.runMysqlDbMigration(MYSQL);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE_CONTAINER);
+
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
@@ -182,16 +183,9 @@ class ProjectsResourceTest {
     private GuardrailsGenerator guardrailsGenerator;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi, ProjectService projectService) throws SQLException {
+    void setUpAll(ClientSupport client, ProjectService projectService) {
 
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
-        try (var connection = CLICKHOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
-
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURI = TestConfigUtils.getBaseUrl(client);
         this.client = client;
         this.projectService = projectService;
 
@@ -1625,7 +1619,7 @@ class ProjectsResourceTest {
                 .toList();
     }
 
-    private Double getTotalEstimatedCost(List<Trace> traces) {
+    private double getTotalEstimatedCost(List<Trace> traces) {
         long count = traces.stream()
                 .map(Trace::totalEstimatedCost)
                 .filter(Objects::nonNull)

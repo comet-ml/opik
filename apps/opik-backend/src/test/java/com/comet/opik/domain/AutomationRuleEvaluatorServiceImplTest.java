@@ -9,9 +9,9 @@ import com.comet.opik.api.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
-import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.TestConfigUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
@@ -21,7 +21,6 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
-import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,7 +45,6 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -101,19 +99,13 @@ class AutomationRuleEvaluatorServiceImplTest {
     private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) throws Exception {
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
-        try (var connection = CLICKHOUSE.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
+    void setUpAll(ClientSupport client) {
 
         ClientSupportUtils.config(client);
 
         AuthTestUtils.mockTargetWorkspace(WIRE_MOCK.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
 
-        var baseURI = "http://localhost:%d".formatted(client.getPort());
+        var baseURI = TestConfigUtils.getBaseUrl(client);
         this.evaluatorResourceClient = new AutomationRuleEvaluatorResourceClient(client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
     }

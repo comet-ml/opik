@@ -15,6 +15,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.TestConfigUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.WireMockUtils;
@@ -45,7 +46,6 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import org.apache.http.HttpStatus;
-import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,7 +69,6 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -83,7 +82,6 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.LogItem.LogLevel;
 import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
@@ -208,6 +206,10 @@ class AutomationRuleEvaluatorsResourceTest {
         Startables.deepStart(redis, mysql, clickhouse, zookeeper).join();
         wireMock = WireMockUtils.startWireMock();
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickhouse, DATABASE_NAME);
+
+        MigrationUtils.runMysqlDbMigration(mysql);
+        MigrationUtils.runClickhouseDbMigration(clickhouse);
+
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 AppContextConfig.builder()
                         .jdbcUrl(mysql.getJdbcUrl())
@@ -239,13 +241,8 @@ class AutomationRuleEvaluatorsResourceTest {
     private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-        try (var connection = clickhouse.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+    void setUpAll(ClientSupport client) {
+        this.baseURI = TestConfigUtils.getBaseUrl(client);
         this.client = client;
         ClientSupportUtils.config(client);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
