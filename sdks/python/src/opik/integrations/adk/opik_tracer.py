@@ -52,7 +52,6 @@ class OpikTracer:
 
         self._opik_created_spans: Set[str] = set()
 
-
     @functools.cached_property
     def _opik_client(self) -> opik_client.Opik:
         return opik_client.get_client_cached()
