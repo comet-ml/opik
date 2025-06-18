@@ -279,10 +279,10 @@ def test_opik_tracer_with_sample_agent__anthropic(
     assert len(spans) == 3
     assert spans[0].type == "llm"
     assert spans[0].provider == "anthropic"
-    assert spans[0].model.startswith("claude-sonnet-4-0")
+    assert spans[0].model.startswith("claude-sonnet-4")
     OpenAICompletionsUsage.from_original_usage_dict(spans[0].usage)
 
     assert spans[2].type == "llm"
     assert spans[2].provider == "anthropic"
-    assert spans[2].model.startswith("claude-sonnet-4-0")
+    assert spans[2].model.startswith("claude-sonnet-4")
     OpenAICompletionsUsage.from_original_usage_dict(spans[2].usage)

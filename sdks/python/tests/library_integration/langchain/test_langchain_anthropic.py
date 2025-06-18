@@ -33,7 +33,7 @@ def _assert_usage_validity(usage: Dict[str, Any]):
 
 
 MODEL_FOR_TESTS_FULL = "claude-sonnet-4-0"
-MODEL_FOR_TESTS_SHORT = "claude-sonnet-4-0"
+MODEL_FOR_TESTS_SHORT = "claude-sonnet-4"
 
 
 def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__happyflow(
