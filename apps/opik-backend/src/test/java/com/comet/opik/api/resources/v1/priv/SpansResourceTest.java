@@ -77,6 +77,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
@@ -4180,6 +4181,7 @@ class SpansResourceTest {
                             .totalEstimatedCost(Objects.equals(sorting.field(), SortableFields.TOTAL_ESTIMATED_COST)
                                     ? BigDecimal.valueOf(randomNumber())
                                     : null)
+                            .usage(Map.of("total_tokens", RandomUtils.secure().randomInt()))
                             .createdAt(Instant.now().plusMillis(index.getAndIncrement()))
                             .lastUpdatedAt(Instant.now().plusMillis(index.getAndIncrement()))
                             .build())
@@ -4209,7 +4211,7 @@ class SpansResourceTest {
             Comparator<Span> metadataComparator = Comparator.comparing(span -> span.metadata().toString());
             Comparator<Span> tagsComparator = Comparator.comparing(span -> span.tags().toString());
             Comparator<Span> errorInfoComparator = Comparator.comparing(span -> span.errorInfo().toString());
-            Comparator<Span> usageComparator = Comparator.comparing(span -> StringUtils.join(span.usage()));
+            Comparator<Span> usageComparator = Comparator.comparing(span -> span.usage().get("total_tokens"));
 
             return Stream.of(
                     Arguments.of(Comparator.comparing(Span::id),
@@ -4255,9 +4257,9 @@ class SpansResourceTest {
                     Arguments.of(tagsComparator.reversed(),
                             SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()),
                     Arguments.of(usageComparator,
-                            SortingField.builder().field(SortableFields.USAGE).direction(Direction.ASC).build()),
+                            SortingField.builder().field("usage.total_tokens").direction(Direction.ASC).build()),
                     Arguments.of(usageComparator.reversed(),
-                            SortingField.builder().field(SortableFields.USAGE).direction(Direction.DESC).build()),
+                            SortingField.builder().field("usage.total_tokens").direction(Direction.DESC).build()),
                     Arguments.of(Comparator.comparing(Span::createdAt)
                             .thenComparing(Comparator.comparing(Span::id).reversed()),
                             SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.ASC).build()),
