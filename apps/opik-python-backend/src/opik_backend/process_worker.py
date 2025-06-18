@@ -57,17 +57,7 @@ def run_user_code(code: str, data: dict) -> dict:
     return {"scores": [score.__dict__ for score in scores]}
 
 
-def _graceful_shutdown_handler(signum, frame):
-    # This handler acknowledges the signal. Essential, async-signal-safe cleanup
-    # could be done here. For now, logging is removed to prevent reentrant stderr calls.
-    # The process will terminate due to the original signal (e.g., SIGTERM)
-    # after this handler returns. The parent ProcessExecutor logs worker termination.
-    pass
-
-
 def worker_process_main(connection):
-    # Register the graceful shutdown handler for SIGTERM
-    signal.signal(signal.SIGTERM, _graceful_shutdown_handler)
     # Workers should ignore SIGINT; parent ProcessExecutor will manage shutdown.
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
@@ -95,7 +85,6 @@ def worker_process_main(connection):
             except EOFError:
                 # This occurs when the parent closes the pipe, e.g., during shutdown.
                 # The worker will break from its loop and be terminated by SIGTERM from the parent.
-                # Logging is removed to reduce noise as parent logs worker termination.
                 break
             except Exception as e:
                 # Report any errors via the pipe
@@ -104,13 +93,9 @@ def worker_process_main(connection):
                     connection.send(error_msg)
                 except Exception as send_e:
                     print(f"Worker PID {os.getpid()}: Failed to send error to parent: {send_e}", file=sys.stderr)
-                # Optionally, decide if the worker should exit on all errors or try to continue
-                # For now, let's continue, but log the error to worker's stderr (or file log)
                 print(f"Worker PID {os.getpid()}: Encountered error: {e}", file=sys.stderr)
                 print(traceback.format_exc(), file=sys.stderr)
-        
-        # Loop finished (e.g. EXIT command or pipe closed), worker function will now return.
-        # Process termination will be handled by parent or signals.
+
     except Exception as e:
         # If we get an error during initialization, write it to stderr and exit
         # Also try to send error over pipe if possible
@@ -118,11 +103,7 @@ def worker_process_main(connection):
         try:
             connection.send(error_payload)
         except Exception:
-            pass # Pipe might not be usable
+            pass  # Pipe might not be usable
         sys.stderr.write(f"Worker initialization error: {str(e)}\n{traceback.format_exc()}\n")
         sys.stderr.flush()
         sys.exit(1)
-
-
-# The __main__ block is no longer needed as this script will be imported
-# and worker_process_main will be the target of multiprocessing.Process
