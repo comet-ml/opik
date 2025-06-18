@@ -11,8 +11,8 @@ import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
-import com.comet.opik.api.resources.utils.TestConfigUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
@@ -105,7 +105,7 @@ class AutomationRuleEvaluatorServiceImplTest {
 
         AuthTestUtils.mockTargetWorkspace(WIRE_MOCK.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
 
-        var baseURI = TestConfigUtils.getBaseUrl(client);
+        var baseURI = TestUtils.getBaseUrl(client);
         this.evaluatorResourceClient = new AutomationRuleEvaluatorResourceClient(client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
     }

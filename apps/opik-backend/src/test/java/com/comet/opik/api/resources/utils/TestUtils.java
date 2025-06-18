@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.utils;
 import com.comet.opik.utils.JsonUtils;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.collections4.CollectionUtils;
+import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -21,5 +22,9 @@ public class TestUtils {
         return CollectionUtils.isEmpty(filters)
                 ? null
                 : URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
+    }
+
+    public static String getBaseUrl(ClientSupport client) {
+        return "http://localhost:%d".formatted(client.getPort());
     }
 }
