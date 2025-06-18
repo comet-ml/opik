@@ -1,4 +1,5 @@
 import opik
+import pickle
 from typing import Optional, Iterator, Dict
 from . import agent_tools
 from google.adk import agents as adk_agents
@@ -1138,3 +1139,22 @@ def test_adk__track_adk_agent_recursive__idempotent_calls_make_no_duplicated_cal
     assert root_agent.before_tool_callback is first_root_before_tool_callback
     assert root_agent.after_model_callback is first_root_after_model_callback
     assert root_agent.before_model_callback is first_root_before_model_callback
+
+
+def test_adk__opik_tracer__pickled__happyflow(fake_backend):
+    opik_tracer = OpikTracer(
+        name="test-name",
+        project_name="test-project",
+        tags=["test-tag"],
+        metadata={"test-key": "test-value"},
+        distributed_headers={"test-header": "test-value"},
+    )
+
+    pickled_opik_tracer = pickle.dumps(opik_tracer)
+    opik_tracer = pickle.loads(pickled_opik_tracer)
+
+    assert opik_tracer.name == "test-name"
+    assert opik_tracer.project_name == "test-project"
+    assert opik_tracer.tags == ["test-tag"]
+    assert opik_tracer.metadata == {"created_from": "google-adk", "test-key": "test-value"}
+    assert opik_tracer.distributed_headers == {"test-header": "test-value"}
