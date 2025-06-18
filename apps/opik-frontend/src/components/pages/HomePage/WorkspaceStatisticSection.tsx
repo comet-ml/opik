@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { keepPreviousData } from "@tanstack/react-query";
 
 import useProjectsList from "@/api/projects/useProjectsList";
@@ -13,6 +14,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const WorkspaceStatisticSection = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const navigate = useNavigate();
 
   const { data: projectData } = useProjectsList(
     {
@@ -49,13 +51,23 @@ const WorkspaceStatisticSection = () => {
 
   return (
     <div className="flex flex-wrap gap-4">
-      <Card className="min-w-52 flex-1">
+      <Card
+        className="min-w-52 flex-1 cursor-pointer"
+        onClick={() =>
+          navigate({
+            to: "/$workspaceName/projects",
+            params: {
+              workspaceName,
+            },
+          })
+        }
+      >
         <CardHeader className="flex flex-row items-center gap-3">
           <div className="flex size-6 items-center justify-center rounded-sm bg-primary-foreground text-primary">
             <LayoutGrid className="size-3.5" />
           </div>
           <div className="comet-body-s !m-0 flex items-center gap-1.5">
-            Project
+            Projects
             <ExplainerIcon
               {...EXPLAINERS_MAP[EXPLAINER_ID.what_do_you_use_projects_for]}
             />
@@ -67,7 +79,17 @@ const WorkspaceStatisticSection = () => {
           </div>
         </CardContent>
       </Card>
-      <Card className="min-w-52 flex-1">
+      <Card
+        className="min-w-52 flex-1 cursor-pointer"
+        onClick={() =>
+          navigate({
+            to: "/$workspaceName/experiments",
+            params: {
+              workspaceName,
+            },
+          })
+        }
+      >
         <CardHeader className="flex flex-row items-center gap-3">
           <div className="flex size-6 items-center justify-center rounded-sm bg-primary-foreground text-primary">
             <FlaskConical className="size-3.5" />
@@ -85,7 +107,17 @@ const WorkspaceStatisticSection = () => {
           </div>
         </CardContent>
       </Card>
-      <Card className="min-w-52 flex-1">
+      <Card
+        className="min-w-52 flex-1 cursor-pointer"
+        onClick={() =>
+          navigate({
+            to: "/$workspaceName/prompts",
+            params: {
+              workspaceName,
+            },
+          })
+        }
+      >
         <CardHeader className="flex flex-row items-center gap-3">
           <div className="flex size-6 items-center justify-center rounded-sm bg-primary-foreground text-primary">
             <FileTerminal className="size-3.5" />
