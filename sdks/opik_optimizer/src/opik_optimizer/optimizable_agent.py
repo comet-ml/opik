@@ -184,11 +184,11 @@ class OptimizableAgent:
         self,
         dataset: Dataset,
         metric: Callable,
+        n_threads: int,
+        verbose: int = 0,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
         n_samples: Optional[int] = None,
-        n_threads: Optional[int] = 8,
-        verbose: Optional[bool] = False,
     ) -> float:
         prompt = self.agent_config.chat_prompt
 

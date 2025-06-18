@@ -81,7 +81,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         seed: int = 42,
         n_threads: int = 8,
         verbose: int = 1,
-        **model_kwargs: Dict[str, Any],
+        **model_kwargs: Any,
     ) -> None:
         """
         Args:
