@@ -95,11 +95,13 @@ class LangGraphAgent(OptimizableAgent):
         self.agent_config = agent_config
         self.graph = create_graph(
             self.project_name,
-            self.agent_config.chat_prompt.get_messages()[0]["content"],
+            self.agent_config.chat_prompt.get_messages()[0][
+                "content"
+            ],  # FIXME: better way?
         )
 
     def invoke(self, messages: List[Dict[str, str]], seed: int | None = None) -> str:
-        if len(messages) > 1:
+        if len(messages) > 1:  # FIXME: better way?
             # Skip the system prompt
             messages = messages[1:]
         for message in messages:

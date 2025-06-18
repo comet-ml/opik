@@ -13,11 +13,15 @@ from .optimization_config.chat_prompt import ChatPrompt
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 
-def tool_to_dict(tool: Dict[str, Any]) -> Dict[str, Optional[str]]:
+def tools_to_dict(tools: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     retval = {}
-    for key in tool:
-        if isinstance(tool[key], str):
-            retval[key] = tool[key]
+    for name in tools:
+        parts = {}
+        for part in tools[name]:
+            if isinstance(tools[name][part], (int, float, str)):
+                parts[part] = tools[name][part]
+        if parts:
+            retval[name] = parts
     return retval
 
 
@@ -70,12 +74,12 @@ class AgentConfig(BaseModel):
         return base_copy
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            "chat_prompt": self.chat_prompt.to_dict() if self.chat_prompt else None,
-            "tools": {key: tool_to_dict(self.tools[key]) for key in self.tools}
-            if self.tools
-            else None,
-        }
+        retval = {}
+        if self.chat_prompt:
+            retval["chat_prompt"] = self.chat_prompt.to_dict()
+        if self.tools:
+            retval["tools"] = tools_to_dict(self.tools)
+        return retval
 
 
 class OptimizableAgent:

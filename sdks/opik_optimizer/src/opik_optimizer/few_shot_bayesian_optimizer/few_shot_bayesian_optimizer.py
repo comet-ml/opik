@@ -264,6 +264,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             **{
                 "optimizer": self.__class__.__name__,
                 "agent_class": agent_class.__name__,
+                "agent_config": agent_config.to_dict(),
                 "metric": metric.__name__,
                 "dataset": dataset.name,
                 "configuration": {},
@@ -638,6 +639,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             **{
                 "optimizer": self.__class__.__name__,
                 "agent_class": agent_class.__name__,
+                "agent_config": agent_config.to_dict(),
                 "metric": metric.__name__,
                 "dataset": dataset.name,
                 "configuration": {"prompt": (prompt.get_messages() if prompt else [])},

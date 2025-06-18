@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import copy
 
@@ -105,17 +105,20 @@ class ChatPrompt:
 
         return copy.deepcopy(standardize_messages)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> Dict[str, Union[str, List[Dict[str, str]]]]:
         """Convert ChatPrompt to a dictionary for JSON serialization.
 
         Returns:
             Dict containing the serializable representation of this ChatPrompt
         """
-        return {
-            "system": self.system,
-            "user": self.user,
-            "messages": self.messages,
-        }
+        retval: Dict[str, Union[str, List[Dict[str, str]]]] = {}
+        if self.system is not None:
+            retval["system"] = self.system
+        if self.user is not None:
+            retval["user"] = self.user
+        if self.messages is not None:
+            retval["messages"] = self.messages
+        return retval
 
     @classmethod
     def model_validate(
