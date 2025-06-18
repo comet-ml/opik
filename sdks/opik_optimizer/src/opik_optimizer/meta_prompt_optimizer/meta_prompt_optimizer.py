@@ -286,7 +286,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             # Step 1: create the agent
             new_agent_config = agent_config.copy()
             messages = new_agent_config.chat_prompt.get_messages(dataset_item)
-            new_agent_config.chat_prompt = chat_prompt.ChatPrompt(messages=messages)
+            new_agent_config.chat_prompt.messages = messages
             agent = agent_class(new_agent_config)
 
             # --- Step 2: Call the model ---
@@ -429,7 +429,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             if optimization:
                 self.update_optimization(optimization, status="cancelled")
                 logger.debug("Optimization marked as cancelled")
-            raise e
+            return None
 
     def _optimize_agent(
         self,
@@ -535,8 +535,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                             )
 
                             eval_report.set_final_score(best_score, prompt_score)
-                        except Exception as e:
-                            raise ValueError(f"Error evaluating candidate prompt: {e}")
+                        except Exception:
+                            print("Failed evaluating agent; continuing...")
+                            prompt_score = 0
 
                     prompt_scores.append((prompt, prompt_score))
 
@@ -817,7 +818,11 @@ class MetaPromptOptimizer(BaseOptimizer):
                         and isinstance(item["prompt"], list)
                     ):
                         valid_prompts.append(
-                            chat_prompt.ChatPrompt(messages=item["prompt"])
+                            # FIXME: Assumed Format:
+                            chat_prompt.ChatPrompt(
+                                system=item["prompt"][0]["content"],
+                                user=current_prompt.user,
+                            )
                         )
 
                         # Log details

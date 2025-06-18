@@ -96,12 +96,12 @@ class ChatPrompt:
         if self.system is not None:
             standardize_messages.append({"role": "system", "content": self.system})
 
-        if self.user is not None:
-            standardize_messages.append({"role": "user", "content": self.user})
-
         if self.messages is not None:
             for message in self.messages:
                 standardize_messages.append(message)
+
+        if self.user is not None:
+            standardize_messages.append({"role": "user", "content": self.user})
 
         return copy.deepcopy(standardize_messages)
 
