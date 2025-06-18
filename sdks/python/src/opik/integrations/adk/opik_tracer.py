@@ -47,25 +47,28 @@ class OpikTracer:
         self.metadata["created_from"] = "google-adk"
         self.project_name = project_name
         self.distributed_headers = distributed_headers
-        self._client = opik_client.get_client_cached()
 
         self._last_model_output: Optional[Dict[str, Any]] = None
 
-        # Use OpikContextStorage instance instead of global context storage module
-        # in case we need to use different context storage for ADK in the future
-        self._context_storage = context_storage.get_current_context_instance()
-
-        self._opik_created_spans: Set[str] = (
-            set()
-        )  # TODO: use contextvar set for a more reliable clean-up?
-
-        self._current_trace_created_by_opik_tracer: contextvars.ContextVar[
-            Optional[str]
-        ] = contextvars.ContextVar("current_trace_created_by_opik_tracer", default=None)
-
-        self._opik_client = opik_client.get_client_cached()
+        self._opik_created_spans: Set[str] = set()
 
         _patch_adk()
+
+    @functools.cached_property
+    def _opik_client(self) -> opik_client.Opik:
+        return opik_client.get_client_cached()
+
+    @functools.cached_property
+    def _context_storage(self) -> context_storage.OpikContextStorage:
+        return context_storage.get_current_context_instance()
+
+    @functools.cached_property
+    def _current_trace_created_by_opik_tracer(
+        self,
+    ) -> contextvars.ContextVar[Optional[str]]:
+        return contextvars.ContextVar(
+            "current_trace_created_by_opik_tracer", default=None
+        )
 
     def _end_current_trace(self) -> None:
         trace_data = self._context_storage.pop_trace_data()
