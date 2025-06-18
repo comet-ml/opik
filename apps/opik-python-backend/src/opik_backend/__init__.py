@@ -59,7 +59,7 @@ def setup_telemetry(app):
     """Configure OpenTelemetry metrics for the application."""
     # Create metric readers based on environment
     metric_readers = []
-    
+
     # Always add Prometheus reader for k8s scraping
     prometheus_reader = PrometheusMetricReader()
     metric_readers.append(prometheus_reader)
@@ -76,7 +76,7 @@ def setup_telemetry(app):
     # Create MeterProvider with all readers
     resource = Resource.create({"service.name": os.getenv("OTEL_SERVICE_NAME", "opik-python-backend")})
     provider = MeterProvider(resource=resource, metric_readers=metric_readers)
-    
+
     # Set the global MeterProvider
     metrics.set_meter_provider(provider)
     

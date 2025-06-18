@@ -1,6 +1,5 @@
 import atexit
 import concurrent.futures
-import json
 import logging
 import os
 import signal
@@ -37,79 +36,67 @@ process_pool_size_gauge = meter.create_gauge(
     description="Number of available processes in the pool queue",
 )
 
+
 def _calculate_latency_ms(start_time):
     return (time.time() - start_time) * 1000
 
+
 class ProcessExecutor(CodeExecutorBase):
-    _instance = None
-
-    def __new__(cls, *args, **kwargs):
-        if not cls._instance:
-            cls._instance = super(ProcessExecutor, cls).__new__(cls)
-        return cls._instance
-
-    def __init__(self):
+    def __init__(self, should_initialize: bool):
         super().__init__()
+        if not should_initialize:
+            return
         self.instance_id = str(uuid7())
         self.process_pool = Queue()
         self.pool_lock = Lock()
-        self.releaser_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+        self.releaser_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel)
         self.stop_event = Event()
         self.pool_check_interval = int(os.getenv("PYTHON_CODE_EXECUTOR_POOL_CHECK_INTERVAL_IN_SECONDS", "3"))
         self.all_workers = {}
         self.all_workers_lock = Lock()
         self._shutting_down = False
-        self._cleanup_has_run = False
-        self._services_started = False
+        self.start_services()
 
-    def start_services(self, register_signal_handlers=False):
-        if self._services_started:
-            logger.info(f"ProcessExecutor ({self.instance_id}): Services already started. Skipping.")
-            return
-
-        if register_signal_handlers:
-            logger.info(f"ProcessExecutor ({self.instance_id}): Registering signal handlers in PID {os.getpid()}.")
+    def start_services(self):
+        logger.info(f"ProcessExecutor ({self.instance_id}): Registering signal handlers in PID {os.getpid()}.")
+        if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
             signal.signal(signal.SIGINT, self._handle_shutdown_signal)
             signal.signal(signal.SIGTERM, self._handle_shutdown_signal)
 
         self._pre_warm_process_pool()
         self._start_pool_monitor()
-        
-        # NOTE: atexit is unreliable in this environment. Cleanup is called from the signal handler.
+
         logger.info(f"ProcessExecutor ({self.instance_id}): Services started.")
-        self._services_started = True
 
     def _handle_shutdown_signal(self, signum, frame):
         signal_name = signal.Signals(signum).name
         # Prevent re-entry if shutdown is already in progress
         if self.stop_event.is_set():
-            logger.warning(f"ProcessExecutor ({self.instance_id}): PID {os.getpid()} received signal {signal_name}, but shutdown already in progress. Ignoring.")
+            logger.warning(
+                f"ProcessExecutor ({self.instance_id}): PID {os.getpid()} received signal {signal_name}, but shutdown already in progress. Ignoring.")
             return
 
-        logger.warning(f"ProcessExecutor ({self.instance_id}): PID {os.getpid()} received signal {signal_name}. Initiating graceful shutdown.")
-        self.stop_event.set() # Signal other parts of the executor to stop
+        logger.warning(
+            f"ProcessExecutor ({self.instance_id}): PID {os.getpid()} received signal {signal_name}. Initiating graceful shutdown.")
+        # Signal other parts of the executor to stop
+        self.stop_event.set()
 
         # Deregister signal handlers to prevent re-entry during cleanup
-        # Allowing Python to restore default handlers is generally safer.
         signal.signal(signal.SIGINT, signal.SIG_DFL)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
         logger.warning(f"ProcessExecutor ({self.instance_id}): Starting cleanup...")
-        self.cleanup() # This should terminate and join all worker processes
+        self.cleanup()  # This should terminate and join all worker processes
         logger.warning(f"ProcessExecutor ({self.instance_id}): Cleanup finished.")
 
         # Unregister cleanup from atexit to prevent double execution, as we've called it directly.
         atexit.unregister(self.cleanup)
-        
-        logger.warning(f"ProcessExecutor ({self.instance_id}): Graceful cleanup finished. Exiting process via sys.exit(0).")
-        sys.exit(0) # Use sys.exit for standard shutdown
+
+        logger.warning(
+            f"ProcessExecutor ({self.instance_id}): Graceful cleanup finished. Exiting process via sys.exit(0).")
+        sys.exit(0)  # Use sys.exit for standard shutdown
 
     def cleanup(self):
-        if self._cleanup_has_run:
-            logger.debug(f"ProcessExecutor ({self.instance_id}): Cleanup check: already run or in progress. Skipping.")
-            return
-        self._cleanup_has_run = True
-
         logger.warning(f"ProcessExecutor ({self.instance_id}): Starting cleanup core logic...")
 
         if not self.stop_event.is_set():
@@ -123,12 +110,6 @@ class ProcessExecutor(CodeExecutorBase):
         logger.info(f"Terminating {len(workers_to_terminate)} worker processes.")
         futures = [self.releaser_executor.submit(self.terminate_worker, worker) for worker in workers_to_terminate]
         concurrent.futures.wait(futures)
-
-        # Add a longer delay to allow pending IPC/resource cleanup before main process atexit handlers run
-        logger.info("All worker processes joined. Pausing for 2.0 seconds for resource tracker updates...")
-        time.sleep(2.0) 
-
-        logger.info("Pause complete. Proceeding with main process shutdown.")
 
         # Drain the queue to be safe
         while not self.process_pool.empty():
@@ -165,18 +146,19 @@ class ProcessExecutor(CodeExecutorBase):
 
         logger.info(f"Terminating worker {worker_id} (PID: {process.pid}).")
         try:
-            process.terminate() # Send SIGTERM
-            process.join(timeout=2) # Give it 2 seconds to die
-            if process.is_alive(): # Check if it's still alive after timeout
-                logger.warning(f"Worker {worker_id} (PID: {process.pid}) did not terminate gracefully after SIGTERM, killing.")
-                process.kill() # Send SIGKILL
-                process.join(timeout=1) # Wait for SIGKILL to take effect
-        except Exception as e: # Catch any other exceptions during termination
+            process.terminate()  # Send SIGTERM
+            process.join(timeout=2)  # Give it 2 seconds to die
+            if process.is_alive():  # Check if it's still alive after timeout
+                logger.warning(
+                    f"Worker {worker_id} (PID: {process.pid}) did not terminate gracefully after SIGTERM, killing.")
+                process.kill()  # Send SIGKILL
+                process.join(timeout=1)  # Wait for SIGKILL to take effect
+        except Exception as e:  # Catch any other exceptions during termination
             logger.error(f"Exception during termination of worker {worker_id} (PID: {process.pid}): {e}")
             if process.is_alive():
                 process.kill()
                 process.join(timeout=1)
-        
+
         with self.all_workers_lock:
             if worker_id in self.all_workers:
                 del self.all_workers[worker_id]
@@ -209,11 +191,12 @@ class ProcessExecutor(CodeExecutorBase):
         concurrent.futures.wait(futures)
 
     def ensure_pool_filled(self):
-        with self.all_workers_lock: # Ensure thread-safe access to all_workers
+        with self.all_workers_lock:  # Ensure thread-safe access to all_workers
             current_total_workers = len(self.all_workers)
             to_create = self.max_parallel - current_total_workers
             if to_create > 0:
-                logger.info(f"Pool needs {to_create} workers to reach max_parallel {self.max_parallel} (current total: {current_total_workers}). Creating...")
+                logger.info(
+                    f"Pool needs {to_create} workers to reach max_parallel {self.max_parallel} (current total: {current_total_workers}). Creating...")
                 for _ in range(to_create):
                     self.releaser_executor.submit(self.create_worker_process)
 
@@ -223,12 +206,11 @@ class ProcessExecutor(CodeExecutorBase):
         parent_conn, child_conn = Pipe()
         process = None
         try:
-            # Changed to non-daemon (daemon=False by default)
             process = Process(target=process_worker.worker_process_main, args=(child_conn,))
             process.start()
-            
+
             # Wait for READY signal from worker
-            if parent_conn.poll(timeout=10): # Wait up to 10 seconds for READY
+            if parent_conn.poll(timeout=10):  # Wait up to 10 seconds for READY
                 ready_signal = parent_conn.recv()
                 if ready_signal != "READY":
                     raise Exception(f"Worker {worker_id} (PID: {process.pid}) sent unexpected signal: {ready_signal}")
@@ -243,7 +225,8 @@ class ProcessExecutor(CodeExecutorBase):
             process_creation_histogram.record(latency)
             logger.info(f"Created worker {worker_id} (PID: {process.pid}) in {latency:.3f}ms.")
         except Exception as e:
-            logger.error(f"Failed to create worker process {worker_id} (PID: {process.pid if process and process.pid else 'N/A'}): {e}")
+            logger.error(
+                f"Failed to create worker process {worker_id} (PID: {process.pid if process and process.pid else 'N/A'}): {e}")
             if process and process.is_alive():
                 process.terminate()
                 process.join(timeout=1)
@@ -260,7 +243,7 @@ class ProcessExecutor(CodeExecutorBase):
             if not worker['process'].is_alive():
                 logger.warning(f"Got a dead worker {worker['id']} from pool. Terminating and retrying.")
                 self.terminate_worker(worker)
-                return self.get_worker() # Retry
+                return self.get_worker()  # Retry
             return worker
         except Empty:
             logger.error("Timeout getting a worker from the pool.")
@@ -279,23 +262,23 @@ class ProcessExecutor(CodeExecutorBase):
 
             start_exec_time = time.time()
             connection.send({'code': code, 'data': data})
-            
+
             # Wait for result with timeout
-            if connection.poll(timeout=self.exec_timeout): # exec_timeout should be defined, e.g., 60 seconds
+            if connection.poll(timeout=self.exec_timeout):  # exec_timeout should be defined, e.g., 60 seconds
                 result = connection.recv()
             else:
                 logger.error(f"Timeout waiting for result from worker {worker_id}")
                 # Terminate the worker as it's unresponsive
                 self.terminate_worker(worker)
                 return {"code": 500, "error": "Execution timed out"}
-            
+
             latency = _calculate_latency_ms(start_exec_time)
             process_execution_histogram.record(latency)
 
-            self.process_pool.put(worker) # Return worker to pool
+            self.process_pool.put(worker)  # Return worker to pool
             return result
         except Exception as e:
             logger.error(f"Error in run_scoring with worker {worker.get('id') if worker else 'N/A'}: {e}")
             if worker:
-                self.terminate_worker(worker) # Terminate failed worker
+                self.terminate_worker(worker)  # Terminate failed worker
             return {"code": 500, "error": f"Failed to execute code: {e}"}

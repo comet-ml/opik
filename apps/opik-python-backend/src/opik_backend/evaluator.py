@@ -19,7 +19,7 @@ def init_executor(app):
         app.executor = DockerExecutor()
     elif EXECUTION_STRATEGY == "process":
         from opik_backend.executor_process import ProcessExecutor
-        app.executor = ProcessExecutor()
+        app.executor = ProcessExecutor(os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug)
     else:
         raise ValueError(f"Unknown execution strategy: {EXECUTION_STRATEGY}")
 
