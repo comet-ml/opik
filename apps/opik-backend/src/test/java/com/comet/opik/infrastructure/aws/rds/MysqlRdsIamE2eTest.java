@@ -4,8 +4,8 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
-import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.TestConfigUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -25,7 +25,6 @@ import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
-import java.sql.SQLException;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -79,15 +78,12 @@ class MysqlRdsIamE2eTest {
     private ClientSupport client;
 
     @BeforeAll
-    void beforeAll(ClientSupport client, Jdbi jdbi) throws SQLException {
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
+    void beforeAll(ClientSupport client, Jdbi jdbi) {
 
-        try (var connection = CLICKHOUSE.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, MigrationUtils.CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
+        MigrationUtils.runMysqlDbMigration(jdbi);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
 
-        baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURI = TestConfigUtils.getBaseUrl(client);
         this.client = client;
 
         ClientSupportUtils.config(client);

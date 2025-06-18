@@ -13,8 +13,6 @@ import com.google.inject.AbstractModule;
 import com.google.inject.Singleton;
 import com.redis.testcontainers.RedisContainer;
 import org.assertj.core.api.Assertions;
-import org.jdbi.v3.core.Jdbi;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,7 +28,6 @@ import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -53,6 +50,9 @@ class CacheManagerTest {
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICKHOUSE, DATABASE_NAME);
 
+        MigrationUtils.runMysqlDbMigration(MYSQL);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
+
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 AppContextConfig.builder()
                         .jdbcUrl(MYSQL.getJdbcUrl())
@@ -72,18 +72,6 @@ class CacheManagerTest {
                                         new CustomConfig("cacheManager.defaultDuration", "PT0.500S"),
                                         new CustomConfig("cacheManager.caches.%s".formatted(CACHE_NAME_2), "PT0.200S")))
                         .build());
-    }
-
-    @BeforeAll
-    void setUpAll(Jdbi jdbi) throws Exception {
-
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
-        try (var connection = CLICKHOUSE.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
-
     }
 
     @Test
