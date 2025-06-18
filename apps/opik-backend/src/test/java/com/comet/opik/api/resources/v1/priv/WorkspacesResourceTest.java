@@ -1,8 +1,9 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.metrics.WorkspaceMetricRequest;
+import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -45,6 +46,10 @@ import java.math.RoundingMode;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -130,7 +135,7 @@ class WorkspacesResourceTest {
 
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
-        void happyPath(boolean withProjectIds) {
+        void metricsSummary_happyPath(boolean withProjectIds) {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -148,10 +153,11 @@ class WorkspacesResourceTest {
 
             var traces = traceResourceClient.getByProjectName(projectName, apiKey, workspaceName);
             var startTime = traces.stream()
-                    .flatMap(trace -> trace.feedbackScores().stream())
-                    .filter(score -> score.name().equals(names.getLast()))
-                    .map(FeedbackScore::createdAt)
+                    .filter(trace -> trace.feedbackScores().stream()
+                            .anyMatch(score -> score.name().equals(names.getLast())))
+                    .map(Trace::startTime)
                     .min(Instant::compareTo).get();
+
             Instant endTime = startTime.plus(Duration.ofMinutes(10));
 
             // Get metrics summary
@@ -174,7 +180,7 @@ class WorkspacesResourceTest {
 
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
-        void emptyData(boolean withProjectIds) {
+        void metricsSummary_emptyData(boolean withProjectIds) {
             var projectId = UUID.randomUUID();
 
             var startTime = Instant.now();
@@ -190,6 +196,80 @@ class WorkspacesResourceTest {
                     API_KEY, WORKSPACE_NAME);
 
             assertThat(actualMetricsSummary.results()).isEmpty();
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void metricsDaily_happyPath(boolean withProjectIds) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName2 = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            var projectId2 = projectResourceClient.createProject(projectName2, apiKey, workspaceName);
+
+            String name = UUID.randomUUID().toString();
+
+            var project1Scores = createFeedbackScores(projectName, List.of(name), apiKey,
+                    workspaceName);
+            var project2Scores = createFeedbackScores(projectName2, List.of(name), apiKey,
+                    workspaceName);
+
+            var endTime = Instant.now();
+            var startTime = endTime.minus(Duration.ofDays(1));
+
+            // Get metrics summary
+            var actualMetrics = workspaceResourceClient.getMetricsDaily(
+                    WorkspaceMetricRequest.builder()
+                            .intervalStart(startTime)
+                            .intervalEnd(endTime)
+                            .projectIds(withProjectIds ? Set.of(projectId, projectId2) : null)
+                            .name(name)
+                            .build(),
+                    apiKey, workspaceName);
+
+            var expectedMetricsSummary = withProjectIds
+                    ? prepareMetricsDailyPerProjects(project1Scores, project2Scores, name, projectId, projectId2)
+                    : prepareMetricsDailyPerWorkspace(project1Scores, project2Scores, name);
+
+            assertThat(actualMetrics.results())
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedMetricsSummary);
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void metricsDaily_emptyData(boolean withProjectIds) {
+            var projectId = UUID.randomUUID();
+            String name = UUID.randomUUID().toString();
+
+            var endTime = Instant.now();
+            var startTime = endTime.minus(Duration.ofDays(1));
+
+            var actualMetrics = workspaceResourceClient.getMetricsDaily(
+                    WorkspaceMetricRequest.builder()
+                            .intervalStart(startTime)
+                            .intervalEnd(endTime)
+                            .projectIds(withProjectIds ? Set.of(projectId) : null)
+                            .name(name)
+                            .build(),
+                    API_KEY, WORKSPACE_NAME);
+
+            if (withProjectIds) {
+                assertThat(actualMetrics.results()).isEmpty();
+            } else {
+                var expectedMetricsSummary = prepareMetricsDailyPerWorkspace(Map.of(), Map.of(), name);
+
+                assertThat(actualMetrics.results())
+                        .usingRecursiveComparison()
+                        .ignoringCollectionOrder()
+                        .isEqualTo(expectedMetricsSummary);
+            }
         }
 
         private Map<String, Double> createFeedbackScores(String projectName, List<String> scoreNames, String apiKey,
@@ -241,6 +321,65 @@ class WorkspacesResourceTest {
                             .previous(previousScores.getOrDefault(name, 0D))
                             .build())
                     .toList();
+        }
+
+        private List<WorkspaceMetricResponse.Result> prepareMetricsDailyPerProjects(Map<String, Double> project1Scores,
+                Map<String, Double> project2Scores,
+                String name, UUID projectId1, UUID projectId2) {
+            return List.of(WorkspaceMetricResponse.Result.builder()
+                    .projectId(projectId1)
+                    .name(name)
+                    .data(prepareMetricsDailyData(project1Scores.values()))
+                    .build(),
+                    WorkspaceMetricResponse.Result.builder()
+                            .projectId(projectId2)
+                            .name(name)
+                            .data(prepareMetricsDailyData(project2Scores.values()))
+                            .build());
+        }
+
+        private List<WorkspaceMetricResponse.Result> prepareMetricsDailyPerWorkspace(Map<String, Double> project1Scores,
+                Map<String, Double> project2Scores,
+                String name) {
+            Collection<Double> allValues = Stream.concat(
+                    project1Scores.values().stream(),
+                    project2Scores.values().stream()).toList();
+
+            return List.of(WorkspaceMetricResponse.Result.builder()
+                    .projectId(null)
+                    .name(name)
+                    .data(prepareMetricsDailyData(allValues))
+                    .build());
+        }
+
+        private List<WorkspaceMetricResponse.Result.MetricsData> prepareMetricsDailyData(Collection<Double> scores) {
+
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mmX");
+
+            String todayTime = LocalDate
+                    .now(ZoneOffset.UTC)
+                    .atStartOfDay(ZoneOffset.UTC)
+                    .format(formatter);
+
+            String yesterdayTime = LocalDate
+                    .now(ZoneOffset.UTC)
+                    .minusDays(1)
+                    .atStartOfDay(ZoneOffset.UTC)
+                    .format(formatter);
+
+            var avgValue = scores.stream()
+                    .mapToDouble(Double::doubleValue)
+                    .average()
+                    .orElse(0.0);
+
+            return List.of(WorkspaceMetricResponse.Result.MetricsData.builder()
+                    .time(yesterdayTime)
+                    .value(0D)
+                    .build(),
+                    WorkspaceMetricResponse.Result.MetricsData.builder()
+                            .time(todayTime)
+                            .value(avgValue)
+                            .build());
         }
     }
 }

@@ -1,8 +1,11 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.metrics.WorkspaceMetricRequest;
+import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
@@ -12,12 +15,16 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.ArrayUtils;
+import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
@@ -27,6 +34,7 @@ public interface WorkspaceMetricsDAO {
 
     Mono<List<WorkspaceMetricsSummaryResponse.Result>> getFeedbackScoresSummary(WorkspaceMetricsSummaryRequest request);
 
+    Mono<List<WorkspaceMetricResponse.Result>> getFeedbackScoresDaily(WorkspaceMetricRequest request);
 }
 
 @Slf4j
@@ -40,16 +48,24 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             parseDateTime64BestEffort(:timestamp_prior_start, 9) AS timestamp_prior_start,
             feedback_scores_aggregated AS (
                 SELECT
-                    AVGIf(value, created_at >= timestamp_start AND created_at \\<= timestamp_end) AS current,
-                    AVGIf(value, created_at >= timestamp_prior_start AND created_at \\< timestamp_start) AS previous,
-                    name
+                    AVGIf(fs.value, t.start_time >= timestamp_start AND t.start_time \\<= timestamp_end) AS current,
+                    AVGIf(fs.value, t.start_time >= timestamp_prior_start AND t.start_time \\< timestamp_start) AS previous,
+                    fs.name
                 FROM feedback_scores fs final
+                JOIN (
+                    SELECT
+                        id,
+                        start_time
+                    FROM traces final
+                    WHERE workspace_id = :workspace_id
+                      <if(project_ids)> AND project_id IN :project_ids <endif>
+                      AND start_time >= timestamp_prior_start
+                      AND start_time \\<= timestamp_end
+                ) t ON t.id = fs.entity_id
                 WHERE workspace_id = :workspace_id
-                  <if(project_ids)> AND project_id IN :project_ids <endif>
-                  AND created_at >= timestamp_prior_start
-                  AND created_at \\<= timestamp_end
-                  AND entity_type = 'trace'
-                GROUP BY name
+                    <if(project_ids)> AND project_id IN :project_ids <endif>
+                    AND entity_type = 'trace'
+                GROUP BY fs.name
             )
             SELECT
                 IF(isNaN(current), 0, current) AS current,
@@ -58,17 +74,120 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             FROM feedback_scores_aggregated;
             """;
 
+    private static final String GET_FEEDBACK_SCORES_DAILY_BY_PROJECT = """
+            WITH feedback_scores_daily AS (
+                SELECT fs.project_id AS project_id,
+                       toStartOfInterval(t.start_time, toIntervalDay(1)) AS bucket,
+                       avg(fs.value) AS value
+                FROM feedback_scores fs final
+                JOIN (
+                    SELECT
+                        id,
+                        start_time
+                    FROM traces final
+                    WHERE workspace_id = :workspace_id
+                      AND project_id IN :project_ids
+                      AND start_time >= parseDateTime64BestEffort(:timestamp_start, 9)
+                      AND start_time <= parseDateTime64BestEffort(:timestamp_end, 9)
+                ) t ON t.id = fs.entity_id
+                WHERE workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+                  AND entity_type = 'trace'
+                  AND name = :name
+                GROUP BY fs.project_id, bucket
+                ORDER BY fs.project_id, bucket
+                WITH FILL
+                FROM toStartOfInterval(parseDateTimeBestEffort(:timestamp_start), toIntervalDay(1))
+                    TO parseDateTimeBestEffort(:timestamp_end)
+                    STEP toIntervalDay(1)
+            )
+            SELECT
+                project_id,
+                :name AS name,
+                groupArray(tuple(bucket, value)) AS data
+            FROM feedback_scores_daily
+            GROUP BY project_id
+            ;
+            """;
+
+    private static final String GET_FEEDBACK_SCORES_DAILY = """
+            WITH feedback_scores_daily AS (
+                SELECT toStartOfInterval(t.start_time, toIntervalDay(1)) AS bucket,
+                       avg(fs.value) AS value
+                FROM feedback_scores fs final
+                JOIN (
+                    SELECT
+                        id,
+                        start_time
+                    FROM traces final
+                    WHERE workspace_id = :workspace_id
+                      AND start_time >= parseDateTime64BestEffort(:timestamp_start, 9)
+                      AND start_time <= parseDateTime64BestEffort(:timestamp_end, 9)
+                ) t ON t.id = fs.entity_id
+                WHERE workspace_id = :workspace_id
+                  AND entity_type = 'trace'
+                  AND name = :name
+                GROUP BY bucket
+                ORDER BY bucket
+                WITH FILL
+                FROM toStartOfInterval(parseDateTimeBestEffort(:timestamp_start), toIntervalDay(1))
+                    TO parseDateTimeBestEffort(:timestamp_end)
+                    STEP toIntervalDay(1)
+            )
+            SELECT
+                NULL AS project_id,
+                :name AS name,
+                groupArray(tuple(bucket, value)) AS data
+            FROM feedback_scores_daily
+            ;
+            """;
+
     private final @NonNull TransactionTemplateAsync template;
+
+    private static final TypeReference<List<WorkspaceMetricResponse.Result.MetricsData>> LIST_DAILY_DATA_TYPE_REFERENCE = new TypeReference<>() {
+    };
 
     @Override
     public Mono<List<WorkspaceMetricsSummaryResponse.Result>> getFeedbackScoresSummary(
             @NonNull WorkspaceMetricsSummaryRequest request) {
-        return getMetricsSummary(request, GET_FEEDBACK_SCORES_SUMMARY);
+        return getFeedbackScoresSummary(request, GET_FEEDBACK_SCORES_SUMMARY);
     }
 
-    private Mono<List<WorkspaceMetricsSummaryResponse.Result>> getMetricsSummary(WorkspaceMetricsSummaryRequest request,
+    @Override
+    public Mono<List<WorkspaceMetricResponse.Result>> getFeedbackScoresDaily(WorkspaceMetricRequest request) {
+        var query = CollectionUtils
+                .isEmpty(request.projectIds())
+                        ? GET_FEEDBACK_SCORES_DAILY
+                        : GET_FEEDBACK_SCORES_DAILY_BY_PROJECT;
+        return getFeedbackScoresDaily(request, query);
+    }
+
+    private Mono<List<WorkspaceMetricResponse.Result>> getFeedbackScoresDaily(WorkspaceMetricRequest request,
             String query) {
-        return template.nonTransaction(connection -> getMetricsSummary(connection, request, query)
+        return template.nonTransaction(connection -> getFeedbackScoresDaily(connection, request, query)
+                .flatMapMany(this::rowToDataPoint)
+                .collectList());
+    }
+
+    private Mono<? extends Result> getFeedbackScoresDaily(Connection connection, WorkspaceMetricRequest request,
+            String query) {
+
+        var statement = connection.createStatement(query)
+                .bind("timestamp_start", request.intervalStart().toString())
+                .bind("timestamp_end", request.intervalEnd().toString())
+                .bind("name", request.name());
+
+        if (CollectionUtils.isNotEmpty(request.projectIds())) {
+            statement.bind("project_ids", request.projectIds());
+        }
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement));
+    }
+
+    private Mono<List<WorkspaceMetricsSummaryResponse.Result>> getFeedbackScoresSummary(
+            WorkspaceMetricsSummaryRequest request,
+            String query) {
+        return template.nonTransaction(connection -> getFeedbackScoresSummary(connection, request, query)
                 .flatMapMany(result -> result.map((row, rowMetadata) -> WorkspaceMetricsSummaryResponse.Result.builder()
                         .name(row.get("name", String.class))
                         .current(row.get("current", Double.class))
@@ -77,7 +196,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 .collectList());
     }
 
-    private Mono<? extends Result> getMetricsSummary(Connection connection, WorkspaceMetricsSummaryRequest request,
+    private Mono<? extends Result> getFeedbackScoresSummary(Connection connection,
+            WorkspaceMetricsSummaryRequest request,
             String query) {
         ST template = new ST(query);
 
@@ -104,5 +224,29 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
         // Subtract the duration from intervalStart to get prior start timestamp
         return intervalStart.minus(duration);
+    }
+
+    private Publisher<WorkspaceMetricResponse.Result> rowToDataPoint(Result result) {
+        return result.map(((row, rowMetadata) -> WorkspaceMetricResponse.Result.builder()
+                .projectId(row.get("project_id", UUID.class))
+                .name(row.get("name", String.class))
+                .data(getDailyData(row.get("data", List[].class)))
+                .build()));
+    }
+
+    private List<WorkspaceMetricResponse.Result.MetricsData> getDailyData(List[] dataArray) {
+        if (ArrayUtils.isEmpty(dataArray)) {
+            return null;
+        }
+
+        var dataItems = Arrays.stream(dataArray)
+                .filter(CollectionUtils::isNotEmpty)
+                .map(dataItem -> WorkspaceMetricResponse.Result.MetricsData.builder()
+                        .time(dataItem.get(0).toString())
+                        .value(Double.parseDouble(dataItem.get(1).toString()))
+                        .build())
+                .toList();
+
+        return dataItems.isEmpty() ? null : dataItems;
     }
 }
