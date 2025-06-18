@@ -68,6 +68,8 @@ tags:
   description: Span related resources
 - name: Traces
   description: Trace related resources
+- name: Workspaces
+  description: Workspace related resources
 - name: Redirect
   description: Redirects for SDK generated links
 paths:
@@ -3337,6 +3339,31 @@ paths:
           description: No Content
         "404":
           description: Not found
+  /v1/private/workspaces/metrics/summaries:
+    post:
+      tags:
+      - Workspaces
+      summary: Get metrics summary
+      description: Get metrics summary
+      operationId: metricsSummary
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceMetricsSummaryRequest"
+      responses:
+        "200":
+          description: Workspace Metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceMetricsSummaryResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/session/redirect/datasets:
     get:
       tags:
@@ -8735,3 +8762,39 @@ components:
           $ref: "#/components/schemas/ErrorInfo"
         thread_id:
           type: string
+    Result:
+      type: object
+      properties:
+        name:
+          type: string
+        current:
+          type: number
+          format: double
+        previous:
+          type: number
+          format: double
+    WorkspaceMetricsSummaryResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Result"
+    WorkspaceMetricsSummaryRequest:
+      required:
+      - interval_end
+      - interval_start
+      type: object
+      properties:
+        project_ids:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
