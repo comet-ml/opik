@@ -52,8 +52,6 @@ class OpikTracer:
 
         self._opik_created_spans: Set[str] = set()
 
-        _patch_adk()
-
     @functools.cached_property
     def _opik_client(self) -> opik_client.Opik:
         return opik_client.get_client_cached()
@@ -110,6 +108,7 @@ class OpikTracer:
         self, callback_context: CallbackContext, *args: Any, **kwargs: Any
     ) -> None:
         try:
+            _ensure_adk_patched()
             thread_id, session_metadata = _get_info_from_adk_session(callback_context)
 
             trace_metadata = self.metadata.copy()
@@ -326,7 +325,7 @@ class OpikTracer:
 
 
 @functools.lru_cache()
-def _patch_adk() -> None:
+def _ensure_adk_patched() -> None:
     # monkey patch LLMResponse to store usage_metadata
     old_function = LlmResponse.create
     create_wrapper = llm_response_wrapper.LlmResponseCreateWrapper(old_function)
