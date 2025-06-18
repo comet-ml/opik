@@ -38,8 +38,8 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
-import com.comet.opik.api.resources.utils.TestConfigUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
@@ -61,6 +61,9 @@ import com.comet.opik.domain.GuardrailsMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.threads.TraceThreadCriteria;
+import com.comet.opik.domain.threads.TraceThreadModel;
+import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -103,6 +106,7 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.com.google.common.collect.Lists;
 import org.testcontainers.shaded.org.apache.commons.lang3.tuple.Pair;
+import org.testcontainers.shaded.org.awaitility.Awaitility;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -124,11 +128,12 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
-import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -253,7 +258,7 @@ class TracesResourceTest {
     @BeforeAll
     void setUpAll(ClientSupport client) {
 
-        this.baseURI = TestConfigUtils.getBaseUrl(client);
+        this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
 
         ClientSupportUtils.config(client);
@@ -5845,7 +5850,11 @@ class TracesResourceTest {
     }
 
     private Trace createTrace() {
-        return factory.manufacturePojo(Trace.class).toBuilder()
+        return fromBuilder(factory.manufacturePojo(Trace.class).toBuilder());
+    }
+
+    private Trace fromBuilder(Trace.TraceBuilder builder) {
+        return builder
                 .feedbackScores(null)
                 .threadId(null)
                 .comments(null)
@@ -8338,6 +8347,175 @@ class TracesResourceTest {
 
             var actualError = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
             assertThat(actualError).isEqualTo(expectedError);
+        }
+
+    }
+
+    /**
+     * This class is testing the creation of trace threads. The feature is not completely implemented yet,
+     * so some tests are using services to check the database state. In the future, this should be do via the APIs
+     * */
+    @Nested
+    @DisplayName("Trace Threads Creation")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class TraceThreadCreation {
+
+        @Test
+        @DisplayName("when trace threads are created, then create trace thread id async")
+        void createTraceThreads(TraceThreadService traceThreadService) {
+            // Given
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var threadId = randomUUID().toString();
+
+            // Create multiple trace within same thread
+            List<Trace> traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> fromBuilder(trace.toBuilder()).toBuilder()
+                            .projectId(projectId)
+                            .projectName(projectName)
+                            .threadId(threadId)
+                            .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
+                            .build())
+                    .toList();
+
+            var createdAt = Instant.now();
+
+            Instant expectedLastUpdatedAt = getExpectedLastUpdatedAt(traces);
+
+            var expectedTraceThreadModel = createTraceThreadModel(threadId, projectId, createdAt,
+                    expectedLastUpdatedAt);
+
+            // When: Creating trace threads
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Then: Assert that trace thread is created
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                var criteria = TraceThreadCriteria.builder()
+                        .projectId(projectId)
+                        .build();
+
+                List<TraceThreadModel> actualTraceThreadModels = traceThreadService.getThreadsByProject(1, 10, criteria)
+                        .contextWrite(context -> context.put(RequestContext.USER_NAME, USER)
+                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .block();
+
+                assertThreadModels(actualTraceThreadModels, List.of(expectedTraceThreadModel), createdAt);
+            });
+        }
+
+        @Test
+        @DisplayName("when trace threads receive concurrent requests, then create trace thread only once")
+        void createTraceThreads__whenConcurrentRequests__thenCreateTraceThreadOnlyOnce(
+                TraceThreadService traceThreadService) {
+            //Given
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            String threadId1 = randomUUID().toString();
+            String threadId2 = randomUUID().toString();
+
+            // Create multiple trace within same thread
+            List<List<Trace>> traces = IntStream.range(0, 5)
+                    .mapToObj(i -> PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                            .stream()
+                            .map(trace -> fromBuilder(trace.toBuilder()).toBuilder()
+                                    .projectId(projectId)
+                                    .projectName(projectName)
+                                    .threadId(PodamUtils.getIntegerInRange(0, 1) % 2 == 0 ? threadId1 : threadId2)
+                                    .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
+                                    .build())
+                            .toList())
+                    .toList();
+
+            Instant expectedLastUpdatedAt1 = getExpectedLastUpdatedAt(
+                    traces.stream()
+                            .flatMap(List::stream)
+                            .filter(it -> it.threadId().equals(threadId1))
+                            .toList());
+
+            Instant expectedLastUpdatedAt2 = getExpectedLastUpdatedAt(
+                    traces.stream()
+                            .flatMap(List::stream)
+                            .filter(it -> it.threadId().equals(threadId2))
+                            .toList());
+
+            Instant expectedCreatedAt = Instant.now();
+
+            var expectedTraceThreadModel1 = createTraceThreadModel(threadId1, projectId, expectedCreatedAt,
+                    expectedLastUpdatedAt1);
+            var expectedTraceThreadModel2 = createTraceThreadModel(threadId2, projectId, expectedCreatedAt,
+                    expectedLastUpdatedAt2);
+
+            // When: Creating trace thread concurrently
+            traces.parallelStream()
+                    .forEach(traceList -> traceResourceClient.batchCreateTraces(traceList, apiKey, workspaceName));
+
+            List<TraceThreadModel> expectedTraceThreadModels = List.of(expectedTraceThreadModel1,
+                    expectedTraceThreadModel2);
+
+            // Then: Assert that trace threads are created only once
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                var criteria = TraceThreadCriteria.builder()
+                        .projectId(projectId)
+                        .build();
+
+                List<TraceThreadModel> actualTraceThreadModels = traceThreadService.getThreadsByProject(1, 10, criteria)
+                        .contextWrite(context -> context.put(RequestContext.USER_NAME, USER)
+                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .block();
+
+                assertThreadModels(actualTraceThreadModels, expectedTraceThreadModels, expectedCreatedAt);
+            });
+        }
+
+        private Instant getExpectedLastUpdatedAt(List<Trace> traces) {
+            return traces
+                    .stream()
+                    .map(Trace::lastUpdatedAt)
+                    .max(Comparator.naturalOrder())
+                    .orElseThrow();
+        }
+
+        private TraceThreadModel createTraceThreadModel(String threadId, UUID projectId, Instant expectedCreatedAt,
+                Instant expectedLastUpdatedAt) {
+            return TraceThreadModel.builder()
+                    .threadId(threadId)
+                    .projectId(projectId)
+                    .createdBy(USER)
+                    .createdAt(expectedCreatedAt)
+                    .lastUpdatedBy(USER)
+                    .lastUpdatedAt(expectedLastUpdatedAt)
+                    .status(TraceThreadModel.Status.ACTIVE)
+                    .build();
+        }
+
+        private void assertThreadModels(List<TraceThreadModel> actualTraceThreadModels,
+                List<TraceThreadModel> expectedTraceThreadModels, Instant expectedCreatedAt) {
+
+            assertThat(actualTraceThreadModels).hasSize(expectedTraceThreadModels.size());
+
+            assertThat(actualTraceThreadModels)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id", "createdAt")
+                    .containsExactlyInAnyOrderElementsOf(expectedTraceThreadModels);
+
+            assertThat(actualTraceThreadModels.stream().map(TraceThreadModel::createdAt))
+                    .allMatch(createdAt -> createdAt.isAfter(expectedCreatedAt));
+            assertThat(actualTraceThreadModels.stream().map(TraceThreadModel::id))
+                    .allMatch(Objects::nonNull);
         }
 
     }
