@@ -93,7 +93,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
             ></SearchInput>
             <Separator className="mt-1" />
           </div>
-          <div className="max-h-[calc(var(--radix-popper-available-height)-60px)] overflow-y-auto">
+          <div className="max-h-[calc(var(--radix-popper-available-height)-60px)] overflow-y-auto overflow-x-hidden">
             {hasMoreProjects && (
               <div className="comet-body-xs px-4 py-2 text-muted-slate">
                 Presenting the latest {LOADED_PROJECTS_COUNT} projects, sorted

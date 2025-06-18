@@ -26,8 +26,6 @@ import MetricOverviewChart, {
 import { Project } from "@/types/projects";
 import useAppStore from "@/store/AppStore";
 
-// TODO lala horizontal scroll in projects selector
-
 const METRIC_NAME_TO_EXPLAINER_ID_MAP: Record<
   string,
   { explainerId: EXPLAINER_ID; trend: PercentageTrendType }
