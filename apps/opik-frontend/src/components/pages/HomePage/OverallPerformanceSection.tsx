@@ -89,7 +89,6 @@ const OverallPerformanceSection = () => {
         intervalStart={intervalStart}
         intervalEnd={intervalEnd}
       />
-      <div className="mt-6 min-h-72">COST</div>
     </div>
   );
 };
