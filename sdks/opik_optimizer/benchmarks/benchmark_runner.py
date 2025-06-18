@@ -62,7 +62,7 @@ def run_optimization(
             start_time_initial_eval = time.time()
             initial_evaluation = []
             for metric_ in dataset_config.metrics:
-                result = agent.evaluate(dataset=dataset, metric=metric_)
+                result = agent.evaluate(dataset=dataset, metric=metric_, n_threads=4)
                 initial_evaluation.append(
                     {
                         "metric_name": metric_.__name__,
@@ -89,7 +89,9 @@ def run_optimization(
             start_time_final_eval = time.time()
             optimized_evaluation = []
             for metric_ in dataset_config.metrics:
-                result = new_agent.evaluate(dataset=dataset, metric=metric_)
+                result = new_agent.evaluate(
+                    dataset=dataset, metric=metric_, n_threads=4
+                )
                 optimized_evaluation.append(
                     {
                         "metric_name": metric_.__name__,
