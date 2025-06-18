@@ -52,6 +52,7 @@ class OpikTracer:
 
         self._opik_created_spans: Set[str] = set()
 
+
     @functools.cached_property
     def _opik_client(self) -> opik_client.Opik:
         return opik_client.get_client_cached()
@@ -67,6 +68,9 @@ class OpikTracer:
         return contextvars.ContextVar(
             "current_trace_created_by_opik_tracer", default=None
         )
+
+    def flush(self) -> None:
+        self._opik_client.flush()
 
     def _end_current_trace(self) -> None:
         trace_data = self._context_storage.pop_trace_data()
