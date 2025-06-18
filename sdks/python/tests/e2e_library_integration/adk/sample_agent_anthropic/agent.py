@@ -74,7 +74,7 @@ def after_agent_callback(
 
 root_agent = LlmAgent(
     name="weather_time_agent",
-    model=LiteLlm(model="anthropic/claude-3-5-haiku-latest"),
+    model=LiteLlm(model="anthropic/claude-sonnet-4-0"),
     description="Agent to answer questions about the time and weather in a city.",
     instruction=(
         "You are a helpful agent who can answer user questions about the time and weather in a city."
