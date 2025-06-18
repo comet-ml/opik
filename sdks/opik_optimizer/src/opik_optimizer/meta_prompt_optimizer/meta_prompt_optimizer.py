@@ -430,7 +430,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             if optimization:
                 self.update_optimization(optimization, status="cancelled")
                 logger.debug("Optimization marked as cancelled")
-            return None
+            raise e
 
     def _optimize_agent(
         self,
