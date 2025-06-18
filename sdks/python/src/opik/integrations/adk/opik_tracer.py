@@ -47,8 +47,10 @@ class OpikTracer:
         self.metadata["created_from"] = "google-adk"
         self.project_name = project_name
         self.distributed_headers = distributed_headers
-        self._client = opik_client.get_client_cached()
 
+        self._init_internal_attributes()
+
+    def _init_internal_attributes(self) -> None:
         self._last_model_output: Optional[Dict[str, Any]] = None
 
         # Use OpikContextStorage instance instead of global context storage module
@@ -327,25 +329,17 @@ class OpikTracer:
     def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
 
-        if '_opik_client' in state:
-            del state['_opik_client']
-        if '_context_storage' in state:
-            del state['_context_storage']
-        if '_current_trace_created_by_opik_tracer' in state:
-            del state['_current_trace_created_by_opik_tracer']
+        state.pop('_last_model_output', None)
+        state.pop('_opik_client', None)
+        state.pop('_context_storage', None)
+        state.pop('_current_trace_created_by_opik_tracer', None)
+        state.pop('_opik_created_spans', None)
 
         return state
 
     def __setstate__(self, state: Dict[str, Any]):
         self.__dict__.update(state)
-        
-        self._opik_client = opik_client.get_client_cached()
-        self._context_storage = context_storage.get_current_context_instance()
-        self._current_trace_created_by_opik_tracer = contextvars.ContextVar(
-            "current_trace_created_by_opik_tracer", default=None
-        )
-        
-        _patch_adk()
+        self._init_internal_attributes()
 
 
 @functools.lru_cache()
