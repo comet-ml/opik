@@ -4,11 +4,13 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
+import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Trace.TracePage;
@@ -41,6 +43,7 @@ import com.comet.opik.utils.ErrorUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import io.dropwizard.validation.Validated;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -76,6 +79,7 @@ import org.glassfish.jersey.server.ChunkedOutput;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
@@ -392,7 +396,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     public Response scoreBatchOfTraces(
-            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @NotNull @Valid FeedbackScoreBatch batch) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @NotNull @Valid @JsonView(FeedbackScoreBatch.View.Tracing.class) FeedbackScoreBatch batch) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -683,6 +687,60 @@ public class TracesResource {
 
         log.info("Close trace thread by id '{}' and project id '{}' on workspace_id '{}'", identifier.threadId(),
                 projectId, workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @PUT
+    @Path("/threads/feedback-scores")
+    @Operation(operationId = "scoreBatchOfThreads", summary = "Batch feedback scoring for threads", description = "Batch feedback scoring for threads", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content")})
+    @RateLimited
+    public Response scoreBatchOfThreads(
+            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @JsonView(FeedbackScoreBatch.View.Thread.class) @Validated(FeedbackScoreBatch.View.Thread.class) @NotNull @Valid FeedbackScoreBatch batch) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Feedback scores batch for threads, size '{}' on  workspaceId '{}'", batch.scores().size(),
+                workspaceId);
+
+        feedbackScoreService.scoreBatchOfThreads(batch.scores())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .retryWhen(AsyncUtils.handleConnectionError())
+                .block();
+
+        log.info("Feedback scores batch for threads, size '{}' on  workspaceId '{}'", batch.scores().size(),
+                workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/threads/feedback-scores/delete")
+    @Operation(operationId = "deleteThreadFeedbackScores", summary = "Delete thread feedback scores", description = "Delete thread feedback scores", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content")})
+    public Response deleteThreadFeedbackScores(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DeleteThreadFeedbackScores.class))) @NotNull @Valid DeleteThreadFeedbackScores scores) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        String projectName = scores.projectName();
+
+        Optional<Project> project = projectService.findByNames(workspaceId, List.of(projectName)).stream().findFirst();
+
+        if (project.isEmpty()) {
+            log.info("Project '{}' not found on workspaceId '{}', cannot delete feedback scores", projectName,
+                    workspaceId);
+            return Response.noContent().build();
+        }
+
+        log.info("Deleting feedback scores for threadId '{}', projectName '{}' on workspaceId '{}'", scores.threadId(),
+                projectName, workspaceId);
+
+        feedbackScoreService.deleteThreadScores(project.get().id(), scores.threadId(), scores.names())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Deleted feedback scores for threadId '{}', projectName '{}' on workspaceId '{}'", scores.threadId(),
+                projectName, workspaceId);
 
         return Response.noContent().build();
     }

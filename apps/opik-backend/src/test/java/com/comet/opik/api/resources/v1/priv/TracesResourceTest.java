@@ -53,6 +53,8 @@ import com.comet.opik.api.resources.utils.traces.TraceTestAssertion;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.EntityType;
+import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
@@ -108,6 +110,7 @@ import org.testcontainers.shaded.org.apache.commons.lang3.tuple.Pair;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.context.Context;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -138,6 +141,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemBuilder;
+import static com.comet.opik.api.FeedbackScoreBatchItem.builder;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
@@ -712,7 +717,7 @@ class TracesResourceTest {
             var id = create(trace, okApikey, workspaceName);
 
             var scores = IntStream.range(0, 5)
-                    .mapToObj(i -> FeedbackScoreBatchItem.builder()
+                    .mapToObj(i -> builder()
                             .name("name" + i)
                             .id(id)
                             .value(BigDecimal.valueOf(i))
@@ -1158,7 +1163,7 @@ class TracesResourceTest {
             var id = create(trace, API_KEY, TEST_WORKSPACE);
 
             var scores = IntStream.range(0, 5)
-                    .mapToObj(i -> FeedbackScoreBatchItem.builder()
+                    .mapToObj(i -> builder()
                             .name("name" + i)
                             .id(id)
                             .value(BigDecimal.valueOf(i))
@@ -5428,7 +5433,7 @@ class TracesResourceTest {
 
             List<Trace> finalTraces = traces;
             List<FeedbackScoreBatchItem> scoreForSpan = IntStream.range(0, traces.size())
-                    .mapToObj(i -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .mapToObj(i -> initFeedbackScoreItem()
                             .projectName(finalTraces.get(i).projectName())
                             .id(finalTraces.get(i).id())
                             .build())
@@ -5647,6 +5652,360 @@ class TracesResourceTest {
             List<FeedbackScore> destination, List<FeedbackScore> source, int index) {
         destination.set(index, source.get(index).toBuilder().build());
         return destination;
+    }
+
+    @Nested
+    @DisplayName("Thread Feedback Scores Creation:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ThreadFeedbackScoresCreation {
+
+        @Test
+        @DisplayName("When scoring batch of threads with valid data, then scores are persisted")
+        void scoreBatchOfThreads_withValidData_thenScoresArePersisted(FeedbackScoreDAO feedbackScoreDAO,
+                TraceThreadService traceThreadService) {
+            // Given
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(API_KEY, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var project = factory.manufacturePojo(Project.class).toBuilder()
+                    .name(projectName)
+                    .build();
+
+            UUID projectId = projectResourceClient.createProject(project, API_KEY, workspaceName);
+
+            var threadId1 = UUID.randomUUID().toString();
+            var threadId2 = UUID.randomUUID().toString();
+
+            var scoreItems = PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class).stream()
+                    .map(item -> item.toBuilder()
+                            .threadId(threadId1)
+                            .projectName(projectName)
+                            .projectId(null) // Project ID is not required for thread scores
+                            .source(ScoreSource.SDK)
+                            .build())
+                    .collect(Collectors.toList());
+
+            String score1 = RandomStringUtils.secure().nextAlphanumeric(10);
+            String score2 = RandomStringUtils.secure().nextAlphanumeric(10);
+            String score3 = RandomStringUtils.secure().nextAlphanumeric(10);
+            String score4 = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            scoreItems.set(0, scoreItems.get(0).toBuilder()
+                    .name(score1)
+                    .build());
+
+            scoreItems.set(1, scoreItems.get(1).toBuilder()
+                    .name(score2)
+                    .build());
+
+            // Update only relevant fields for thread 2 scores
+            scoreItems.set(2, scoreItems.get(2).toBuilder()
+                    .threadId(threadId2)
+                    .name(score1)
+                    .build());
+
+            scoreItems.set(3, scoreItems.get(3).toBuilder()
+                    .threadId(threadId2)
+                    .name(score3)
+                    .build());
+
+            scoreItems.set(4, scoreItems.get(4).toBuilder()
+                    .name(score4)
+                    .build());
+
+            // When
+            traceResourceClient.threadFeedbackScores(scoreItems, API_KEY, workspaceName);
+
+            // Then
+            var threadModelId1 = traceThreadService.getThreadModelId(projectId, threadId1)
+                    .contextWrite(context -> setContext(context, workspaceId))
+                    .block();
+
+            var thread1Scores = feedbackScoreDAO.getScores(EntityType.THREAD, List.of(threadModelId1))
+                    .contextWrite(context -> setContext(context, workspaceId))
+                    .block();
+
+            assertThat(thread1Scores).isNotNull();
+            assertThat(thread1Scores.get(threadModelId1)).hasSize(3);
+            assertThat(thread1Scores.get(threadModelId1))
+                    .extracting(FeedbackScore::name)
+                    .containsExactlyInAnyOrder(score1, score2, score4);
+
+            // AND
+            var threadModelId2 = traceThreadService.getThreadModelId(projectId, threadId2)
+                    .contextWrite(context -> setContext(context, workspaceId))
+                    .block();
+
+            var thread2Scores = feedbackScoreDAO.getScores(EntityType.THREAD, List.of(threadModelId2))
+                    .contextWrite(context -> setContext(context, workspaceId))
+                    .block();
+
+            assertThat(thread2Scores).isNotNull();
+            assertThat(thread2Scores.get(threadModelId2)).hasSize(2);
+            assertThat(thread2Scores.get(threadModelId2))
+                    .extracting(FeedbackScore::name)
+                    .containsExactlyInAnyOrder(score1, score3);
+        }
+
+        @ParameterizedTest
+        @MethodSource("threadFeedbackScoreTestCases")
+        @DisplayName("Thread feedback scores contract test")
+        void threadFeedbackScores_contractTest(List<FeedbackScoreBatchItem> scores, int expectedStatus,
+                String expectedError) {
+            // Given
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(API_KEY, workspaceName, workspaceId);
+
+            // When
+            try (var response = traceResourceClient.callThreadFeedbackScores(scores, API_KEY, workspaceName)) {
+                // Then
+                assertThat(response.getStatus()).isEqualTo(expectedStatus);
+                if (expectedStatus == HttpStatus.SC_NO_CONTENT) {
+                    assertThat(response.hasEntity()).isFalse();
+                } else {
+                    assertThat(response.readEntity(ErrorMessage.class).errors()).contains(expectedError);
+                }
+            }
+        }
+
+        Stream<Arguments> threadFeedbackScoreTestCases() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+
+            // Valid case
+            String score1 = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var validScore = initFeedbackScoreItem()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .projectId(null)
+                    .name(score1)
+                    .build();
+
+            // Missing thread ID case
+            var missingThreadIdScore = initFeedbackScoreItem()
+                    .threadId(null)
+                    .projectName(projectName)
+                    .projectId(null)
+                    .name(score1)
+                    .build();
+
+            // Missing thread ID
+            var blankThreadId = initFeedbackScoreItem()
+                    .threadId("")
+                    .projectName(projectName)
+                    .projectId(null)
+                    .name(score1)
+                    .build();
+
+            // Missing value
+            var missingValueCase = initFeedbackScoreItem()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .projectId(null)
+                    .name(score1)
+                    .value(null)
+                    .build();
+
+            var missingNameCase = initFeedbackScoreItem()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .projectId(null)
+                    .name(null)
+                    .build();
+
+            var blankNameCase = initFeedbackScoreItem()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .projectId(null)
+                    .name("")
+                    .build();
+
+            var missingSourceCase = initFeedbackScoreItem()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .projectId(null)
+                    .source(null)
+                    .build();
+
+            return Stream.of(
+                    // Valid case - 204 No Content
+                    arguments(List.of(validScore), HttpStatus.SC_NO_CONTENT, null),
+
+                    // Missing thread ID - 422 Unprocessable Entity
+                    arguments(List.of(missingThreadIdScore), HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            "scores[0].threadId must not be blank"),
+
+                    // Blank thread ID - 422 Unprocessable Entity
+                    arguments(List.of(blankThreadId), HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            "scores[0].threadId must not be blank"),
+
+                    // Missing value - 422 Unprocessable Entity
+                    arguments(List.of(missingValueCase), HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            "scores[0].value must not be null"),
+
+                    // Missing name - 422 Unprocessable Entity
+                    arguments(List.of(missingNameCase), HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            "scores[0].name must not be blank"),
+
+                    // Blank name - 422 Unprocessable Entity
+                    arguments(List.of(blankNameCase), HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            "scores[0].name must not be blank"),
+
+                    // Missing source - 422 Unprocessable Entity
+                    arguments(List.of(missingSourceCase), HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            "scores[0].source must not be null"));
+        }
+    }
+
+    private Context setContext(Context context, String workspaceId) {
+        return context.put(RequestContext.WORKSPACE_ID, workspaceId)
+                .put(RequestContext.USER_NAME, USER);
+    }
+
+    @Nested
+    @DisplayName("Thread Feedback Scores Deletion:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ThreadFeedbackScoresDeletion {
+
+        @Test
+        @DisplayName("When deleting thread feedback scores with valid data, then scores are deleted")
+        void deleteThreadFeedbackScores_withValidData_thenScoresAreDeleted(FeedbackScoreDAO feedbackScoreDAO,
+                TraceThreadService traceThreadService) {
+            // Given
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var project = factory.manufacturePojo(Project.class).toBuilder()
+                    .name(projectName)
+                    .build();
+
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var threadId = UUID.randomUUID().toString();
+
+            var scoreItems = PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class);
+
+            String score1 = RandomStringUtils.secure().nextAlphanumeric(10);
+            String score2 = RandomStringUtils.secure().nextAlphanumeric(10);
+            String score3 = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            scoreItems.set(0, scoreItems.get(0).toBuilder()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .projectId(null)
+                    .name(score1)
+                    .build());
+
+            scoreItems.set(1, scoreItems.get(1).toBuilder()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .projectId(null)
+                    .name(score2)
+                    .build());
+
+            scoreItems.set(2, scoreItems.get(2).toBuilder()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .projectId(null)
+                    .name(score3)
+                    .build());
+
+            // When
+            traceResourceClient.threadFeedbackScores(scoreItems, apiKey, workspaceName);
+
+            // Then
+            var threadModelId1 = traceThreadService.getThreadModelId(projectId, threadId)
+                    .contextWrite(context -> setContext(context, workspaceId))
+                    .block();
+
+            var initialScores = feedbackScoreDAO.getScores(EntityType.THREAD, List.of(threadModelId1))
+                    .contextWrite(context -> setContext(context, workspaceId))
+                    .block();
+
+            assertThat(initialScores).isNotNull();
+            assertThat(initialScores.get(threadModelId1)).hasSize(3);
+
+            Set<String> scoresToDelete = Set.of(score1, score2);
+
+            // And When
+            traceResourceClient.deleteThreadFeedbackScores(projectName, threadId, scoresToDelete, apiKey,
+                    workspaceName);
+
+            // Then
+            var remainingScores = feedbackScoreDAO.getScores(EntityType.THREAD, List.of(threadModelId1))
+                    .contextWrite(context -> setContext(context, workspaceId))
+                    .block();
+
+            assertThat(remainingScores).isNotNull();
+            assertThat(remainingScores.get(threadModelId1)).hasSize(1);
+            assertThat(remainingScores.get(threadModelId1))
+                    .extracting(FeedbackScore::name)
+                    .containsExactly(score3);
+        }
+
+        @ParameterizedTest
+        @MethodSource("deleteThreadFeedbackScoreTestCases")
+        @DisplayName("Delete thread feedback scores contract test")
+        void deleteThreadFeedbackScores_contractTest(String projectName, String threadId, Set<String> scoreNames,
+                int expectedStatus, String expectedError) {
+            // Given
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(API_KEY, workspaceName, workspaceId);
+
+            // When
+            try (var response = traceResourceClient.callDeleteThreadFeedbackScores(projectName, threadId, scoreNames,
+                    API_KEY, workspaceName)) {
+                // Then
+                assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+                if (expectedStatus == HttpStatus.SC_NO_CONTENT) {
+                    assertThat(response.hasEntity()).isFalse();
+                } else {
+                    var actualError = response.readEntity(ErrorMessage.class);
+                    assertThat(actualError.errors()).contains(expectedError);
+                }
+            }
+        }
+
+        static Stream<Arguments> deleteThreadFeedbackScoreTestCases() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+
+            return Stream.of(
+                    // Valid case - 204 No Content
+                    arguments(projectName, threadId, Set.of("accuracy"), HttpStatus.SC_NO_CONTENT, null),
+
+                    // Non-existent project - 204 No Content (idempotent)
+                    arguments("non-existent-project", threadId, Set.of("accuracy"), HttpStatus.SC_NO_CONTENT, null),
+
+                    // Non-existent thread ID - 204 No Content (idempotent)
+                    arguments(projectName, "non-existent-thread", Set.of("accuracy"), HttpStatus.SC_NO_CONTENT, null),
+
+                    // Missing project name - 422 Unprocessable Entity
+                    arguments(null, threadId, Set.of("accuracy"), HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            "projectName must not be blank"),
+
+                    // Missing thread ID - 422 Unprocessable Entity
+                    arguments(projectName, null, Set.of("accuracy"), HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            "threadId must not be blank"),
+
+                    // Empty set of score names - 422 Unprocessable Entity
+                    arguments(projectName, threadId, Set.of(), HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            "names size must be between 1 and 1000"),
+
+                    // Empty score name - 422 Unprocessable Entity
+                    arguments(projectName, threadId, Set.of(""), HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            "names[].<iterable element> must not be blank"));
+        }
     }
 
     @Nested
@@ -7380,31 +7739,31 @@ class TracesResourceTest {
                             "scores size must be between 1 and 1000"),
                     arguments(FeedbackScoreBatch.builder().scores(
                             IntStream.range(0, 1001)
-                                    .mapToObj(__ -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .mapToObj(__ -> initFeedbackScoreItem()
                                             .projectName(DEFAULT_PROJECT).build())
                                     .toList())
                             .build(), "scores size must be between 1 and 1000"),
                     arguments(
                             FeedbackScoreBatch.builder()
-                                    .scores(List.of(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .scores(List.of(initFeedbackScoreItem()
                                             .projectName(DEFAULT_PROJECT).name(null).build()))
                                     .build(),
                             "scores[0].name must not be blank"),
                     arguments(
                             FeedbackScoreBatch.builder()
-                                    .scores(List.of(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .scores(List.of(initFeedbackScoreItem()
                                             .projectName(DEFAULT_PROJECT).name("").build()))
                                     .build(),
                             "scores[0].name must not be blank"),
                     arguments(
                             FeedbackScoreBatch.builder()
-                                    .scores(List.of(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .scores(List.of(initFeedbackScoreItem()
                                             .projectName(DEFAULT_PROJECT).value(null).build()))
                                     .build(),
                             "scores[0].value must not be null"),
                     arguments(
                             FeedbackScoreBatch.builder()
-                                    .scores(List.of(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .scores(List.of(initFeedbackScoreItem()
                                             .projectName(DEFAULT_PROJECT)
                                             .value(BigDecimal.valueOf(-999999999.9999999991))
                                             .build()))
@@ -7412,7 +7771,7 @@ class TracesResourceTest {
                             "scores[0].value must be greater than or equal to -999999999.999999999"),
                     arguments(
                             FeedbackScoreBatch.builder()
-                                    .scores(List.of(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .scores(List.of(initFeedbackScoreItem()
                                             .projectName(DEFAULT_PROJECT)
                                             .value(BigDecimal.valueOf(999999999.9999999991))
                                             .build()))
@@ -7445,18 +7804,18 @@ class TracesResourceTest {
                     .build();
             var id2 = create(trace2, API_KEY, TEST_WORKSPACE);
 
-            var score1 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score1 = initFeedbackScoreItem()
                     .id(id1)
                     .projectName(trace1.projectName())
                     .value(factory.manufacturePojo(BigDecimal.class))
                     .build();
-            var score2 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score2 = initFeedbackScoreItem()
                     .id(id2)
                     .name("hallucination")
                     .projectName(trace2.projectName())
                     .value(factory.manufacturePojo(BigDecimal.class))
                     .build();
-            var score3 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score3 = initFeedbackScoreItem()
                     .id(id1)
                     .name("hallucination")
                     .projectName(trace1.projectName())
@@ -7503,13 +7862,13 @@ class TracesResourceTest {
                     .projectName(expectedTrace1.projectName())
                     .value(factory.manufacturePojo(BigDecimal.class))
                     .build();
-            var score2 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score2 = initFeedbackScoreItem()
                     .id(id2)
                     .name("hallucination")
                     .projectName(expectedTrace2.projectName())
                     .value(factory.manufacturePojo(BigDecimal.class))
                     .build();
-            var score3 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score3 = initFeedbackScoreItem()
                     .id(id1)
                     .name("hallucination")
                     .projectName(expectedTrace1.projectName())
@@ -7560,7 +7919,7 @@ class TracesResourceTest {
                     .build();
             var id = create(trace, API_KEY, TEST_WORKSPACE);
 
-            var score = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score = initFeedbackScoreItem()
                     .id(id)
                     .projectName(trace.projectName())
                     .categoryName(null)
@@ -7593,7 +7952,7 @@ class TracesResourceTest {
                     .build();
             var id = create(expectedTrace, API_KEY, TEST_WORKSPACE);
 
-            var score = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score = initFeedbackScoreItem()
                     .id(id)
                     .projectName(expectedTrace.projectName())
                     .value(factory.manufacturePojo(BigDecimal.class))
@@ -7626,7 +7985,7 @@ class TracesResourceTest {
                     .build();
             var id = create(trace, API_KEY, TEST_WORKSPACE);
 
-            var score = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score = initFeedbackScoreItem()
                     .id(id)
                     .projectName(trace.projectName())
                     .build();
@@ -7646,7 +8005,7 @@ class TracesResourceTest {
         @DisplayName("when trace does not exist, then return no content and create score")
         void feedback__whenTraceDoesNotExist__thenReturnNoContentAndCreateScore() {
             var id = generator.generate();
-            var score = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score = initFeedbackScoreItem()
                     .id(id)
                     .projectName(DEFAULT_PROJECT)
                     .build();
@@ -7663,7 +8022,7 @@ class TracesResourceTest {
             var id = create(expectedTrace, API_KEY, TEST_WORKSPACE);
 
             var scores = IntStream.range(0, 1000)
-                    .mapToObj(__ -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .mapToObj(__ -> initFeedbackScoreItem()
                             .projectName(DEFAULT_PROJECT)
                             .id(id)
                             .build())
@@ -7674,7 +8033,7 @@ class TracesResourceTest {
         @Test
         @DisplayName("when feedback trace id is not valid, then return 400")
         void feedback__whenFeedbackTraceIdIsNotValid__thenReturn400() {
-            var score = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score = initFeedbackScoreItem()
                     .id(UUID.randomUUID())
                     .projectName(DEFAULT_PROJECT)
                     .build();
@@ -7708,7 +8067,7 @@ class TracesResourceTest {
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
             var scores = traces.stream()
-                    .map(trace -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .map(trace -> initFeedbackScoreItem()
                             .id(trace.id())
                             .projectName(projectNameModifier.apply(projectName))
                             .build())
@@ -7736,6 +8095,11 @@ class TracesResourceTest {
         Stream<Arguments> feedback__whenLinkingByProjectName__thenReturnNoContent() {
             return getProjectNameModifierArgs();
         }
+    }
+
+    private FeedbackScoreBatchItemBuilder initFeedbackScoreItem() {
+        return factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                .threadId(null);
     }
 
     private FeedbackScore mapFeedbackScore(FeedbackScoreBatchItem feedbackScoreBatchItem) {
