@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Optional, Any, Union, List, Dict, Literal
+from typing import Optional, Any, Union, List
 import pydantic
 
 from opik import exceptions
@@ -9,11 +9,9 @@ from . import schema, templates
 from .. import conversation_thread_metric
 from ... import score_result
 from ...llm_judges import parsing_helpers
+from .types import Conversation
 
 LOGGER = logging.getLogger(__name__)
-
-ConversationDict = Dict[Literal["role", "content"], str]
-Conversation = List[ConversationDict]
 
 
 class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMetric):
