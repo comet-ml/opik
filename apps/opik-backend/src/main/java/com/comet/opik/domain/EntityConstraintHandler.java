@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.function.Supplier;
 
-interface EntityConstraintHandler<T> {
+public interface EntityConstraintHandler<T> {
 
     Logger log = LoggerFactory.getLogger(EntityConstraintHandler.class);
 
