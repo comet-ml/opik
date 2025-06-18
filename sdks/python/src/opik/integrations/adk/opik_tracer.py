@@ -325,19 +325,19 @@ class OpikTracer:
                 self._opik_created_spans.discard(current_span_data.id)
         except Exception as e:
             LOGGER.error(f"Failed during after_tool_callback(): {e}", exc_info=True)
-    
+
     def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
 
-        state.pop('_last_model_output', None)
-        state.pop('_opik_client', None)
-        state.pop('_context_storage', None)
-        state.pop('_current_trace_created_by_opik_tracer', None)
-        state.pop('_opik_created_spans', None)
+        state.pop("_last_model_output", None)
+        state.pop("_opik_client", None)
+        state.pop("_context_storage", None)
+        state.pop("_current_trace_created_by_opik_tracer", None)
+        state.pop("_opik_created_spans", None)
 
         return state
 
-    def __setstate__(self, state: Dict[str, Any]):
+    def __setstate__(self, state: Dict[str, Any]) -> None:
         self.__dict__.update(state)
         self._init_internal_attributes()
 
