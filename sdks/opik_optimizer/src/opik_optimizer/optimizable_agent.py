@@ -1,14 +1,18 @@
-from typing import Dict, Any, Optional, List
-from pydantic import BaseModel, Field
-
+from typing import Dict, Any, List, Optional, Callable
+import random
 import os
 import copy
+
+from pydantic import BaseModel, Field
+
+from opik import Dataset
 
 import litellm
 from litellm.integrations.opik.opik import OpikLogger
 
-from . import _throttle
+from . import _throttle, task_evaluator
 from .optimization_config.chat_prompt import ChatPrompt
+from .optimization_config import mappers
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -175,3 +179,57 @@ class OptimizableAgent:
         # Replace with agent invocation:
         result = self.llm_invoke(messages=messages, seed=seed)
         return result
+
+    def evaluate(
+        self,
+        dataset: Dataset,
+        metric: Callable,
+        dataset_item_ids: Optional[List[str]] = None,
+        experiment_config: Optional[Dict] = None,
+        n_samples: Optional[int] = None,
+        n_threads: Optional[int] = 8,
+        verbose: Optional[bool] = False,
+    ) -> float:
+        prompt = self.agent_config.chat_prompt
+
+        def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
+            messages = self.agent_config.chat_prompt.get_messages(dataset_item)
+            raw_model_output = self.invoke(messages)
+            cleaned_model_output = raw_model_output.strip()
+            result = {
+                mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
+            }
+            return result
+
+        experiment_config = experiment_config or {}
+        experiment_config["project_name"] = self.__class__.__name__
+        experiment_config = {
+            **experiment_config,
+            **{
+                "agent_class": self.__class__.__name__,
+                "agent_config": self.agent_config.to_dict(),
+                "metric": metric.__name__,
+                "dataset": dataset.name,
+                "configuration": {"prompt": (prompt.get_messages() if prompt else [])},
+            },
+        }
+
+        if n_samples is not None:
+            if dataset_item_ids is not None:
+                raise Exception("Can't use n_samples and dataset_item_ids")
+
+            all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
+            dataset_item_ids = random.sample(all_ids, n_samples)
+
+        score = task_evaluator.evaluate(
+            dataset=dataset,
+            dataset_item_ids=dataset_item_ids,
+            metric=metric,
+            evaluated_task=llm_task,
+            num_threads=n_threads,
+            project_name=self.project_name,
+            experiment_config=experiment_config,
+            optimization_id=None,
+            verbose=verbose,
+        )
+        return score
