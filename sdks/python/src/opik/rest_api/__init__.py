@@ -252,6 +252,7 @@ from .types import (
     ProviderApiKeyPublicProvider,
     ResponseFormat,
     ResponseFormatType,
+    Result,
     ResultsNumberPublic,
     ScoreName,
     ServiceTogglesConfig,
@@ -289,6 +290,7 @@ from .types import (
     UserDefinedMetricPythonCode,
     UserDefinedMetricPythonCodePublic,
     UserDefinedMetricPythonCodeWrite,
+    WorkspaceMetricsSummaryResponse,
     WorkspaceNameHolder,
     WorkspaceSpansCount,
     WorkspaceTraceCount,
@@ -321,6 +323,7 @@ from . import (
     spans,
     system_usage,
     traces,
+    workspaces,
 )
 from .attachments import (
     AttachmentListRequestEntityType,
@@ -624,6 +627,7 @@ __all__ = [
     "ProviderApiKeyWriteProvider",
     "ResponseFormat",
     "ResponseFormatType",
+    "Result",
     "ResultsNumberPublic",
     "ScoreName",
     "ServiceTogglesConfig",
@@ -667,6 +671,7 @@ __all__ = [
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
+    "WorkspaceMetricsSummaryResponse",
     "WorkspaceNameHolder",
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
@@ -688,4 +693,5 @@ __all__ = [
     "spans",
     "system_usage",
     "traces",
+    "workspaces",
 ]
