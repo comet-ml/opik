@@ -1,15 +1,19 @@
 import asyncio
 import logging
-from typing import Optional, Any, Union, List, Dict
+from typing import Optional, Any, Union, List, Dict, Literal
 import pydantic
 
+from opik import exceptions
 from opik.evaluation.models import base_model, models_factory
 from . import schema, templates
 from .. import conversation_thread_metric
 from ... import score_result
-
+from ...llm_judges import parsing_helpers
 
 LOGGER = logging.getLogger(__name__)
+
+ConversationDict = Dict[Literal["role", "content"], str]
+Conversation = List[ConversationDict]
 
 
 class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMetric):
@@ -77,37 +81,30 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
 
     def score(
         self,
-        conversation: List[Dict[str, str]],
+        conversation: Conversation,
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         return self._calculate_score(conversation=conversation)
 
     async def ascore(
         self,
-        conversation: List[Dict[str, str]],
+        conversation: Conversation,
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         return await self._a_calculate_score(conversation=conversation)
 
     def _extract_user_goals(
         self,
-        conversation: List[Dict[str, str]],
+        conversation: Conversation,
     ) -> List[str]:
         llm_query = templates.extract_user_goals(conversation)
         model_output = self._model.generate_string(
             input=llm_query, response_format=schema.UserGoalsResponse
         )
-        try:
-            return schema.UserGoalsResponse.model_validate_json(model_output).user_goals
-        except pydantic.ValidationError as e:
-            LOGGER.warning(
-                f"Failed to parse user goals from LLM output: {model_output}, reason: {e}",
-                exc_info=True,
-            )
-            raise e
+        return _extract_user_goals_from_model_output(model_output=model_output)
 
     def _evaluate_user_goal(
-        self, conversation: List[Dict[str, str]], user_goal: str
+        self, conversation: Conversation, user_goal: str
     ) -> schema.EvaluateUserGoalResponse:
         llm_query = templates.evaluate_user_goal(
             conversation=conversation, user_goal=user_goal
@@ -115,14 +112,7 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
         model_output = self._model.generate_string(
             input=llm_query, response_format=schema.EvaluateUserGoalResponse
         )
-        try:
-            return schema.EvaluateUserGoalResponse.model_validate_json(model_output)
-        except pydantic.ValidationError as e:
-            LOGGER.warning(
-                f"Failed to parse user goal evaluation results from LLM output: {model_output}, reason: {e}",
-                exc_info=True,
-            )
-            raise e
+        return _evaluate_user_goal_from_model_output(model_output=model_output)
 
     def _generate_reason(
         self,
@@ -141,18 +131,11 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
         model_output = self._model.generate_string(
             input=llm_query, response_format=schema.ScoreReasonResponse
         )
-        try:
-            return schema.ScoreReasonResponse.model_validate_json(model_output).reason
-        except pydantic.ValidationError as e:
-            LOGGER.warning(
-                f"Failed to parse reason from LLM output: {model_output}, reason: {e}",
-                exc_info=True,
-            )
-            raise e
+        return _generate_reason_from_model_output(model_output=model_output)
 
     def _calculate_score(
         self,
-        conversation: List[Dict[str, str]],
+        conversation: Conversation,
     ) -> score_result.ScoreResult:
         try:
             user_goals = self._extract_user_goals(conversation)
@@ -168,30 +151,23 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
 
             return score_result.ScoreResult(name=self.name, value=score, reason=reason)
         except Exception as e:
-            LOGGER.warning(f"Failed to calculate session completeness quality: {e}")
-            return score_result.ScoreResult(
-                name=self.name, value=0.0, scoring_failed=True, reason=str(e)
-            )
+            LOGGER.error(f"Failed to calculate session completeness quality: {e}")
+            raise exceptions.MetricComputationError(
+                "Failed to calculate session completeness quality: {e}"
+            ) from e
 
     async def _a_extract_user_goals(
         self,
-        conversation: List[Dict[str, str]],
+        conversation: Conversation,
     ) -> List[str]:
         llm_query = templates.extract_user_goals(conversation)
         model_output = await self._model.agenerate_string(
             input=llm_query, response_format=schema.UserGoalsResponse
         )
-        try:
-            return schema.UserGoalsResponse.model_validate_json(model_output).user_goals
-        except pydantic.ValidationError as e:
-            LOGGER.warning(
-                f"Failed to parse user goals from LLM output: {model_output}, reason: {e}",
-                exc_info=True,
-            )
-            raise e
+        return _extract_user_goals_from_model_output(model_output=model_output)
 
     async def _a_evaluate_user_goal(
-        self, conversation: List[Dict[str, str]], user_goal: str
+        self, conversation: Conversation, user_goal: str
     ) -> schema.EvaluateUserGoalResponse:
         llm_query = templates.evaluate_user_goal(
             conversation=conversation, user_goal=user_goal
@@ -199,14 +175,7 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
         model_output = await self._model.agenerate_string(
             input=llm_query, response_format=schema.EvaluateUserGoalResponse
         )
-        try:
-            return schema.EvaluateUserGoalResponse.model_validate_json(model_output)
-        except pydantic.ValidationError as e:
-            LOGGER.warning(
-                f"Failed to parse user goal evaluation results from LLM output: {model_output}, reason: {e}",
-                exc_info=True,
-            )
-            raise e
+        return _evaluate_user_goal_from_model_output(model_output=model_output)
 
     async def _a_generate_reason(
         self,
@@ -225,18 +194,11 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
         model_output = await self._model.agenerate_string(
             input=llm_query, response_format=schema.ScoreReasonResponse
         )
-        try:
-            return schema.ScoreReasonResponse.model_validate_json(model_output).reason
-        except pydantic.ValidationError as e:
-            LOGGER.warning(
-                f"Failed to parse reason from LLM output: {model_output}, reason: {e}",
-                exc_info=True,
-            )
-            raise e
+        return _generate_reason_from_model_output(model_output=model_output)
 
     async def _a_calculate_score(
         self,
-        conversation: List[Dict[str, str]],
+        conversation: Conversation,
     ) -> score_result.ScoreResult:
         try:
             user_goals = await self._a_extract_user_goals(conversation)
@@ -259,9 +221,51 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
             LOGGER.warning(
                 f"Failed to calculate session completeness quality: {e}", exc_info=True
             )
-            return score_result.ScoreResult(
-                name=self.name, value=0.0, scoring_failed=True, reason=str(e)
-            )
+            raise exceptions.MetricComputationError(
+                "Failed to calculate session completeness quality: {e}"
+            ) from e
+
+
+def _generate_reason_from_model_output(
+    model_output: str,
+) -> str:
+    try:
+        dict_content = parsing_helpers.extract_json_content_or_raise(model_output)
+        return schema.ScoreReasonResponse.model_validate(dict_content).reason
+    except pydantic.ValidationError as e:
+        LOGGER.warning(
+            f"Failed to parse reason from LLM output: {model_output}, reason: {e}",
+            exc_info=True,
+        )
+        raise e
+
+
+def _evaluate_user_goal_from_model_output(
+    model_output: str,
+) -> schema.EvaluateUserGoalResponse:
+    try:
+        dict_content = parsing_helpers.extract_json_content_or_raise(model_output)
+        return schema.EvaluateUserGoalResponse.model_validate(dict_content)
+    except pydantic.ValidationError as e:
+        LOGGER.warning(
+            f"Failed to parse user goal evaluation results from LLM output: {model_output}, reason: {e}",
+            exc_info=True,
+        )
+        raise e
+
+
+def _extract_user_goals_from_model_output(
+    model_output: str,
+) -> List[str]:
+    try:
+        dict_content = parsing_helpers.extract_json_content_or_raise(model_output)
+        return schema.UserGoalsResponse.model_validate(dict_content).user_goals
+    except pydantic.ValidationError as e:
+        LOGGER.warning(
+            f"Failed to parse user goals from LLM output: {model_output}, reason: {e}",
+            exc_info=True,
+        )
+        raise e
 
 
 def _extract_negative_verdicts(
