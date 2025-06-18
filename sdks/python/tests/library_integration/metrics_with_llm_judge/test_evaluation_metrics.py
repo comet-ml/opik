@@ -1,7 +1,7 @@
 import pytest
 from opik.evaluation import metrics
 from opik import exceptions
-from .common import assert_score_result
+from ...testlib import assert_helpers
 
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
@@ -15,7 +15,7 @@ def test__answer_relevance__context_provided_happyflow():
         context=["France is a country in Europe."],
     )
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
 
 
 def test__answer_relevance__no_context_provided__error_raised():
@@ -50,7 +50,7 @@ def test__answer_relevance__no_context_provided__no_context_mode_is_enabled__hap
         output="The capital of France is Paris.",
     )
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
 
 
 def test__no_opik_configured__answer_relevance(
@@ -64,7 +64,7 @@ def test__no_opik_configured__answer_relevance(
         context=["France is a country in Europe."],
     )
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
 
 
 @pytest.mark.parametrize(
@@ -84,7 +84,7 @@ def test__context_precision(context):
         context=context,
     )
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
 
 
 @pytest.mark.parametrize(
@@ -104,7 +104,7 @@ def test__context_recall(context):
         context=context,
     )
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
 
 
 @pytest.mark.parametrize(
@@ -123,7 +123,7 @@ def test__hallucination(context):
         context=context,
     )
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
 
 
 def test__moderation():
@@ -133,7 +133,7 @@ def test__moderation():
         output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage."
     )
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
 
 
 def test__g_eval():
@@ -149,4 +149,4 @@ def test__g_eval():
                """
     )
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)

@@ -3,9 +3,9 @@ import pytest
 from unittest.mock import MagicMock
 
 from opik import exceptions
-from library_integration.metrics_with_llm_judge.common import assert_score_result
 from opik.evaluation.metrics import SessionCompletenessQuality
 from opik.evaluation.models import base_model
+from ......testlib import assert_helpers
 
 
 @pytest.fixture
@@ -69,7 +69,7 @@ def test__session_completeness_quality__mocked__happy_path(
     metric = SessionCompletenessQuality(model=mock_model, track=False)
     result = metric.score(simple_conversation)
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
     assert result.value == 1.0  # Both goals were met
     assert (
         result.reason
@@ -95,7 +95,7 @@ async def test__session_completeness_quality__mocked__happy_path__async(
     metric = SessionCompletenessQuality(model=mock_model, track=False)
     result = await metric.ascore(simple_conversation)
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
     assert result.value == 1.0  # Both goals were met
     assert (
         result.reason
@@ -120,7 +120,7 @@ def test__session_completeness_quality__mocked__partial_completion(
     metric = SessionCompletenessQuality(model=mock_model, track=False)
     result = metric.score(incomplete_conversation)
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
     assert result.value == 0.5  # Only one of two goals was met
     assert (
         result.reason
@@ -146,7 +146,7 @@ async def test__session_completeness_quality__mocked__partial_completion__async(
     metric = SessionCompletenessQuality(model=mock_model, track=False)
     result = await metric.ascore(incomplete_conversation)
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
     assert result.value == 0.5  # Only one of two goals was met
     assert (
         result.reason
@@ -172,7 +172,7 @@ def test__session_completeness__mocked__quality_no_goals(mock_model):
     metric = SessionCompletenessQuality(model=mock_model, track=False)
     result = metric.score(conversation)
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
     assert result.value == 0.0  # No goals to meet
     assert (
         result.reason == "No specific user goals were identified in this conversation."
@@ -195,7 +195,7 @@ async def test__session_completeness__mocked__quality_no_goals__async(mock_model
     metric = SessionCompletenessQuality(model=mock_model, track=False)
     result = await metric.ascore(conversation)
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
     assert result.value == 0.0  # No goals to meet
     assert (
         result.reason == "No specific user goals were identified in this conversation."
@@ -217,7 +217,7 @@ def test__session_completeness_quality__mocked__without_reason(
     )
     result = metric.score(simple_conversation)
 
-    assert_score_result(result, include_reason=False)
+    assert_helpers.assert_score_result(result, include_reason=False)
     assert result.value == 1.0  # Both goals were met
     assert result.reason is None  # No reason should be generated
 
@@ -241,7 +241,7 @@ async def test__session_completeness_quality__mocked__without_reason__async(
     )
     result = await metric.ascore(simple_conversation)
 
-    assert_score_result(result, include_reason=False)
+    assert_helpers.assert_score_result(result, include_reason=False)
     assert result.value == 1.0  # Both goals were met
     assert result.reason is None  # No reason should be generated
 

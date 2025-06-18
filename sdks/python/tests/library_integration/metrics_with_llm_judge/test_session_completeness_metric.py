@@ -7,7 +7,7 @@ from opik.evaluation.metrics.conversation.session_completeness.metric import (
     SessionCompletenessQuality,
 )
 
-from .common import assert_score_result
+from ...testlib import assert_helpers
 
 
 @pytest.fixture
@@ -41,7 +41,7 @@ def test__session_completeness_quality__with_real_model__happy_path(
     metric = SessionCompletenessQuality(track=True)  # Uses default model
     result = metric.score(real_model_conversation)
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
     # We don't assert specific values since the real model's output may vary
 
 
@@ -55,5 +55,5 @@ async def test__session_completeness_quality__with_real_model_async__happy_path(
     metric = SessionCompletenessQuality(track=True)  # Uses default model
     result = await metric.ascore(real_model_conversation)
 
-    assert_score_result(result)
+    assert_helpers.assert_score_result(result)
     # We don't assert specific values since the real model's output may vary
