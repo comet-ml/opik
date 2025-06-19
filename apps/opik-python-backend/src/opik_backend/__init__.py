@@ -13,7 +13,7 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 
 
-def create_app(test_config=None, should_init_executor=True):
+def create_app(test_config=None, should_init_executor=False):
     app = Flask(__name__, instance_relative_config=True)
 
     # Configure logging
