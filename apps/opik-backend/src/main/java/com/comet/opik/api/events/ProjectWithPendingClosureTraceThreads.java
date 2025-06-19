@@ -1,10 +1,9 @@
-package com.comet.opik.api;
+package com.comet.opik.api.events;
 
-import com.comet.opik.api.validation.TraceThreadIdentifierValidation;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
-import jakarta.validation.constraints.NotBlank;
 import lombok.Builder;
 
 import java.util.UUID;
@@ -12,6 +11,6 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-@TraceThreadIdentifierValidation
-public record TraceThreadIdentifier(String projectName, UUID projectId, @NotBlank String threadId) {
+@JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
+public record ProjectWithPendingClosureTraceThreads(String workspaceId, UUID projectId) {
 }

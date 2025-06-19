@@ -1,5 +1,6 @@
 package com.comet.opik.domain.threads;
 
+import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.comet.opik.utils.TemplateUtils;
@@ -17,9 +18,13 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
+import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.domain.threads.TraceThreadModel.Status;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -32,6 +37,15 @@ interface TraceThreadDAO {
     Mono<Long> save(List<TraceThreadModel> traceThreads);
 
     Mono<List<TraceThreadModel>> findThreadsByProject(int page, int size, TraceThreadCriteria criteria);
+
+    Flux<ProjectWithPendingClosureTraceThreads> findProjectsWithPendingClosureThreads(Instant lastUpdatedUntil,
+            int limit);
+
+    Mono<Long> closeThreadWith(UUID projectId, Instant lastUpdatedUntil);
+
+    Mono<Long> openThread(UUID projectId, String threadId);
+
+    Mono<Long> closeThread(UUID projectId, String threadId);
 }
 
 @Singleton
@@ -72,6 +86,28 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
+            """;
+
+    private static final String FIND_PENDING_CLOSURE_THREADS_SQL = """
+            SELECT DISTINCT
+                workspace_id,
+                project_id,
+            FROM trace_threads final
+            WHERE status = 'active'
+            AND last_updated_at < parseDateTime64BestEffort(:last_updated_at, 6)
+            ORDER BY last_updated_at
+            LIMIT :limit
+            """;
+
+    private static final String OPEN_CLOSURE_THREADS_SQL = """
+            INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at)
+            SELECT
+                workspace_id, project_id, thread_id, id, :status AS status, created_by, :user_name, created_at, now64(6)
+            FROM trace_threads final
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            <if(last_updated_at)>AND last_updated_at \\< parseDateTime64BestEffort(:last_updated_at, 6)<endif>
+            <if(thread_id)>AND thread_id = :thread_id<endif>
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -143,6 +179,67 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         });
     }
 
+    @Override
+    public Flux<ProjectWithPendingClosureTraceThreads> findProjectsWithPendingClosureThreads(
+            @NonNull Instant lastUpdatedUntil, int limit) {
+        return asyncTemplate.stream(connection -> {
+            var statement = connection.createStatement(FIND_PENDING_CLOSURE_THREADS_SQL)
+                    .bind("last_updated_at", lastUpdatedUntil.toString())
+                    .bind("limit", limit);
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE
+                            .mapToProjectWithPendingClosuseThreads(row)));
+        });
+    }
+
+    @Override
+    public Mono<Long> closeThreadWith(@NonNull UUID projectId, @NonNull Instant lastUpdatedUntil) {
+        return asyncTemplate.nonTransaction(connection -> {
+            ST closureThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
+            closureThreadsSql.add("last_updated_at", lastUpdatedUntil.toString());
+            var statement = connection.createStatement(closureThreadsSql.render())
+                    .bind("project_id", projectId)
+                    .bind("last_updated_at", lastUpdatedUntil.toString())
+                    .bind("status", Status.INACTIVE.getValue());
+
+            return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
+        });
+    }
+
+    @Override
+    public Mono<Long> openThread(@NonNull UUID projectId, @NonNull String threadId) {
+        return asyncTemplate.nonTransaction(connection -> {
+            ST openThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
+            openThreadsSql.add("thread_id", threadId);
+
+            var statement = connection.createStatement(openThreadsSql.render())
+                    .bind("project_id", projectId)
+                    .bind("thread_id", threadId)
+                    .bind("status", Status.ACTIVE.getValue());
+
+            return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
+        });
+    }
+
+    @Override
+    public Mono<Long> closeThread(@NonNull UUID projectId, @NonNull String threadId) {
+        return asyncTemplate.nonTransaction(connection -> {
+            ST closureThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
+            closureThreadsSql.add("thread_id", threadId);
+
+            var statement = connection.createStatement(closureThreadsSql.render())
+                    .bind("project_id", projectId)
+                    .bind("thread_id", threadId)
+                    .bind("status", Status.INACTIVE.getValue());
+
+            return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
+        });
+    }
+
     private void bindTemplateParam(TraceThreadCriteria criteria, ST template) {
         if (CollectionUtils.isNotEmpty(criteria.ids())) {
             template.add("ids", criteria.ids());
@@ -178,4 +275,5 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             statement.bind("status", criteria.status().getValue());
         }
     }
+
 }
