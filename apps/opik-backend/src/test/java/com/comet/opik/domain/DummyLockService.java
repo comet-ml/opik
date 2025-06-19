@@ -21,7 +21,7 @@ public class DummyLockService implements LockService {
     @Override
     public <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<Void> failToAcquireLockAction,
             Duration actionTimeout, Duration lockTimeout) {
-        return null;
+        return action;
     }
 
     @Override

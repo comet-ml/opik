@@ -396,18 +396,20 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     public Response scoreBatchOfTraces(
-            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @NotNull @Valid @JsonView(FeedbackScoreBatch.View.Tracing.class) FeedbackScoreBatch batch) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @NotNull @Valid FeedbackScoreBatch feedbackScoreBatch) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Feedback scores batch for traces, size {} on  workspaceId '{}'", batch.scores().size(), workspaceId);
+        log.info("Feedback scores batch for traces, size {} on  workspaceId '{}'", feedbackScoreBatch.scores().size(),
+                workspaceId);
 
-        feedbackScoreService.scoreBatchOfTraces(batch.scores())
+        feedbackScoreService.scoreBatchOfTraces(feedbackScoreBatch.scores())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(AsyncUtils.handleConnectionError())
                 .block();
 
-        log.info("Feedback scores batch for traces, size {} on  workspaceId '{}'", batch.scores().size(), workspaceId);
+        log.info("Feedback scores batch for traces, size {} on  workspaceId '{}'", feedbackScoreBatch.scores().size(),
+                workspaceId);
 
         return Response.noContent().build();
     }
@@ -610,14 +612,14 @@ public class TracesResource {
         // Verify project visibility
         if (identifier.projectId() != null) {
             return projectService.get(identifier.projectId()).id();
-        } else {
-            // If the project name is provided, find the project by name
-            return projectService.findByNames(workspaceId, List.of(identifier.projectName()))
-                    .stream()
-                    .findFirst()
-                    .orElseThrow(() -> ErrorUtils.failWithNotFoundName("Project", identifier.projectName()))
-                    .id();
         }
+
+        // If the project name is provided, find the project by name
+        return projectService.findByNames(workspaceId, List.of(identifier.projectName()))
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> ErrorUtils.failWithNotFoundName("Project", identifier.projectName()))
+                .id();
     }
 
     @POST

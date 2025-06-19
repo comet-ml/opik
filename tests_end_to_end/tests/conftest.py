@@ -1,5 +1,9 @@
-import pytest
+import sys
 import os
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import pytest
 import opik
 import tempfile
 import time
@@ -23,7 +27,7 @@ from tests.sdk_helpers import (
     find_project_by_name_sdk,
     wait_for_project_to_not_be_visible,
 )
-from utils import TEST_ITEMS
+from tests.utils import TEST_ITEMS
 import re
 import json
 import allure
