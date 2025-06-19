@@ -2,8 +2,13 @@ package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
+import dev.langchain4j.exception.AuthenticationException;
+import dev.langchain4j.exception.InternalServerException;
+import dev.langchain4j.exception.InvalidRequestException;
+import dev.langchain4j.exception.ModelNotFoundException;
+import dev.langchain4j.exception.RateLimitException;
+import dev.langchain4j.exception.TimeoutException;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
-import dev.langchain4j.model.anthropic.internal.client.AnthropicHttpException;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -58,11 +63,14 @@ class LlmProviderAnthropic implements LlmProviderService {
 
     @Override
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
-        if (throwable instanceof AnthropicHttpException anthropicHttpException) {
-            return Optional.of(new ErrorMessage(anthropicHttpException.statusCode(),
-                    anthropicHttpException.getMessage()));
-        }
-
-        return Optional.empty();
+        return switch (throwable) {
+            case InternalServerException ex -> Optional.of(new ErrorMessage(500, ex.getMessage()));
+            case ModelNotFoundException ex -> Optional.of(new ErrorMessage(404, ex.getMessage()));
+            case TimeoutException ex -> Optional.of(new ErrorMessage(408, ex.getMessage()));
+            case RateLimitException ex -> Optional.of(new ErrorMessage(429, ex.getMessage()));
+            case InvalidRequestException ex -> Optional.of(new ErrorMessage(400, ex.getMessage()));
+            case AuthenticationException ex -> Optional.of(new ErrorMessage(401, ex.getMessage()));
+            default -> Optional.empty();
+        };
     }
 }

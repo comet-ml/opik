@@ -18,7 +18,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.jetbrains.annotations.NotNull;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -421,7 +420,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         row.get("most_recent_optimization_at", Instant.class))));
     }
 
-    private Mono<Long> getCount(@NotNull OptimizationSearchCriteria searchCriteria) {
+    private Mono<Long> getCount(OptimizationSearchCriteria searchCriteria) {
         var template = new ST(COUNT);
 
         bindTemplateParams(template, searchCriteria);
