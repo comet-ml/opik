@@ -46,7 +46,7 @@ def run_user_code(code: str, data: dict) -> dict:
     try:
         exec(code, module.__dict__)
     except Exception as e:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[4:])
+        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
         return {"code": 400, "error": f"Field 'code' contains invalid Python code: {stacktrace}"}
 
     metric_class = get_metric_class(module)
