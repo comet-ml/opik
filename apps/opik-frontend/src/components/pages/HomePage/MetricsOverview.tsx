@@ -19,12 +19,13 @@ import PercentageTrend, {
 } from "@/components/shared/PercentageTrend/PercentageTrend";
 import Loader from "@/components/shared/Loader/Loader";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
-import MetricOverviewChart, {
-  ChartData,
-  DataRecord,
-} from "@/components/pages/HomePage/MetricOverviewChart";
+import HomePageChart from "@/components/pages/HomePage/HomePageChart";
 import { Project } from "@/types/projects";
 import useAppStore from "@/store/AppStore";
+import {
+  getChartData,
+  RE_FETCH_INTERVAL,
+} from "@/components/pages/HomePage/helpers";
 
 const METRIC_NAME_TO_EXPLAINER_ID_MAP: Record<
   string,
@@ -92,13 +93,6 @@ const METRIC_NAME_TO_EXPLAINER_ID_MAP: Record<
   },
 };
 
-const RE_FETCH_INTERVAL = 30000;
-
-const ALL_PROJECTS_PROJECT = {
-  id: "all",
-  name: "All projects",
-} as Project;
-
 type MetricsOverviewProps = {
   projects: Project[];
   totalProjects: number;
@@ -147,32 +141,10 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
       },
     );
 
-  const chartData = useMemo(() => {
-    const data: ChartData = {
-      data: [],
-      values: [],
-      projects: projects.length === 0 ? [ALL_PROJECTS_PROJECT] : projects,
-    };
-
-    const datesMap: Record<string, DataRecord> = {};
-
-    (metricsChartData || []).forEach((projectMetric) => {
-      projectMetric.data.forEach((d) => {
-        if (!datesMap[d.time]) {
-          datesMap[d.time] = { date: d.time, map: {} };
-        }
-        datesMap[d.time].map[
-          projectMetric.project_id || ALL_PROJECTS_PROJECT.id
-        ] = d.value;
-        data.values.push(d.value);
-      });
-    });
-    data.data = Object.values(datesMap).sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-    );
-
-    return data;
-  }, [metricsChartData, projects]);
+  const chartData = useMemo(
+    () => getChartData(metricsChartData, projects),
+    [metricsChartData, projects],
+  );
 
   const noMetricsData = !data || data?.length === 0;
   const noMetricsAndProjectsData = noMetricsData && totalProjects === 0;
@@ -295,7 +267,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
             src={noDataMetricChartImageUrl}
             alt="no data image"
           ></img>
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-10">
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-10">
             <h1 className="comet-title-m text-center">Unlock your metrics!</h1>
             <div className="comet-body mt-2 text-center text-muted-slate">
               Integrate your project with Opik to evaluate your AI.
@@ -309,7 +281,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
       );
     }
 
-    return <MetricOverviewChart chartData={chartData} />;
+    return <HomePageChart chartData={chartData} />;
   };
 
   const renderNoMetricsData = () => {
@@ -324,7 +296,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
           src={noDataMetricsImageUrl}
           alt="no data image"
         ></img>
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-10">
+        <div className="absolute inset-0 flex flex-col items-center justify-center p-10">
           <h1 className="comet-title-m">No metrics available</h1>
           <div className="comet-body mt-2 max-w-[60%] text-center text-muted-slate">
             {description}

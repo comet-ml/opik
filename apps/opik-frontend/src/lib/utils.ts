@@ -194,17 +194,18 @@ export const extractIdFromLocation = (location: string) =>
 export const formatNumericData = (value: number, precision = 3) =>
   String(round(value, precision));
 
-export const formatNumberInK = (value: number): string => {
-  if (value >= 1000000000) {
-    return `${(value / 1000000000).toFixed(1)}b`;
-  }
-  if (value >= 1000000) {
-    return `${(value / 1000000).toFixed(1)}m`;
-  }
-  if (value >= 1000) {
-    return `${(value / 1000).toFixed(1)}k`;
-  }
-  return value.toString();
+export const formatNumberInK = (value: number, precision = 1): string => {
+  const ranges = [
+    { threshold: 1000000000, suffix: "b", divider: 1000000000 },
+    { threshold: 1000000, suffix: "m", divider: 1000000 },
+    { threshold: 1000, suffix: "k", divider: 1000 },
+  ];
+
+  const range = ranges.find((r) => value >= r.threshold);
+
+  return range
+    ? `${(value / range.divider).toFixed(precision)}${range.suffix}`
+    : value.toString();
 };
 
 export const calculatePercentageChange = (

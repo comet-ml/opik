@@ -11,31 +11,26 @@ import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig"
 import { DEFAULT_CHART_TICK } from "@/constants/chart";
 import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 import { generateTagVariant } from "@/lib/traces";
-import { Project } from "@/types/projects";
 import dayjs from "dayjs";
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
+  ChartTooltipRenderValueArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
 import { formatDate } from "@/lib/date";
 import { Props as DotProps } from "recharts/types/shape/Dot";
-
-export type DataRecord = {
-  date: string;
-  map: Record<string, number>;
-};
-
-export type ChartData = {
-  data: DataRecord[];
-  values: number[];
-  projects: Project[];
-};
+import { ChartData } from "@/components/pages/HomePage/helpers";
+import { ValueType } from "recharts/types/component/DefaultTooltipContent";
 
 type MetricOverviewChartProps = {
   chartData: ChartData;
+  renderValue?: (data: ChartTooltipRenderValueArguments) => ValueType;
+  customYTickFormatter?: (value: number, maxDecimalLength?: number) => string;
 };
 
-const MetricOverviewChart: React.FC<MetricOverviewChartProps> = ({
+const HomePageChart: React.FC<MetricOverviewChartProps> = ({
   chartData,
+  renderValue,
+  customYTickFormatter,
 }) => {
   const {
     width: tickWidth,
@@ -44,6 +39,7 @@ const MetricOverviewChart: React.FC<MetricOverviewChartProps> = ({
     yTickFormatter,
     interval: tickInterval,
   } = useChartTickDefaultConfig(chartData.values, {
+    tickFormatter: customYTickFormatter,
     tickPrecision: 2,
     numberOfTicks: 3,
   });
@@ -111,7 +107,10 @@ const MetricOverviewChart: React.FC<MetricOverviewChartProps> = ({
         <ChartTooltip
           isAnimationActive={false}
           content={
-            <ChartTooltipContent renderHeader={renderChartTooltipHeader} />
+            <ChartTooltipContent
+              renderHeader={renderChartTooltipHeader}
+              renderValue={renderValue}
+            />
           }
         />
         {chartData.projects.map((project) => {
@@ -149,4 +148,4 @@ const MetricOverviewChart: React.FC<MetricOverviewChartProps> = ({
   );
 };
 
-export default MetricOverviewChart;
+export default HomePageChart;
