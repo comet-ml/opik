@@ -20,7 +20,7 @@ if not logger.hasHandlers():
 logger.setLevel(logging.INFO)
 
 
-def get_metric_class(module: ModuleType) -> Type[BaseMetric]:
+def get_metric_class(module: ModuleType) -> Type[BaseMetric]:   
     for _, cls in inspect.getmembers(module, inspect.isclass):
         if issubclass(cls, BaseMetric):
             return cls

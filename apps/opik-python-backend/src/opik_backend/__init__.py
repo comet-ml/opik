@@ -22,6 +22,8 @@ def create_app(test_config=None, should_init_executor=True):
         app.logger.handlers = gunicorn_logger.handlers
         app.logger.setLevel(gunicorn_logger.level)
     else:
+        # this logger is used mainly for debugging, we don't want it to raise exceptions
+        logging.raiseExceptions = False
         # Fallback basic logging if not running under Gunicorn
         if not app.logger.handlers:
             console_handler = logging.StreamHandler(sys.stderr)
