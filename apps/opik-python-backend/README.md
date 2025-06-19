@@ -13,6 +13,7 @@ Opik Python Backend is a service that runs Python code in a sandboxed environmen
     - `PYTHON_CODE_EXECUTOR_STRATEGY`: sets backend to use Docker containers (use 'docker' or subprocesses (use 'process', or empty as it's the default))
     - `PYTHON_CODE_EXECUTOR_PARALLEL_NUM`: number of containers or subprocesses to use (default: 5)
     - `PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS`: timeout for execution in seconds (default: 3)
+    - `PYTHON_CODE_EXECUTOR_ALLOW_NETWORK`: set to `true` to allow network access in executor containers (default: false)
 
 ## Running the Flask service
 

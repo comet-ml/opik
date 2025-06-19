@@ -47,6 +47,7 @@ class DockerExecutor(CodeExecutorBase):
         self.docker_image = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_NAME", "opik-sandbox-executor-python")
         self.docker_tag = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_TAG", "latest")
         self.pool_check_interval = int(os.getenv("PYTHON_CODE_EXECUTOR_POOL_CHECK_INTERVAL_IN_SECONDS", "3"))
+        self.network_disabled = os.getenv("PYTHON_CODE_EXECUTOR_ALLOW_NETWORK", "false").lower() != "true"
 
         self.client = docker.from_env()
         self.instance_id = str(uuid7())
@@ -147,7 +148,7 @@ class DockerExecutor(CodeExecutorBase):
             mem_limit="256mb",
             cpu_shares=2,
             detach=True,
-            network_disabled=True,
+            network_disabled=self.network_disabled,
             security_opt=["no-new-privileges"],
             labels=self.container_labels
         )
