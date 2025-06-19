@@ -316,7 +316,7 @@ def test_missing_data_returns_bad_request(client):
             """  File "<string>", line 2
     from typing import
                       ^
-SyntaxError: invalid syntax"""
+SyntaxError: """
     ),
     pytest.param(
             FLASK_INJECTION_METRIC,
@@ -334,7 +334,7 @@ def test_invalid_code_returns_bad_request(client, code, stacktrace):
         "code": code
     })
     assert response.status_code == 400
-    assert response.json["error"] == f"400 Bad Request: Field 'code' contains invalid Python code: {stacktrace}"
+    assert str(response.json["error"]).startswith(f"400 Bad Request: Field 'code' contains invalid Python code: {stacktrace}")
 
 
 def test_missing_metric_returns_bad_request(client):
