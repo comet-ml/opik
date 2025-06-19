@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
-import com.comet.opik.api.resources.v1.events.TraceThreadBufferConfig;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.TraceThreadConfig;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -11,7 +10,6 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.JobExecutionContext;
-import org.redisson.api.RSetReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.stream.StreamAddArgs;
 import reactor.core.publisher.Flux;
@@ -21,7 +19,6 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.UUID;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
@@ -78,7 +75,7 @@ public class TraceThreadsClosingJob extends Job {
     private Mono<Void> enqueueInRedis(Flux<ProjectWithPendingClosureTraceThreads> flux) {
         var stream = redisClient.getStream(traceThreadConfig.getStreamName(), traceThreadConfig.getCodec());
 
-        return flux.flatMap(message -> addToPendingList(message.projectId(), traceThreadConfig)
+        return flux.flatMap(message -> traceThreadService.addToPendingQueue(message.projectId())
                 .flatMap(pending -> {
                     if (Boolean.TRUE.equals(pending)) {
                         return stream.add(StreamAddArgs.entry(TraceThreadConfig.PAYLOAD_FIELD, message));
@@ -104,12 +101,4 @@ public class TraceThreadsClosingJob extends Job {
     private void errorLog(Throwable throwable) {
         log.error("Error sending message", throwable);
     }
-
-    private Mono<Boolean> addToPendingList(UUID projectId, TraceThreadConfig config) {
-        RSetReactive<UUID> projectWithThreadsPendingClosure = redisClient
-                .getSet(TraceThreadBufferConfig.BUFFER_SET_NAME);
-        return projectWithThreadsPendingClosure.expire(config.getTimeoutToMarkThreadAsInactive().toJavaDuration())
-                .then(Mono.defer(() -> projectWithThreadsPendingClosure.add(projectId)));
-    }
-
 }

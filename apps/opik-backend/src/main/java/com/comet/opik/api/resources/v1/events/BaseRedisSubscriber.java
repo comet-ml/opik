@@ -100,6 +100,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     @Override
     public void stop() {
         log.info("Shutting down '{}' and closing stream", getSubscriberName());
+
         if (stream == null) {
             return;
         }
