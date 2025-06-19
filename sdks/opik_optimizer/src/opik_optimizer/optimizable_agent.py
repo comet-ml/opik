@@ -114,7 +114,8 @@ class OptimizableAgent:
         """
         if self.project_name is None:
             self.project_name = "Default Project"
-        self.tool_registry: Dict[str, Any] = {}
+        self.tool_definitions: List[Dict[str, Any]] = []
+        self.tool_map: Dict[str, Callable] = {}
         self.init_llm()
         self.init_agent(agent_config)
 
@@ -129,15 +130,19 @@ class OptimizableAgent:
         """Initialize the agent with the provided configuration."""
         self.agent_config = agent_config
         # Register the tools, if any, for default LiteLLM Agent use:
-        self.tool_registry.clear()
+        self.tool_definitions.clear()
+        self.tool_map.clear()
         if agent_config.tools:
             for tool_key in agent_config.tools:
                 # this is the common format
-                self.tool_registry[
-                    agent_config.tools[tool_key]["function"].__name__
-                ] = function_to_litellm_definition(
-                    agent_config.tools[tool_key]["function"],
-                    agent_config.tools[tool_key].get("description", ""),
+                self.tool_definitions.append(
+                    function_to_litellm_definition(
+                        agent_config.tools[tool_key]["function"],
+                        agent_config.tools[tool_key].get("description", ""),
+                    )
+                )
+                self.tool_map[agent_config.tools[tool_key]["function"].__name__] = (
+                    agent_config.tools[tool_key]["function"]
                 )
 
     @_throttle.rate_limited(_limiter)
@@ -152,7 +157,7 @@ class OptimizableAgent:
             messages=all_messages,
             seed=seed,
             tools=tool_definitions,
-            tool_choice="auto",
+            tool_choice="auto" if tool_definitions is not None else None,
             **self.model_kwargs,
         )
         return response
@@ -188,25 +193,23 @@ class OptimizableAgent:
 
         if allow_tool_use and self.agent_config.tools:
             # Tool-calling loop
-            tool_definitions = [
-                self.tool_registry[tool_name] for tool_name in self.tool_registry
-            ]
             final_response = "I was unable to find the desired information."
             count = 0
             while count < 20:
                 count += 1
-                response = self._llm_complete(all_messages, tool_definitions, seed)
+                response = self._llm_complete(all_messages, self.tool_definitions, seed)
                 msg = response.choices[0].message
                 all_messages.append(msg.to_dict())
-
                 if msg.tool_calls:
                     for tool_call in msg["tool_calls"]:
                         tool_name = tool_call["function"]["name"]
                         arguments = json.loads(tool_call["function"]["arguments"])
-                        tool_func = self.tool_registry.get(tool_name)
+                        tool_func = self.tool_map.get(tool_name)
                         try:
                             tool_result = (
-                                tool_func(**arguments) if tool_func else "Unknown tool"
+                                tool_func(**arguments)
+                                if tool_func is not None
+                                else "Unknown tool"
                             )
                         except Exception:
                             tool_result = f"Error in calling tool `{tool_name}`"
@@ -214,7 +217,7 @@ class OptimizableAgent:
                             {
                                 "role": "tool",
                                 "tool_call_id": tool_call["id"],
-                                "content": tool_result,
+                                "content": str(tool_result),
                             }
                         )
                 else:
