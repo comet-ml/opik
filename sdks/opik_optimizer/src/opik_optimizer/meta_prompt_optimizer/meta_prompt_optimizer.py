@@ -820,10 +820,11 @@ class MetaPromptOptimizer(BaseOptimizer):
                         and isinstance(item["prompt"], list)
                     ):
                         valid_prompts.append(
-                            # FIXME: Assumed Format:
+                            # FIXME: might be brittle
                             chat_prompt.ChatPrompt(
                                 system=item["prompt"][0]["content"],
-                                user=current_prompt.user,
+                                user=current_prompt.user
+                                or current_prompt.messages[-1]["content"],
                             )
                         )
 
