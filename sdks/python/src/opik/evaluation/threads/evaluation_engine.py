@@ -94,7 +94,10 @@ class ThreadsEvaluationEngine:
             )
 
             result = metric.score(conversation_dict["discussion"])
-            results.append(result)
+            if isinstance(result, list):
+                results.extend(result)
+            else:
+                results.append(result)
 
             # end span
             self._client.span(
