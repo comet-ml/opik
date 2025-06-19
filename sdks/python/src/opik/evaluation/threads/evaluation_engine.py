@@ -1,7 +1,6 @@
 import functools
 from typing import Optional, List, Callable
 
-from opik.api_objects import opik_client
 from opik.evaluation.metrics.conversation import conversation_thread_metric
 from opik.rest_api import JsonListStringPublic, TraceThread
 from . import _types
@@ -14,7 +13,7 @@ from ...types import FeedbackScoreDict
 class ThreadsEvaluationEngine:
     def __init__(
         self,
-        client: opik_client.Opik,
+        client: threads_client.ThreadsClient,
         project_name: Optional[str],
         number_of_workers: int,
         verbose: int,
@@ -24,7 +23,7 @@ class ThreadsEvaluationEngine:
         self._number_of_workers = number_of_workers
         self._verbose = verbose
 
-        self._threads_client = threads_client.ThreadsClient(self._client)
+        self._threads_client = client
 
     def evaluate_threads(
         self,
@@ -78,7 +77,7 @@ class ThreadsEvaluationEngine:
         if eval_project_name is None:
             eval_project_name = self._project_name
 
-        trace = self._client.trace(
+        trace = self._client.opik_client.trace(
             name=f"thread_id: {thread.id} evaluation",
             project_name=eval_project_name,
             input=conversation_dict,
@@ -100,7 +99,7 @@ class ThreadsEvaluationEngine:
                 results.append(result)
 
             # end span
-            self._client.span(
+            self._client.opik_client.span(
                 trace_id=trace.id,
                 id=span.id,
                 output=result.__dict__,
@@ -108,7 +107,7 @@ class ThreadsEvaluationEngine:
 
         # end trace
         outputs = [result.__dict__ for result in results]
-        self._client.trace(
+        self._client.opik_client.trace(
             id=trace.id,
             output={"evaluation_results": outputs},
         )
@@ -128,7 +127,7 @@ class ThreadsEvaluationEngine:
         trace_output_transform: Callable[[JsonListStringPublic], str],
         max_results: int,
     ) -> conversation_thread.ConversationThread:
-        traces = self._client.search_traces(
+        traces = self._client.opik_client.search_traces(
             project_name=self._project_name,
             filter_string=f"thread_id = {thread.id}",
             max_results=max_results,

@@ -73,3 +73,7 @@ class ThreadsClient:
                 scores. If not provided, the scores won't be associated with any specific project.
         """
         raise NotImplementedError
+
+    @property
+    def opik_client(self) -> "opik.Opik":
+        return self._opik_client
