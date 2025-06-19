@@ -377,4 +377,35 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
         return actualResponse.readEntity(Trace.TracePage.class);
     }
+
+    public void openTraceThread(String threadId, UUID projectId, String projectName, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("open")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(TraceThreadIdentifier.builder().projectId(projectId).projectName(projectName)
+                        .threadId(threadId).build()))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public void closeTraceThread(String threadId, UUID projectId, String projectName, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("close")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(TraceThreadIdentifier.builder().projectId(projectId).projectName(projectName)
+                        .threadId(threadId).build()))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
 }

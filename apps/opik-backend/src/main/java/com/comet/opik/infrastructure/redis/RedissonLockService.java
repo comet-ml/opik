@@ -134,7 +134,7 @@ class RedissonLockService implements LockService {
         log.debug(TRYING_TO_LOCK_WITH, lock);
 
         return Mono.defer(() -> semaphore.setPermits(1)
-                //Try to acquire the lock until the lockWaitTime if the lock is not available it will return Mono.empty()
+                //Try to acquire the lock until the lockWaitTime expires if the lock is not available it will return Mono.empty()
                 // If the lock is acquired, it sets the expiration time using the actionTimeout
                 .then(Mono.defer(() -> semaphore.tryAcquire(lockWaitTime.toMillis(), actionTimeout.toMillis(),
                         TimeUnit.MILLISECONDS))
@@ -166,7 +166,8 @@ class RedissonLockService implements LockService {
 
     private Mono<LockInstance> expire(Duration actionTimeout, String locked,
             RPermitExpirableSemaphoreReactive semaphore) {
-        return semaphore.expire(actionTimeout).thenReturn(new LockInstance(semaphore, locked));
+        return semaphore.expire(actionTimeout)
+                .thenReturn(new LockInstance(semaphore, locked));
     }
 
     private static <T> Mono<T> handleError(Lock lock, Mono<T> failToAcquireLockAction, Exception e) {

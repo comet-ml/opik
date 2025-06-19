@@ -1,6 +1,6 @@
 package com.comet.opik.api;
 
-import com.comet.opik.api.validate.FeedbackValidation;
+import com.comet.opik.api.validation.FeedbackValidation;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;

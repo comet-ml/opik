@@ -38,7 +38,11 @@ public interface TraceThreadService {
 
     Mono<Void> processProjectWithTraceThreadsPendingClosure(UUID projectId, Instant lastUpdatedUntil);
 
-    Mono<Boolean> addToPendingQueue(@NonNull UUID projectId);
+    Mono<Boolean> addToPendingQueue(UUID projectId);
+
+    Mono<Void> openThread(UUID projectId, String threadId);
+
+    Mono<Void> closeThread(UUID projectId, String threadId);
 }
 
 @Slf4j
@@ -150,4 +154,19 @@ class TraceThreadServiceImpl implements TraceThreadService {
         return lockService.lockUsingToken(lock, LOCK_DURATION);
     }
 
+    @Override
+    public Mono<Void> openThread(@NonNull UUID projectId, @NonNull String threadId) {
+        return lockService.executeWithLockCustomExpire(
+                new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
+                Mono.defer(() -> traceThreadDAO.openThread(projectId, threadId)).then(),
+                LOCK_DURATION);
+    }
+
+    @Override
+    public Mono<Void> closeThread(@NonNull UUID projectId, @NonNull String threadId) {
+        return lockService.executeWithLockCustomExpire(
+                new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
+                Mono.defer(() -> traceThreadDAO.closeThread(projectId, threadId)).then(),
+                LOCK_DURATION);
+    }
 }

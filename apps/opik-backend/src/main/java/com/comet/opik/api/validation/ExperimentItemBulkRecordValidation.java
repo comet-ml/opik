@@ -1,6 +1,7 @@
-package com.comet.opik.api.validate;
+package com.comet.opik.api.validation;
 
 import jakarta.validation.Constraint;
+import jakarta.validation.Payload;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
@@ -10,13 +11,14 @@ import java.lang.annotation.Target;
 
 @Target({ElementType.FIELD, ElementType.ANNOTATION_TYPE, ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
-@Constraint(validatedBy = {DeleteTraceThreadsValidator.class})
+@Constraint(validatedBy = {ExperimentItemBulkRecordValidator.class})
 @Documented
-public @interface DeleteTraceThreadsValidation {
+public @interface ExperimentItemBulkRecordValidation {
 
-    String message() default "must provide either a project_name or a project_id";
+    String message() default "cannot provide both evaluate_task_result and trace together";
 
     Class<?>[] groups() default {};
 
-    Class<?>[] payload() default {};
+    Class<? extends Payload>[] payload() default {};
+
 }

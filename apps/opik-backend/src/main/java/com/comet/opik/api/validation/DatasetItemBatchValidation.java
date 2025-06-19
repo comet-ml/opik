@@ -1,4 +1,4 @@
-package com.comet.opik.api.validate;
+package com.comet.opik.api.validation;
 
 import jakarta.validation.Constraint;
 
@@ -10,10 +10,11 @@ import java.lang.annotation.Target;
 
 @Target({ElementType.FIELD, ElementType.ANNOTATION_TYPE, ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
-@Constraint(validatedBy = {FeedbackValidator.class})
+@Constraint(validatedBy = {DatasetItemBatchValidator.class})
 @Documented
-public @interface FeedbackValidation {
-    String message() default "Feedback is invalid";
+public @interface DatasetItemBatchValidation {
+
+    String message() default "must provide either a dataset_name or a dataset_id";
 
     Class<?>[] groups() default {};
 

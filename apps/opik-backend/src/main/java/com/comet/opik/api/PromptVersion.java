@@ -1,6 +1,6 @@
 package com.comet.opik.api;
 
-import com.comet.opik.api.validate.CommitValidation;
+import com.comet.opik.api.validation.CommitValidation;
 import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;

@@ -1,6 +1,6 @@
 package com.comet.opik.api;
 
-import com.comet.opik.api.validate.ExperimentItemBulkRecordValidation;
+import com.comet.opik.api.validation.ExperimentItemBulkRecordValidation;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;

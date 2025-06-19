@@ -1,6 +1,6 @@
 package com.comet.opik.api;
 
-import com.comet.opik.api.validate.InRange;
+import com.comet.opik.api.validation.InRange;
 import com.comet.opik.domain.SpanType;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;

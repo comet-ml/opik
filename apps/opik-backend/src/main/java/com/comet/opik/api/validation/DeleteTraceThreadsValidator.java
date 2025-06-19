@@ -1,4 +1,4 @@
-package com.comet.opik.api.validate;
+package com.comet.opik.api.validation;
 
 import com.comet.opik.api.DeleteTraceThreads;
 import jakarta.validation.ConstraintValidator;

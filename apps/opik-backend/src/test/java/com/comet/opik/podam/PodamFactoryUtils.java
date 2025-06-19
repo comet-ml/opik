@@ -7,7 +7,7 @@ import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
-import com.comet.opik.api.validate.InRange;
+import com.comet.opik.api.validation.InRange;
 import com.comet.opik.podam.manufacturer.BigDecimalTypeManufacturer;
 import com.comet.opik.podam.manufacturer.CategoricalFeedbackDetailTypeManufacturer;
 import com.comet.opik.podam.manufacturer.DatasetItemTypeManufacturer;
