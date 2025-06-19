@@ -1,95 +1,86 @@
 import React from "react";
-import { Span, Trace } from "@/types/traces";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import UserCommentForm from "../../UserComment/UserCommentForm";
-import useTraceCommentsBatchDeleteMutation from "@/api/traces/useTraceCommentsBatchDeleteMutation";
-import useSpanCommentsBatchDeleteMutation from "@/api/traces/useSpanCommentsBatchDeleteMutation";
-import useCreateSpanCommentMutation from "@/api/traces/useCreateSpanCommentMutation";
-import useCreateTraceCommentMutation from "@/api/traces/useCreateTraceCommentMutation";
-import useUpdateSpanCommentMutation from "@/api/traces/useUpdateSpanCommentMutation";
-import useUpdateTraceCommentMutation from "@/api/traces/useUpdateTraceCommentMutation";
-import UserComment from "../../UserComment/UserComment";
+import UserCommentForm from "@/components/pages-shared/traces/UserComment/UserCommentForm";
+import UserComment from "@/components/pages-shared/traces/UserComment/UserComment";
 import { orderBy } from "lodash";
 import { useLoggedInUserName } from "@/store/AppStore";
 import {
   DetailsActionSectionValue,
   DetailsActionSectionLayout,
 } from "@/components/pages-shared/traces/DetailsActionSection";
+import { CommentItem } from "@/types/comment";
 
-export type CommentsViewerProps = {
-  data: Trace | Span;
-  spanId?: string;
-  traceId: string;
-  projectId: string;
+export type ThreadCommentsProps = {
   activeSection?: DetailsActionSectionValue | null;
   setActiveSection: (v: DetailsActionSectionValue | null) => void;
 };
 
-const CommentsViewer: React.FC<CommentsViewerProps> = ({
-  data,
-  spanId,
-  traceId,
-  projectId,
+const ThreadComments: React.FC<ThreadCommentsProps> = ({
   activeSection,
   setActiveSection,
 }) => {
-  const traceDeleteMutation = useTraceCommentsBatchDeleteMutation();
-  const spanDeleteMutation = useSpanCommentsBatchDeleteMutation();
+  //   const traceDeleteMutation = useTraceCommentsBatchDeleteMutation();
+  //   const spanDeleteMutation = useSpanCommentsBatchDeleteMutation();
 
-  const createSpanMutation = useCreateSpanCommentMutation();
-  const createTraceMutation = useCreateTraceCommentMutation();
+  //   const createSpanMutation = useCreateSpanCommentMutation();
+  //   const createTraceMutation = useCreateTraceCommentMutation();
 
-  const updateSpanMutation = useUpdateSpanCommentMutation();
-  const updateTraceMutation = useUpdateTraceCommentMutation();
+  //   const updateSpanMutation = useUpdateSpanCommentMutation();
+  //   const updateTraceMutation = useUpdateTraceCommentMutation();
+
+  const comments: CommentItem[] = [];
 
   const userName = useLoggedInUserName();
 
   const onSubmit = (text: string) => {
-    if (!spanId) {
-      createTraceMutation.mutate({
-        text,
-        traceId,
-      });
-      return;
-    }
+    console.log("submit", text);
+    // if (!spanId) {
+    //   createTraceMutation.mutate({
+    //     text,
+    //     traceId,
+    //   });
+    //   return;
+    // }
 
-    createSpanMutation.mutate({
-      text,
-      spanId,
-      projectId,
-    });
+    // createSpanMutation.mutate({
+    //   text,
+    //   spanId,
+    //   projectId,
+    // });
   };
 
   const onEditSubmit = (commentId: string, text: string) => {
-    if (!spanId) {
-      updateTraceMutation.mutate({
-        text,
-        commentId,
-        traceId,
-      });
-      return;
-    }
+    console.log("edit submit", text, commentId);
+    // if (!spanId) {
+    //   updateTraceMutation.mutate({
+    //     text,
+    //     commentId,
+    //     traceId,
+    //   });
+    //   return;
+    // }
 
-    updateSpanMutation.mutate({
-      text,
-      commentId,
-      projectId,
-    });
+    // updateSpanMutation.mutate({
+    //   text,
+    //   commentId,
+    //   projectId,
+    // });
   };
 
   const onDelete = (commentId: string) => {
-    if (!spanId) {
-      traceDeleteMutation.mutate({
-        ids: [commentId],
-        traceId,
-      });
-      return;
-    }
+    console.log("delete", commentId);
+    // if (!spanId) {
+    //   traceDeleteMutation.mutate({
+    //     ids: [commentId],
+    //     traceId,
+    //   });
+    //   return;
+    // }
 
-    spanDeleteMutation.mutate({
-      ids: [commentId],
-      projectId,
-    });
+    // spanDeleteMutation.mutate({
+    //   ids: [commentId],
+    //   projectId,
+    // });
   };
 
   return (
@@ -113,8 +104,8 @@ const CommentsViewer: React.FC<CommentsViewerProps> = ({
         <UserCommentForm.TextareaField placeholder="Add a comment..." />
       </UserCommentForm>
       <div className="mt-3 h-full overflow-auto pb-3">
-        {data.comments?.length ? (
-          orderBy(data.comments, "created_at", "desc").map((comment) => (
+        {comments?.length ? (
+          orderBy(comments, "created_at", "desc").map((comment) => (
             <UserComment
               key={comment.id}
               comment={comment}
@@ -148,4 +139,4 @@ const CommentsViewer: React.FC<CommentsViewerProps> = ({
   );
 };
 
-export default CommentsViewer;
+export default ThreadComments;

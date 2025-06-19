@@ -15,6 +15,7 @@ export const DEFAULT_OPERATOR_MAP: Record<COLUMN_TYPE, FilterOperator> = {
   [COLUMN_TYPE.cost]: "<=",
   [COLUMN_TYPE.duration]: "<=",
   [COLUMN_TYPE.guardrails]: "=",
+  [COLUMN_TYPE.threadStatus]: "=",
 };
 
 export const OPERATORS_MAP: Record<
@@ -186,6 +187,12 @@ export const OPERATORS_MAP: Record<
     },
   ],
   [COLUMN_TYPE.guardrails]: [
+    {
+      label: "=",
+      value: "=",
+    },
+  ],
+  [COLUMN_TYPE.threadStatus]: [
     {
       label: "=",
       value: "=",

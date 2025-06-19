@@ -1,42 +1,34 @@
 import React from "react";
-import { Span, Trace } from "@/types/traces";
-import FeedbackScoresEditor from "../../FeedbackScoresEditor/FeedbackScoresEditor";
+import { TraceFeedbackScore } from "@/types/traces";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import {
   DetailsActionSectionLayout,
   DetailsActionSectionValue,
 } from "@/components/pages-shared/traces/DetailsActionSection";
-import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
-import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
-import { UpdateFeedbackScoreData } from "./types";
+import FeedbackScoresEditor from "../FeedbackScoresEditor/FeedbackScoresEditor";
+import { UpdateFeedbackScoreData } from "../TraceDetailsPanel/TraceAnnotateViewer/types";
 
-type TraceAnnotateViewerProps = {
-  data: Trace | Span;
-  spanId?: string;
-  traceId: string;
+type ThreadAnnotationsProps = {
+  threadId: string;
   activeSection: DetailsActionSectionValue | null;
   setActiveSection: (v: DetailsActionSectionValue | null) => void;
 };
 
-const TraceAnnotateViewer: React.FunctionComponent<
-  TraceAnnotateViewerProps
-> = ({ data, spanId, traceId, activeSection, setActiveSection }) => {
-  const hasFeedbackScores = Boolean(data.feedback_scores?.length);
-
-  const { mutate: setTraceFeedbackScore } = useTraceFeedbackScoreSetMutation();
-  const { mutate: feedbackScoreDelete } = useTraceFeedbackScoreDeleteMutation();
+const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
+  threadId,
+  activeSection,
+  setActiveSection,
+}) => {
+  const feedbackScores: TraceFeedbackScore[] = [];
+  const hasFeedbackScores = Boolean(feedbackScores.length);
 
   const onUpdateFeedbackScore = (data: UpdateFeedbackScoreData) => {
-    setTraceFeedbackScore({
-      ...data,
-      traceId,
-      spanId,
-    });
+    console.log("onUpdateFeedbackScore", data);
   };
 
   const onDeleteFeedbackScore = (name: string) => {
-    feedbackScoreDelete({ name, traceId, spanId });
+    console.log("onDeleteFeedbackScore", name);
   };
 
   return (
@@ -49,7 +41,7 @@ const TraceAnnotateViewer: React.FunctionComponent<
     >
       {hasFeedbackScores && (
         <div className="flex flex-wrap gap-2 px-6 pb-2 pt-4">
-          {data.feedback_scores?.map((score) => (
+          {feedbackScores.map((score) => (
             <FeedbackScoreTag
               key={score.name}
               label={score.name}
@@ -62,8 +54,8 @@ const TraceAnnotateViewer: React.FunctionComponent<
         </div>
       )}
       <FeedbackScoresEditor
-        key={traceId ?? spanId}
-        feedbackScores={data.feedback_scores || []}
+        key={threadId}
+        feedbackScores={feedbackScores}
         onUpdateFeedbackScore={onUpdateFeedbackScore}
         onDeleteFeedbackScore={onDeleteFeedbackScore}
         className="mt-4"
@@ -72,4 +64,4 @@ const TraceAnnotateViewer: React.FunctionComponent<
   );
 };
 
-export default TraceAnnotateViewer;
+export default ThreadAnnotations;

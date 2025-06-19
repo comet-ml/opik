@@ -58,6 +58,7 @@ import { formatDate } from "@/lib/date";
 import ThreadsActionsPanel from "@/components/pages/TracesPage/ThreadsTab/ThreadsActionsPanel";
 import useThreadList from "@/api/traces/useThreadsList";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ThreadStatusCell from "@/components/shared/DataTableCells/ThreadStatusCell";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -90,6 +91,12 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     type: COLUMN_TYPE.number,
     accessorFn: (row) =>
       isNumber(row.number_of_messages) ? `${row.number_of_messages}` : "-",
+  },
+  {
+    id: "status",
+    label: "Status",
+    type: COLUMN_TYPE.threadStatus,
+    cell: ThreadStatusCell as never,
   },
   {
     id: `${COLUMN_USAGE_ID}.total_tokens`,

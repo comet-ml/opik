@@ -1,8 +1,20 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-import { Calendar, Clock, Tag, Trash } from "lucide-react";
-
+import { Link, useNavigate } from "@tanstack/react-router";
+import {
+  Calendar,
+  ChevronDown,
+  Clock,
+  Copy,
+  Hash,
+  MessageCircleMore,
+  MessageCircleOff,
+  MessagesSquare,
+  MoreHorizontal,
+  Share,
+  Trash,
+} from "lucide-react";
+import copy from "clipboard-copy";
 import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
 import { Trace } from "@/types/traces";
 import { formatDate, formatDuration } from "@/lib/date";
@@ -18,6 +30,34 @@ import useTracesList from "@/api/traces/useTracesList";
 import useThreadBatchDeleteMutation from "@/api/traces/useThreadBatchDeleteMutation";
 import TraceMessages from "@/components/pages-shared/traces/ThreadDetailsPanel/TraceMessages";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
+import {
+  DetailsActionSection,
+  DetailsActionSectionToggle,
+  useDetailsActionSectionState,
+} from "@/components/pages-shared/traces/DetailsActionSection";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "@/components/ui/use-toast";
+import ThreadDetailsTags from "./ThreadDetailsTags";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
+import ThreadComments from "./ThreadComments";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { StringParam, useQueryParam } from "use-query-params";
+import ThreadAnnotations from "./ThreadAnnotations";
+import FeedbackScoreTab from "../TraceDetailsPanel/TraceDataViewer/FeedbackScoreTab";
+import SetInactiveConfirmDialog from "./SetInactiveConfirmDialog";
+import { WORKSPACE_PREFERENCE_TYPE } from "@/components/pages/ConfigurationPage/WorkspacePreferencesTab/types";
+import ThreadStatusTag from "@/components/shared/ThreadStatusTag/ThreadStatusTag";
+import { ThreadStatus } from "@/types/thread";
 
 type ThreadDetailsPanelProps = {
   projectId: string;
@@ -45,14 +85,26 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
+  const [setInactiveOpen, setSetInactiveOpen] = useState<boolean>(false);
   const [height, setHeight] = useState<number>(0);
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
     const contentHeight = node.clientHeight;
     const headerHeight =
       node.querySelector('[data-panel-header="true"]')?.clientHeight || 0;
+    const tabsHeight =
+      node.querySelector('[data-panel-tabs="true"]')?.clientHeight || 0;
     const BOTTOM_PADDING = 16;
-    setHeight(contentHeight - headerHeight - BOTTOM_PADDING);
+    setHeight(contentHeight - headerHeight - tabsHeight - BOTTOM_PADDING);
   });
+  const [activeSection, setActiveSection] =
+    useDetailsActionSectionState("lastThreadSection");
+  const [activeTab = "messages", setActiveTab] = useQueryParam(
+    "threadTab",
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   const { data: thread, isPending: isThreadPending } = useThreadById(
     {
@@ -64,6 +116,10 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       enabled: Boolean(threadId),
     },
   );
+
+  // TODO update once BE will send this data
+  const annotationCount = 0;
+  const commentsCount = 0;
 
   const { data: tracesData, isPending: isTracesPending } = useTracesList(
     {
@@ -110,6 +166,11 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     });
   }, [onClose, mutate, threadId, projectId]);
 
+  // TODO implement for thread
+  const handleDeleteFeedbackScore = (name: string) => {
+    console.log("delete", name);
+  };
+
   const bodyStyle = {
     ...(height && { height: `${height}px` }),
   };
@@ -120,62 +181,110 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     }
 
     return (
-      <div className="flex flex-wrap gap-2">
-        <h3 className="comet-title-m mr-2 text-foreground-secondary">Thread</h3>
-        <TooltipWrapper content="Thread start time">
-          <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
-            <Calendar className="size-4 shrink-0" />
-            <span className="comet-body-s-accented truncate">
-              {thread?.start_time ? formatDate(thread?.start_time) : "NA"}
-            </span>
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2 overflow-x-hidden">
+          <div className="relative flex size-[22px] shrink-0 items-center justify-center rounded-md bg-[#DEDEFD] text-[#1B1C7E]">
+            <MessagesSquare className="size-3.5" />
           </div>
-        </TooltipWrapper>
-        <TooltipWrapper content="Number of messages in the thread">
-          <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
-            <Tag className="size-4 shrink-0" />
-            <span className="comet-body-s-accented truncate">
-              {thread?.number_of_messages
-                ? `${thread.number_of_messages} messages`
-                : "NA"}
-            </span>
-          </div>
-        </TooltipWrapper>
-        <TooltipWrapper content="Thread duration">
-          <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
-            <Clock className="size-4 shrink-0" />
-            <span className="comet-body-s-accented truncate">
-              {formatDuration(thread?.duration, false)}
-            </span>
-          </div>
-        </TooltipWrapper>
-        <div className="flex flex-auto"></div>
-        <Button
-          variant="outline"
-          size="sm"
-          key="Go to project"
-          onClick={() => {
-            navigate({
-              to: "/$workspaceName/projects/$projectId/traces",
-              params: {
-                projectId,
-                workspaceName,
-              },
-              search: {
-                traces_filters: [
-                  {
-                    id: "thread_id_filter",
-                    field: "thread_id",
-                    type: COLUMN_TYPE.string,
-                    operator: "=",
-                    value: threadId,
-                  },
-                ],
-              },
-            });
-          }}
-        >
-          View all traces
-        </Button>
+          <div className="comet-title-s truncate py-0.5">Thread</div>
+          <div className="flex flex-auto"></div>
+          <Button
+            variant="outline"
+            size="2xs"
+            key="Go to project"
+            onClick={() => {
+              navigate({
+                to: "/$workspaceName/projects/$projectId/traces",
+                params: {
+                  projectId,
+                  workspaceName,
+                },
+                search: {
+                  traces_filters: [
+                    {
+                      id: "thread_id_filter",
+                      field: "thread_id",
+                      type: COLUMN_TYPE.string,
+                      operator: "=",
+                      value: threadId,
+                    },
+                  ],
+                },
+              });
+            }}
+          >
+            View all traces
+          </Button>
+
+          <ThreadStatusTag status={ThreadStatus.CLOSE} />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="2xs"
+                className="border-[#EBF2F5] bg-[#EBF2F5] hover:bg-[#EBF2F5]/80"
+              >
+                <MessageCircleMore className="mr-1 size-3" /> Active
+                <ChevronDown className="ml-1 size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              <DropdownMenuItem onClick={() => setSetInactiveOpen(true)}>
+                <MessageCircleOff className="mr-2 size-4" />
+                Set as inactive
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <Button variant="link" className="w-full" asChild>
+                <Link
+                  to="/$workspaceName/configuration"
+                  params={{ workspaceName }}
+                  search={{
+                    tab: "workspace-preferences",
+                    editPreference: WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
+                  }}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Manage session timeout
+                </Link>
+              </Button>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <div className=" flex w-full items-center gap-3 overflow-x-hidden py-1">
+          <TooltipWrapper content="Thread start time">
+            <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
+              <Calendar className="size-4 shrink-0" />
+              <span className="comet-body-s-accented truncate">
+                {thread?.start_time ? formatDate(thread?.start_time) : "NA"}
+              </span>
+            </div>
+          </TooltipWrapper>
+          <TooltipWrapper content="Number of messages in the thread">
+            <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
+              <Hash className="size-4 shrink-0" />
+              <span className="comet-body-s-accented truncate">
+                {thread?.number_of_messages
+                  ? `${thread.number_of_messages} messages`
+                  : "NA"}
+              </span>
+            </div>
+          </TooltipWrapper>
+          <TooltipWrapper content="Thread duration">
+            <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
+              <Clock className="size-4 shrink-0" />
+              <span className="comet-body-s-accented truncate">
+                {formatDuration(thread?.duration, false)}
+              </span>
+            </div>
+          </TooltipWrapper>
+        </div>
+        <ThreadDetailsTags
+          // TODO implement for thread
+          tags={[]}
+          threadId={threadId}
+          projectId={projectId}
+        />
       </div>
     );
   };
@@ -186,11 +295,42 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     }
 
     return (
-      <TraceMessages
-        traces={traces}
-        handleOpenTrace={handleOpenTrace}
-        traceId={traceId}
-      />
+      <Tabs
+        defaultValue="messages"
+        value={activeTab!}
+        onValueChange={setActiveTab}
+      >
+        <div className="mx-6" data-panel-tabs="true">
+          <TabsList variant="underline">
+            <TabsTrigger variant="underline" value="messages">
+              Messages
+            </TabsTrigger>
+            <TabsTrigger variant="underline" value="feedback_scores">
+              Feedback scores
+            </TabsTrigger>
+          </TabsList>
+        </div>
+        <TabsContent value="messages">
+          <div style={bodyStyle}>
+            <TraceMessages
+              traces={traces}
+              handleOpenTrace={handleOpenTrace}
+              traceId={traceId}
+            />
+          </div>
+        </TabsContent>
+        <TabsContent value="feedback_scores" className="px-6">
+          <FeedbackScoreTab
+            // TODO implement for thread
+            onDeleteFeedbackScore={handleDeleteFeedbackScore}
+            entityName="thread"
+            feedbackScores={[]}
+            onAddHumanReview={() =>
+              setActiveSection(DetailsActionSection.Annotations)
+            }
+          />
+        </TabsContent>
+      </Tabs>
     );
   };
 
@@ -204,13 +344,41 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     }
 
     return (
-      <div ref={ref} className="relative size-full px-6">
-        <div className="border-b py-4" data-panel-header="true">
-          {renderHeader()}
-        </div>
-        <div style={bodyStyle} data-panel-body="true">
-          {renderBody()}
-        </div>
+      <div className="relative size-full">
+        <ResizablePanelGroup direction="horizontal" autoSaveId="trace-sidebar">
+          <ResizablePanel id="thread-viewer" defaultSize={70} minSize={50}>
+            <div ref={ref} className="relative size-full">
+              <div className="px-6 pb-6 pt-4" data-panel-header="true">
+                {renderHeader()}
+              </div>
+              <div data-panel-body="true">{renderBody()}</div>
+            </div>
+          </ResizablePanel>
+          {Boolean(activeSection) && (
+            <>
+              <ResizableHandle />
+              <ResizablePanel
+                id="thread-last-section-viewer"
+                defaultSize={30}
+                minSize={30}
+              >
+                {activeSection === DetailsActionSection.Annotations && (
+                  <ThreadAnnotations
+                    threadId={threadId}
+                    activeSection={activeSection}
+                    setActiveSection={setActiveSection}
+                  />
+                )}
+                {activeSection === DetailsActionSection.Comments && (
+                  <ThreadComments
+                    activeSection={activeSection}
+                    setActiveSection={setActiveSection}
+                  />
+                )}
+              </ResizablePanel>
+            </>
+          )}
+        </ResizablePanelGroup>
       </div>
     );
   };
@@ -218,6 +386,59 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   const renderHeaderContent = () => {
     return (
       <div className="flex gap-2">
+        <DetailsActionSectionToggle
+          activeSection={activeSection}
+          setActiveSection={setActiveSection}
+          layoutSize="sm"
+          count={commentsCount}
+          type={DetailsActionSection.Comments}
+        />
+        <DetailsActionSectionToggle
+          activeSection={activeSection}
+          setActiveSection={setActiveSection}
+          layoutSize="sm"
+          count={annotationCount}
+          type={DetailsActionSection.Annotations}
+        />
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="icon-sm">
+              <span className="sr-only">Actions menu</span>
+              <MoreHorizontal />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem
+              onClick={() => {
+                toast({
+                  description: "URL successfully copied to clipboard",
+                });
+                copy(window.location.href);
+              }}
+            >
+              <Share className="mr-2 size-4" />
+              Share
+            </DropdownMenuItem>
+            <TooltipWrapper content={threadId} side="left">
+              <DropdownMenuItem
+                onClick={() => {
+                  toast({
+                    description: `Thread ID successfully copied to clipboard`,
+                  });
+                  copy(threadId);
+                }}
+              >
+                <Copy className="mr-2 size-4" />
+                Copy thread ID
+              </DropdownMenuItem>
+            </TooltipWrapper>
+            <DropdownMenuItem onClick={() => setPopupOpen(true)}>
+              <Trash className="mr-2 size-4" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <ConfirmDialog
           open={popupOpen}
           setOpen={setPopupOpen}
@@ -227,10 +448,11 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           confirmText="Delete thread"
           confirmButtonVariant="destructive"
         />
-        <Button variant="outline" size="sm" onClick={() => setPopupOpen(true)}>
-          <Trash className="mr-2 size-4" />
-          Delete
-        </Button>
+
+        <SetInactiveConfirmDialog
+          open={setInactiveOpen}
+          setOpen={setSetInactiveOpen}
+        />
       </div>
     );
   };

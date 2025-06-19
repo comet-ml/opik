@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import find from "lodash/find";
-import { createEnumParam, useQueryParam } from "use-query-params";
 
 import { Trash } from "lucide-react";
 
@@ -25,6 +24,10 @@ import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import CommentsViewer from "./CommentsViewer/CommentsViewer";
 import useLazySpansList from "@/api/traces/useLazySpansList";
+import {
+  DetailsActionSection,
+  useDetailsActionSectionState,
+} from "@/components/pages-shared/traces/DetailsActionSection";
 
 type TraceDetailsPanelProps = {
   projectId?: string;
@@ -39,17 +42,6 @@ type TraceDetailsPanelProps = {
   onRowChange?: (shift: number) => void;
 };
 
-export const LastSection = {
-  Annotations: "annotations",
-  Comments: "comments",
-} as const;
-export type LastSectionValue = (typeof LastSection)[keyof typeof LastSection];
-
-export const LastSectionParam = createEnumParam<LastSectionValue>([
-  "annotations",
-  "comments",
-]);
-
 const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   projectId: externalProjectId,
   traceId,
@@ -63,13 +55,8 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   onRowChange,
 }) => {
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
-  const [lastSection, setLastSection] = useQueryParam(
-    "lastSection",
-    LastSectionParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
+  const [activeSection, setActiveSection] =
+    useDetailsActionSectionState("lastSection");
 
   const { data: trace, isPending: isTracePending } = useTraceById(
     {
@@ -151,12 +138,12 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
               projectId={projectId}
               spanId={spanId}
               traceId={traceId}
-              lastSection={lastSection}
-              setLastSection={setLastSection}
+              activeSection={activeSection}
+              setActiveSection={setActiveSection}
               isSpansLazyLoading={isSpansLazyLoading}
             />
           </ResizablePanel>
-          {Boolean(lastSection) && (
+          {Boolean(activeSection) && (
             <>
               <ResizableHandle />
               <ResizablePanel
@@ -164,23 +151,23 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                 defaultSize={40}
                 minSize={30}
               >
-                {lastSection === LastSection.Annotations && (
+                {activeSection === DetailsActionSection.Annotations && (
                   <TraceAnnotateViewer
                     data={dataToView}
                     spanId={spanId}
                     traceId={traceId}
-                    lastSection={lastSection}
-                    setLastSection={setLastSection}
+                    activeSection={activeSection}
+                    setActiveSection={setActiveSection}
                   />
                 )}
-                {lastSection === LastSection.Comments && (
+                {activeSection === DetailsActionSection.Comments && (
                   <CommentsViewer
                     data={dataToView}
                     spanId={spanId}
                     traceId={traceId}
                     projectId={projectId}
-                    lastSection={lastSection}
-                    setLastSection={setLastSection}
+                    activeSection={activeSection}
+                    setActiveSection={setActiveSection}
                   />
                 )}
               </ResizablePanel>

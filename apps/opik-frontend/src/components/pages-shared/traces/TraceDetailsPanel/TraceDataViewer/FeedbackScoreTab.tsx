@@ -1,17 +1,20 @@
 import React, { useMemo } from "react";
 import sortBy from "lodash/sortBy";
-import { Span, Trace, TraceFeedbackScore } from "@/types/traces";
+import { TraceFeedbackScore } from "@/types/traces";
 import FeedbackScoreRowDeleteCell from "./FeedbackScoreRowDeleteCell";
 import FeedbackScoreValueCell from "./FeedbackScoreValueCell";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
-import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import FeedbackScoreNameCell from "@/components/shared/DataTableCells/FeedbackScoreNameCell";
 import FeedbackScoreReasonCell from "@/components/shared/DataTableCells/FeedbackScoreReasonCell";
 import { FEEDBACK_SCORE_SOURCE_MAP } from "@/lib/feedback-scores";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import useLocalStorageState from "use-local-storage-state";
+import FeedbackScoreTableNoData from "./FeedbackScoreTableNoData";
+import { ExternalLink, InfoIcon } from "lucide-react";
+import { buildDocsUrl } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 const SELECTED_COLUMNS_KEY = "trace-feedback-scores-tab-selected-columns";
 const COLUMNS_ORDER_KEY = "trace-feedback-scores-tab-columns-order";
@@ -56,15 +59,17 @@ export const DEFAULT_COLUMNS: ColumnData<TraceFeedbackScore>[] = [
 const DEFAULT_SELECTED_COLUMNS = ["name", "value", "reason"];
 
 type FeedbackScoreTabProps = {
-  data: Trace | Span;
-  spanId?: string;
-  traceId: string;
+  onDeleteFeedbackScore: (name: string) => void;
+  onAddHumanReview: () => void;
+  entityName: string;
+  feedbackScores?: TraceFeedbackScore[];
 };
 
 const FeedbackScoreTab: React.FunctionComponent<FeedbackScoreTabProps> = ({
-  data,
-  spanId,
-  traceId,
+  onDeleteFeedbackScore,
+  onAddHumanReview,
+  entityName,
+  feedbackScores = [],
 }) => {
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -92,8 +97,8 @@ const FeedbackScoreTab: React.FunctionComponent<FeedbackScoreTabProps> = ({
       cell: FeedbackScoreRowDeleteCell,
       meta: {
         custom: {
-          traceId,
-          spanId,
+          onDelete: onDeleteFeedbackScore,
+          entityName,
         },
       },
       size: 48,
@@ -101,12 +106,14 @@ const FeedbackScoreTab: React.FunctionComponent<FeedbackScoreTabProps> = ({
     });
 
     return retVal;
-  }, [traceId, spanId, selectedColumns, columnsOrder]);
+  }, [onDeleteFeedbackScore, selectedColumns, columnsOrder, entityName]);
 
-  const feedbackScores: TraceFeedbackScore[] = useMemo(
-    () => sortBy(data.feedback_scores || [], "name"),
-    [data.feedback_scores],
+  const sortedFeedbackScores: TraceFeedbackScore[] = useMemo(
+    () => sortBy(feedbackScores, "name"),
+    [feedbackScores],
   );
+
+  const scoreDocsLink = buildDocsUrl("/tracing/annotate_traces");
 
   return (
     <>
@@ -122,9 +129,43 @@ const FeedbackScoreTab: React.FunctionComponent<FeedbackScoreTabProps> = ({
 
       <DataTable
         columns={columns}
-        data={feedbackScores}
-        noData={<DataTableNoData title="No feedback scores" />}
+        data={sortedFeedbackScores}
+        noData={
+          <FeedbackScoreTableNoData onAddHumanReview={onAddHumanReview} />
+        }
       />
+
+      {sortedFeedbackScores.length > 0 && (
+        <div className="comet-body-xs mt-2 flex gap-1.5 py-2 text-light-slate">
+          <div className="pt-[3px]">
+            <InfoIcon className="size-3" />
+          </div>
+          <div className="leading-relaxed">
+            Use the SDK or Online evaluation rules to
+            <Button
+              size="sm"
+              variant="link"
+              className="comet-body-xs inline-flex h-auto gap-0.5 px-1"
+              asChild
+            >
+              <a href={scoreDocsLink} target="_blank" rel="noopener noreferrer">
+                automatically score
+                <ExternalLink className="size-3" />
+              </a>
+            </Button>
+            your threads, or manually annotate your thread with
+            <Button
+              size="sm"
+              variant="link"
+              className="comet-body-xs inline-flex h-auto gap-0.5 px-1"
+              onClick={onAddHumanReview}
+            >
+              human review
+            </Button>
+            .
+          </div>
+        </div>
+      )}
     </>
   );
 };

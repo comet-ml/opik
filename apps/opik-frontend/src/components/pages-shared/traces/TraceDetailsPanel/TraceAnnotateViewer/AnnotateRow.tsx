@@ -3,9 +3,6 @@ import isUndefined from "lodash/isUndefined";
 import isNumber from "lodash/isNumber";
 import sortBy from "lodash/sortBy";
 import { Copy, MessageSquareMore, Trash, X } from "lucide-react";
-
-import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
-import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
@@ -26,6 +23,7 @@ import { categoryOptionLabelRenderer } from "@/lib/feedback-scores";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import copy from "clipboard-copy";
 import { useToast } from "@/components/ui/use-toast";
+import { UpdateFeedbackScoreData } from "./types";
 
 const SET_VALUE_DEBOUNCE_DELAY = 500;
 
@@ -33,16 +31,16 @@ type AnnotateRowProps = {
   name: string;
   feedbackDefinition?: FeedbackDefinition;
   feedbackScore?: TraceFeedbackScore;
-  spanId?: string;
-  traceId: string;
+  onUpdateFeedbackScore: (update: UpdateFeedbackScoreData) => void;
+  onDeleteFeedbackScore: (name: string) => void;
 };
 
 const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   name,
   feedbackDefinition,
   feedbackScore,
-  spanId,
-  traceId,
+  onUpdateFeedbackScore,
+  onDeleteFeedbackScore,
 }) => {
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const { toast } = useToast();
@@ -55,46 +53,41 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   useEffect(() => {
     setCategoryName(feedbackScore?.category_name);
     setEditReason(false);
-  }, [feedbackScore?.category_name, traceId, spanId]);
+  }, [feedbackScore?.category_name]);
 
-  useEffect(() => {
-    setEditReason(false);
-  }, [traceId, spanId]);
+  // TODO: add traceId and spanId to key or parent component
+  // useEffect(() => {
+  //   setEditReason(false);
+  // }, [traceId]);
 
   const [value, setValue] = useState<number | "">(
     isNumber(feedbackScore?.value) ? feedbackScore?.value : "",
   );
   useEffect(() => {
     setValue(isNumber(feedbackScore?.value) ? feedbackScore?.value : "");
-  }, [feedbackScore?.value, spanId, traceId]);
-
-  const { mutate: setTraceFeedbackScore } = useTraceFeedbackScoreSetMutation();
+  }, [feedbackScore?.value]);
 
   const handleChangeValue = useCallback(
     (value: number, categoryName?: string) => {
-      setTraceFeedbackScore({
+      onUpdateFeedbackScore({
         categoryName,
         name,
-        spanId,
-        traceId,
         value,
       });
     },
-    [name, spanId, traceId, setTraceFeedbackScore],
+    [name, onUpdateFeedbackScore],
   );
 
   const handleChangeReason = useCallback(
     (reason?: string) => {
-      setTraceFeedbackScore({
+      onUpdateFeedbackScore({
         categoryName,
         name,
-        spanId,
-        traceId,
         reason,
         value: value as number,
       });
     },
-    [name, value, spanId, traceId, categoryName, setTraceFeedbackScore],
+    [name, value, categoryName, onUpdateFeedbackScore],
   );
 
   const onChangeTextAreaTriggered = useCallback(() => {
@@ -113,18 +106,12 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     onChange: onChangeTextAreaTriggered,
   });
 
-  const { mutate: feedbackScoreDelete } = useTraceFeedbackScoreDeleteMutation();
-
   const deleteFeedbackScore = useCallback(() => {
-    feedbackScoreDelete({
-      traceId,
-      spanId,
-      name: feedbackScore?.name ?? "",
-    });
+    onDeleteFeedbackScore(name);
     setEditReason(false);
     resetValue();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedbackScore?.name, traceId, spanId, resetValue]);
+  }, [name, resetValue]);
 
   const handleCopyReasonClick = async (reasonValue: string) => {
     await copy(reasonValue);

@@ -30,6 +30,7 @@ const AddFeedbackScorePopover: React.FunctionComponent<
         <div className="max-h-[70vh] max-w-[400px] overflow-auto px-0 py-4">
           <FeedbackScoresEditor
             feedbackScores={feedbackScores}
+            /// TODO FIX IT
             traceId={traceId}
             spanId={spanId}
           />
