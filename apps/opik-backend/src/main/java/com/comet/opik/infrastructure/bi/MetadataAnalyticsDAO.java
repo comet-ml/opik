@@ -2,12 +2,11 @@ package com.comet.opik.infrastructure.bi;
 
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
-import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import io.r2dbc.spi.Result;
+import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
@@ -27,7 +26,6 @@ interface MetadataAnalyticsDAO {
 }
 
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 class MetadataAnalyticsDAOImpl implements MetadataAnalyticsDAO {
 
     private static final String DAILY_REPORT_USERS_TABLES = """
@@ -49,8 +47,15 @@ class MetadataAnalyticsDAOImpl implements MetadataAnalyticsDAO {
             ;
             """;
 
-    private final @NonNull TransactionTemplateAsync template;
-    private final @NonNull @Named("Database Analytics Database Name") String databaseAnalyticsName;
+    private final TransactionTemplateAsync template;
+    private final String databaseAnalyticsName;
+
+    @Inject
+    public MetadataAnalyticsDAOImpl(@NonNull TransactionTemplateAsync template,
+            @NonNull @Named("Database Analytics Database Name") String databaseAnalyticsName) {
+        this.template = template;
+        this.databaseAnalyticsName = databaseAnalyticsName;
+    }
 
     @Override
     public Mono<List<String>> getTablesForDailyReport() {

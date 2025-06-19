@@ -68,7 +68,7 @@ def after_agent_callback(
     callback_context: CallbackContext, *args: Any, **kwargs: Any
 ) -> None:
     opik_tracer.after_agent_callback(callback_context, *args, **kwargs)
-    opik_tracer._client.flush()
+    opik_tracer.flush()
 
 
 root_agent = Agent(

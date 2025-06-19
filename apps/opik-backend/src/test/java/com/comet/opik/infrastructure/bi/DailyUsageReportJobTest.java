@@ -9,6 +9,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
@@ -46,13 +47,11 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamUtils;
 
-import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -71,22 +70,6 @@ class DailyUsageReportJobTest {
 
     private static final String VERSION = "%s.%s.%s".formatted(PodamUtils.getIntegerInRange(1, 99),
             PodamUtils.getIntegerInRange(1, 99), PodamUtils.getIntegerInRange(1, 99));
-
-    private void runMigrations(MySQLContainer<?> mysql, ClickHouseContainer clickhouse) {
-        try {
-            MigrationUtils.runDbMigration(mysql.createConnection(""),
-                    MySQLContainerUtils.migrationParameters());
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-
-        try (var connection = clickhouse.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-    }
 
     private void mockBiEventResponse(String eventType, WireMockServer server) {
         server.stubFor(
@@ -239,7 +222,8 @@ class DailyUsageReportJobTest {
 
             mockBiEventResponse(InstallationReportService.NOTIFICATION_EVENT_TYPE, wireMock.server());
 
-            runMigrations(MYSQL, CLICKHOUSE);
+            MigrationUtils.runMysqlDbMigration(MYSQL);
+            MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
 
             APP = newTestDropwizardAppExtension(
                     AppContextConfig.builder()
@@ -268,7 +252,7 @@ class DailyUsageReportJobTest {
         void setUpAll(ClientSupport client, TransactionTemplate transactionTemplate,
                 TransactionTemplateAsync templateAsync) {
 
-            this.baseURI = "http://localhost:%d".formatted(client.getPort());
+            this.baseURI = TestUtils.getBaseUrl(client);
             this.client = client;
             this.templateAsync = templateAsync;
             this.transactionTemplate = transactionTemplate;
@@ -382,7 +366,8 @@ class DailyUsageReportJobTest {
             mockBiEventResponse(BiEventListener.FIRST_TRACE_REPORT_BI_EVENT, wireMock.server());
             mockBiEventResponse(InstallationReportService.NOTIFICATION_EVENT_TYPE, wireMock.server());
 
-            runMigrations(MYSQL, CLICKHOUSE);
+            MigrationUtils.runMysqlDbMigration(MYSQL);
+            MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
 
             APP = newTestDropwizardAppExtension(
                     AppContextConfig.builder()
@@ -410,7 +395,7 @@ class DailyUsageReportJobTest {
         void setUpAll(ClientSupport client, TransactionTemplate transactionTemplate,
                 TransactionTemplateAsync templateAsync) {
 
-            this.baseURI = "http://localhost:%d".formatted(client.getPort());
+            this.baseURI = TestUtils.getBaseUrl(client);
             this.client = client;
             this.templateAsync = templateAsync;
             this.transactionTemplate = transactionTemplate;

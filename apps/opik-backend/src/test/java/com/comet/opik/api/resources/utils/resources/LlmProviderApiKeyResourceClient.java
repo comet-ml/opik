@@ -28,7 +28,7 @@ public class LlmProviderApiKeyResourceClient {
 
     public LlmProviderApiKeyResourceClient(ClientSupport client) {
         this.client = client;
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURI = TestUtils.getBaseUrl(client);
     }
 
     public ProviderApiKey createProviderApiKey(

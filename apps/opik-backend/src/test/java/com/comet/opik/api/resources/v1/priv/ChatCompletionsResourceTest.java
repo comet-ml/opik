@@ -23,7 +23,6 @@ import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.Role;
 import org.apache.http.HttpStatus;
-import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Nested;
@@ -43,7 +42,6 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.sql.SQLException;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.stream.Stream;
@@ -90,6 +88,9 @@ class ChatCompletionsResourceTest {
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICK_HOUSE_CONTAINER, ClickHouseContainerUtils.DATABASE_NAME);
 
+        MigrationUtils.runMysqlDbMigration(MY_SQL_CONTAINER);
+        MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
+
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MY_SQL_CONTAINER.getJdbcUrl(),
                 databaseAnalyticsFactory,
@@ -103,18 +104,9 @@ class ChatCompletionsResourceTest {
     private LlmProviderApiKeyResourceClient llmProviderApiKeyResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport clientSupport, Jdbi jdbi) throws SQLException {
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
-        try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(
-                    connection,
-                    MigrationUtils.CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
+    void setUpAll(ClientSupport clientSupport) {
 
         ClientSupportUtils.config(clientSupport);
-
         mockTargetWorkspace(WORKSPACE_NAME, WORKSPACE_ID);
 
         this.chatCompletionsClient = new ChatCompletionsClient(clientSupport);

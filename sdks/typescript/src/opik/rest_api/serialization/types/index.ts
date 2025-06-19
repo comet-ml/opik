@@ -264,3 +264,5 @@ export * from "./TraceThreadPage";
 export * from "./TracePagePublic";
 export * from "./TraceFilterPublicOperator";
 export * from "./TraceFilterPublic";
+export * from "./Result";
+export * from "./WorkspaceMetricsSummaryResponse";
