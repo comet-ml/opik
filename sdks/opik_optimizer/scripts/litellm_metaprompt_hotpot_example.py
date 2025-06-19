@@ -11,6 +11,20 @@ from opik_optimizer.datasets import hotpot_300
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 
+# For wikipedia tool:
+import dspy
+
+
+def search_wikipedia(query: str) -> list[str]:
+    """
+    This agent is used to search wikipedia. It can retrieve additional details
+    about a topic.
+    """
+    results = dspy.ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")(
+        query, k=3
+    )
+    return [item["text"] for item in results]
+
 
 dataset = hotpot_300()
 
@@ -21,15 +35,20 @@ def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreRes
 
 
 system_prompt = """
-You are a helpful assistant. Use the `search_wikipedia` tool to find factual information when appropriate.
-The user will provide a question string like "Who is Barack Obama?".
-1. Extract the item to look up
-2. Use the `search_wikipedia` tool to find details
-3. Respond clearly to the user, stating the answer found by the tool.
+Answer the question with a direct phrase. Use the tool `search_wikipedia`
+if you need it. Make sure you consider the results before answering the
+question.
 """
 
 agent_config = AgentConfig(
-    chat_prompt=ChatPrompt(system=system_prompt, user="{question}")
+    chat_prompt=ChatPrompt(system=system_prompt, user="{question}"),
+    tools={
+        "Search Wikipedia": {
+            "function": search_wikipedia,
+            "description": "Use this tool to search wikipedia",
+            "name": search_wikipedia.__name__,
+        }
+    },
 )
 
 

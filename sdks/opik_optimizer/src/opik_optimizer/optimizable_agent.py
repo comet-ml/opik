@@ -1,4 +1,5 @@
 from typing import Dict, Any, List, Optional, Callable
+import json
 import random
 import os
 import copy
@@ -13,6 +14,7 @@ from litellm.integrations.opik.opik import OpikLogger
 from . import _throttle, task_evaluator
 from .optimization_config.chat_prompt import ChatPrompt
 from .optimization_config import mappers
+from .integrations.litellm_utils import function_to_litellm_definition
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -112,6 +114,7 @@ class OptimizableAgent:
         """
         if self.project_name is None:
             self.project_name = "Default Project"
+        self.tool_registry: Dict[str, Any] = {}
         self.init_llm()
         self.init_agent(agent_config)
 
@@ -125,21 +128,53 @@ class OptimizableAgent:
     def init_agent(self, agent_config: AgentConfig) -> None:
         """Initialize the agent with the provided configuration."""
         self.agent_config = agent_config
+        # Register the tools, if any, for default LiteLLM Agent use:
+        self.tool_registry.clear()
+        if agent_config.tools:
+            for tool_key in agent_config.tools:
+                # this is the common format
+                self.tool_registry[
+                    agent_config.tools[tool_key]["function"].__name__
+                ] = function_to_litellm_definition(
+                    agent_config.tools[tool_key]["function"],
+                    agent_config.tools[tool_key].get("description", ""),
+                )
 
     @_throttle.rate_limited(_limiter)
+    def _llm_complete(
+        self,
+        all_messages: List[Dict[str, str]],
+        tool_definitions: Optional[List[Dict[str, str]]],
+        seed: int,
+    ) -> Any:
+        response = litellm.completion(
+            model=self.model,
+            messages=all_messages,
+            seed=seed,
+            tools=tool_definitions,
+            tool_choice="auto",
+            **self.model_kwargs,
+        )
+        return response
+
     def llm_invoke(
         self,
         query: Optional[str] = None,
         messages: Optional[List[Dict[str, str]]] = None,
         seed: Optional[int] = None,
+        allow_tool_use: Optional[bool] = False,
     ) -> str:
         """
+        NOTE: this is the default LiteLLM API. It is used
+        internally for the LiteLLM Agent.
+
         Invoke the LLM with the provided query or messages.
 
         Args:
             query (Optional[str]): The query to send to the LLM
             messages (Optional[List[Dict[str, str]]]): Messages to send to the LLM
             seed (Optional[int]): Seed for reproducibility
+            allow_tool_use: If True, allow LLM to use tools
 
         Returns:
             str: The LLM's response
@@ -151,10 +186,44 @@ class OptimizableAgent:
         if query is not None:
             all_messages.append({"role": "user", "content": query})
 
-        response = litellm.completion(
-            model=self.model, messages=all_messages, seed=seed, **self.model_kwargs
-        )
-        result = response.choices[0].message.content
+        if allow_tool_use and self.agent_config.tools:
+            # Tool-calling loop
+            tool_definitions = [
+                self.tool_registry[tool_name] for tool_name in self.tool_registry
+            ]
+            final_response = "I was unable to find the desired information."
+            count = 0
+            while count < 20:
+                count += 1
+                response = self._llm_complete(all_messages, tool_definitions, seed)
+                msg = response.choices[0].message
+                all_messages.append(msg.to_dict())
+
+                if msg.tool_calls:
+                    for tool_call in msg["tool_calls"]:
+                        tool_name = tool_call["function"]["name"]
+                        arguments = json.loads(tool_call["function"]["arguments"])
+                        tool_func = self.tool_registry.get(tool_name)
+                        try:
+                            tool_result = (
+                                tool_func(**arguments) if tool_func else "Unknown tool"
+                            )
+                        except Exception:
+                            tool_result = f"Error in calling tool `{tool_name}`"
+                        all_messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tool_call["id"],
+                                "content": tool_result,
+                            }
+                        )
+                else:
+                    final_response = msg["content"]
+                    break
+            result = final_response
+        else:
+            response = self._llm_complete(all_messages, None, seed)
+            result = response.choices[0].message.content
         return result
 
     def invoke_dataset_item(self, dataset_item: Dict[str, str]) -> str:
@@ -177,7 +246,7 @@ class OptimizableAgent:
             Dict[str, Any]: The agent's response
         """
         # Replace with agent invocation:
-        result = self.llm_invoke(messages=messages, seed=seed)
+        result = self.llm_invoke(messages=messages, seed=seed, allow_tool_use=True)
         return result
 
     def evaluate(

@@ -11,6 +11,20 @@ from opik_optimizer import (
 )
 from opik_optimizer.datasets import hotpot_300
 
+# For wikipedia tool:
+import dspy
+
+
+def search_wikipedia(query: str) -> list[str]:
+    """
+    This agent is used to search wikipedia. It can retrieve additional details
+    about a topic.
+    """
+    results = dspy.ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")(
+        query, k=3
+    )
+    return [item["text"] for item in results]
+
 
 def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
     metric = LevenshteinRatio()
@@ -26,12 +40,20 @@ class LiteLLMAgent(OptimizableAgent):
 
 
 system_prompt = """
-You are a helpful assistant. Answer with specific
-words or phrases, without explanation.
+Answer the question with a direct phrase. Use the tool `search_wikipedia`
+if you need it. Make sure you consider the results before answering the
+question.
 """
 
 agent_config = AgentConfig(
-    chat_prompt=ChatPrompt(system=system_prompt, user="{question}")
+    chat_prompt=ChatPrompt(system=system_prompt, user="{question}"),
+    tools={
+        "Search Wikipedia": {
+            "function": search_wikipedia,
+            "description": "Use this tool to search wikipedia",
+            "name": search_wikipedia.__name__,
+        }
+    },
 )
 
 # Test it:
