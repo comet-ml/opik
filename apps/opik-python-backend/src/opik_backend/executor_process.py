@@ -8,9 +8,9 @@ import uuid
 import sys
 from multiprocessing import Process, Pipe
 from queue import Queue, Empty
-from threading import Lock, Event
+from threading import Lock, Event, Thread
 
-import schedule
+
 from opentelemetry import metrics
 
 from opik_backend.executor import CodeExecutorBase
@@ -50,6 +50,7 @@ class ProcessExecutor(CodeExecutorBase):
         self.pool_check_interval = int(os.getenv("PYTHON_CODE_EXECUTOR_POOL_CHECK_INTERVAL_IN_SECONDS", "3"))
         self.all_workers = {}
         self.all_workers_lock = Lock()
+        self.scheduler_thread = None
 
     def start_services(self):
         logger.info("ProcessExecutor: Registering signal handlers")
@@ -57,7 +58,10 @@ class ProcessExecutor(CodeExecutorBase):
         signal.signal(signal.SIGTERM, self._handle_shutdown_signal)
 
         self._pre_warm_process_pool()
-        self._start_pool_monitor()
+
+        logger.info("Starting process pool monitor.")
+        self.scheduler_thread = Thread(target=self._pool_monitor_loop, daemon=True)
+        self.scheduler_thread.start()
 
         logger.info(f"ProcessExecutor: Services started.")
 
@@ -95,7 +99,8 @@ class ProcessExecutor(CodeExecutorBase):
         if not self.stop_event.is_set():
             self.stop_event.set()
 
-        schedule.clear()
+        if self.scheduler_thread:
+            self.scheduler_thread.join()
 
         with self.all_workers_lock:
             workers_to_terminate = list(self.all_workers.values())
@@ -158,22 +163,20 @@ class ProcessExecutor(CodeExecutorBase):
 
         logger.info(f"Termination sequence for worker {worker_id} complete.")
 
-    def _start_pool_monitor(self):
-        logger.info(f"Starting process pool monitor with {self.pool_check_interval} second interval")
-        schedule.every(self.pool_check_interval).seconds.do(self._check_pool)
-        self.releaser_executor.submit(self._run_scheduler)
-
-    def _run_scheduler(self):
-        logger.info("Starting scheduler for process pool monitoring")
-        while not self.stop_event.is_set():
-            schedule.run_pending()
-            time.sleep(1)
-        logger.info("Scheduler finished running")
-
-    def _check_pool(self):
-        if self.stop_event.is_set():
-            return schedule.CancelJob
-        self.ensure_pool_filled()
+    def _pool_monitor_loop(self):
+        """
+        Periodically checks the pool and tops it up with new workers if needed.
+        This loop is designed to run in a daemon thread.
+        """
+        logger.info("Starting process pool monitor loop.")
+        # The loop will wait for 'pool_check_interval' seconds, but will exit
+        # immediately if 'stop_event' is set during the wait.
+        while not self.stop_event.wait(self.pool_check_interval):
+            try:
+                self.ensure_pool_filled()
+            except Exception as e:
+                logger.error(f"Error in pool monitor loop: {e}", exc_info=True)
+        logger.info("Process pool monitor loop finished.")
 
     def _pre_warm_process_pool(self):
         logger.info(f"Pre-warming process pool with {self.max_parallel} processes")
