@@ -1,6 +1,7 @@
 package com.comet.opik.domain.threads;
 
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
+import com.comet.opik.api.resources.v1.events.TraceThreadBufferConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.google.inject.ImplementedBy;
@@ -37,6 +38,7 @@ public interface TraceThreadService {
 
     Mono<Void> processProjectWithTraceThreadsPendingClosure(UUID projectId, Instant lastUpdatedUntil);
 
+    Mono<Boolean> addToPendingQueue(@NonNull UUID projectId);
 }
 
 @Slf4j
@@ -132,10 +134,20 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
     private Mono<Long> closeThreadWith(UUID projectId, Instant lastUpdatedUntil, ContextView contextView) {
         return traceThreadDAO.closeThreadWith(projectId, lastUpdatedUntil)
+                .flatMap(count -> {
+                    var lock = new LockService.Lock(TraceThreadBufferConfig.BUFFER_SET_NAME, projectId.toString());
+                    return lockService.unlockUsingToken(lock).thenReturn(count);
+                })
                 .doOnSuccess(count -> log.info("Closed '{}' trace threads for projectId: '{}' on workspaceId: '{}'",
                         count, projectId, contextView.get(RequestContext.WORKSPACE_ID)))
                 .doOnError(ex -> log.error("Error when processing closure of pending trace threads  for project: '%s'"
                         .formatted(projectId), ex));
+    }
+
+    @Override
+    public Mono<Boolean> addToPendingQueue(@NonNull UUID projectId) {
+        var lock = new LockService.Lock(TraceThreadBufferConfig.BUFFER_SET_NAME, projectId.toString());
+        return lockService.lockUsingToken(lock, LOCK_DURATION);
     }
 
 }

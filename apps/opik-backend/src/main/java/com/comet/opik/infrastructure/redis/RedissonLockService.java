@@ -116,6 +116,17 @@ class RedissonLockService implements LockService {
                         .doFinally(__ -> lockInstance.release(lock)));
     }
 
+    /**
+     * This method attempts to acquire a lock and execute an action with a fallback if the lock cannot be acquired.
+     *
+     * @param lock The lock to be acquired.
+     * @param action The action to be executed.
+     * @param failToAcquireLockAction The action to be executed if the lock cannot be acquired.
+     * @param actionTimeout The timeout for the action to be executed. Otherwise, the lock will be released.
+     * @param lockWaitTime The maximum time to wait for the lock to be acquired.
+     *
+     * @return Mono.empty if the lock could not be acquired, otherwise it returns the result of the action.
+     * **/
     @Override
     public <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<Void> failToAcquireLockAction,
             Duration actionTimeout, Duration lockWaitTime) {
@@ -135,6 +146,16 @@ class RedissonLockService implements LockService {
                         e -> handleError(lock, failToAcquireLockAction, e).then(Mono.empty()))
                 .onErrorResume(IllegalStateException.class,
                         e -> handleError(lock, failToAcquireLockAction, e).then(Mono.empty()));
+    }
+
+    @Override
+    public Mono<Boolean> lockUsingToken(@NonNull Lock lock, @NonNull Duration lockDuration) {
+        return redisClient.getBucket(lock.key()).setIfAbsent("ok", lockDuration);
+    }
+
+    @Override
+    public Mono<Void> unlockUsingToken(@NonNull Lock lock) {
+        return redisClient.getBucket(lock.key()).delete().then();
     }
 
     private <T> Mono<T> runAction(Lock lock, Mono<T> action, LockInstance lockInstance) {

@@ -28,4 +28,13 @@ public class DummyLockService implements LockService {
     public <T> Mono<T> executeWithLockCustomExpire(LockService.Lock lock, Mono<T> action, Duration duration) {
         return action;
     }
+
+    public Mono<Boolean> lockUsingToken(Lock lock, Duration lockDuration) {
+        return Mono.just(true);
+    }
+
+    public Mono<Void> unlockUsingToken(Lock lock) {
+        return Mono.just("ok").then();
+    }
+
 }
