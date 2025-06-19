@@ -6,7 +6,7 @@ import signal
 import time
 import uuid
 import sys
-from multiprocessing import Process, Pipe
+from multiprocessing import Process, Pipe, active_children
 from queue import Queue, Empty
 from threading import Lock, Event, Thread
 
@@ -119,6 +119,11 @@ class ProcessExecutor(CodeExecutorBase):
 
         if self.releaser_executor:
             self.releaser_executor.shutdown(wait=True)
+
+        for p in active_children():
+            logger.warning(f"Forcibly terminating lingering child process {p.pid}")
+            p.terminate()
+            p.join(timeout=1)
 
         logger.warning(f"ProcessExecutor: Cleanup finished.")
 

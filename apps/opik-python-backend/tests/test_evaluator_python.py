@@ -1,11 +1,10 @@
-import os
 import pytest
 from opik_backend.executor_docker import DockerExecutor
 from opik_backend.executor_process import ProcessExecutor
 
 EVALUATORS_URL = "/v1/private/evaluators/python"
 
-@pytest.fixture(scope="session", params=[DockerExecutor, ProcessExecutor])
+@pytest.fixture(params=[DockerExecutor, ProcessExecutor])
 def executor(request):
     """Fixture that provides both Docker and Process executors."""
     executor_instance = request.param()
