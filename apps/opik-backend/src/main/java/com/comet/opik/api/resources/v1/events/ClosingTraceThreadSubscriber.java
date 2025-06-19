@@ -23,6 +23,8 @@ import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_ID;
 @Slf4j
 public class ClosingTraceThreadSubscriber extends BaseRedisSubscriber<ProjectWithPendingClosureTraceThreads> {
 
+    private static final String SUBSCRIBER_NAMESPACE = "closing_trace_threads";
+
     private final TraceThreadService traceThreadService;
     private final TraceThreadConfig config;
     private final RedissonReactiveClient redisson;
@@ -38,7 +40,7 @@ public class ClosingTraceThreadSubscriber extends BaseRedisSubscriber<ProjectWit
 
     @Override
     protected String getMetricNamespace() {
-        return "closing_trace_threads";
+        return SUBSCRIBER_NAMESPACE;
     }
 
     @Override

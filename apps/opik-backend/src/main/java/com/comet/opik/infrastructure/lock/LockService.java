@@ -29,6 +29,5 @@ public interface LockService {
             Duration lockTimeout);
 
     Mono<Boolean> lockUsingToken(Lock lock, Duration lockDuration);
-
     Mono<Void> unlockUsingToken(Lock lock);
 }
