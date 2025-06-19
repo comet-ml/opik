@@ -6,7 +6,7 @@ import signal
 import time
 import uuid
 import sys
-from multiprocessing import Process, Pipe, active_children
+from multiprocessing import Process, Pipe
 from queue import Queue, Empty
 from threading import Event, Thread
 
@@ -38,6 +38,42 @@ process_pool_size_gauge = meter.create_gauge(
 
 def _calculate_latency_ms(start_time):
     return (time.time() - start_time) * 1000
+
+
+def terminate_worker(worker):
+    worker_id = worker.get('id', 'unknown')
+    process = worker.get('process')
+    if not process:
+        return
+
+    # Close the connection if it exists and is open
+    connection = worker.get('connection')
+    if connection:
+        try:
+            connection.close()
+        except Exception as e:
+            logger.warning(f"Error closing connection for worker {worker_id}: {e}")
+
+    if not process.is_alive():
+        logger.info(f"Worker {worker_id} (PID: {process.pid if process.pid else 'N/A'}) already terminated.")
+        return
+
+    logger.info(f"Terminating worker {worker_id} (PID: {process.pid}).")
+    try:
+        process.terminate()  # Send SIGTERM
+        process.join(timeout=2)
+        if process.is_alive():  # Check if it's still alive after timeout
+            logger.warning(
+                f"Worker {worker_id} (PID: {process.pid}) did not terminate gracefully after SIGTERM, killing.")
+            process.kill()  # Send SIGKILL
+            process.join(timeout=1)  # Wait for SIGKILL to take effect
+    except Exception as e:  # Catch any other exceptions during termination
+        logger.error(f"Exception during termination of worker {worker_id} (PID: {process.pid}): {e}")
+        if process.is_alive():
+            process.kill()
+            process.join(timeout=1)
+
+    logger.info(f"Termination sequence for worker {worker_id} complete.")
 
 
 class ProcessExecutor(CodeExecutorBase):
@@ -110,7 +146,7 @@ class ProcessExecutor(CodeExecutorBase):
                 break
 
         logger.info(f"Terminating {len(workers_to_terminate)} worker processes.")
-        futures = [self.releaser_executor.submit(self.terminate_worker, worker) for worker in workers_to_terminate]
+        futures = [self.releaser_executor.submit(terminate_worker, worker) for worker in workers_to_terminate]
         concurrent.futures.wait(futures)
 
         # Drain the queue to be safe
@@ -123,47 +159,7 @@ class ProcessExecutor(CodeExecutorBase):
         if self.releaser_executor:
             self.releaser_executor.shutdown(wait=True)
 
-        for p in active_children():
-            logger.warning(f"Forcibly terminating lingering child process {p.pid}")
-            p.terminate()
-            p.join(timeout=1)
-
         logger.warning(f"ProcessExecutor: Cleanup finished.")
-
-    def terminate_worker(self, worker):
-        worker_id = worker.get('id', 'unknown')
-        process = worker.get('process')
-        if not process:
-            return
-
-        # Close the connection if it exists and is open
-        connection = worker.get('connection')
-        if connection:
-            try:
-                connection.close()
-            except Exception as e:
-                logger.warning(f"Error closing connection for worker {worker_id}: {e}")
-
-        if not process.is_alive():
-            logger.info(f"Worker {worker_id} (PID: {process.pid if process.pid else 'N/A'}) already terminated.")
-            return
-
-        logger.info(f"Terminating worker {worker_id} (PID: {process.pid}).")
-        try:
-            process.terminate()  # Send SIGTERM
-            process.join(timeout=2)
-            if process.is_alive():  # Check if it's still alive after timeout
-                logger.warning(
-                    f"Worker {worker_id} (PID: {process.pid}) did not terminate gracefully after SIGTERM, killing.")
-                process.kill()  # Send SIGKILL
-                process.join(timeout=1)  # Wait for SIGKILL to take effect
-        except Exception as e:  # Catch any other exceptions during termination
-            logger.error(f"Exception during termination of worker {worker_id} (PID: {process.pid}): {e}")
-            if process.is_alive():
-                process.kill()
-                process.join(timeout=1)
-
-        logger.info(f"Termination sequence for worker {worker_id} complete.")
 
     def _pool_monitor_loop(self):
         """
@@ -191,7 +187,6 @@ class ProcessExecutor(CodeExecutorBase):
             return
 
         # Check how many workers are in the process_pool
-        current_total_workers = 0
         temp_workers = []
         while not self.process_pool.empty():
             try:
@@ -253,7 +248,7 @@ class ProcessExecutor(CodeExecutorBase):
             worker = self.process_pool.get(timeout=self.exec_timeout)
             if not worker['process'].is_alive():
                 logger.warning(f"Got a dead worker {worker['id']} from pool. Terminating and retrying.")
-                self.terminate_worker(worker)
+                terminate_worker(worker)
                 return self.get_worker()  # Retry
             return worker
         except Empty:
@@ -280,7 +275,7 @@ class ProcessExecutor(CodeExecutorBase):
             else:
                 logger.error(f"Timeout waiting for result from worker {worker_id}")
                 # Terminate the worker as it's unresponsive
-                self.terminate_worker(worker)
+                terminate_worker(worker)
                 return {"code": 500, "error": "Execution timed out"}
 
             latency = _calculate_latency_ms(start_exec_time)
@@ -291,5 +286,5 @@ class ProcessExecutor(CodeExecutorBase):
         except Exception as e:
             logger.error(f"Error in run_scoring with worker {worker.get('id') if worker else 'N/A'}: {e}")
             if worker:
-                self.terminate_worker(worker)  # Terminate failed worker
+                terminate_worker(worker)  # Terminate failed worker
             return {"code": 500, "error": f"Failed to execute code: {e}"}

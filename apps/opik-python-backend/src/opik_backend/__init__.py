@@ -13,7 +13,7 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 
 
-def create_app(test_config=None):
+def create_app(test_config=None, should_init_executor=True):
     app = Flask(__name__, instance_relative_config=True)
 
     # Configure logging
@@ -46,8 +46,9 @@ def create_app(test_config=None):
     from opik_backend.post_user_signup import post_user_signup
     from opik_backend.healthcheck import healthcheck
 
-    # Initialize the code executor
-    init_executor(app)
+    # Initialize the code executor if needed - some of the tests override the executor and therefore don't initialize it
+    if should_init_executor:
+        init_executor(app)
 
     app.register_blueprint(healthcheck)
     app.register_blueprint(evaluator)
