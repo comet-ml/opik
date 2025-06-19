@@ -8,7 +8,7 @@ import uuid
 import sys
 from multiprocessing import Process, Pipe, active_children
 from queue import Queue, Empty
-from threading import Lock, Event, Thread
+from threading import Event, Thread
 
 
 from opentelemetry import metrics
@@ -44,12 +44,10 @@ class ProcessExecutor(CodeExecutorBase):
     def __init__(self):
         super().__init__()
         self.process_pool = Queue()
-        self.pool_lock = Lock()
         self.releaser_executor = None
         self.stop_event = Event()
         self.pool_check_interval = int(os.getenv("PYTHON_CODE_EXECUTOR_POOL_CHECK_INTERVAL_IN_SECONDS", "3"))
-        self.all_workers = {}
-        self.all_workers_lock = Lock()
+
         self.scheduler_thread = None
 
     def start_services(self):
@@ -103,8 +101,13 @@ class ProcessExecutor(CodeExecutorBase):
         if self.scheduler_thread:
             self.scheduler_thread.join()
 
-        with self.all_workers_lock:
-            workers_to_terminate = list(self.all_workers.values())
+        # Drain all workers from the pool for termination
+        workers_to_terminate = []
+        while not self.process_pool.empty():
+            try:
+                workers_to_terminate.append(self.process_pool.get_nowait())
+            except Empty:
+                break
 
         logger.info(f"Terminating {len(workers_to_terminate)} worker processes.")
         futures = [self.releaser_executor.submit(self.terminate_worker, worker) for worker in workers_to_terminate]
@@ -143,9 +146,6 @@ class ProcessExecutor(CodeExecutorBase):
 
         if not process.is_alive():
             logger.info(f"Worker {worker_id} (PID: {process.pid if process.pid else 'N/A'}) already terminated.")
-            with self.all_workers_lock:
-                if worker_id in self.all_workers:
-                    del self.all_workers[worker_id]
             return
 
         logger.info(f"Terminating worker {worker_id} (PID: {process.pid}).")
@@ -162,10 +162,6 @@ class ProcessExecutor(CodeExecutorBase):
             if process.is_alive():
                 process.kill()
                 process.join(timeout=1)
-
-        with self.all_workers_lock:
-            if worker_id in self.all_workers:
-                del self.all_workers[worker_id]
 
         logger.info(f"Termination sequence for worker {worker_id} complete.")
 
@@ -190,16 +186,34 @@ class ProcessExecutor(CodeExecutorBase):
         concurrent.futures.wait(futures)
 
     def ensure_pool_filled(self):
-        with self.all_workers_lock:  # Ensure thread-safe access to all_workers
-            current_total_workers = len(self.all_workers)
-            to_create = self.max_parallel - current_total_workers
-            if to_create > 0:
-                logger.info(
-                    f"Pool needs {to_create} workers to reach max_parallel {self.max_parallel} (current total: {current_total_workers}). Creating...")
-                for _ in range(to_create):
-                    self.releaser_executor.submit(self.create_worker_process)
+        if self.stop_event.is_set():
+            logger.debug("ProcessExecutor: entered 'ensure_pool_filled' while shutdown in progress. Ignoring.")
+            return
+
+        # Check how many workers are in the process_pool
+        current_total_workers = 0
+        temp_workers = []
+        while not self.process_pool.empty():
+            try:
+                temp_workers.append(self.process_pool.get_nowait())
+            except Empty:
+                break
+        current_total_workers = len(temp_workers)
+        # Return workers to the pool
+        for w in temp_workers:
+            self.process_pool.put(w)
+        to_create = self.max_parallel - current_total_workers
+        if to_create > 0:
+            logger.info(
+                f"Pool needs {to_create} workers to reach max_parallel {self.max_parallel} (current total: {current_total_workers}). Creating...")
+            for _ in range(to_create):
+                self.releaser_executor.submit(self.create_worker_process)
 
     def create_worker_process(self):
+        if self.stop_event.is_set():
+            logger.debug("ProcessExecutor: entered 'create_worker_process' while shutdown in progress. Ignoring.")
+            return
+
         start_time = time.time()
         worker_id = str(uuid.uuid4())[:8]
         parent_conn, child_conn = Pipe()
@@ -217,8 +231,6 @@ class ProcessExecutor(CodeExecutorBase):
                 raise Exception(f"Worker {worker_id} (PID: {process.pid}) timed out waiting for READY signal.")
 
             worker = {'id': worker_id, 'process': process, 'connection': parent_conn}
-            with self.all_workers_lock:
-                self.all_workers[worker_id] = worker
             self.process_pool.put(worker)
             latency = _calculate_latency_ms(start_time)
             process_creation_histogram.record(latency)
