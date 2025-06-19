@@ -45,21 +45,36 @@ class ProcessExecutor(CodeExecutorBase):
         super().__init__()
         self.process_pool = Queue()
         self.pool_lock = Lock()
-        self.releaser_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel)
+        self.releaser_executor = None
         self.stop_event = Event()
         self.pool_check_interval = int(os.getenv("PYTHON_CODE_EXECUTOR_POOL_CHECK_INTERVAL_IN_SECONDS", "3"))
         self.all_workers = {}
         self.all_workers_lock = Lock()
+        self._started = False
+        self._start_lock = Lock()
+
+    def _start_services_if_needed(self):
+        if self._started:
+            return
+        with self._start_lock:
+            if self._started:
+                return
+
+            logger.info("ProcessExecutor: Initializing services on first use.")
+            self.releaser_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel)
+
+            logger.info("ProcessExecutor: Registering signal handlers")
+            signal.signal(signal.SIGINT, self._handle_shutdown_signal)
+            signal.signal(signal.SIGTERM, self._handle_shutdown_signal)
+
+            self._pre_warm_process_pool()
+            self._start_pool_monitor()
+
+            logger.info(f"ProcessExecutor: Services started.")
+            self._started = True
 
     def start_services(self):
-        logger.info("ProcessExecutor: Registering signal handlers")
-        signal.signal(signal.SIGINT, self._handle_shutdown_signal)
-        signal.signal(signal.SIGTERM, self._handle_shutdown_signal)
-
-        self._pre_warm_process_pool()
-        self._start_pool_monitor()
-
-        logger.info(f"ProcessExecutor: Services started.")
+        self._start_services_if_needed()
 
     def _handle_shutdown_signal(self, signum, frame):
         signal_name = signal.Signals(signum).name
@@ -97,12 +112,17 @@ class ProcessExecutor(CodeExecutorBase):
 
         schedule.clear()
 
+        if not self._started or not self.releaser_executor:
+            logger.warning("ProcessExecutor: Cleanup called, but services were not started. Nothing to clean up.")
+            return
+
         with self.all_workers_lock:
             workers_to_terminate = list(self.all_workers.values())
 
-        logger.info(f"Terminating {len(workers_to_terminate)} worker processes.")
-        futures = [self.releaser_executor.submit(self.terminate_worker, worker) for worker in workers_to_terminate]
-        concurrent.futures.wait(futures)
+        if workers_to_terminate:
+            logger.info(f"Terminating {len(workers_to_terminate)} worker processes.")
+            futures = [self.releaser_executor.submit(self.terminate_worker, worker) for worker in workers_to_terminate]
+            concurrent.futures.wait(futures)
 
         # Drain the queue to be safe
         while not self.process_pool.empty():
@@ -226,6 +246,7 @@ class ProcessExecutor(CodeExecutorBase):
                 child_conn.close()
 
     def get_worker(self):
+        self._start_services_if_needed()
         if self.stop_event.is_set():
             raise RuntimeError("Executor is shutting down")
         try:
