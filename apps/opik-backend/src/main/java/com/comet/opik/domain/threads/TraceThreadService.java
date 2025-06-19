@@ -1,5 +1,6 @@
 package com.comet.opik.domain.threads;
 
+import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.google.inject.ImplementedBy;
@@ -10,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.context.ContextView;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -29,6 +31,12 @@ public interface TraceThreadService {
     Mono<Void> processTraceThreads(Map<String, Instant> threadIdAndLastUpdateAts, UUID projectId);
 
     Mono<List<TraceThreadModel>> getThreadsByProject(int page, int size, TraceThreadCriteria criteria);
+
+    Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(Instant lastUpdatedUntil,
+            int limit);
+
+    Mono<Void> processProjectWithTraceThreadsPendingClosure(UUID projectId, Instant lastUpdatedUntil);
+
 }
 
 @Slf4j
@@ -105,6 +113,29 @@ class TraceThreadServiceImpl implements TraceThreadService {
     public Mono<List<TraceThreadModel>> getThreadsByProject(int page, int size, @NonNull TraceThreadCriteria criteria) {
         return traceThreadDAO.findThreadsByProject(page, size, criteria)
                 .switchIfEmpty(Mono.just(List.of()));
+    }
+
+    @Override
+    public Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(
+            @NonNull Instant lastUpdatedUntil, int limit) {
+        return traceThreadDAO.findProjectsWithPendingClosureThreads(lastUpdatedUntil, limit);
+    }
+
+    @Override
+    public Mono<Void> processProjectWithTraceThreadsPendingClosure(@NonNull UUID projectId,
+            @NonNull Instant lastUpdatedUntil) {
+        return lockService.executeWithLockCustomExpire(
+                new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
+                Mono.deferContextual(contextView -> closeThreadWith(projectId, lastUpdatedUntil, contextView)),
+                LOCK_DURATION).then();
+    }
+
+    private Mono<Long> closeThreadWith(UUID projectId, Instant lastUpdatedUntil, ContextView contextView) {
+        return traceThreadDAO.closeThreadWith(projectId, lastUpdatedUntil)
+                .doOnSuccess(count -> log.info("Closed '{}' trace threads for projectId: '{}' on workspaceId: '{}'",
+                        count, projectId, contextView.get(RequestContext.WORKSPACE_ID)))
+                .doOnError(ex -> log.error("Error when processing closure of pending trace threads  for project: '%s'"
+                        .formatted(projectId), ex));
     }
 
 }

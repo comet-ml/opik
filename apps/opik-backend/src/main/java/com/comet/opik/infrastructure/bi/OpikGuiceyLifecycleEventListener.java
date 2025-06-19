@@ -1,12 +1,15 @@
 package com.comet.opik.infrastructure.bi;
 
+import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.TraceThreadConfig;
 import com.comet.opik.utils.JobManagerUtils;
 import com.google.inject.Injector;
 import io.dropwizard.jobs.GuiceJobManager;
 import io.dropwizard.jobs.JobConfiguration;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.quartz.JobBuilder;
 import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
@@ -16,6 +19,7 @@ import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycleListener;
 import ru.vyarus.dropwizard.guice.module.lifecycle.event.GuiceyLifecycleEvent;
 import ru.vyarus.dropwizard.guice.module.lifecycle.event.InjectorPhaseEvent;
 
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
@@ -33,6 +37,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             case GuiceyLifecycle.ApplicationStarted -> {
                 reportInstallationsIfNeeded();
                 setupDailyJob();
+                setTraceThreadsClosingJob();
             }
 
             case GuiceyLifecycle.ApplicationStopped -> JobManagerUtils.clearJobManager();
@@ -66,6 +71,34 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             disableJob();
         } else {
             runReportIfNeeded();
+        }
+    }
+
+    // This method sets up a job that periodically checks for trace threads that need to be closed.
+    private void setTraceThreadsClosingJob() {
+        TraceThreadConfig traceThreadConfig = injector.get().getInstance(OpikConfiguration.class)
+                .getTraceThreadConfig();
+        Duration closeTraceThreadJobInterval = traceThreadConfig.getCloseTraceThreadJobInterval().toJavaDuration();
+
+        var jobDetail = JobBuilder.newJob(TraceThreadsClosingJob.class)
+                .storeDurably()
+                .build();
+
+        var trigger = TriggerBuilder.newTrigger()
+                .forJob(jobDetail)
+                .startNow()
+                .withSchedule(
+                        org.quartz.SimpleScheduleBuilder.simpleSchedule()
+                                .withIntervalInMilliseconds(closeTraceThreadJobInterval.toMillis())
+                                .repeatForever())
+                .build();
+
+        try {
+            Scheduler scheduler = getJobManager();
+            scheduler.addJob(jobDetail, false);
+            scheduler.scheduleJob(trigger);
+        } catch (SchedulerException e) {
+            log.error("Failed to schedule job '{}'", jobDetail.getKey(), e);
         }
     }
 
