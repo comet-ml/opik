@@ -1,5 +1,6 @@
 package com.comet.opik.domain.threads;
 
+import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
@@ -24,7 +25,7 @@ import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
-import static com.comet.opik.domain.threads.TraceThreadModel.Status;
+
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -201,7 +202,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             var statement = connection.createStatement(closureThreadsSql.render())
                     .bind("project_id", projectId)
                     .bind("last_updated_at", lastUpdatedUntil.toString())
-                    .bind("status", Status.INACTIVE.getValue());
+                    .bind("status", TraceThreadStatus.INACTIVE.getValue());
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
@@ -217,7 +218,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             var statement = connection.createStatement(openThreadsSql.render())
                     .bind("project_id", projectId)
                     .bind("thread_id", threadId)
-                    .bind("status", Status.ACTIVE.getValue());
+                    .bind("status", TraceThreadStatus.ACTIVE.getValue());
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
@@ -233,7 +234,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             var statement = connection.createStatement(closureThreadsSql.render())
                     .bind("project_id", projectId)
                     .bind("thread_id", threadId)
-                    .bind("status", Status.INACTIVE.getValue());
+                    .bind("status", TraceThreadStatus.INACTIVE.getValue());
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));

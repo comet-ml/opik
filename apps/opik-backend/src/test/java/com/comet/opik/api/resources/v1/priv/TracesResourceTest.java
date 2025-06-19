@@ -14,6 +14,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
@@ -8806,7 +8807,7 @@ class TracesResourceTest {
                 .createdAt(expectedCreatedAt)
                 .lastUpdatedBy(USER)
                 .lastUpdatedAt(expectedLastUpdatedAt)
-                .status(TraceThreadModel.Status.ACTIVE)
+                .status(TraceThreadStatus.ACTIVE)
                 .build();
     }
 
@@ -8856,7 +8857,7 @@ class TracesResourceTest {
             traceResourceClient.closeTraceThread(threadId, projectId, null, apiKey, workspaceName);
 
             expectedThread = expectedThread.toBuilder()
-                    .status(TraceThreadModel.Status.INACTIVE)
+                    .status(TraceThreadStatus.INACTIVE)
                     .lastUpdatedAt(expectedLastUpdated)
                     .build();
 
@@ -8871,7 +8872,7 @@ class TracesResourceTest {
             traceResourceClient.openTraceThread(threadId, null, projectName, apiKey, workspaceName);
 
             expectedThread = expectedThread.toBuilder()
-                    .status(TraceThreadModel.Status.ACTIVE)
+                    .status(TraceThreadStatus.ACTIVE)
                     .lastUpdatedAt(Instant.now())
                     .build();
 

@@ -1,5 +1,6 @@
 package com.comet.opik.domain.threads;
 
+import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.api.resources.v1.events.TraceThreadBufferConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -22,8 +23,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-
-import static com.comet.opik.domain.threads.TraceThreadModel.Status;
 
 @ImplementedBy(TraceThreadServiceImpl.class)
 public interface TraceThreadService {
@@ -99,7 +98,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
     }
 
     private TraceThreadModel mapToModel(TraceThreadIdModel traceThread, String userName, Instant lastUpdatedAt) {
-        return TraceThreadMapper.INSTANCE.mapFromThreadIdModel(traceThread, userName, Status.ACTIVE, lastUpdatedAt);
+        return TraceThreadMapper.INSTANCE.mapFromThreadIdModel(traceThread, userName, TraceThreadStatus.ACTIVE, lastUpdatedAt);
     }
 
     private Mono<Void> saveTraceThreads(UUID projectId, List<TraceThreadModel> traceThreads) {
@@ -112,7 +111,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
         var criteria = TraceThreadCriteria.builder()
                 .projectId(projectId)
-                .status(Status.INACTIVE)
+                .status(TraceThreadStatus.INACTIVE)
                 .ids(ids)
                 .build();
 
