@@ -31,6 +31,8 @@ import java.util.UUID;
  */
 public abstract class BaseRedisSubscriber<M> implements Managed {
 
+    private static final String BUSYGROUP = "BUSYGROUP";
+
     /**
      * Logger for the actual subclass, in order to have the correct class name in the logs.
      */
@@ -61,7 +63,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
         String metricNamespace = getMetricNamespace();
 
-        meter = GlobalOpenTelemetry.getMeter(metricNamespace);
+        this.meter = GlobalOpenTelemetry.getMeter(metricNamespace);
 
         this.messageProcessingTime = meter
                 .histogramBuilder("%s_%s_processing_time".formatted(metricNamespace, metricsBaseName))
@@ -98,30 +100,35 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     @Override
     public void stop() {
         log.info("Shutting down '{}' and closing stream", getSubscriberName());
-        if (stream != null) {
-            if (streamSubscription != null && !streamSubscription.isDisposed()) {
-                log.info("Waiting for last messages to be processed before shutdown...");
-                try {
-                    // Read any remaining messages before stopping
-                    stream.readGroup(config.getConsumerGroupName(), consumerId, redisReadConfig)
-                            .flatMap(messages -> {
-                                if (!messages.isEmpty()) {
-                                    log.info("Processing last '{}' messages before shutdown", messages.size());
-                                    return Flux.fromIterable(messages.entrySet())
-                                            .publishOn(Schedulers.boundedElastic())
-                                            .flatMap(entry -> processReceivedMessages(stream, entry))
-                                            .collectList()
-                                            .then(Mono.fromRunnable(() -> streamSubscription.dispose()));
-                                }
-                                return Mono.fromRunnable(() -> streamSubscription.dispose());
-                            })
-                            .block(Duration.ofSeconds(2));
-                } catch (Exception exception) {
-                    log.error("Error processing last messages before shutdown", exception);
-                }
-            } else {
-                log.info("No active subscription, deleting Redis stream");
-            }
+        if (stream == null) {
+            return;
+        }
+
+        if (streamSubscription == null || streamSubscription.isDisposed()) {
+            log.info("No active subscription, deleting Redis stream");
+            stream.delete().doOnTerminate(() -> log.info("Redis Stream deleted")).subscribe();
+            return;
+        }
+
+        log.info("Waiting for last messages to be processed before shutdown...");
+        try {
+            // Read any remaining messages before stopping
+            stream.readGroup(config.getConsumerGroupName(), consumerId, redisReadConfig)
+                    .flatMap(messages -> {
+                        if (!messages.isEmpty()) {
+                            log.info("Processing last '{}' messages before shutdown", messages.size());
+                            return Flux.fromIterable(messages.entrySet())
+                                    .publishOn(Schedulers.boundedElastic())
+                                    .flatMap(entry -> processReceivedMessages(stream, entry))
+                                    .collectList()
+                                    .then(Mono.fromRunnable(() -> streamSubscription.dispose()));
+                        }
+                        return Mono.fromRunnable(() -> streamSubscription.dispose());
+                    })
+                    .block(Duration.ofSeconds(2));
+        } catch (Exception exception) {
+            log.error("Error processing last messages before shutdown", exception);
+        } finally {
             stream.delete().doOnTerminate(() -> log.info("Redis Stream deleted")).subscribe();
         }
     }
@@ -141,7 +148,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         var args = StreamCreateGroupArgs.name(config.getConsumerGroupName()).makeStream();
         stream.createGroup(args)
                 .onErrorResume(err -> {
-                    if (err.getMessage().contains("BUSYGROUP")) {
+                    if (err.getMessage().contains(BUSYGROUP)) {
                         log.info("Consumer group already exists, name '{}'", config.getConsumerGroupName());
                         return Mono.empty();
                     }
