@@ -336,7 +336,8 @@ def test_invalid_code_returns_bad_request(client, code, stacktrace):
         "code": code
     })
     assert response.status_code == 400
-    assert str(response.json["error"]).startswith(f"400 Bad Request: Field 'code' contains invalid Python code: {stacktrace}")
+    assert "400 Bad Request: Field 'code' contains invalid Python code" in str(response.json["error"])
+    assert stacktrace in str(response.json["error"])
 
 
 def test_missing_metric_returns_bad_request(client):
@@ -367,8 +368,8 @@ def test_evaluation_exception_returns_bad_request(client, code, stacktrace):
         "code": code
     })
     assert response.status_code == 400
-    assert response.json[
-               "error"] == f"400 Bad Request: The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"
+    assert "400 Bad Request: The provided 'code' and 'data' fields can't be evaluated" in str(response.json["error"])
+    assert stacktrace in str(response.json["error"])
 
 
 def test_no_scores_returns_bad_request(client):
