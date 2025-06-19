@@ -5,7 +5,7 @@ from opik_backend.executor_process import ProcessExecutor
 
 EVALUATORS_URL = "/v1/private/evaluators/python"
 
-@pytest.fixture(params=[DockerExecutor, ProcessExecutor])
+@pytest.fixture(scope="session", params=[DockerExecutor, ProcessExecutor])
 def executor(request):
     """Fixture that provides both Docker and Process executors."""
     executor_instance = request.param()

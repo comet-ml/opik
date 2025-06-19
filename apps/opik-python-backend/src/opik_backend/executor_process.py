@@ -45,7 +45,7 @@ class ProcessExecutor(CodeExecutorBase):
         super().__init__()
         self.process_pool = Queue()
         self.pool_lock = Lock()
-        self.releaser_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel)
+        self.releaser_executor = None
         self.stop_event = Event()
         self.pool_check_interval = int(os.getenv("PYTHON_CODE_EXECUTOR_POOL_CHECK_INTERVAL_IN_SECONDS", "3"))
         self.all_workers = {}
@@ -57,6 +57,7 @@ class ProcessExecutor(CodeExecutorBase):
         signal.signal(signal.SIGINT, self._handle_shutdown_signal)
         signal.signal(signal.SIGTERM, self._handle_shutdown_signal)
 
+        self.releaser_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel)
         self._pre_warm_process_pool()
 
         logger.info("Starting process pool monitor.")
