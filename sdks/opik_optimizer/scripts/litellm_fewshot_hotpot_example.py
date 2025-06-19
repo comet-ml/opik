@@ -68,7 +68,7 @@ optimizer = FewShotBayesianOptimizer(
     model="openai/gpt-4o-mini",
     min_examples=3,
     max_examples=8,
-    n_threads=16,
+    n_threads=4,
     seed=42,
 )
 optimization_result = optimizer.optimize_agent(
