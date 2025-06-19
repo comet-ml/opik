@@ -82,9 +82,11 @@ def worker_process_main(connection):
                 
                 # Return the result via the pipe
                 connection.send(result)
-            except EOFError:
+            except EOFError as e:
                 # This occurs when the parent closes the pipe, e.g., during shutdown.
                 # The worker will break from its loop and be terminated by SIGTERM from the parent.
+                sys.stderr.write(f"Received EOF error, probably parent closed the pipe: {str(e)}")
+                sys.stderr.flush()
                 break
             except Exception as e:
                 # Report any errors via the pipe
