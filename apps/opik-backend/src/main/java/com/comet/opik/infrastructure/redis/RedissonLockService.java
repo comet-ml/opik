@@ -9,6 +9,7 @@ import org.redisson.api.RPermitExpirableSemaphoreReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.options.CommonOptions;
 import org.redisson.client.RedisException;
+import org.redisson.config.ConstantDelay;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -51,7 +52,7 @@ class RedissonLockService implements LockService {
         return acquireLock(semaphore, Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
                 .flatMap(lockInstance -> runAction(lock, action, lockInstance.locked())
                         .subscribeOn(Schedulers.boundedElastic())
-                        .doFinally(signalType -> lockInstance.release(lock)));
+                        .doFinally(__ -> lockInstance.release(lock)));
     }
 
     @Override
@@ -64,7 +65,7 @@ class RedissonLockService implements LockService {
         return acquireLock(semaphore, duration)
                 .flatMap(lockInstance -> runAction(lock, action, lockInstance.locked())
                         .subscribeOn(Schedulers.boundedElastic())
-                        .doFinally(signalType -> lockInstance.release(lock)));
+                        .doFinally(__ -> lockInstance.release(lock)));
     }
 
     private RPermitExpirableSemaphoreReactive getSemaphore(Lock lock) {
@@ -72,7 +73,7 @@ class RedissonLockService implements LockService {
                 CommonOptions
                         .name(lock.key())
                         .timeout(Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
-                        .retryInterval(Duration.ofMillis(10))
+                        .retryDelay(new ConstantDelay(Duration.ofMillis(10)))
                         .retryAttempts(distributedLockConfig.getLockTimeoutMS() / 10));
     }
 
@@ -112,7 +113,7 @@ class RedissonLockService implements LockService {
         return acquireLock(semaphore, Duration.ofMillis(distributedLockConfig.getLockTimeoutMS()))
                 .flatMapMany(lockInstance -> stream(lock, stream, lockInstance.locked())
                         .subscribeOn(Schedulers.boundedElastic())
-                        .doFinally(signalType -> lockInstance.release(lock)));
+                        .doFinally(__ -> lockInstance.release(lock)));
     }
 
     /**

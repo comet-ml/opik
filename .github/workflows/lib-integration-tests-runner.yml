@@ -2,6 +2,8 @@
 #
 name: SDK Library Integration Tests Runner
 run-name: "SDK Library Integration Tests Runner ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
 on:
   workflow_dispatch:
     inputs:
@@ -21,6 +23,8 @@ on:
           - dspy
           - crewai
           - genai
+          - adk
+          - metrics
   schedule:
     - cron: "0 0 */1 * *"
   pull_request:
@@ -108,4 +112,16 @@ jobs:
     needs: [init_environment]
     if: contains(fromJSON('["genai", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-genai-tests.yml
+    secrets: inherit
+
+  adk_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["adk", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-adk-tests.yml
+    secrets: inherit
+
+  evaluation_metrics_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["metrics", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-metrics-with-llm-judge-tests.yml
     secrets: inherit
