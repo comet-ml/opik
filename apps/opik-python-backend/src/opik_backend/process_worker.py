@@ -1,14 +1,23 @@
-import os
 import signal
 import sys
 import traceback
 import inspect
 import uuid
+import logging
 from types import ModuleType
 from typing import Type, Union, List
 
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
+
+# Set up logging for the worker
+logger = logging.getLogger("process_worker")
+handler = logging.StreamHandler(sys.stderr)
+formatter = logging.Formatter('[%(asctime)s] Worker PID %(process)d: [%(levelname)s] %(message)s')
+handler.setFormatter(formatter)
+if not logger.hasHandlers():
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 
 def get_metric_class(module: ModuleType) -> Type[BaseMetric]:
@@ -85,8 +94,7 @@ def worker_process_main(connection):
             except EOFError as e:
                 # This occurs when the parent closes the pipe, e.g., during shutdown.
                 # The worker will break from its loop and be terminated by SIGTERM from the parent.
-                sys.stderr.write(f"Received EOF error, probably parent closed the pipe: {str(e)}")
-                sys.stderr.flush()
+                logger.info(f"Received EOF error, probably parent closed the pipe: {str(e)}")
                 break
             except Exception as e:
                 # Report any errors via the pipe
@@ -94,18 +102,17 @@ def worker_process_main(connection):
                 try:
                     connection.send(error_msg)
                 except Exception as send_e:
-                    print(f"Worker PID {os.getpid()}: Failed to send error to parent: {send_e}", file=sys.stderr)
-                print(f"Worker PID {os.getpid()}: Encountered error: {e}", file=sys.stderr)
-                print(traceback.format_exc(), file=sys.stderr)
+                    logger.error(f"Failed to send error to parent: {send_e}")
+                logger.error(f"Encountered error: {e}")
+                logger.error(traceback.format_exc())
 
     except Exception as e:
-        # If we get an error during initialization, write it to stderr and exit
+        # If we get an error during initialization, log it and exit
         # Also try to send error over pipe if possible
         error_payload = {"code": 500, "error": f"Worker initialization error: {str(e)}", "traceback": traceback.format_exc()}
         try:
             connection.send(error_payload)
         except Exception:
             pass  # Pipe might not be usable
-        sys.stderr.write(f"Worker initialization error: {str(e)}\n{traceback.format_exc()}\n")
-        sys.stderr.flush()
+        logger.error(f"Worker initialization error: {str(e)}\n{traceback.format_exc()}")
         sys.exit(1)
