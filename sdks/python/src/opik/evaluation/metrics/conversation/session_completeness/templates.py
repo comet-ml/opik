@@ -1,6 +1,6 @@
 from typing import List
 
-from .types import Conversation
+from ..types import Conversation
 
 
 def extract_user_goals(conversation: Conversation) -> str:
