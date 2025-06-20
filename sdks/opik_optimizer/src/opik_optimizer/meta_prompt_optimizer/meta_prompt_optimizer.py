@@ -823,7 +823,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                         if current_prompt.user:
                             user_text = current_prompt.user
                         else:
-                            if current_prompt.meesages is not None:
+                            if current_prompt.messages is not None:
                                 user_text = current_prompt.messages[-1]["content"]
                             else:
                                 raise Exception(
