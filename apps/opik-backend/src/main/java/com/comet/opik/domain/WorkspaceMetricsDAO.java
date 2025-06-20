@@ -6,6 +6,7 @@ import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.github.f4b6a3.uuid.UuidCreator;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
@@ -46,22 +47,18 @@ public interface WorkspaceMetricsDAO {
 class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
     private static final String GET_FEEDBACK_SCORES_SUMMARY = """
-            WITH parseDateTime64BestEffort(:timestamp_start, 9) AS timestamp_start,
-            parseDateTime64BestEffort(:timestamp_end, 9) AS timestamp_end,
-            parseDateTime64BestEffort(:timestamp_prior_start, 9) AS timestamp_prior_start
             SELECT
-                AVGIf(fs.value, t.start_time >= timestamp_start AND t.start_time \\<= timestamp_end) AS current,
-                AVGIf(fs.value, t.start_time >= timestamp_prior_start AND t.start_time \\< timestamp_start) AS previous,
+                AVGIf(fs.value, t.id >= :id_start AND t.id \\<= :id_end) AS current,
+                AVGIf(fs.value, t.id >= :id_prior_start AND t.id \\< :id_start) AS previous,
                 fs.name
             FROM feedback_scores fs final
             JOIN (
                 SELECT
-                    id,
-                    start_time
+                    id
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                   <if(project_ids)> AND project_id IN :project_ids <endif>
-                  AND start_time BETWEEN timestamp_prior_start AND timestamp_end
+                  AND id BETWEEN :id_prior_start AND :id_end
             ) t ON t.id = fs.entity_id
             WHERE workspace_id = :workspace_id
                 <if(project_ids)> AND project_id IN :project_ids <endif>
@@ -82,7 +79,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                     FROM traces final
                     WHERE workspace_id = :workspace_id
                       AND project_id IN :project_ids
-                      AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
+                      AND id BETWEEN :id_start AND :id_end
                 ) t ON t.id = fs.entity_id
                 WHERE workspace_id = :workspace_id
                   AND project_id IN :project_ids
@@ -115,7 +112,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                         start_time
                     FROM traces final
                     WHERE workspace_id = :workspace_id
-                      AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
+                      AND id BETWEEN :id_start AND :id_end
                 ) t ON t.id = fs.entity_id
                 WHERE workspace_id = :workspace_id
                   AND entity_type = 'trace'
@@ -167,6 +164,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
         var statement = connection.createStatement(query)
                 .bind("timestamp_start", request.intervalStart().toString())
                 .bind("timestamp_end", request.intervalEnd().toString())
+                .bind("id_start", UuidCreator.getTimeOrderedEpoch(request.intervalStart()))
+                .bind("id_end", UuidCreator.getTimeOrderedEpoch(request.intervalEnd()))
                 .bind("name", request.name());
 
         if (CollectionUtils.isNotEmpty(request.projectIds())) {
@@ -199,10 +198,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
         }
 
         var statement = connection.createStatement(template.render())
-                .bind("timestamp_start", request.intervalStart().toString())
-                .bind("timestamp_end", request.intervalEnd().toString())
-                .bind("timestamp_prior_start",
-                        getPriorStart(request.intervalStart(), request.intervalEnd()).toString());
+                .bind("id_start", UuidCreator.getTimeOrderedEpoch(request.intervalStart()))
+                .bind("id_end", UuidCreator.getTimeOrderedEpoch(request.intervalEnd()))
+                .bind("id_prior_start",
+                        UuidCreator.getTimeOrderedEpoch(getPriorStart(request.intervalStart(), request.intervalEnd())));
 
         if (CollectionUtils.isNotEmpty(request.projectIds())) {
             statement.bind("project_ids", request.projectIds());

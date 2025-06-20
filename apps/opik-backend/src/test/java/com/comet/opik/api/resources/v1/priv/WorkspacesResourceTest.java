@@ -137,7 +137,7 @@ class WorkspacesResourceTest {
 
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
-        void metricsSummary_happyPath(boolean withProjectIds) {
+        void metricsSummary_happyPath(boolean withProjectIds) throws InterruptedException {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -150,17 +150,17 @@ class WorkspacesResourceTest {
 
             var previousScores = createFeedbackScores(projectName, names.subList(0, names.size() - 1), apiKey,
                     workspaceName);
+
+            // Ensure a time gap for the next scores
+            Thread.sleep(1000); // Ensure a time gap for the next scores
+            Instant startTime = Instant.now();
+            Instant endTime = startTime.plus(Duration.ofMinutes(10));
+            Thread.sleep(1000);
+
             var currentScores = createFeedbackScores(projectName, names.subList(1, names.size()), apiKey,
                     workspaceName);
 
             var traces = traceResourceClient.getByProjectName(projectName, apiKey, workspaceName);
-            var startTime = traces.stream()
-                    .filter(trace -> trace.feedbackScores().stream()
-                            .anyMatch(score -> score.name().equals(names.getLast())))
-                    .map(Trace::startTime)
-                    .min(Instant::compareTo).get();
-
-            Instant endTime = startTime.plus(Duration.ofMinutes(10));
 
             // Get metrics summary
             var actualMetricsSummary = workspaceResourceClient.getMetricsSummary(

@@ -282,7 +282,11 @@
             <artifactId>tika-core</artifactId>
             <version>3.2.0</version>
         </dependency>
-
+        <dependency>
+            <groupId>com.github.f4b6a3</groupId>
+            <artifactId>uuid-creator</artifactId>
+            <version>5.3.3</version>
+        </dependency>
 
         <!-- Test -->
 
