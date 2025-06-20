@@ -212,6 +212,86 @@ export class Traces {
     }
 
     /**
+     * Close trace thread
+     *
+     * @param {OpikApi.TraceThreadIdentifier} request
+     * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.traces.closeTraceThread({
+     *         threadId: "thread_id"
+     *     })
+     */
+    public closeTraceThread(
+        request: OpikApi.TraceThreadIdentifier,
+        requestOptions?: Traces.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__closeTraceThread(request, requestOptions));
+    }
+
+    private async __closeTraceThread(
+        request: OpikApi.TraceThreadIdentifier,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/traces/threads/close",
+            ),
+            method: "PUT",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.TraceThreadIdentifier.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling PUT /v1/private/traces/threads/close.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Get traces by project_name or project_id
      *
      * @param {OpikApi.GetTracesByProjectRequest} request
@@ -1337,7 +1417,6 @@ export class Traces {
      *
      * @example
      *     await client.traces.getTraceThread({
-     *         projectId: "project_id",
      *         threadId: "thread_id"
      *     })
      */
@@ -1529,6 +1608,86 @@ export class Traces {
                 });
             case "timeout":
                 throw new errors.OpikApiTimeoutError("Timeout exceeded when calling GET /v1/private/traces/threads.");
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
+     * Open trace thread
+     *
+     * @param {OpikApi.TraceThreadIdentifier} request
+     * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.traces.openTraceThread({
+     *         threadId: "thread_id"
+     *     })
+     */
+    public openTraceThread(
+        request: OpikApi.TraceThreadIdentifier,
+        requestOptions?: Traces.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__openTraceThread(request, requestOptions));
+    }
+
+    private async __openTraceThread(
+        request: OpikApi.TraceThreadIdentifier,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/traces/threads/open",
+            ),
+            method: "PUT",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.TraceThreadIdentifier.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling PUT /v1/private/traces/threads/open.",
+                );
             case "unknown":
                 throw new errors.OpikApiError({
                     message: _response.error.errorMessage,
