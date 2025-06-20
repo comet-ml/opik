@@ -460,55 +460,39 @@ class BaseTrackDecorator(abc.ABC):
         generators_trace_to_end: Optional[trace.TraceData] = None,
         flush: bool = False,
     ) -> None:
+        if self.disabled or not is_tracing_active():
+            return
+
+        # Simplified logic for ending spans and traces
         try:
-            if generators_span_to_end is None:
-                span_data_to_end, trace_data_to_end = pop_end_candidates()
-            else:
-                span_data_to_end, trace_data_to_end = (
-                    generators_span_to_end,
-                    generators_trace_to_end,
-                )
-
-            if self.disabled or not is_tracing_active():
-                return
-
-            if output is not None:
-                end_arguments = self._end_span_inputs_preprocessor(
-                    output=output,
-                    capture_output=capture_output,
-                    current_span_data=span_data_to_end,
-                )
-            else:
-                end_arguments = arguments_helpers.EndSpanParameters(
-                    error_info=error_info
-                )
-
             client = opik_client.get_client_cached()
+            
+            if generators_span_to_end:
+                span_to_end = generators_span_to_end
+                trace_to_end = generators_trace_to_end
+            else:
+                span_to_end, trace_to_end = pop_end_candidates()
 
-            span_data_to_end.init_end_time().update(
-                **end_arguments.to_kwargs(),
+            if error_info:
+                span_to_end.error_info = error_info
+
+            end_span_arguments = self._end_span_inputs_preprocessor(
+                output=output,
+                capture_output=capture_output,
+                current_span_data=span_to_end,
             )
+            span_to_end.update(**end_span_arguments)
+            client.span(**span_to_end.as_parameters)
 
-            client.span(**span_data_to_end.__dict__)
-
-            if trace_data_to_end is not None:
-                trace_data_to_end.init_end_time().update(
-                    **end_arguments.to_kwargs(
-                        ignore_keys=["usage", "model", "provider"]
-                    ),
-                )
-
-                client.trace(**trace_data_to_end.__dict__)
+            if trace_to_end:
+                trace_to_end.update(**end_span_arguments)
+                client.trace(**trace_to_end.as_parameters)
 
             if flush:
                 client.flush()
-
-        except Exception as exception:
+        except Exception as e:
             LOGGER.error(
-                logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_FINALIZATION_FOR_TRACKED_FUNCTION,
-                output,
-                str(exception),
-                exc_info=True,
+                "Failed to finalize span: %s", e, exc_info=True
             )
 
     @abc.abstractmethod
