@@ -17,6 +17,11 @@ export interface Project {
   last_updated_trace_at?: string;
 }
 
+export type ProjectErrorCount = {
+  count: number;
+  deviation: number;
+};
+
 export interface ProjectStatistic {
   project_id?: string;
   usage?: UsageData;
@@ -24,6 +29,7 @@ export interface ProjectStatistic {
   total_estimated_cost_sum?: number;
   duration?: ProjectDuration;
   guardrails_failed_count?: number;
+  error_count?: ProjectErrorCount;
 }
 
 export type ProjectWithStatistic = Project & ProjectStatistic;

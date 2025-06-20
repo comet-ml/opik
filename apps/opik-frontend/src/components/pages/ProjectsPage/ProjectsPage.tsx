@@ -51,6 +51,7 @@ import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import ErrorsCountCell from "@/components/shared/DataTableCells/ErrorsCountCell";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 
@@ -127,6 +128,33 @@ const ProjectsPage: React.FunctionComponent = () => {
         id: "trace_count",
         label: "Trace count",
         type: COLUMN_TYPE.number,
+      },
+      {
+        id: "error_count",
+        label: "Errors",
+        type: COLUMN_TYPE.errors,
+        cell: ErrorsCountCell as never,
+        customMeta: {
+          onZoomIn: (row: ProjectWithStatistic) => {
+            navigate({
+              to: "/$workspaceName/projects/$projectId/traces",
+              params: {
+                projectId: row.id,
+                workspaceName,
+              },
+              search: {
+                traces_filters: [
+                  {
+                    operator: "is_not_empty",
+                    type: COLUMN_TYPE.errors,
+                    field: "error_info",
+                    value: "",
+                  },
+                ],
+              },
+            });
+          },
+        },
       },
       {
         id: "usage.total_tokens",
@@ -212,7 +240,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         type: COLUMN_TYPE.string,
       },
     ];
-  }, [isGuardrailsEnabled]);
+  }, [isGuardrailsEnabled, navigate, workspaceName]);
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);

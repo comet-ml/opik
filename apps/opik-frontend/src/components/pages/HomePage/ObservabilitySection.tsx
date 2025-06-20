@@ -21,57 +21,52 @@ import { convertColumnDataToColumn } from "@/lib/table";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { get } from "lodash";
 import { formatNumericData } from "@/lib/utils";
+import ErrorsCountCell from "@/components/shared/DataTableCells/ErrorsCountCell";
 
 const COLUMNS_WIDTH_KEY = "home-projects-columns-width";
 
-export const COLUMNS = convertColumnDataToColumn<
-  ProjectWithStatistic,
-  ProjectWithStatistic
->(
-  [
-    {
-      id: COLUMN_NAME_ID,
-      label: "Project",
-      type: COLUMN_TYPE.string,
-      cell: ResourceCell as never,
-      sortable: true,
-      customMeta: {
-        nameKey: "name",
-        idKey: "id",
-        resource: RESOURCE_TYPE.project,
-      },
+export const SHARED_COLUMNS = [
+  {
+    id: COLUMN_NAME_ID,
+    label: "Project",
+    type: COLUMN_TYPE.string,
+    cell: ResourceCell as never,
+    sortable: true,
+    customMeta: {
+      nameKey: "name",
+      idKey: "id",
+      resource: RESOURCE_TYPE.project,
     },
-    {
-      id: "last_updated_at",
-      label: "Last updated",
-      type: COLUMN_TYPE.time,
-      accessorFn: (row) =>
-        formatDate(row.last_updated_trace_at ?? row.last_updated_at),
-      sortable: true,
+  },
+  {
+    id: "last_updated_at",
+    label: "Last updated",
+    type: COLUMN_TYPE.time,
+    accessorFn: (row: ProjectWithStatistic) =>
+      formatDate(row.last_updated_trace_at ?? row.last_updated_at),
+    sortable: true,
+  },
+  {
+    id: "feedback_scores",
+    label: "Feedback scores",
+    type: COLUMN_TYPE.numberDictionary,
+    accessorFn: (row: ProjectWithStatistic) =>
+      get(row, "feedback_scores", []).map((score) => ({
+        ...score,
+        value: formatNumericData(score.value),
+      })),
+    cell: FeedbackScoreListCell as never,
+    customMeta: {
+      getHoverCardName: (row: ProjectWithStatistic) => row.name,
+      isAverageScores: true,
     },
-    {
-      id: "feedback_scores",
-      label: "Feedback scores",
-      type: COLUMN_TYPE.numberDictionary,
-      accessorFn: (row) =>
-        get(row, "feedback_scores", []).map((score) => ({
-          ...score,
-          value: formatNumericData(score.value),
-        })),
-      cell: FeedbackScoreListCell as never,
-      customMeta: {
-        getHoverCardName: (row: ProjectWithStatistic) => row.name,
-        isAverageScores: true,
-      },
-    },
-    {
-      id: "trace_count",
-      label: "Trace count",
-      type: COLUMN_TYPE.number,
-    },
-  ],
-  {},
-);
+  },
+  {
+    id: "trace_count",
+    label: "Trace count",
+    type: COLUMN_TYPE.number,
+  },
+];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
@@ -120,6 +115,45 @@ const ObservabilitySection: React.FunctionComponent = () => {
     [columnsWidth, setColumnsWidth],
   );
 
+  const columnData = useMemo(() => {
+    return convertColumnDataToColumn<
+      ProjectWithStatistic,
+      ProjectWithStatistic
+    >(
+      [
+        ...SHARED_COLUMNS,
+        {
+          id: "error_count",
+          label: "Errors",
+          type: COLUMN_TYPE.errors,
+          cell: ErrorsCountCell as never,
+          customMeta: {
+            onZoomIn: (row: ProjectWithStatistic) => {
+              navigate({
+                to: "/$workspaceName/projects/$projectId/traces",
+                params: {
+                  projectId: row.id,
+                  workspaceName,
+                },
+                search: {
+                  traces_filters: [
+                    {
+                      operator: "is_not_empty",
+                      type: COLUMN_TYPE.errors,
+                      field: "error_info",
+                      value: "",
+                    },
+                  ],
+                },
+              });
+            },
+          },
+        },
+      ],
+      {},
+    );
+  }, [navigate, workspaceName]);
+
   const handleRowClick = useCallback(
     (row: ProjectWithStatistic) => {
       navigate({
@@ -148,7 +182,7 @@ const ObservabilitySection: React.FunctionComponent = () => {
         Observability
       </h2>
       <DataTable
-        columns={COLUMNS}
+        columns={columnData}
         data={projects}
         onRowClick={handleRowClick}
         resizeConfig={resizeConfig}

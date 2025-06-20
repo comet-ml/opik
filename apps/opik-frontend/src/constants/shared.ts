@@ -33,4 +33,5 @@ export const CELL_HORIZONTAL_ALIGNMENT_MAP: Record<COLUMN_TYPE, string> = {
   [COLUMN_TYPE.dictionary]: "justify-start",
   [COLUMN_TYPE.numberDictionary]: "justify-start",
   [COLUMN_TYPE.guardrails]: "justify-start",
+  [COLUMN_TYPE.errors]: "justify-start",
 };

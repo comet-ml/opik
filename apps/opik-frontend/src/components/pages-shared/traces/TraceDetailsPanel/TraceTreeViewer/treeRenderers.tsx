@@ -5,12 +5,12 @@ import isUndefined from "lodash/isUndefined";
 import { TreeRenderProps } from "react-complex-tree";
 import {
   ChevronRight,
-  CircleAlert,
   Clock,
   Coins,
   Hash,
   MessageSquareMore,
   PenLine,
+  TriangleAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/date";
@@ -127,7 +127,7 @@ export const treeRenderers: TreeRenderProps = {
                 {props.item.data.hasError && (
                   <TooltipWrapper content="Has error">
                     <div className={styles.chainSpanDetailsItem}>
-                      <CircleAlert className="text-destructive" />
+                      <TriangleAlert className="text-destructive" />
                     </div>
                   </TooltipWrapper>
                 )}
