@@ -359,6 +359,26 @@ clickhouse:
       host: opik-zookeeper
   backup: 
     enabled: false
+    env:
+      LOG_LEVEL: debug
+      ALLOW_EMPTY_BACKUPS: true
+      API_LISTEN: 0.0.0.0:7171
+      API_CREATE_INTEGRATION_TABLES: true
+      BACKUPS_TO_KEEP_REMOTE: 3
+      REMOTE_STORAGE: s3
+      S3_ACL: private
+      # S3_ENDPOINT: http://opik-minio:9000
+      # S3_REGION: us-east-1
+      S3_BUCKET: clickhouse-backup
+      S3_PATH: backup/shard-{shard}
+      S3_ACCESS_KEY: ''
+      S3_SECRET_KEY: ''
+      S3_FORCE_PATH_STYLE: true
+      # S3_DISABLE_SSL: true
+      # S3_DEBUG: true
+    port: 7171
+    image: altinity/clickhouse-backup:latest
+    imagePullPolicy: Always
     successfulJobsHistoryLimit: 1
     serviceAccount:
       annotations: {}
@@ -372,10 +392,25 @@ clickhouse:
     command:
       - /bin/bash
       - '-cx'
-      - |-
-        export backupname=backup$(date +'%Y%m%d%H%M')
-        echo "BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');" > /tmp/backQuery.sql
-        clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql
+      - |
+        if [ $(date +%j) -eq 1 ]; then
+          echo "Running backup for the first day of the year"
+          export BACKUP_PREFIX=yearly/
+        elif [ $(date +%d) -eq 1 ]; then
+          echo "Skipping backup, not the first day of the year"
+          export BACKUP_PREFIX=monthly/
+        else
+          echo "Running backup for the current day"
+          export BACKUP_PREFIX=""
+        fi
+        export BACKUP_NAME=${BACKUP_PREFIX}backup$(date +'%Y%m%d%H%M')
+        BACKUP_QUERY_FILE=$(mktemp --suffix .sql /tmp/clickhouse-backup-query.XXXXXX)
+        cat << BACKUP_SQL | tee "${BACKUP_QUERY_FILE}"
+          BACKUP ALL EXCEPT DATABASE system 
+            TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${BACKUP_NAME}/', '${ACCESS_KEY}', '${SECRET_KEY}');
+        BACKUP_SQL
+        clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file="${BACKUP_QUERY_FILE}"
+            
   monitoring:
     enabled: false
     username: opikmon # readonly user
