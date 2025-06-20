@@ -24,8 +24,9 @@ import javassist.NotFoundException;
 @ImplementedBy(TraceThreadIdServiceImpl.class)
 interface TraceThreadIdService {
 
-    Mono<TraceThreadIdModel> getOrCreateTraceThreadId(@NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull String threadId);
+    Mono<TraceThreadIdModel> getOrCreateTraceThreadId(String workspaceId, UUID projectId, String threadId);
+
+    Mono<UUID> getThreadModelId(String workspaceId, UUID projectId, String threadId);
 
 }
 
@@ -49,6 +50,19 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
                 .flatMap(project -> getTraceThreadId(threadId, project.id())
                         .switchIfEmpty(createThread(threadId, projectId)))
                 .switchIfEmpty(Mono.error(new NotFoundException("Project not found: " + projectId)));
+    }
+
+    @Cacheable(name = "GET_THREAD_ID", key = "$workspaceId +'-'+ $projectId +'-'+ $threadId", returnType = UUID.class)
+    public Mono<UUID> getThreadModelId(@NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull String threadId) {
+        Preconditions.checkArgument(!StringUtils.isBlank(workspaceId), "Workspace ID cannot be blank");
+        Preconditions.checkArgument(!StringUtils.isBlank(threadId), "Thread ID cannot be blank");
+
+        return Mono.fromCallable(() -> projectService.get(projectId, workspaceId))
+                .flatMap(project -> getTraceThreadId(threadId, project.id())
+                        .map(TraceThreadIdModel::id))
+                .onErrorResume(NotFoundException.class, throwable -> Mono.empty());
+
     }
 
     private Mono<TraceThreadIdModel> getTraceThreadId(String threadId, UUID projectId) {

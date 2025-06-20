@@ -4,10 +4,12 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
+import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 import static java.util.stream.Collectors.groupingBy;
@@ -41,6 +44,10 @@ public interface FeedbackScoreService {
     Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds);
 
     Mono<FeedbackScoreNames> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
+
+    Mono<Void> scoreBatchOfThreads(List<FeedbackScoreBatchItem> scores);
+
+    Mono<Void> deleteThreadScores(UUID projectId, String threadId, Set<String> names);
 }
 
 @Slf4j
@@ -52,7 +59,9 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private final @NonNull SpanDAO spanDAO;
     private final @NonNull TraceDAO traceDAO;
     private final @NonNull ProjectService projectService;
+    private final @NonNull TraceThreadService traceThreadService;
 
+    @Builder(toBuilder = true)
     record ProjectDto(Project project, List<FeedbackScoreBatchItem> scores) {
     }
 
@@ -170,5 +179,86 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
         return dao.getProjectsFeedbackScoreNames(projectIds)
                 .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
                 .map(FeedbackScoreNames::new);
+    }
+
+    @Override
+    public Mono<Void> scoreBatchOfThreads(List<FeedbackScoreBatchItem> scores) {
+        return processThreadsScoreBatch(scores);
+    }
+
+    @Override
+    public Mono<Void> deleteThreadScores(UUID projectId, String threadId, Set<String> names) {
+        if (names.isEmpty()) {
+            return Mono.empty();
+        }
+
+        return traceThreadService.getThreadModelId(projectId, threadId)
+                .flatMap(threadModelId -> dao.deleteByEntityIdAndNames(EntityType.THREAD, threadModelId, names))
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.info("ThreadId '{}' not found in project '{}'. No scores deleted.", threadId, projectId);
+                    return Mono.empty();
+                }))
+                .doOnNext(count -> log.info("Deleted '{}' scores for threadId '{}' in projectId '{}'", count, threadId,
+                        projectId))
+                .then();
+    }
+
+    private Mono<Void> processThreadsScoreBatch(List<FeedbackScoreBatchItem> scores) {
+
+        if (scores.isEmpty()) {
+            return Mono.empty();
+        }
+
+        // group scores by project name to resolve project itemIds
+        Map<String, List<FeedbackScoreBatchItem>> scoresPerProject = scores
+                .stream()
+                .map(score -> score.toBuilder()
+                        .projectName(WorkspaceUtils.getProjectName(score.projectName()))
+                        .build())
+                .collect(groupingBy(FeedbackScoreBatchItem::projectName));
+
+        return projectService.retrieveByNamesOrCreate(scoresPerProject.keySet())
+                .map(ProjectService::groupByName)
+                .map(projectMap -> mergeProjectsAndScores(projectMap, scoresPerProject))
+                .flatMap(this::saveThreadScoreBatch) // save all scores
+                .then();
+    }
+
+    private Mono<Long> saveThreadScoreBatch(List<ProjectDto> projects) {
+        return Flux.fromIterable(projects)
+                .flatMap(projectDto -> {
+                    // Collect unique thread IDs from the scores
+                    Set<String> threadIds = projectDto.scores()
+                            .stream()
+                            .map(FeedbackScoreBatchItem::threadId)
+                            .collect(Collectors.toSet());
+
+                    return Flux.fromIterable(threadIds)
+                            // resolve thread model IDs for each thread ID
+                            .flatMap(threadId -> getOrCreateThread(projectDto, threadId))
+                            .collectMap(Map.Entry::getKey, Map.Entry::getValue)
+                            .map(threadIdMap -> bindThreadModelId(projectDto, threadIdMap))
+                            .filter(projectDtoWithThreads -> !projectDtoWithThreads.scores().isEmpty())
+                            // score the batch of threads with resolved thread model IDs
+                            .flatMap(score -> dao.scoreBatchOfThreads(score.scores()));
+                })
+                .reduce(0L, Long::sum);
+    }
+
+    private Mono<Map.Entry<String, UUID>> getOrCreateThread(ProjectDto projectDto, String threadId) {
+        return traceThreadService.getOrCreateThreadId(projectDto.project().id(), threadId)
+                .map(threadModelId -> Map.entry(threadId, threadModelId));
+    }
+
+    private ProjectDto bindThreadModelId(ProjectDto projectDto, Map<String, UUID> threadIdMap) {
+        return projectDto.toBuilder()
+                .project(projectDto.project())
+                .scores(projectDto.scores()
+                        .stream()
+                        .map(score -> score.toBuilder()
+                                .id(threadIdMap.get(score.threadId())) // set thread model id
+                                .build())
+                        .toList())
+                .build();
     }
 }
