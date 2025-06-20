@@ -75,18 +75,34 @@ spec:
     podTemplates:
       - name: clickhouse-cluster-pod-template
         spec:
+        {{- if .Values.clickhouse.imagePullSecrets }}
+          imagePullSecrets:
+            {{- .Values.clickhouse.imagePullSecrets | toYaml | nindent 12 }}
+        {{- end }}
           containers:
           - name: clickhouse
             image: {{ .Values.clickhouse.image }}
-            {{- with .Values.clickhouse.imagePullSecrets }}
-            imagePullSecrets:
-              {{- toYaml . | nindent 8 }}
-            {{- end }}
             {{- with .Values.clickhouse.resources }}
             resources:
               {{- toYaml . | nindent 14 }}
             {{- end }}
-
+          {{- if .Values.clickhouse.backup.enabled }}
+          - name: clickhouse-backup
+            image: {{ .Values.clickhouse.backup.image }}
+            imagePullPolicy: {{ .Values.clickhouse.backup.imagePullPolicy | default "IfNotPresent" }}
+            {{- with .Values.clickhouse.backup.resources }}
+            args: ["server"]
+            {{- with .Values.clickhouse.backup.env }}
+            env:
+            {{-   range $name, $value := . }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{-   end }}
+            {{- end }}
+            ports:
+            - name: clickhouse-backup-rest
+              containerPort: {{ .Values.clickhouse.backup.port }}
+          {{- end }}
           {{- with .Values.clickhouse.nodeSelector }}
           nodeSelector:
             {{- toYaml . | nindent 12 }}
