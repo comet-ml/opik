@@ -139,19 +139,11 @@ public class TraceAssertions {
     }
 
     public static void assertStats(List<ProjectStatItem<?>> actualStats, List<ProjectStatItem<?>> expectedStats) {
-        var actualMap = actualStats.stream()
-                .collect(java.util.stream.Collectors.toMap(ProjectStatItem::getName,
-                        java.util.function.Function.identity()));
+        assertThat(actualStats).hasSize(expectedStats.size());
 
-        var expectedMap = expectedStats.stream()
-                .collect(java.util.stream.Collectors.toMap(ProjectStatItem::getName,
-                        java.util.function.Function.identity()));
-
-        assertThat(actualMap.keySet()).containsAll(expectedMap.keySet());
-
-        expectedMap.forEach((name, expected) -> assertThat(actualMap.get(name))
+        assertThat(actualStats)
                 .usingRecursiveComparison(StatsUtils.getRecursiveComparisonConfiguration())
-                .isEqualTo(expected));
+                .isEqualTo(expectedStats);
     }
 
     public static void assertPage(Trace.TracePage actualPage, int page, int expectedPageSize, int expectedTotal) {
