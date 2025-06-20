@@ -29,6 +29,15 @@ database:
   #  Description: Any additional JDBC driver parameters
   properties:
     wrapperPlugins: ${STATE_DB_PLUGINS:-''}
+    useSSL: ${MYSQL_USE_SSL:-''}
+    requireSSL: ${MYSQL_REQUIRE_SSL:-''}
+    verifyServerCertificate: ${MYSQL_VERIFY_SSL:-''}
+    trustCertificateKeyStoreUrl: ${MYSQL_TRUSTSTORE_URL:-''}
+    trustCertificateKeyStorePassword: ${MYSQL_TRUSTSTORE_PASSWORD:-''}
+    trustCertificateKeyStoreType: ${MYSQL_TRUSTSTORE_TYPE:-''}
+    clientCertificateKeyStoreUrl: ${MYSQL_CLIENTSTORE_URL:-''}
+    clientCertificateKeyStorePassword: ${MYSQL_CLIENTSTORE_PASSWORD:-''}
+    clientCertificateKeyStoreType: ${MYSQL_CLIENTSTORE_TYPE:-''}
 
 # Description: analytics database configuration for migrations connection
 databaseAnalyticsMigrations:
