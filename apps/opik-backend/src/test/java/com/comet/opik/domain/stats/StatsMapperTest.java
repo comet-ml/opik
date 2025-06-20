@@ -84,6 +84,7 @@ class StatsMapperTest {
         values.put("output", 0L);
         values.put("metadata", 0L);
         values.put("tags", 0.0);
+        values.put("llm_span_count_avg", 2.0);
         values.put("total_estimated_cost_avg", new BigDecimal("1.25"));
         values.put("total_estimated_cost_sum", new BigDecimal("2.50"));
 

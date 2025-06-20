@@ -135,6 +135,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -2563,6 +2564,115 @@ class TracesResourceTest {
 
             testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
                     values.all(), filters, Map.of());
+        }
+
+
+        Predicate<Trace> makeLlmSpanCountPredicate(Operator operator, int value) {
+            switch (operator) {
+                case Operator.GREATER_THAN_EQUAL:
+                    return trace -> trace.llmSpanCount() >= value;
+                case Operator.LESS_THAN_EQUAL:
+                    return trace -> trace.llmSpanCount() <= value;
+                case Operator.GREATER_THAN:
+                    return trace -> trace.llmSpanCount() > value;
+                case Operator.LESS_THAN:
+                    return trace -> trace.llmSpanCount() < value;
+                case Operator.EQUAL:
+                    return trace -> trace.llmSpanCount() == value;
+                case Operator.NOT_EQUAL:
+                    return trace -> trace.llmSpanCount() != value;
+                default:
+                    throw new IllegalArgumentException("Unknown operator: " + operator);
+            }
+        }
+
+        void testLlmSpanCountFiltering(String endpoint,
+                                       TracePageTestAssertion testAssertion, Operator operator) {
+                var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+                var workspaceId = UUID.randomUUID().toString();
+                var apiKey = UUID.randomUUID().toString();
+
+                mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+                var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+                var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                        .stream()
+                        .map(trace -> {
+                            var llmSpanCount = RandomUtils.secure().randomInt(1, 7);
+                            return trace.toBuilder()
+                                    .projectId(null)
+                                    .projectName(projectName)
+                                    .usage(null)
+                                    .feedbackScores(null)
+                                    .threadId(null)
+                                    .totalEstimatedCost(null)
+                                    .guardrailsValidations(null)
+                                    .spanCount(llmSpanCount + RandomUtils.secure().randomInt(1, 7))
+                                    .llmSpanCount(llmSpanCount)
+                                    .build();
+                        })
+                        .toList();
+
+                traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+                var spans = traces.stream()
+                        .flatMap(trace -> IntStream.range(0, trace.spanCount())
+                                .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                                        .usage(null)
+                                        .projectName(projectName)
+                                        .traceId(trace.id())
+                                        .type(i < trace.llmSpanCount() ? SpanType.llm : SpanType.general)
+                                        .build()))
+                        .toList();
+
+                spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+                var llmSpanCountToCompareAgainst = traces.getFirst().llmSpanCount();
+
+                Predicate<Trace> matchesFilter = makeLlmSpanCountPredicate(operator, llmSpanCountToCompareAgainst);
+                Comparator<Trace> traceIdComparator = Comparator.comparing(Trace::id).reversed();
+
+                var expectedTraces = traces.stream()
+                        .filter(matchesFilter)
+                        .sorted(traceIdComparator)
+                        .collect(Collectors.toList());
+
+                var unexpectedTraces = traces.stream()
+                        .filter(matchesFilter.negate())
+                        .sorted(traceIdComparator)
+                        .collect(Collectors.toList());
+
+                var filters = List.of(TraceFilter.builder()
+                        .field(TraceField.LLM_SPAN_COUNT)
+                        .operator(operator)
+                        .value(Integer.toString(llmSpanCountToCompareAgainst))
+                        .build());
+
+                var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
+
+                testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                        values.all(), filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterLlmSpanCountGreaterThanEqual__thenReturnTracesFiltered(String endpoint,
+                TracePageTestAssertion testAssertion) {
+            testLlmSpanCountFiltering(endpoint, testAssertion, Operator.GREATER_THAN_EQUAL);
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterLlmSpanCountLessThanEqual__thenReturnTracesFiltered(String endpoint,
+                TracePageTestAssertion testAssertion) {
+            testLlmSpanCountFiltering(endpoint, testAssertion, Operator.LESS_THAN_EQUAL);
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterLlmSpanCountEqual__thenReturnTracesFiltered(String endpoint,
+                TracePageTestAssertion testAssertion) {
+            testLlmSpanCountFiltering(endpoint, testAssertion, Operator.EQUAL);
         }
 
         @ParameterizedTest
@@ -5079,18 +5189,21 @@ class TracesResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
+                    .map(trace -> {
+                        var llmSpanCount = RandomUtils.secure().randomInt(1, 7);
+                        return trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
                             .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
                             .comments(null)
-                            .spanCount(RandomUtils.secure().randomInt(1, 11))
-                            .build())
+                            .spanCount(llmSpanCount + RandomUtils.secure().randomInt(1, 7))
+                            .llmSpanCount(llmSpanCount)
+                            .build();
+                    })
                     .map(trace -> trace.toBuilder()
                             .duration(trace.startTime().until(trace.endTime(), ChronoUnit.MICROS) / 1000.0)
                             .build())
@@ -5104,7 +5217,7 @@ class TracesResourceTest {
                                     .usage(Map.of("completion_tokens", RandomUtils.secure().randomInt()))
                                     .projectName(projectName)
                                     .traceId(trace.id())
-                                    .type(SpanType.general)
+                                    .type(i < trace.llmSpanCount() ? SpanType.llm : SpanType.general)
                                     .build()))
                     .toList();
 
@@ -5276,6 +5389,12 @@ class TracesResourceTest {
                     Arguments.of(Comparator.comparing(Trace::spanCount).reversed()
                             .thenComparing(Comparator.comparing(Trace::id).reversed()),
                             SortingField.builder().field(SortableFields.SPAN_COUNT).direction(Direction.DESC).build()),
+                    Arguments.of(Comparator.comparing(Trace::llmSpanCount)
+                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field(SortableFields.LLM_SPAN_COUNT).direction(Direction.ASC).build()),
+                    Arguments.of(Comparator.comparing(Trace::llmSpanCount).reversed()
+                            .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field(SortableFields.LLM_SPAN_COUNT).direction(Direction.DESC).build()),
                     Arguments.of(usageComparator,
                             SortingField.builder().field("usage.completion_tokens").direction(Direction.ASC).build()),
                     Arguments.of(usageComparator.reversed(),
