@@ -55,7 +55,10 @@ class RedirectClient:
         client.redirect.datasets_redirect(dataset_id='dataset_id', path='path', )
         """
         _response = self._raw_client.datasets_redirect(
-            dataset_id=dataset_id, path=path, workspace_name=workspace_name, request_options=request_options
+            dataset_id=dataset_id,
+            path=path,
+            workspace_name=workspace_name,
+            request_options=request_options,
         )
         return _response.data
 
@@ -180,7 +183,10 @@ class RedirectClient:
         client.redirect.projects_redirect(trace_id='trace_id', path='path', )
         """
         _response = self._raw_client.projects_redirect(
-            trace_id=trace_id, path=path, workspace_name=workspace_name, request_options=request_options
+            trace_id=trace_id,
+            path=path,
+            workspace_name=workspace_name,
+            request_options=request_options,
         )
         return _response.data
 
@@ -236,7 +242,10 @@ class AsyncRedirectClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.datasets_redirect(
-            dataset_id=dataset_id, path=path, workspace_name=workspace_name, request_options=request_options
+            dataset_id=dataset_id,
+            path=path,
+            workspace_name=workspace_name,
+            request_options=request_options,
         )
         return _response.data
 
@@ -370,6 +379,9 @@ class AsyncRedirectClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.projects_redirect(
-            trace_id=trace_id, path=path, workspace_name=workspace_name, request_options=request_options
+            trace_id=trace_id,
+            path=path,
+            workspace_name=workspace_name,
+            request_options=request_options,
         )
         return _response.data

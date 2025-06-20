@@ -25,7 +25,9 @@ class SystemUsageClient:
         """
         return self._raw_client
 
-    def get_dataset_bi_info(self, *, request_options: typing.Optional[RequestOptions] = None) -> BiInformationResponse:
+    def get_dataset_bi_info(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> BiInformationResponse:
         """
         Get datasets information for BI events per user per workspace
 
@@ -45,7 +47,9 @@ class SystemUsageClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.system_usage.get_dataset_bi_info()
         """
-        _response = self._raw_client.get_dataset_bi_info(request_options=request_options)
+        _response = self._raw_client.get_dataset_bi_info(
+            request_options=request_options
+        )
         return _response.data
 
     def get_experiment_bi_info(
@@ -70,10 +74,14 @@ class SystemUsageClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.system_usage.get_experiment_bi_info()
         """
-        _response = self._raw_client.get_experiment_bi_info(request_options=request_options)
+        _response = self._raw_client.get_experiment_bi_info(
+            request_options=request_options
+        )
         return _response.data
 
-    def get_spans_bi_info(self, *, request_options: typing.Optional[RequestOptions] = None) -> BiInformationResponse:
+    def get_spans_bi_info(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> BiInformationResponse:
         """
         Get spans information for BI events per user per workspace
 
@@ -118,10 +126,14 @@ class SystemUsageClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.system_usage.get_spans_count_for_workspaces()
         """
-        _response = self._raw_client.get_spans_count_for_workspaces(request_options=request_options)
+        _response = self._raw_client.get_spans_count_for_workspaces(
+            request_options=request_options
+        )
         return _response.data
 
-    def get_traces_bi_info(self, *, request_options: typing.Optional[RequestOptions] = None) -> BiInformationResponse:
+    def get_traces_bi_info(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> BiInformationResponse:
         """
         Get traces information for BI events per user per workspace
 
@@ -166,7 +178,9 @@ class SystemUsageClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.system_usage.get_traces_count_for_workspaces()
         """
-        _response = self._raw_client.get_traces_count_for_workspaces(request_options=request_options)
+        _response = self._raw_client.get_traces_count_for_workspaces(
+            request_options=request_options
+        )
         return _response.data
 
 
@@ -210,7 +224,9 @@ class AsyncSystemUsageClient:
             await client.system_usage.get_dataset_bi_info()
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_dataset_bi_info(request_options=request_options)
+        _response = await self._raw_client.get_dataset_bi_info(
+            request_options=request_options
+        )
         return _response.data
 
     async def get_experiment_bi_info(
@@ -238,7 +254,9 @@ class AsyncSystemUsageClient:
             await client.system_usage.get_experiment_bi_info()
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_experiment_bi_info(request_options=request_options)
+        _response = await self._raw_client.get_experiment_bi_info(
+            request_options=request_options
+        )
         return _response.data
 
     async def get_spans_bi_info(
@@ -266,7 +284,9 @@ class AsyncSystemUsageClient:
             await client.system_usage.get_spans_bi_info()
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_spans_bi_info(request_options=request_options)
+        _response = await self._raw_client.get_spans_bi_info(
+            request_options=request_options
+        )
         return _response.data
 
     async def get_spans_count_for_workspaces(
@@ -294,7 +314,9 @@ class AsyncSystemUsageClient:
             await client.system_usage.get_spans_count_for_workspaces()
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_spans_count_for_workspaces(request_options=request_options)
+        _response = await self._raw_client.get_spans_count_for_workspaces(
+            request_options=request_options
+        )
         return _response.data
 
     async def get_traces_bi_info(
@@ -322,7 +344,9 @@ class AsyncSystemUsageClient:
             await client.system_usage.get_traces_bi_info()
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_traces_bi_info(request_options=request_options)
+        _response = await self._raw_client.get_traces_bi_info(
+            request_options=request_options
+        )
         return _response.data
 
     async def get_traces_count_for_workspaces(
@@ -350,5 +374,7 @@ class AsyncSystemUsageClient:
             await client.system_usage.get_traces_count_for_workspaces()
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_traces_count_for_workspaces(request_options=request_options)
+        _response = await self._raw_client.get_traces_count_for_workspaces(
+            request_options=request_options
+        )
         return _response.data

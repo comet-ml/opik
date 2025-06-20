@@ -32,7 +32,9 @@ class TracePublic(UniversalBaseModel):
     last_updated_by: typing.Optional[str] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScorePublic]] = None
     comments: typing.Optional[typing.List[CommentPublic]] = None
-    guardrails_validations: typing.Optional[typing.List[GuardrailsValidationPublic]] = None
+    guardrails_validations: typing.Optional[typing.List[GuardrailsValidationPublic]] = (
+        None
+    )
     total_estimated_cost: typing.Optional[float] = None
     span_count: typing.Optional[int] = None
     duration: typing.Optional[float] = pydantic.Field(default=None)
@@ -45,7 +47,9 @@ class TracePublic(UniversalBaseModel):
     llm_span_count: typing.Optional[int] = None
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:

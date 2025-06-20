@@ -12,11 +12,16 @@ class JsonSchema(UniversalBaseModel):
     name: typing.Optional[str] = None
     strict: typing.Optional[bool] = None
     schema_: typing_extensions.Annotated[
-        typing.Optional[typing.Dict[str, typing.Dict[str, typing.Optional[typing.Any]]]], FieldMetadata(alias="schema")
+        typing.Optional[
+            typing.Dict[str, typing.Dict[str, typing.Optional[typing.Any]]]
+        ],
+        FieldMetadata(alias="schema"),
     ] = None
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:

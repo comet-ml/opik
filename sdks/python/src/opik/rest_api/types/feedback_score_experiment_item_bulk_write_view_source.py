@@ -2,4 +2,6 @@
 
 import typing
 
-FeedbackScoreExperimentItemBulkWriteViewSource = typing.Union[typing.Literal["ui", "sdk", "online_scoring"], typing.Any]
+FeedbackScoreExperimentItemBulkWriteViewSource = typing.Union[
+    typing.Literal["ui", "sdk", "online_scoring"], typing.Any
+]

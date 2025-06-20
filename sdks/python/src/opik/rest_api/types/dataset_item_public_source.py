@@ -2,4 +2,6 @@
 
 import typing
 
-DatasetItemPublicSource = typing.Union[typing.Literal["manual", "trace", "span", "sdk"], typing.Any]
+DatasetItemPublicSource = typing.Union[
+    typing.Literal["manual", "trace", "span", "sdk"], typing.Any
+]

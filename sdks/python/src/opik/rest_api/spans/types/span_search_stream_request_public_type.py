@@ -2,4 +2,6 @@
 
 import typing
 
-SpanSearchStreamRequestPublicType = typing.Union[typing.Literal["general", "tool", "llm", "guardrail"], typing.Any]
+SpanSearchStreamRequestPublicType = typing.Union[
+    typing.Literal["general", "tool", "llm", "guardrail"], typing.Any
+]

@@ -3,5 +3,7 @@
 import typing
 
 JsonListString = typing.Union[
-    typing.Dict[str, typing.Optional[typing.Any]], typing.List[typing.Dict[str, typing.Optional[typing.Any]]], str
+    typing.Dict[str, typing.Optional[typing.Any]],
+    typing.List[typing.Dict[str, typing.Optional[typing.Any]]],
+    str,
 ]

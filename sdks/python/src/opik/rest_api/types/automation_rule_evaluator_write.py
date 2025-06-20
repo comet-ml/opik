@@ -17,7 +17,9 @@ class Base(UniversalBaseModel):
     action: typing.Optional[typing.Literal["evaluator"]] = None
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:
@@ -31,7 +33,9 @@ class AutomationRuleEvaluatorWrite_LlmAsJudge(Base):
     code: typing.Optional[LlmAsJudgeCodeWrite] = None
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:
@@ -45,7 +49,9 @@ class AutomationRuleEvaluatorWrite_UserDefinedMetricPython(Base):
     code: typing.Optional[UserDefinedMetricPythonCodeWrite] = None
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:
@@ -55,5 +61,6 @@ class AutomationRuleEvaluatorWrite_UserDefinedMetricPython(Base):
 
 
 AutomationRuleEvaluatorWrite = typing.Union[
-    AutomationRuleEvaluatorWrite_LlmAsJudge, AutomationRuleEvaluatorWrite_UserDefinedMetricPython
+    AutomationRuleEvaluatorWrite_LlmAsJudge,
+    AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
 ]

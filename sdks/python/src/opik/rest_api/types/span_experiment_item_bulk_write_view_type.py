@@ -2,4 +2,6 @@
 
 import typing
 
-SpanExperimentItemBulkWriteViewType = typing.Union[typing.Literal["general", "tool", "llm", "guardrail"], typing.Any]
+SpanExperimentItemBulkWriteViewType = typing.Union[
+    typing.Literal["general", "tool", "llm", "guardrail"], typing.Any
+]

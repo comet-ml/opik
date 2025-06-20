@@ -15,10 +15,14 @@ class LlmAsJudgeCodeWrite(UniversalBaseModel):
     model: LlmAsJudgeModelParametersWrite
     messages: typing.List[LlmAsJudgeMessageWrite]
     variables: typing.Dict[str, str]
-    schema_: typing_extensions.Annotated[typing.List[LlmAsJudgeOutputSchemaWrite], FieldMetadata(alias="schema")]
+    schema_: typing_extensions.Annotated[
+        typing.List[LlmAsJudgeOutputSchemaWrite], FieldMetadata(alias="schema")
+    ]
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:

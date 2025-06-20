@@ -306,7 +306,10 @@ class TracesClient:
         return _response.data
 
     def create_traces(
-        self, *, traces: typing.Sequence[TraceWrite], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        traces: typing.Sequence[TraceWrite],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Create traces
@@ -330,10 +333,14 @@ class TracesClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.traces.create_traces(traces=[TraceWrite(start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )], )
         """
-        _response = self._raw_client.create_traces(traces=traces, request_options=request_options)
+        _response = self._raw_client.create_traces(
+            traces=traces, request_options=request_options
+        )
         return _response.data
 
-    def get_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> TracePublic:
+    def get_trace_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> TracePublic:
         """
         Get trace by id
 
@@ -355,10 +362,14 @@ class TracesClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.traces.get_trace_by_id(id='id', )
         """
-        _response = self._raw_client.get_trace_by_id(id, request_options=request_options)
+        _response = self._raw_client.get_trace_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
-    def delete_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    def delete_trace_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
         """
         Delete trace by id
 
@@ -379,7 +390,9 @@ class TracesClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.traces.delete_trace_by_id(id='id', )
         """
-        _response = self._raw_client.delete_trace_by_id(id, request_options=request_options)
+        _response = self._raw_client.delete_trace_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     def update_trace(
@@ -457,7 +470,10 @@ class TracesClient:
         return _response.data
 
     def delete_trace_comments(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete trace comments
@@ -479,11 +495,17 @@ class TracesClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.traces.delete_trace_comments(ids=['ids'], )
         """
-        _response = self._raw_client.delete_trace_comments(ids=ids, request_options=request_options)
+        _response = self._raw_client.delete_trace_comments(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     def delete_trace_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete trace feedback score
@@ -507,7 +529,9 @@ class TracesClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.traces.delete_trace_feedback_score(id='id', name='name', )
         """
-        _response = self._raw_client.delete_trace_feedback_score(id, name=name, request_options=request_options)
+        _response = self._raw_client.delete_trace_feedback_score(
+            id, name=name, request_options=request_options
+        )
         return _response.data
 
     def delete_trace_threads(
@@ -545,12 +569,18 @@ class TracesClient:
         client.traces.delete_trace_threads(thread_ids=['thread_ids'], )
         """
         _response = self._raw_client.delete_trace_threads(
-            thread_ids=thread_ids, project_name=project_name, project_id=project_id, request_options=request_options
+            thread_ids=thread_ids,
+            project_name=project_name,
+            project_id=project_id,
+            request_options=request_options,
         )
         return _response.data
 
     def delete_traces(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete traces
@@ -572,11 +602,16 @@ class TracesClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.traces.delete_traces(ids=['ids'], )
         """
-        _response = self._raw_client.delete_traces(ids=ids, request_options=request_options)
+        _response = self._raw_client.delete_traces(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     def find_feedback_score_names_2(
-        self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        project_id: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.List[str]:
         """
         Find Feedback Score names
@@ -599,7 +634,9 @@ class TracesClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.traces.find_feedback_score_names_2()
         """
-        _response = self._raw_client.find_feedback_score_names_2(project_id=project_id, request_options=request_options)
+        _response = self._raw_client.find_feedback_score_names_2(
+            project_id=project_id, request_options=request_options
+        )
         return _response.data
 
     def get_trace_stats(
@@ -636,12 +673,19 @@ class TracesClient:
         client.traces.get_trace_stats()
         """
         _response = self._raw_client.get_trace_stats(
-            project_id=project_id, project_name=project_name, filters=filters, request_options=request_options
+            project_id=project_id,
+            project_name=project_name,
+            filters=filters,
+            request_options=request_options,
         )
         return _response.data
 
     def get_trace_comment(
-        self, comment_id: str, trace_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        comment_id: str,
+        trace_id: str,
+        *,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> Comment:
         """
         Get trace comment
@@ -666,11 +710,17 @@ class TracesClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.traces.get_trace_comment(comment_id='commentId', trace_id='traceId', )
         """
-        _response = self._raw_client.get_trace_comment(comment_id, trace_id, request_options=request_options)
+        _response = self._raw_client.get_trace_comment(
+            comment_id, trace_id, request_options=request_options
+        )
         return _response.data
 
     def get_trace_thread(
-        self, *, project_id: str, thread_id: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        project_id: str,
+        thread_id: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThread:
         """
         Get trace thread
@@ -784,7 +834,9 @@ class TracesClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.traces.score_batch_of_traces(scores=[FeedbackScoreBatchItem(id='id', name='name', value=1.1, source="ui", )], )
         """
-        _response = self._raw_client.score_batch_of_traces(scores=scores, request_options=request_options)
+        _response = self._raw_client.score_batch_of_traces(
+            scores=scores, request_options=request_options
+        )
         return _response.data
 
     def search_traces(
@@ -1184,7 +1236,10 @@ class AsyncTracesClient:
         return _response.data
 
     async def create_traces(
-        self, *, traces: typing.Sequence[TraceWrite], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        traces: typing.Sequence[TraceWrite],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Create traces
@@ -1211,10 +1266,14 @@ class AsyncTracesClient:
             await client.traces.create_traces(traces=[TraceWrite(start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.create_traces(traces=traces, request_options=request_options)
+        _response = await self._raw_client.create_traces(
+            traces=traces, request_options=request_options
+        )
         return _response.data
 
-    async def get_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> TracePublic:
+    async def get_trace_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> TracePublic:
         """
         Get trace by id
 
@@ -1239,10 +1298,14 @@ class AsyncTracesClient:
             await client.traces.get_trace_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_trace_by_id(id, request_options=request_options)
+        _response = await self._raw_client.get_trace_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
-    async def delete_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    async def delete_trace_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
         """
         Delete trace by id
 
@@ -1266,7 +1329,9 @@ class AsyncTracesClient:
             await client.traces.delete_trace_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_trace_by_id(id, request_options=request_options)
+        _response = await self._raw_client.delete_trace_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     async def update_trace(
@@ -1347,7 +1412,10 @@ class AsyncTracesClient:
         return _response.data
 
     async def delete_trace_comments(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete trace comments
@@ -1372,11 +1440,17 @@ class AsyncTracesClient:
             await client.traces.delete_trace_comments(ids=['ids'], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_trace_comments(ids=ids, request_options=request_options)
+        _response = await self._raw_client.delete_trace_comments(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     async def delete_trace_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete trace feedback score
@@ -1403,7 +1477,9 @@ class AsyncTracesClient:
             await client.traces.delete_trace_feedback_score(id='id', name='name', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_trace_feedback_score(id, name=name, request_options=request_options)
+        _response = await self._raw_client.delete_trace_feedback_score(
+            id, name=name, request_options=request_options
+        )
         return _response.data
 
     async def delete_trace_threads(
@@ -1444,12 +1520,18 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.delete_trace_threads(
-            thread_ids=thread_ids, project_name=project_name, project_id=project_id, request_options=request_options
+            thread_ids=thread_ids,
+            project_name=project_name,
+            project_id=project_id,
+            request_options=request_options,
         )
         return _response.data
 
     async def delete_traces(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete traces
@@ -1474,11 +1556,16 @@ class AsyncTracesClient:
             await client.traces.delete_traces(ids=['ids'], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_traces(ids=ids, request_options=request_options)
+        _response = await self._raw_client.delete_traces(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     async def find_feedback_score_names_2(
-        self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        project_id: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.List[str]:
         """
         Find Feedback Score names
@@ -1546,12 +1633,19 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_trace_stats(
-            project_id=project_id, project_name=project_name, filters=filters, request_options=request_options
+            project_id=project_id,
+            project_name=project_name,
+            filters=filters,
+            request_options=request_options,
         )
         return _response.data
 
     async def get_trace_comment(
-        self, comment_id: str, trace_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        comment_id: str,
+        trace_id: str,
+        *,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> Comment:
         """
         Get trace comment
@@ -1579,11 +1673,17 @@ class AsyncTracesClient:
             await client.traces.get_trace_comment(comment_id='commentId', trace_id='traceId', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_trace_comment(comment_id, trace_id, request_options=request_options)
+        _response = await self._raw_client.get_trace_comment(
+            comment_id, trace_id, request_options=request_options
+        )
         return _response.data
 
     async def get_trace_thread(
-        self, *, project_id: str, thread_id: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        project_id: str,
+        thread_id: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThread:
         """
         Get trace thread
@@ -1706,7 +1806,9 @@ class AsyncTracesClient:
             await client.traces.score_batch_of_traces(scores=[FeedbackScoreBatchItem(id='id', name='name', value=1.1, source="ui", )], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.score_batch_of_traces(scores=scores, request_options=request_options)
+        _response = await self._raw_client.score_batch_of_traces(
+            scores=scores, request_options=request_options
+        )
         return _response.data
 
     async def search_traces(

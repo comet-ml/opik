@@ -15,7 +15,9 @@ from ..types.feedback_create import FeedbackCreate
 from ..types.feedback_definition_page_public import FeedbackDefinitionPagePublic
 from ..types.feedback_public import FeedbackPublic
 from ..types.feedback_update import FeedbackUpdate
-from .types.find_feedback_definitions_request_type import FindFeedbackDefinitionsRequestType
+from .types.find_feedback_definitions_request_type import (
+    FindFeedbackDefinitionsRequestType,
+)
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -78,11 +80,22 @@ class RawFeedbackDefinitionsClient:
                 return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def create_feedback_definition(
-        self, *, request: FeedbackCreate, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        request: FeedbackCreate,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Get feedback definition
@@ -101,7 +114,9 @@ class RawFeedbackDefinitionsClient:
         _response = self._client_wrapper.httpx_client.request(
             "v1/private/feedback-definitions",
             method="POST",
-            json=convert_and_respect_annotation_metadata(object_=request, annotation=FeedbackCreate, direction="write"),
+            json=convert_and_respect_annotation_metadata(
+                object_=request, annotation=FeedbackCreate, direction="write"
+            ),
             headers={
                 "content-type": "application/json",
             },
@@ -113,8 +128,16 @@ class RawFeedbackDefinitionsClient:
                 return HttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def get_feedback_definition_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
@@ -151,11 +174,23 @@ class RawFeedbackDefinitionsClient:
                 return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def update_feedback_definition(
-        self, id: str, *, request: FeedbackUpdate, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        request: FeedbackUpdate,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Update feedback definition by id
@@ -176,7 +211,9 @@ class RawFeedbackDefinitionsClient:
         _response = self._client_wrapper.httpx_client.request(
             f"v1/private/feedback-definitions/{jsonable_encoder(id)}",
             method="PUT",
-            json=convert_and_respect_annotation_metadata(object_=request, annotation=FeedbackUpdate, direction="write"),
+            json=convert_and_respect_annotation_metadata(
+                object_=request, annotation=FeedbackUpdate, direction="write"
+            ),
             headers={
                 "content-type": "application/json",
             },
@@ -188,8 +225,16 @@ class RawFeedbackDefinitionsClient:
                 return HttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def delete_feedback_definition_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
@@ -229,11 +274,22 @@ class RawFeedbackDefinitionsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def delete_feedback_definitions_batch(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Delete feedback definitions batch
@@ -277,8 +333,16 @@ class RawFeedbackDefinitionsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
 
 class AsyncRawFeedbackDefinitionsClient:
@@ -338,11 +402,22 @@ class AsyncRawFeedbackDefinitionsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def create_feedback_definition(
-        self, *, request: FeedbackCreate, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        request: FeedbackCreate,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Get feedback definition
@@ -361,7 +436,9 @@ class AsyncRawFeedbackDefinitionsClient:
         _response = await self._client_wrapper.httpx_client.request(
             "v1/private/feedback-definitions",
             method="POST",
-            json=convert_and_respect_annotation_metadata(object_=request, annotation=FeedbackCreate, direction="write"),
+            json=convert_and_respect_annotation_metadata(
+                object_=request, annotation=FeedbackCreate, direction="write"
+            ),
             headers={
                 "content-type": "application/json",
             },
@@ -373,8 +450,16 @@ class AsyncRawFeedbackDefinitionsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def get_feedback_definition_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
@@ -411,11 +496,23 @@ class AsyncRawFeedbackDefinitionsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def update_feedback_definition(
-        self, id: str, *, request: FeedbackUpdate, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        request: FeedbackUpdate,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Update feedback definition by id
@@ -436,7 +533,9 @@ class AsyncRawFeedbackDefinitionsClient:
         _response = await self._client_wrapper.httpx_client.request(
             f"v1/private/feedback-definitions/{jsonable_encoder(id)}",
             method="PUT",
-            json=convert_and_respect_annotation_metadata(object_=request, annotation=FeedbackUpdate, direction="write"),
+            json=convert_and_respect_annotation_metadata(
+                object_=request, annotation=FeedbackUpdate, direction="write"
+            ),
             headers={
                 "content-type": "application/json",
             },
@@ -448,8 +547,16 @@ class AsyncRawFeedbackDefinitionsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def delete_feedback_definition_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
@@ -489,11 +596,22 @@ class AsyncRawFeedbackDefinitionsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def delete_feedback_definitions_batch(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Delete feedback definitions batch
@@ -537,5 +655,13 @@ class AsyncRawFeedbackDefinitionsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )

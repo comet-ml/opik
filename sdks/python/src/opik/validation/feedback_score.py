@@ -40,7 +40,7 @@ class FeedbackScoreValidator(validator.Validator):
         return self.validation_result
 
     def failure_reason_message(self) -> str:
-        assert (
-            len(self.validation_result.failure_reasons) > 0
-        ), "validate() must be called before accessing failure reason message"
+        assert len(self.validation_result.failure_reasons) > 0, (
+            "validate() must be called before accessing failure reason message"
+        )
         return self.validation_result.failure_reasons[0]

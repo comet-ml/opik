@@ -114,7 +114,9 @@ class ExperimentsClient:
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
-        prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
+        prompt_versions: typing.Optional[
+            typing.Sequence[PromptVersionLinkWrite]
+        ] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -197,7 +199,10 @@ class ExperimentsClient:
         return _response.data
 
     def delete_experiment_items(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete experiment items
@@ -219,11 +224,16 @@ class ExperimentsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.experiments.delete_experiment_items(ids=['ids'], )
         """
-        _response = self._raw_client.delete_experiment_items(ids=ids, request_options=request_options)
+        _response = self._raw_client.delete_experiment_items(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     def delete_experiments_by_id(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete experiments by id
@@ -245,7 +255,9 @@ class ExperimentsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.experiments.delete_experiments_by_id(ids=['ids'], )
         """
-        _response = self._raw_client.delete_experiments_by_id(ids=ids, request_options=request_options)
+        _response = self._raw_client.delete_experiments_by_id(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     def experiment_items_bulk(
@@ -282,12 +294,18 @@ class ExperimentsClient:
         client.experiments.experiment_items_bulk(experiment_name='experiment_name', dataset_name='dataset_name', items=[ExperimentItemBulkRecordExperimentItemBulkWriteView(dataset_item_id='dataset_item_id', )], )
         """
         _response = self._raw_client.experiment_items_bulk(
-            experiment_name=experiment_name, dataset_name=dataset_name, items=items, request_options=request_options
+            experiment_name=experiment_name,
+            dataset_name=dataset_name,
+            items=items,
+            request_options=request_options,
         )
         return _response.data
 
     def find_feedback_score_names(
-        self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        experiment_ids: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.List[str]:
         """
         Find Feedback Score names
@@ -339,7 +357,9 @@ class ExperimentsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.experiments.get_experiment_by_id(id='id', )
         """
-        _response = self._raw_client.get_experiment_by_id(id, request_options=request_options)
+        _response = self._raw_client.get_experiment_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     def get_experiment_item_by_id(
@@ -366,7 +386,9 @@ class ExperimentsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.experiments.get_experiment_item_by_id(id='id', )
         """
-        _response = self._raw_client.get_experiment_item_by_id(id, request_options=request_options)
+        _response = self._raw_client.get_experiment_item_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     def stream_experiment_items(
@@ -437,7 +459,10 @@ class ExperimentsClient:
             Experiments stream or error during process
         """
         with self._raw_client.stream_experiments(
-            name=name, limit=limit, last_retrieved_id=last_retrieved_id, request_options=request_options
+            name=name,
+            limit=limit,
+            last_retrieved_id=last_retrieved_id,
+            request_options=request_options,
         ) as r:
             yield from r.data
 
@@ -539,7 +564,9 @@ class AsyncExperimentsClient:
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
-        prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
+        prompt_versions: typing.Optional[
+            typing.Sequence[PromptVersionLinkWrite]
+        ] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -628,7 +655,10 @@ class AsyncExperimentsClient:
         return _response.data
 
     async def delete_experiment_items(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete experiment items
@@ -653,11 +683,16 @@ class AsyncExperimentsClient:
             await client.experiments.delete_experiment_items(ids=['ids'], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_experiment_items(ids=ids, request_options=request_options)
+        _response = await self._raw_client.delete_experiment_items(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     async def delete_experiments_by_id(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete experiments by id
@@ -682,7 +717,9 @@ class AsyncExperimentsClient:
             await client.experiments.delete_experiments_by_id(ids=['ids'], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_experiments_by_id(ids=ids, request_options=request_options)
+        _response = await self._raw_client.delete_experiments_by_id(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     async def experiment_items_bulk(
@@ -722,12 +759,18 @@ class AsyncExperimentsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.experiment_items_bulk(
-            experiment_name=experiment_name, dataset_name=dataset_name, items=items, request_options=request_options
+            experiment_name=experiment_name,
+            dataset_name=dataset_name,
+            items=items,
+            request_options=request_options,
         )
         return _response.data
 
     async def find_feedback_score_names(
-        self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        experiment_ids: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.List[str]:
         """
         Find Feedback Score names
@@ -785,7 +828,9 @@ class AsyncExperimentsClient:
             await client.experiments.get_experiment_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_experiment_by_id(id, request_options=request_options)
+        _response = await self._raw_client.get_experiment_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     async def get_experiment_item_by_id(
@@ -815,7 +860,9 @@ class AsyncExperimentsClient:
             await client.experiments.get_experiment_item_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_experiment_item_by_id(id, request_options=request_options)
+        _response = await self._raw_client.get_experiment_item_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     async def stream_experiment_items(
@@ -887,7 +934,10 @@ class AsyncExperimentsClient:
             Experiments stream or error during process
         """
         async with self._raw_client.stream_experiments(
-            name=name, limit=limit, last_retrieved_id=last_retrieved_id, request_options=request_options
+            name=name,
+            limit=limit,
+            last_retrieved_id=last_retrieved_id,
+            request_options=request_options,
         ) as r:
             async for data in r.data:
                 yield data

@@ -2,4 +2,6 @@
 
 import typing
 
-ProjectMetricRequestPublicInterval = typing.Union[typing.Literal["HOURLY", "DAILY", "WEEKLY"], typing.Any]
+ProjectMetricRequestPublicInterval = typing.Union[
+    typing.Literal["HOURLY", "DAILY", "WEEKLY"], typing.Any
+]

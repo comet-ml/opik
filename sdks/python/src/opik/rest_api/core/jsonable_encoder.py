@@ -28,7 +28,9 @@ SetIntStr = Set[Union[int, str]]
 DictIntStrAny = Dict[Union[int, str], Any]
 
 
-def jsonable_encoder(obj: Any, custom_encoder: Optional[Dict[Any, Callable[[Any], Any]]] = None) -> Any:
+def jsonable_encoder(
+    obj: Any, custom_encoder: Optional[Dict[Any, Callable[[Any], Any]]] = None
+) -> Any:
     custom_encoder = custom_encoder or {}
     if custom_encoder:
         if type(obj) in custom_encoder:

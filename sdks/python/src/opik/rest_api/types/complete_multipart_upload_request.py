@@ -4,7 +4,9 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .complete_multipart_upload_request_entity_type import CompleteMultipartUploadRequestEntityType
+from .complete_multipart_upload_request_entity_type import (
+    CompleteMultipartUploadRequestEntityType,
+)
 from .multipart_upload_part import MultipartUploadPart
 
 
@@ -24,7 +26,9 @@ class CompleteMultipartUploadRequest(UniversalBaseModel):
     uploaded_file_parts: typing.List[MultipartUploadPart]
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:

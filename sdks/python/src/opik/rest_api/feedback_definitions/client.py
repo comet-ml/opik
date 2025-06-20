@@ -9,7 +9,9 @@ from ..types.feedback_definition_page_public import FeedbackDefinitionPagePublic
 from ..types.feedback_public import FeedbackPublic
 from ..types.feedback_update import FeedbackUpdate
 from .raw_client import AsyncRawFeedbackDefinitionsClient, RawFeedbackDefinitionsClient
-from .types.find_feedback_definitions_request_type import FindFeedbackDefinitionsRequestType
+from .types.find_feedback_definitions_request_type import (
+    FindFeedbackDefinitionsRequestType,
+)
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -72,7 +74,10 @@ class FeedbackDefinitionsClient:
         return _response.data
 
     def create_feedback_definition(
-        self, *, request: FeedbackCreate, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        request: FeedbackCreate,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Get feedback definition
@@ -95,7 +100,9 @@ class FeedbackDefinitionsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.feedback_definitions.create_feedback_definition(request=FeedbackCreate_Numerical(), )
         """
-        _response = self._raw_client.create_feedback_definition(request=request, request_options=request_options)
+        _response = self._raw_client.create_feedback_definition(
+            request=request, request_options=request_options
+        )
         return _response.data
 
     def get_feedback_definition_by_id(
@@ -122,11 +129,17 @@ class FeedbackDefinitionsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.feedback_definitions.get_feedback_definition_by_id(id='id', )
         """
-        _response = self._raw_client.get_feedback_definition_by_id(id, request_options=request_options)
+        _response = self._raw_client.get_feedback_definition_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     def update_feedback_definition(
-        self, id: str, *, request: FeedbackUpdate, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        request: FeedbackUpdate,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Update feedback definition by id
@@ -151,7 +164,9 @@ class FeedbackDefinitionsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.feedback_definitions.update_feedback_definition(id='id', request=FeedbackUpdate_Numerical(), )
         """
-        _response = self._raw_client.update_feedback_definition(id, request=request, request_options=request_options)
+        _response = self._raw_client.update_feedback_definition(
+            id, request=request, request_options=request_options
+        )
         return _response.data
 
     def delete_feedback_definition_by_id(
@@ -177,11 +192,16 @@ class FeedbackDefinitionsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.feedback_definitions.delete_feedback_definition_by_id(id='id', )
         """
-        _response = self._raw_client.delete_feedback_definition_by_id(id, request_options=request_options)
+        _response = self._raw_client.delete_feedback_definition_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     def delete_feedback_definitions_batch(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete feedback definitions batch
@@ -203,13 +223,17 @@ class FeedbackDefinitionsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.feedback_definitions.delete_feedback_definitions_batch(ids=['ids'], )
         """
-        _response = self._raw_client.delete_feedback_definitions_batch(ids=ids, request_options=request_options)
+        _response = self._raw_client.delete_feedback_definitions_batch(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
 
 class AsyncFeedbackDefinitionsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
-        self._raw_client = AsyncRawFeedbackDefinitionsClient(client_wrapper=client_wrapper)
+        self._raw_client = AsyncRawFeedbackDefinitionsClient(
+            client_wrapper=client_wrapper
+        )
 
     @property
     def with_raw_response(self) -> AsyncRawFeedbackDefinitionsClient:
@@ -267,7 +291,10 @@ class AsyncFeedbackDefinitionsClient:
         return _response.data
 
     async def create_feedback_definition(
-        self, *, request: FeedbackCreate, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        request: FeedbackCreate,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Get feedback definition
@@ -293,7 +320,9 @@ class AsyncFeedbackDefinitionsClient:
             await client.feedback_definitions.create_feedback_definition(request=FeedbackCreate_Numerical(), )
         asyncio.run(main())
         """
-        _response = await self._raw_client.create_feedback_definition(request=request, request_options=request_options)
+        _response = await self._raw_client.create_feedback_definition(
+            request=request, request_options=request_options
+        )
         return _response.data
 
     async def get_feedback_definition_by_id(
@@ -323,11 +352,17 @@ class AsyncFeedbackDefinitionsClient:
             await client.feedback_definitions.get_feedback_definition_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_feedback_definition_by_id(id, request_options=request_options)
+        _response = await self._raw_client.get_feedback_definition_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     async def update_feedback_definition(
-        self, id: str, *, request: FeedbackUpdate, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        request: FeedbackUpdate,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Update feedback definition by id
@@ -386,11 +421,16 @@ class AsyncFeedbackDefinitionsClient:
             await client.feedback_definitions.delete_feedback_definition_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_feedback_definition_by_id(id, request_options=request_options)
+        _response = await self._raw_client.delete_feedback_definition_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     async def delete_feedback_definitions_batch(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete feedback definitions batch
@@ -415,5 +455,7 @@ class AsyncFeedbackDefinitionsClient:
             await client.feedback_definitions.delete_feedback_definitions_batch(ids=['ids'], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_feedback_definitions_batch(ids=ids, request_options=request_options)
+        _response = await self._raw_client.delete_feedback_definitions_batch(
+            ids=ids, request_options=request_options
+        )
         return _response.data

@@ -3,7 +3,9 @@
 # isort: skip_file
 
 from .project_metric_request_public_interval import ProjectMetricRequestPublicInterval
-from .project_metric_request_public_metric_type import ProjectMetricRequestPublicMetricType
+from .project_metric_request_public_metric_type import (
+    ProjectMetricRequestPublicMetricType,
+)
 from .project_update_visibility import ProjectUpdateVisibility
 from .project_write_visibility import ProjectWriteVisibility
 

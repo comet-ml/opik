@@ -21,10 +21,14 @@ from ..types.span_public import SpanPublic
 from ..types.span_write import SpanWrite
 from ..types.span_write_type import SpanWriteType
 from .raw_client import AsyncRawSpansClient, RawSpansClient
-from .types.find_feedback_score_names_1_request_type import FindFeedbackScoreNames1RequestType
+from .types.find_feedback_score_names_1_request_type import (
+    FindFeedbackScoreNames1RequestType,
+)
 from .types.get_span_stats_request_type import GetSpanStatsRequestType
 from .types.get_spans_by_project_request_type import GetSpansByProjectRequestType
-from .types.span_search_stream_request_public_type import SpanSearchStreamRequestPublicType
+from .types.span_search_stream_request_public_type import (
+    SpanSearchStreamRequestPublicType,
+)
 from .types.span_update_type import SpanUpdateType
 
 # this is used as the default value for optional parameters
@@ -346,7 +350,10 @@ class SpansClient:
         return _response.data
 
     def create_spans(
-        self, *, spans: typing.Sequence[SpanWrite], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        spans: typing.Sequence[SpanWrite],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Create spans
@@ -370,10 +377,14 @@ class SpansClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.spans.create_spans(spans=[SpanWrite(trace_id='trace_id', start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )], )
         """
-        _response = self._raw_client.create_spans(spans=spans, request_options=request_options)
+        _response = self._raw_client.create_spans(
+            spans=spans, request_options=request_options
+        )
         return _response.data
 
-    def get_span_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> SpanPublic:
+    def get_span_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> SpanPublic:
         """
         Get span by id
 
@@ -398,7 +409,9 @@ class SpansClient:
         _response = self._raw_client.get_span_by_id(id, request_options=request_options)
         return _response.data
 
-    def delete_span_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    def delete_span_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
         """
         Delete span by id
 
@@ -419,7 +432,9 @@ class SpansClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.spans.delete_span_by_id(id='id', )
         """
-        _response = self._raw_client.delete_span_by_id(id, request_options=request_options)
+        _response = self._raw_client.delete_span_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     def update_span(
@@ -521,7 +536,10 @@ class SpansClient:
         return _response.data
 
     def delete_span_comments(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete span comments
@@ -543,11 +561,17 @@ class SpansClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.spans.delete_span_comments(ids=['ids'], )
         """
-        _response = self._raw_client.delete_span_comments(ids=ids, request_options=request_options)
+        _response = self._raw_client.delete_span_comments(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     def delete_span_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete span feedback score
@@ -571,7 +595,9 @@ class SpansClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.spans.delete_span_feedback_score(id='id', name='name', )
         """
-        _response = self._raw_client.delete_span_feedback_score(id, name=name, request_options=request_options)
+        _response = self._raw_client.delete_span_feedback_score(
+            id, name=name, request_options=request_options
+        )
         return _response.data
 
     def find_feedback_score_names_1(
@@ -610,7 +636,11 @@ class SpansClient:
         return _response.data
 
     def get_span_comment(
-        self, comment_id: str, span_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        comment_id: str,
+        span_id: str,
+        *,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> Comment:
         """
         Get span comment
@@ -635,7 +665,9 @@ class SpansClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.spans.get_span_comment(comment_id='commentId', span_id='spanId', )
         """
-        _response = self._raw_client.get_span_comment(comment_id, span_id, request_options=request_options)
+        _response = self._raw_client.get_span_comment(
+            comment_id, span_id, request_options=request_options
+        )
         return _response.data
 
     def get_span_stats(
@@ -714,7 +746,9 @@ class SpansClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.spans.score_batch_of_spans(scores=[FeedbackScoreBatchItem(id='id', name='name', value=1.1, source="ui", )], )
         """
-        _response = self._raw_client.score_batch_of_spans(scores=scores, request_options=request_options)
+        _response = self._raw_client.score_batch_of_spans(
+            scores=scores, request_options=request_options
+        )
         return _response.data
 
     def search_spans(
@@ -1158,7 +1192,10 @@ class AsyncSpansClient:
         return _response.data
 
     async def create_spans(
-        self, *, spans: typing.Sequence[SpanWrite], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        spans: typing.Sequence[SpanWrite],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Create spans
@@ -1185,10 +1222,14 @@ class AsyncSpansClient:
             await client.spans.create_spans(spans=[SpanWrite(trace_id='trace_id', start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.create_spans(spans=spans, request_options=request_options)
+        _response = await self._raw_client.create_spans(
+            spans=spans, request_options=request_options
+        )
         return _response.data
 
-    async def get_span_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> SpanPublic:
+    async def get_span_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> SpanPublic:
         """
         Get span by id
 
@@ -1213,10 +1254,14 @@ class AsyncSpansClient:
             await client.spans.get_span_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_span_by_id(id, request_options=request_options)
+        _response = await self._raw_client.get_span_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
-    async def delete_span_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    async def delete_span_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
         """
         Delete span by id
 
@@ -1240,7 +1285,9 @@ class AsyncSpansClient:
             await client.spans.delete_span_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_span_by_id(id, request_options=request_options)
+        _response = await self._raw_client.delete_span_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     async def update_span(
@@ -1345,7 +1392,10 @@ class AsyncSpansClient:
         return _response.data
 
     async def delete_span_comments(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete span comments
@@ -1370,11 +1420,17 @@ class AsyncSpansClient:
             await client.spans.delete_span_comments(ids=['ids'], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_span_comments(ids=ids, request_options=request_options)
+        _response = await self._raw_client.delete_span_comments(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     async def delete_span_feedback_score(
-        self, id: str, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        name: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete span feedback score
@@ -1401,7 +1457,9 @@ class AsyncSpansClient:
             await client.spans.delete_span_feedback_score(id='id', name='name', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_span_feedback_score(id, name=name, request_options=request_options)
+        _response = await self._raw_client.delete_span_feedback_score(
+            id, name=name, request_options=request_options
+        )
         return _response.data
 
     async def find_feedback_score_names_1(
@@ -1443,7 +1501,11 @@ class AsyncSpansClient:
         return _response.data
 
     async def get_span_comment(
-        self, comment_id: str, span_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        comment_id: str,
+        span_id: str,
+        *,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> Comment:
         """
         Get span comment
@@ -1471,7 +1533,9 @@ class AsyncSpansClient:
             await client.spans.get_span_comment(comment_id='commentId', span_id='spanId', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_span_comment(comment_id, span_id, request_options=request_options)
+        _response = await self._raw_client.get_span_comment(
+            comment_id, span_id, request_options=request_options
+        )
         return _response.data
 
     async def get_span_stats(
@@ -1556,7 +1620,9 @@ class AsyncSpansClient:
             await client.spans.score_batch_of_spans(scores=[FeedbackScoreBatchItem(id='id', name='name', value=1.1, source="ui", )], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.score_batch_of_spans(scores=scores, request_options=request_options)
+        _response = await self._raw_client.score_batch_of_spans(
+            scores=scores, request_options=request_options
+        )
         return _response.data
 
     async def search_spans(

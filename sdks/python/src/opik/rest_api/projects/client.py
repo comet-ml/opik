@@ -12,8 +12,12 @@ from ..types.project_page_public import ProjectPagePublic
 from ..types.project_public import ProjectPublic
 from ..types.project_stats_summary import ProjectStatsSummary
 from .raw_client import AsyncRawProjectsClient, RawProjectsClient
-from .types.project_metric_request_public_interval import ProjectMetricRequestPublicInterval
-from .types.project_metric_request_public_metric_type import ProjectMetricRequestPublicMetricType
+from .types.project_metric_request_public_interval import (
+    ProjectMetricRequestPublicInterval,
+)
+from .types.project_metric_request_public_metric_type import (
+    ProjectMetricRequestPublicMetricType,
+)
 from .types.project_update_visibility import ProjectUpdateVisibility
 from .types.project_write_visibility import ProjectWriteVisibility
 
@@ -73,7 +77,11 @@ class ProjectsClient:
         client.projects.find_projects()
         """
         _response = self._raw_client.find_projects(
-            page=page, size=size, name=name, sorting=sorting, request_options=request_options
+            page=page,
+            size=size,
+            name=name,
+            sorting=sorting,
+            request_options=request_options,
         )
         return _response.data
 
@@ -110,11 +118,16 @@ class ProjectsClient:
         client.projects.create_project(name='name', )
         """
         _response = self._raw_client.create_project(
-            name=name, visibility=visibility, description=description, request_options=request_options
+            name=name,
+            visibility=visibility,
+            description=description,
+            request_options=request_options,
         )
         return _response.data
 
-    def get_project_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> ProjectPublic:
+    def get_project_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> ProjectPublic:
         """
         Get project by id
 
@@ -136,10 +149,14 @@ class ProjectsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.projects.get_project_by_id(id='id', )
         """
-        _response = self._raw_client.get_project_by_id(id, request_options=request_options)
+        _response = self._raw_client.get_project_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
-    def delete_project_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    def delete_project_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
         """
         Delete project by id
 
@@ -160,7 +177,9 @@ class ProjectsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.projects.delete_project_by_id(id='id', )
         """
-        _response = self._raw_client.delete_project_by_id(id, request_options=request_options)
+        _response = self._raw_client.delete_project_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     def update_project(
@@ -199,12 +218,19 @@ class ProjectsClient:
         client.projects.update_project(id='id', )
         """
         _response = self._raw_client.update_project(
-            id, name=name, description=description, visibility=visibility, request_options=request_options
+            id,
+            name=name,
+            description=description,
+            visibility=visibility,
+            request_options=request_options,
         )
         return _response.data
 
     def delete_projects_batch(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete projects batch
@@ -226,11 +252,16 @@ class ProjectsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.projects.delete_projects_batch(ids=['ids'], )
         """
-        _response = self._raw_client.delete_projects_batch(ids=ids, request_options=request_options)
+        _response = self._raw_client.delete_projects_batch(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     def find_feedback_score_names_by_project_ids(
-        self, *, project_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        project_ids: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> FeedbackScoreNames:
         """
         Find Feedback Score names By Project Ids
@@ -344,7 +375,11 @@ class ProjectsClient:
         client.projects.get_project_stats()
         """
         _response = self._raw_client.get_project_stats(
-            page=page, size=size, name=name, sorting=sorting, request_options=request_options
+            page=page,
+            size=size,
+            name=name,
+            sorting=sorting,
+            request_options=request_options,
         )
         return _response.data
 
@@ -372,7 +407,9 @@ class ProjectsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.projects.retrieve_project(name='name', )
         """
-        _response = self._raw_client.retrieve_project(name=name, request_options=request_options)
+        _response = self._raw_client.retrieve_project(
+            name=name, request_options=request_options
+        )
         return _response.data
 
 
@@ -431,7 +468,11 @@ class AsyncProjectsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.find_projects(
-            page=page, size=size, name=name, sorting=sorting, request_options=request_options
+            page=page,
+            size=size,
+            name=name,
+            sorting=sorting,
+            request_options=request_options,
         )
         return _response.data
 
@@ -471,7 +512,10 @@ class AsyncProjectsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_project(
-            name=name, visibility=visibility, description=description, request_options=request_options
+            name=name,
+            visibility=visibility,
+            description=description,
+            request_options=request_options,
         )
         return _response.data
 
@@ -502,10 +546,14 @@ class AsyncProjectsClient:
             await client.projects.get_project_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_project_by_id(id, request_options=request_options)
+        _response = await self._raw_client.get_project_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
-    async def delete_project_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    async def delete_project_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
         """
         Delete project by id
 
@@ -529,7 +577,9 @@ class AsyncProjectsClient:
             await client.projects.delete_project_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_project_by_id(id, request_options=request_options)
+        _response = await self._raw_client.delete_project_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     async def update_project(
@@ -571,12 +621,19 @@ class AsyncProjectsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.update_project(
-            id, name=name, description=description, visibility=visibility, request_options=request_options
+            id,
+            name=name,
+            description=description,
+            visibility=visibility,
+            request_options=request_options,
         )
         return _response.data
 
     async def delete_projects_batch(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete projects batch
@@ -601,11 +658,16 @@ class AsyncProjectsClient:
             await client.projects.delete_projects_batch(ids=['ids'], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_projects_batch(ids=ids, request_options=request_options)
+        _response = await self._raw_client.delete_projects_batch(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     async def find_feedback_score_names_by_project_ids(
-        self, *, project_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        project_ids: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> FeedbackScoreNames:
         """
         Find Feedback Score names By Project Ids
@@ -728,7 +790,11 @@ class AsyncProjectsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_project_stats(
-            page=page, size=size, name=name, sorting=sorting, request_options=request_options
+            page=page,
+            size=size,
+            name=name,
+            sorting=sorting,
+            request_options=request_options,
         )
         return _response.data
 
@@ -759,5 +825,7 @@ class AsyncProjectsClient:
             await client.projects.retrieve_project(name='name', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.retrieve_project(name=name, request_options=request_options)
+        _response = await self._raw_client.retrieve_project(
+            name=name, request_options=request_options
+        )
         return _response.data

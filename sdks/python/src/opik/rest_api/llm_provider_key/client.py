@@ -29,7 +29,10 @@ class LlmProviderKeyClient:
         return self._raw_client
 
     def delete_llm_provider_api_keys_batch(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete LLM Provider's ApiKeys batch
@@ -51,7 +54,9 @@ class LlmProviderKeyClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.llm_provider_key.delete_llm_provider_api_keys_batch(ids=['ids'], )
         """
-        _response = self._raw_client.delete_llm_provider_api_keys_batch(ids=ids, request_options=request_options)
+        _response = self._raw_client.delete_llm_provider_api_keys_batch(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     def find_llm_provider_keys(
@@ -76,7 +81,9 @@ class LlmProviderKeyClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.llm_provider_key.find_llm_provider_keys()
         """
-        _response = self._raw_client.find_llm_provider_keys(request_options=request_options)
+        _response = self._raw_client.find_llm_provider_keys(
+            request_options=request_options
+        )
         return _response.data
 
     def store_llm_provider_api_key(
@@ -155,7 +162,9 @@ class LlmProviderKeyClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.llm_provider_key.get_llm_provider_api_key_by_id(id='id', )
         """
-        _response = self._raw_client.get_llm_provider_api_key_by_id(id, request_options=request_options)
+        _response = self._raw_client.get_llm_provider_api_key_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     def update_llm_provider_api_key(
@@ -212,7 +221,10 @@ class AsyncLlmProviderKeyClient:
         return self._raw_client
 
     async def delete_llm_provider_api_keys_batch(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete LLM Provider's ApiKeys batch
@@ -237,7 +249,9 @@ class AsyncLlmProviderKeyClient:
             await client.llm_provider_key.delete_llm_provider_api_keys_batch(ids=['ids'], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_llm_provider_api_keys_batch(ids=ids, request_options=request_options)
+        _response = await self._raw_client.delete_llm_provider_api_keys_batch(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     async def find_llm_provider_keys(
@@ -265,7 +279,9 @@ class AsyncLlmProviderKeyClient:
             await client.llm_provider_key.find_llm_provider_keys()
         asyncio.run(main())
         """
-        _response = await self._raw_client.find_llm_provider_keys(request_options=request_options)
+        _response = await self._raw_client.find_llm_provider_keys(
+            request_options=request_options
+        )
         return _response.data
 
     async def store_llm_provider_api_key(
@@ -350,7 +366,9 @@ class AsyncLlmProviderKeyClient:
             await client.llm_provider_key.get_llm_provider_api_key_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_llm_provider_api_key_by_id(id, request_options=request_options)
+        _response = await self._raw_client.get_llm_provider_api_key_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     async def update_llm_provider_api_key(

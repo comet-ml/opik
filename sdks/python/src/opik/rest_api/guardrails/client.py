@@ -27,7 +27,10 @@ class GuardrailsClient:
         return self._raw_client
 
     def create_guardrails(
-        self, *, guardrails: typing.Sequence[GuardrailWrite], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        guardrails: typing.Sequence[GuardrailWrite],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Batch guardrails for traces
@@ -52,7 +55,9 @@ class GuardrailsClient:
         }, details={'key': 'value'
         }, )], )
         """
-        _response = self._raw_client.create_guardrails(guardrails=guardrails, request_options=request_options)
+        _response = self._raw_client.create_guardrails(
+            guardrails=guardrails, request_options=request_options
+        )
         return _response.data
 
 
@@ -72,7 +77,10 @@ class AsyncGuardrailsClient:
         return self._raw_client
 
     async def create_guardrails(
-        self, *, guardrails: typing.Sequence[GuardrailWrite], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        guardrails: typing.Sequence[GuardrailWrite],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Batch guardrails for traces
@@ -100,5 +108,7 @@ class AsyncGuardrailsClient:
             }, )], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.create_guardrails(guardrails=guardrails, request_options=request_options)
+        _response = await self._raw_client.create_guardrails(
+            guardrails=guardrails, request_options=request_options
+        )
         return _response.data

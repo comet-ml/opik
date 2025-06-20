@@ -13,14 +13,22 @@ from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.forbidden_error import ForbiddenError
 from ..errors.unauthorized_error import UnauthorizedError
 from ..types.attachment_page import AttachmentPage
-from ..types.complete_multipart_upload_request_entity_type import CompleteMultipartUploadRequestEntityType
+from ..types.complete_multipart_upload_request_entity_type import (
+    CompleteMultipartUploadRequestEntityType,
+)
 from ..types.error_message import ErrorMessage
 from ..types.multipart_upload_part import MultipartUploadPart
 from ..types.start_multipart_upload_response import StartMultipartUploadResponse
 from .types.attachment_list_request_entity_type import AttachmentListRequestEntityType
-from .types.download_attachment_request_entity_type import DownloadAttachmentRequestEntityType
-from .types.start_multipart_upload_request_entity_type import StartMultipartUploadRequestEntityType
-from .types.upload_attachment_request_entity_type import UploadAttachmentRequestEntityType
+from .types.download_attachment_request_entity_type import (
+    DownloadAttachmentRequestEntityType,
+)
+from .types.start_multipart_upload_request_entity_type import (
+    StartMultipartUploadRequestEntityType,
+)
+from .types.upload_attachment_request_entity_type import (
+    UploadAttachmentRequestEntityType,
+)
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -113,8 +121,16 @@ class RawAttachmentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def complete_multi_part_upload(
         self,
@@ -174,7 +190,9 @@ class RawAttachmentsClient:
                 "mime_type": mime_type,
                 "upload_id": upload_id,
                 "uploaded_file_parts": convert_and_respect_annotation_metadata(
-                    object_=uploaded_file_parts, annotation=typing.Sequence[MultipartUploadPart], direction="write"
+                    object_=uploaded_file_parts,
+                    annotation=typing.Sequence[MultipartUploadPart],
+                    direction="write",
                 ),
             },
             headers={
@@ -210,8 +228,16 @@ class RawAttachmentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def delete_attachments(
         self,
@@ -271,7 +297,9 @@ class RawAttachmentsClient:
                 "mime_type": mime_type,
                 "upload_id": upload_id,
                 "uploaded_file_parts": convert_and_respect_annotation_metadata(
-                    object_=uploaded_file_parts, annotation=typing.Sequence[MultipartUploadPart], direction="write"
+                    object_=uploaded_file_parts,
+                    annotation=typing.Sequence[MultipartUploadPart],
+                    direction="write",
                 ),
             },
             headers={
@@ -307,8 +335,16 @@ class RawAttachmentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     @contextlib.contextmanager
     def download_attachment(
@@ -364,9 +400,19 @@ class RawAttachmentsClient:
             def stream() -> HttpResponse[typing.Iterator[bytes]]:
                 try:
                     if 200 <= _response.status_code < 300:
-                        _chunk_size = request_options.get("chunk_size", None) if request_options is not None else None
+                        _chunk_size = (
+                            request_options.get("chunk_size", None)
+                            if request_options is not None
+                            else None
+                        )
                         return HttpResponse(
-                            response=_response, data=(_chunk for _chunk in _response.iter_bytes(chunk_size=_chunk_size))
+                            response=_response,
+                            data=(
+                                _chunk
+                                for _chunk in _response.iter_bytes(
+                                    chunk_size=_chunk_size
+                                )
+                            ),
                         )
                     _response.read()
                     if _response.status_code == 401:
@@ -394,9 +440,15 @@ class RawAttachmentsClient:
                     _response_json = _response.json()
                 except JSONDecodeError:
                     raise ApiError(
-                        status_code=_response.status_code, headers=dict(_response.headers), body=_response.text
+                        status_code=_response.status_code,
+                        headers=dict(_response.headers),
+                        body=_response.text,
                     )
-                raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+                raise ApiError(
+                    status_code=_response.status_code,
+                    headers=dict(_response.headers),
+                    body=_response_json,
+                )
 
             yield stream()
 
@@ -492,8 +544,16 @@ class RawAttachmentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def upload_attachment(
         self,
@@ -571,8 +631,16 @@ class RawAttachmentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
 
 class AsyncRawAttachmentsClient:
@@ -662,8 +730,16 @@ class AsyncRawAttachmentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def complete_multi_part_upload(
         self,
@@ -723,7 +799,9 @@ class AsyncRawAttachmentsClient:
                 "mime_type": mime_type,
                 "upload_id": upload_id,
                 "uploaded_file_parts": convert_and_respect_annotation_metadata(
-                    object_=uploaded_file_parts, annotation=typing.Sequence[MultipartUploadPart], direction="write"
+                    object_=uploaded_file_parts,
+                    annotation=typing.Sequence[MultipartUploadPart],
+                    direction="write",
                 ),
             },
             headers={
@@ -759,8 +837,16 @@ class AsyncRawAttachmentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def delete_attachments(
         self,
@@ -820,7 +906,9 @@ class AsyncRawAttachmentsClient:
                 "mime_type": mime_type,
                 "upload_id": upload_id,
                 "uploaded_file_parts": convert_and_respect_annotation_metadata(
-                    object_=uploaded_file_parts, annotation=typing.Sequence[MultipartUploadPart], direction="write"
+                    object_=uploaded_file_parts,
+                    annotation=typing.Sequence[MultipartUploadPart],
+                    direction="write",
                 ),
             },
             headers={
@@ -856,8 +944,16 @@ class AsyncRawAttachmentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     @contextlib.asynccontextmanager
     async def download_attachment(
@@ -913,10 +1009,19 @@ class AsyncRawAttachmentsClient:
             async def stream() -> AsyncHttpResponse[typing.AsyncIterator[bytes]]:
                 try:
                     if 200 <= _response.status_code < 300:
-                        _chunk_size = request_options.get("chunk_size", None) if request_options is not None else None
+                        _chunk_size = (
+                            request_options.get("chunk_size", None)
+                            if request_options is not None
+                            else None
+                        )
                         return AsyncHttpResponse(
                             response=_response,
-                            data=(_chunk async for _chunk in _response.aiter_bytes(chunk_size=_chunk_size)),
+                            data=(
+                                _chunk
+                                async for _chunk in _response.aiter_bytes(
+                                    chunk_size=_chunk_size
+                                )
+                            ),
                         )
                     await _response.aread()
                     if _response.status_code == 401:
@@ -944,9 +1049,15 @@ class AsyncRawAttachmentsClient:
                     _response_json = _response.json()
                 except JSONDecodeError:
                     raise ApiError(
-                        status_code=_response.status_code, headers=dict(_response.headers), body=_response.text
+                        status_code=_response.status_code,
+                        headers=dict(_response.headers),
+                        body=_response.text,
                     )
-                raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+                raise ApiError(
+                    status_code=_response.status_code,
+                    headers=dict(_response.headers),
+                    body=_response_json,
+                )
 
             yield await stream()
 
@@ -1042,8 +1153,16 @@ class AsyncRawAttachmentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def upload_attachment(
         self,
@@ -1121,5 +1240,13 @@ class AsyncRawAttachmentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )

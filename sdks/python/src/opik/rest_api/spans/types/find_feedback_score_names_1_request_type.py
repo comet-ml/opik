@@ -2,4 +2,6 @@
 
 import typing
 
-FindFeedbackScoreNames1RequestType = typing.Union[typing.Literal["general", "tool", "llm", "guardrail"], typing.Any]
+FindFeedbackScoreNames1RequestType = typing.Union[
+    typing.Literal["general", "tool", "llm", "guardrail"], typing.Any
+]

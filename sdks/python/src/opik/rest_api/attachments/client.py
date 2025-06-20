@@ -5,14 +5,22 @@ import typing
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.attachment_page import AttachmentPage
-from ..types.complete_multipart_upload_request_entity_type import CompleteMultipartUploadRequestEntityType
+from ..types.complete_multipart_upload_request_entity_type import (
+    CompleteMultipartUploadRequestEntityType,
+)
 from ..types.multipart_upload_part import MultipartUploadPart
 from ..types.start_multipart_upload_response import StartMultipartUploadResponse
 from .raw_client import AsyncRawAttachmentsClient, RawAttachmentsClient
 from .types.attachment_list_request_entity_type import AttachmentListRequestEntityType
-from .types.download_attachment_request_entity_type import DownloadAttachmentRequestEntityType
-from .types.start_multipart_upload_request_entity_type import StartMultipartUploadRequestEntityType
-from .types.upload_attachment_request_entity_type import UploadAttachmentRequestEntityType
+from .types.download_attachment_request_entity_type import (
+    DownloadAttachmentRequestEntityType,
+)
+from .types.start_multipart_upload_request_entity_type import (
+    StartMultipartUploadRequestEntityType,
+)
+from .types.upload_attachment_request_entity_type import (
+    UploadAttachmentRequestEntityType,
+)
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)

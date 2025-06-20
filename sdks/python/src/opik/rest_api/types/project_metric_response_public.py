@@ -5,7 +5,9 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .project_metric_response_public_interval import ProjectMetricResponsePublicInterval
-from .project_metric_response_public_metric_type import ProjectMetricResponsePublicMetricType
+from .project_metric_response_public_metric_type import (
+    ProjectMetricResponsePublicMetricType,
+)
 from .results_number_public import ResultsNumberPublic
 
 
@@ -16,7 +18,9 @@ class ProjectMetricResponsePublic(UniversalBaseModel):
     results: typing.Optional[typing.List[ResultsNumberPublic]] = None
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:

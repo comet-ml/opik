@@ -5,10 +5,18 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .error_info_experiment_item_bulk_write_view import ErrorInfoExperimentItemBulkWriteView
-from .json_list_string_experiment_item_bulk_write_view import JsonListStringExperimentItemBulkWriteView
-from .json_node_experiment_item_bulk_write_view import JsonNodeExperimentItemBulkWriteView
-from .span_experiment_item_bulk_write_view_type import SpanExperimentItemBulkWriteViewType
+from .error_info_experiment_item_bulk_write_view import (
+    ErrorInfoExperimentItemBulkWriteView,
+)
+from .json_list_string_experiment_item_bulk_write_view import (
+    JsonListStringExperimentItemBulkWriteView,
+)
+from .json_node_experiment_item_bulk_write_view import (
+    JsonNodeExperimentItemBulkWriteView,
+)
+from .span_experiment_item_bulk_write_view_type import (
+    SpanExperimentItemBulkWriteViewType,
+)
 
 
 class SpanExperimentItemBulkWriteView(UniversalBaseModel):
@@ -31,7 +39,9 @@ class SpanExperimentItemBulkWriteView(UniversalBaseModel):
     total_estimated_cost_version: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:

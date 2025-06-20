@@ -27,7 +27,12 @@ class CheckClient:
         """
         return self._raw_client
 
-    def access(self, *, request: AuthDetailsHolder, request_options: typing.Optional[RequestOptions] = None) -> None:
+    def access(
+        self,
+        *,
+        request: AuthDetailsHolder,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
         """
         Check user access to workspace
 
@@ -49,10 +54,14 @@ class CheckClient:
         client.check.access(request={'key': 'value'
         }, )
         """
-        _response = self._raw_client.access(request=request, request_options=request_options)
+        _response = self._raw_client.access(
+            request=request, request_options=request_options
+        )
         return _response.data
 
-    def get_workspace_name(self, *, request_options: typing.Optional[RequestOptions] = None) -> WorkspaceNameHolder:
+    def get_workspace_name(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> WorkspaceNameHolder:
         """
         User's default workspace name
 
@@ -92,7 +101,10 @@ class AsyncCheckClient:
         return self._raw_client
 
     async def access(
-        self, *, request: AuthDetailsHolder, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        request: AuthDetailsHolder,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Check user access to workspace
@@ -118,7 +130,9 @@ class AsyncCheckClient:
             }, )
         asyncio.run(main())
         """
-        _response = await self._raw_client.access(request=request, request_options=request_options)
+        _response = await self._raw_client.access(
+            request=request, request_options=request_options
+        )
         return _response.data
 
     async def get_workspace_name(
@@ -146,5 +160,7 @@ class AsyncCheckClient:
             await client.check.get_workspace_name()
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_workspace_name(request_options=request_options)
+        _response = await self._raw_client.get_workspace_name(
+            request_options=request_options
+        )
         return _response.data

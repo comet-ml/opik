@@ -2,4 +2,6 @@
 
 import typing
 
-DatasetItemCompareSource = typing.Union[typing.Literal["manual", "trace", "span", "sdk"], typing.Any]
+DatasetItemCompareSource = typing.Union[
+    typing.Literal["manual", "trace", "span", "sdk"], typing.Any
+]

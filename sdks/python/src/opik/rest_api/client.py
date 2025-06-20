@@ -4,7 +4,10 @@ import typing
 
 import httpx
 from .attachments.client import AsyncAttachmentsClient, AttachmentsClient
-from .automation_rule_evaluators.client import AsyncAutomationRuleEvaluatorsClient, AutomationRuleEvaluatorsClient
+from .automation_rule_evaluators.client import (
+    AsyncAutomationRuleEvaluatorsClient,
+    AutomationRuleEvaluatorsClient,
+)
 from .chat_completions.client import AsyncChatCompletionsClient, ChatCompletionsClient
 from .check.client import AsyncCheckClient, CheckClient
 from .core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
@@ -12,10 +15,16 @@ from .core.request_options import RequestOptions
 from .datasets.client import AsyncDatasetsClient, DatasetsClient
 from .environment import OpikApiEnvironment
 from .experiments.client import AsyncExperimentsClient, ExperimentsClient
-from .feedback_definitions.client import AsyncFeedbackDefinitionsClient, FeedbackDefinitionsClient
+from .feedback_definitions.client import (
+    AsyncFeedbackDefinitionsClient,
+    FeedbackDefinitionsClient,
+)
 from .guardrails.client import AsyncGuardrailsClient, GuardrailsClient
 from .llm_provider_key.client import AsyncLlmProviderKeyClient, LlmProviderKeyClient
-from .open_telemetry_ingestion.client import AsyncOpenTelemetryIngestionClient, OpenTelemetryIngestionClient
+from .open_telemetry_ingestion.client import (
+    AsyncOpenTelemetryIngestionClient,
+    OpenTelemetryIngestionClient,
+)
 from .optimizations.client import AsyncOptimizationsClient, OptimizationsClient
 from .projects.client import AsyncProjectsClient, ProjectsClient
 from .prompts.client import AsyncPromptsClient, PromptsClient
@@ -73,7 +82,11 @@ class OpikApi:
         httpx_client: typing.Optional[httpx.Client] = None,
     ):
         _defaulted_timeout = (
-            timeout if timeout is not None else 60 if httpx_client is None else httpx_client.timeout.read
+            timeout
+            if timeout is not None
+            else 60
+            if httpx_client is None
+            else httpx_client.timeout.read
         )
         self._client_wrapper = SyncClientWrapper(
             base_url=_get_base_url(base_url=base_url, environment=environment),
@@ -81,7 +94,9 @@ class OpikApi:
             workspace_name=workspace_name,
             httpx_client=httpx_client
             if httpx_client is not None
-            else httpx.Client(timeout=_defaulted_timeout, follow_redirects=follow_redirects)
+            else httpx.Client(
+                timeout=_defaulted_timeout, follow_redirects=follow_redirects
+            )
             if follow_redirects is not None
             else httpx.Client(timeout=_defaulted_timeout),
             timeout=_defaulted_timeout,
@@ -90,14 +105,24 @@ class OpikApi:
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
         self.attachments = AttachmentsClient(client_wrapper=self._client_wrapper)
         self.check = CheckClient(client_wrapper=self._client_wrapper)
-        self.automation_rule_evaluators = AutomationRuleEvaluatorsClient(client_wrapper=self._client_wrapper)
-        self.chat_completions = ChatCompletionsClient(client_wrapper=self._client_wrapper)
+        self.automation_rule_evaluators = AutomationRuleEvaluatorsClient(
+            client_wrapper=self._client_wrapper
+        )
+        self.chat_completions = ChatCompletionsClient(
+            client_wrapper=self._client_wrapper
+        )
         self.datasets = DatasetsClient(client_wrapper=self._client_wrapper)
         self.experiments = ExperimentsClient(client_wrapper=self._client_wrapper)
-        self.feedback_definitions = FeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
+        self.feedback_definitions = FeedbackDefinitionsClient(
+            client_wrapper=self._client_wrapper
+        )
         self.guardrails = GuardrailsClient(client_wrapper=self._client_wrapper)
-        self.llm_provider_key = LlmProviderKeyClient(client_wrapper=self._client_wrapper)
-        self.open_telemetry_ingestion = OpenTelemetryIngestionClient(client_wrapper=self._client_wrapper)
+        self.llm_provider_key = LlmProviderKeyClient(
+            client_wrapper=self._client_wrapper
+        )
+        self.open_telemetry_ingestion = OpenTelemetryIngestionClient(
+            client_wrapper=self._client_wrapper
+        )
         self.optimizations = OptimizationsClient(client_wrapper=self._client_wrapper)
         self.projects = ProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = PromptsClient(client_wrapper=self._client_wrapper)
@@ -118,7 +143,9 @@ class OpikApi:
         """
         return self._raw_client
 
-    def is_alive(self, *, request_options: typing.Optional[RequestOptions] = None) -> typing.Optional[typing.Any]:
+    def is_alive(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.Optional[typing.Any]:
         """
         Parameters
         ----------
@@ -139,7 +166,9 @@ class OpikApi:
         _response = self._raw_client.is_alive(request_options=request_options)
         return _response.data
 
-    def version(self, *, request_options: typing.Optional[RequestOptions] = None) -> typing.Optional[typing.Any]:
+    def version(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.Optional[typing.Any]:
         """
         Parameters
         ----------
@@ -206,7 +235,11 @@ class AsyncOpikApi:
         httpx_client: typing.Optional[httpx.AsyncClient] = None,
     ):
         _defaulted_timeout = (
-            timeout if timeout is not None else 60 if httpx_client is None else httpx_client.timeout.read
+            timeout
+            if timeout is not None
+            else 60
+            if httpx_client is None
+            else httpx_client.timeout.read
         )
         self._client_wrapper = AsyncClientWrapper(
             base_url=_get_base_url(base_url=base_url, environment=environment),
@@ -214,7 +247,9 @@ class AsyncOpikApi:
             workspace_name=workspace_name,
             httpx_client=httpx_client
             if httpx_client is not None
-            else httpx.AsyncClient(timeout=_defaulted_timeout, follow_redirects=follow_redirects)
+            else httpx.AsyncClient(
+                timeout=_defaulted_timeout, follow_redirects=follow_redirects
+            )
             if follow_redirects is not None
             else httpx.AsyncClient(timeout=_defaulted_timeout),
             timeout=_defaulted_timeout,
@@ -223,18 +258,32 @@ class AsyncOpikApi:
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
         self.attachments = AsyncAttachmentsClient(client_wrapper=self._client_wrapper)
         self.check = AsyncCheckClient(client_wrapper=self._client_wrapper)
-        self.automation_rule_evaluators = AsyncAutomationRuleEvaluatorsClient(client_wrapper=self._client_wrapper)
-        self.chat_completions = AsyncChatCompletionsClient(client_wrapper=self._client_wrapper)
+        self.automation_rule_evaluators = AsyncAutomationRuleEvaluatorsClient(
+            client_wrapper=self._client_wrapper
+        )
+        self.chat_completions = AsyncChatCompletionsClient(
+            client_wrapper=self._client_wrapper
+        )
         self.datasets = AsyncDatasetsClient(client_wrapper=self._client_wrapper)
         self.experiments = AsyncExperimentsClient(client_wrapper=self._client_wrapper)
-        self.feedback_definitions = AsyncFeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
+        self.feedback_definitions = AsyncFeedbackDefinitionsClient(
+            client_wrapper=self._client_wrapper
+        )
         self.guardrails = AsyncGuardrailsClient(client_wrapper=self._client_wrapper)
-        self.llm_provider_key = AsyncLlmProviderKeyClient(client_wrapper=self._client_wrapper)
-        self.open_telemetry_ingestion = AsyncOpenTelemetryIngestionClient(client_wrapper=self._client_wrapper)
-        self.optimizations = AsyncOptimizationsClient(client_wrapper=self._client_wrapper)
+        self.llm_provider_key = AsyncLlmProviderKeyClient(
+            client_wrapper=self._client_wrapper
+        )
+        self.open_telemetry_ingestion = AsyncOpenTelemetryIngestionClient(
+            client_wrapper=self._client_wrapper
+        )
+        self.optimizations = AsyncOptimizationsClient(
+            client_wrapper=self._client_wrapper
+        )
         self.projects = AsyncProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = AsyncPromptsClient(client_wrapper=self._client_wrapper)
-        self.service_toggles = AsyncServiceTogglesClient(client_wrapper=self._client_wrapper)
+        self.service_toggles = AsyncServiceTogglesClient(
+            client_wrapper=self._client_wrapper
+        )
         self.spans = AsyncSpansClient(client_wrapper=self._client_wrapper)
         self.traces = AsyncTracesClient(client_wrapper=self._client_wrapper)
         self.workspaces = AsyncWorkspacesClient(client_wrapper=self._client_wrapper)
@@ -251,7 +300,9 @@ class AsyncOpikApi:
         """
         return self._raw_client
 
-    async def is_alive(self, *, request_options: typing.Optional[RequestOptions] = None) -> typing.Optional[typing.Any]:
+    async def is_alive(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.Optional[typing.Any]:
         """
         Parameters
         ----------
@@ -275,7 +326,9 @@ class AsyncOpikApi:
         _response = await self._raw_client.is_alive(request_options=request_options)
         return _response.data
 
-    async def version(self, *, request_options: typing.Optional[RequestOptions] = None) -> typing.Optional[typing.Any]:
+    async def version(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.Optional[typing.Any]:
         """
         Parameters
         ----------
@@ -300,10 +353,14 @@ class AsyncOpikApi:
         return _response.data
 
 
-def _get_base_url(*, base_url: typing.Optional[str] = None, environment: OpikApiEnvironment) -> str:
+def _get_base_url(
+    *, base_url: typing.Optional[str] = None, environment: OpikApiEnvironment
+) -> str:
     if base_url is not None:
         return base_url
     elif environment is not None:
         return environment.value
     else:
-        raise Exception("Please pass in either base_url or environment to construct the client")
+        raise Exception(
+            "Please pass in either base_url or environment to construct the client"
+        )

@@ -94,8 +94,16 @@ class RawDatasetsClient:
                 return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def create_dataset(
         self,
@@ -146,8 +154,16 @@ class RawDatasetsClient:
                 return HttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def create_or_update_dataset_items(
         self,
@@ -184,7 +200,9 @@ class RawDatasetsClient:
                 "dataset_name": dataset_name,
                 "dataset_id": dataset_id,
                 "items": convert_and_respect_annotation_metadata(
-                    object_=items, annotation=typing.Sequence[DatasetItemWrite], direction="write"
+                    object_=items,
+                    annotation=typing.Sequence[DatasetItemWrite],
+                    direction="write",
                 ),
             },
             headers={
@@ -198,8 +216,16 @@ class RawDatasetsClient:
                 return HttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def get_dataset_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
@@ -236,8 +262,16 @@ class RawDatasetsClient:
                 return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def update_dataset(
         self,
@@ -287,10 +321,20 @@ class RawDatasetsClient:
                 return HttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
-    def delete_dataset(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> HttpResponse[None]:
+    def delete_dataset(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[None]:
         """
         Delete dataset by id
 
@@ -315,11 +359,22 @@ class RawDatasetsClient:
                 return HttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def delete_dataset_by_name(
-        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        dataset_name: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Delete dataset by name
@@ -352,11 +407,22 @@ class RawDatasetsClient:
                 return HttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def delete_dataset_items(
-        self, *, item_ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        item_ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Delete dataset items
@@ -389,11 +455,22 @@ class RawDatasetsClient:
                 return HttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def delete_datasets_batch(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Delete datasets batch
@@ -426,8 +503,16 @@ class RawDatasetsClient:
                 return HttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def find_dataset_items_with_experiment_items(
         self,
@@ -489,11 +574,22 @@ class RawDatasetsClient:
                 return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def get_dataset_by_identifier(
-        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        dataset_name: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[DatasetPublic]:
         """
         Get dataset by name
@@ -534,8 +630,16 @@ class RawDatasetsClient:
                 return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def get_dataset_item_by_id(
         self, item_id: str, *, request_options: typing.Optional[RequestOptions] = None
@@ -572,8 +676,16 @@ class RawDatasetsClient:
                 return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def get_dataset_items(
         self,
@@ -627,8 +739,16 @@ class RawDatasetsClient:
                 return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def get_dataset_items_output_columns(
         self,
@@ -674,8 +794,16 @@ class RawDatasetsClient:
                 return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     @contextlib.contextmanager
     def stream_dataset_items(
@@ -723,17 +851,33 @@ class RawDatasetsClient:
             def stream() -> HttpResponse[typing.Iterator[bytes]]:
                 try:
                     if 200 <= _response.status_code < 300:
-                        _chunk_size = request_options.get("chunk_size", None) if request_options is not None else None
+                        _chunk_size = (
+                            request_options.get("chunk_size", None)
+                            if request_options is not None
+                            else None
+                        )
                         return HttpResponse(
-                            response=_response, data=(_chunk for _chunk in _response.iter_bytes(chunk_size=_chunk_size))
+                            response=_response,
+                            data=(
+                                _chunk
+                                for _chunk in _response.iter_bytes(
+                                    chunk_size=_chunk_size
+                                )
+                            ),
                         )
                     _response.read()
                     _response_json = _response.json()
                 except JSONDecodeError:
                     raise ApiError(
-                        status_code=_response.status_code, headers=dict(_response.headers), body=_response.text
+                        status_code=_response.status_code,
+                        headers=dict(_response.headers),
+                        body=_response.text,
                     )
-                raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+                raise ApiError(
+                    status_code=_response.status_code,
+                    headers=dict(_response.headers),
+                    body=_response_json,
+                )
 
             yield stream()
 
@@ -807,8 +951,16 @@ class AsyncRawDatasetsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def create_dataset(
         self,
@@ -859,8 +1011,16 @@ class AsyncRawDatasetsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def create_or_update_dataset_items(
         self,
@@ -897,7 +1057,9 @@ class AsyncRawDatasetsClient:
                 "dataset_name": dataset_name,
                 "dataset_id": dataset_id,
                 "items": convert_and_respect_annotation_metadata(
-                    object_=items, annotation=typing.Sequence[DatasetItemWrite], direction="write"
+                    object_=items,
+                    annotation=typing.Sequence[DatasetItemWrite],
+                    direction="write",
                 ),
             },
             headers={
@@ -911,8 +1073,16 @@ class AsyncRawDatasetsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def get_dataset_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
@@ -949,8 +1119,16 @@ class AsyncRawDatasetsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def update_dataset(
         self,
@@ -1000,8 +1178,16 @@ class AsyncRawDatasetsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def delete_dataset(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
@@ -1030,11 +1216,22 @@ class AsyncRawDatasetsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def delete_dataset_by_name(
-        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        dataset_name: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Delete dataset by name
@@ -1067,11 +1264,22 @@ class AsyncRawDatasetsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def delete_dataset_items(
-        self, *, item_ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        item_ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Delete dataset items
@@ -1104,11 +1312,22 @@ class AsyncRawDatasetsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def delete_datasets_batch(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Delete datasets batch
@@ -1141,8 +1360,16 @@ class AsyncRawDatasetsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def find_dataset_items_with_experiment_items(
         self,
@@ -1204,11 +1431,22 @@ class AsyncRawDatasetsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def get_dataset_by_identifier(
-        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        dataset_name: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[DatasetPublic]:
         """
         Get dataset by name
@@ -1249,8 +1487,16 @@ class AsyncRawDatasetsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def get_dataset_item_by_id(
         self, item_id: str, *, request_options: typing.Optional[RequestOptions] = None
@@ -1287,8 +1533,16 @@ class AsyncRawDatasetsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def get_dataset_items(
         self,
@@ -1342,8 +1596,16 @@ class AsyncRawDatasetsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def get_dataset_items_output_columns(
         self,
@@ -1389,8 +1651,16 @@ class AsyncRawDatasetsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     @contextlib.asynccontextmanager
     async def stream_dataset_items(
@@ -1438,17 +1708,32 @@ class AsyncRawDatasetsClient:
             async def stream() -> AsyncHttpResponse[typing.AsyncIterator[bytes]]:
                 try:
                     if 200 <= _response.status_code < 300:
-                        _chunk_size = request_options.get("chunk_size", None) if request_options is not None else None
+                        _chunk_size = (
+                            request_options.get("chunk_size", None)
+                            if request_options is not None
+                            else None
+                        )
                         return AsyncHttpResponse(
                             response=_response,
-                            data=(_chunk async for _chunk in _response.aiter_bytes(chunk_size=_chunk_size)),
+                            data=(
+                                _chunk
+                                async for _chunk in _response.aiter_bytes(
+                                    chunk_size=_chunk_size
+                                )
+                            ),
                         )
                     await _response.aread()
                     _response_json = _response.json()
                 except JSONDecodeError:
                     raise ApiError(
-                        status_code=_response.status_code, headers=dict(_response.headers), body=_response.text
+                        status_code=_response.status_code,
+                        headers=dict(_response.headers),
+                        body=_response.text,
                     )
-                raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+                raise ApiError(
+                    status_code=_response.status_code,
+                    headers=dict(_response.headers),
+                    body=_response_json,
+                )
 
             yield await stream()

@@ -2,4 +2,6 @@
 
 import typing
 
-ColumnTypesItem = typing.Union[typing.Literal["string", "number", "object", "boolean", "array", "null"], typing.Any]
+ColumnTypesItem = typing.Union[
+    typing.Literal["string", "number", "object", "boolean", "array", "null"], typing.Any
+]

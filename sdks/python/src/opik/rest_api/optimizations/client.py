@@ -193,7 +193,10 @@ class OptimizationsClient:
         return _response.data
 
     def delete_optimizations_by_id(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete optimizations by id
@@ -215,7 +218,9 @@ class OptimizationsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.optimizations.delete_optimizations_by_id(ids=['ids'], )
         """
-        _response = self._raw_client.delete_optimizations_by_id(ids=ids, request_options=request_options)
+        _response = self._raw_client.delete_optimizations_by_id(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     def get_optimization_by_id(
@@ -242,7 +247,9 @@ class OptimizationsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.optimizations.get_optimization_by_id(id='id', )
         """
-        _response = self._raw_client.get_optimization_by_id(id, request_options=request_options)
+        _response = self._raw_client.get_optimization_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     def update_optimizations_by_id(
@@ -469,7 +476,10 @@ class AsyncOptimizationsClient:
         return _response.data
 
     async def delete_optimizations_by_id(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete optimizations by id
@@ -494,7 +504,9 @@ class AsyncOptimizationsClient:
             await client.optimizations.delete_optimizations_by_id(ids=['ids'], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_optimizations_by_id(ids=ids, request_options=request_options)
+        _response = await self._raw_client.delete_optimizations_by_id(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     async def get_optimization_by_id(
@@ -524,7 +536,9 @@ class AsyncOptimizationsClient:
             await client.optimizations.get_optimization_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_optimization_by_id(id, request_options=request_options)
+        _response = await self._raw_client.get_optimization_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     async def update_optimizations_by_id(

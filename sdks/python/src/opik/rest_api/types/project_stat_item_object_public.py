@@ -13,7 +13,9 @@ class Base(UniversalBaseModel):
     name: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:
@@ -27,7 +29,9 @@ class ProjectStatItemObjectPublic_Percentage(Base):
     value: typing.Optional[PercentageValuesPublic] = None
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:
@@ -41,7 +45,9 @@ class ProjectStatItemObjectPublic_Count(Base):
     value: typing.Optional[int] = None
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:
@@ -55,7 +61,9 @@ class ProjectStatItemObjectPublic_Avg(Base):
     value: typing.Optional[float] = None
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:
@@ -65,5 +73,7 @@ class ProjectStatItemObjectPublic_Avg(Base):
 
 
 ProjectStatItemObjectPublic = typing.Union[
-    ProjectStatItemObjectPublic_Percentage, ProjectStatItemObjectPublic_Count, ProjectStatItemObjectPublic_Avg
+    ProjectStatItemObjectPublic_Percentage,
+    ProjectStatItemObjectPublic_Count,
+    ProjectStatItemObjectPublic_Avg,
 ]

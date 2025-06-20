@@ -10,10 +10,14 @@ class Function(UniversalBaseModel):
     name: typing.Optional[str] = None
     description: typing.Optional[str] = None
     strict: typing.Optional[bool] = None
-    parameters: typing.Optional[typing.Dict[str, typing.Dict[str, typing.Optional[typing.Any]]]] = None
+    parameters: typing.Optional[
+        typing.Dict[str, typing.Dict[str, typing.Optional[typing.Any]]]
+    ] = None
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:

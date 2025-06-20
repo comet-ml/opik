@@ -10,7 +10,9 @@ from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
-from ..types.automation_rule_evaluator_page_public import AutomationRuleEvaluatorPagePublic
+from ..types.automation_rule_evaluator_page_public import (
+    AutomationRuleEvaluatorPagePublic,
+)
 from ..types.automation_rule_evaluator_public import AutomationRuleEvaluatorPublic
 from ..types.automation_rule_evaluator_update import AutomationRuleEvaluatorUpdate
 from ..types.automation_rule_evaluator_write import AutomationRuleEvaluatorWrite
@@ -77,11 +79,22 @@ class RawAutomationRuleEvaluatorsClient:
                 return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def create_automation_rule_evaluator(
-        self, *, request: AutomationRuleEvaluatorWrite, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        request: AutomationRuleEvaluatorWrite,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Create automation rule evaluator
@@ -101,7 +114,9 @@ class RawAutomationRuleEvaluatorsClient:
             "v1/private/automations/evaluators",
             method="POST",
             json=convert_and_respect_annotation_metadata(
-                object_=request, annotation=AutomationRuleEvaluatorWrite, direction="write"
+                object_=request,
+                annotation=AutomationRuleEvaluatorWrite,
+                direction="write",
             ),
             headers={
                 "content-type": "application/json",
@@ -114,8 +129,16 @@ class RawAutomationRuleEvaluatorsClient:
                 return HttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def delete_automation_rule_evaluator_batch(
         self,
@@ -160,8 +183,16 @@ class RawAutomationRuleEvaluatorsClient:
                 return HttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def get_evaluator_by_id(
         self,
@@ -207,8 +238,16 @@ class RawAutomationRuleEvaluatorsClient:
                 return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def update_automation_rule_evaluator(
         self,
@@ -237,7 +276,9 @@ class RawAutomationRuleEvaluatorsClient:
             f"v1/private/automations/evaluators/{jsonable_encoder(id)}",
             method="PATCH",
             json=convert_and_respect_annotation_metadata(
-                object_=request, annotation=AutomationRuleEvaluatorUpdate, direction="write"
+                object_=request,
+                annotation=AutomationRuleEvaluatorUpdate,
+                direction="write",
             ),
             headers={
                 "content-type": "application/json",
@@ -250,11 +291,23 @@ class RawAutomationRuleEvaluatorsClient:
                 return HttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def get_evaluator_logs_by_id(
-        self, id: str, *, size: typing.Optional[int] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        size: typing.Optional[int] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[LogPage]:
         """
         Get automation rule evaluator logs by id
@@ -293,8 +346,16 @@ class RawAutomationRuleEvaluatorsClient:
                 return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
 
 class AsyncRawAutomationRuleEvaluatorsClient:
@@ -354,11 +415,22 @@ class AsyncRawAutomationRuleEvaluatorsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def create_automation_rule_evaluator(
-        self, *, request: AutomationRuleEvaluatorWrite, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        request: AutomationRuleEvaluatorWrite,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Create automation rule evaluator
@@ -378,7 +450,9 @@ class AsyncRawAutomationRuleEvaluatorsClient:
             "v1/private/automations/evaluators",
             method="POST",
             json=convert_and_respect_annotation_metadata(
-                object_=request, annotation=AutomationRuleEvaluatorWrite, direction="write"
+                object_=request,
+                annotation=AutomationRuleEvaluatorWrite,
+                direction="write",
             ),
             headers={
                 "content-type": "application/json",
@@ -391,8 +465,16 @@ class AsyncRawAutomationRuleEvaluatorsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def delete_automation_rule_evaluator_batch(
         self,
@@ -437,8 +519,16 @@ class AsyncRawAutomationRuleEvaluatorsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def get_evaluator_by_id(
         self,
@@ -484,8 +574,16 @@ class AsyncRawAutomationRuleEvaluatorsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def update_automation_rule_evaluator(
         self,
@@ -514,7 +612,9 @@ class AsyncRawAutomationRuleEvaluatorsClient:
             f"v1/private/automations/evaluators/{jsonable_encoder(id)}",
             method="PATCH",
             json=convert_and_respect_annotation_metadata(
-                object_=request, annotation=AutomationRuleEvaluatorUpdate, direction="write"
+                object_=request,
+                annotation=AutomationRuleEvaluatorUpdate,
+                direction="write",
             ),
             headers={
                 "content-type": "application/json",
@@ -527,11 +627,23 @@ class AsyncRawAutomationRuleEvaluatorsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def get_evaluator_logs_by_id(
-        self, id: str, *, size: typing.Optional[int] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        size: typing.Optional[int] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[LogPage]:
         """
         Get automation rule evaluator logs by id
@@ -570,5 +682,13 @@ class AsyncRawAutomationRuleEvaluatorsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )

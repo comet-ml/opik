@@ -2,4 +2,6 @@
 
 import typing
 
-StartMultipartUploadRequestEntityType = typing.Union[typing.Literal["trace", "span"], typing.Any]
+StartMultipartUploadRequestEntityType = typing.Union[
+    typing.Literal["trace", "span"], typing.Any
+]

@@ -45,7 +45,9 @@ class RawChatCompletionsClient:
         response_format: typing.Optional[ResponseFormat] = OMIT,
         seed: typing.Optional[int] = OMIT,
         tools: typing.Optional[typing.Sequence[Tool]] = OMIT,
-        tool_choice: typing.Optional[typing.Dict[str, typing.Optional[typing.Any]]] = OMIT,
+        tool_choice: typing.Optional[
+            typing.Dict[str, typing.Optional[typing.Any]]
+        ] = OMIT,
         parallel_tool_calls: typing.Optional[bool] = OMIT,
         store: typing.Optional[bool] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
@@ -139,7 +141,9 @@ class RawChatCompletionsClient:
                 "logit_bias": logit_bias,
                 "user": user,
                 "response_format": convert_and_respect_annotation_metadata(
-                    object_=response_format, annotation=ResponseFormat, direction="write"
+                    object_=response_format,
+                    annotation=ResponseFormat,
+                    direction="write",
                 ),
                 "seed": seed,
                 "tools": convert_and_respect_annotation_metadata(
@@ -152,7 +156,9 @@ class RawChatCompletionsClient:
                 "reasoning_effort": reasoning_effort,
                 "service_tier": service_tier,
                 "functions": convert_and_respect_annotation_metadata(
-                    object_=functions, annotation=typing.Sequence[Function], direction="write"
+                    object_=functions,
+                    annotation=typing.Sequence[Function],
+                    direction="write",
                 ),
                 "function_call": convert_and_respect_annotation_metadata(
                     object_=function_call, annotation=FunctionCall, direction="write"
@@ -176,8 +182,16 @@ class RawChatCompletionsClient:
                 return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
 
 class AsyncRawChatCompletionsClient:
@@ -204,7 +218,9 @@ class AsyncRawChatCompletionsClient:
         response_format: typing.Optional[ResponseFormat] = OMIT,
         seed: typing.Optional[int] = OMIT,
         tools: typing.Optional[typing.Sequence[Tool]] = OMIT,
-        tool_choice: typing.Optional[typing.Dict[str, typing.Optional[typing.Any]]] = OMIT,
+        tool_choice: typing.Optional[
+            typing.Dict[str, typing.Optional[typing.Any]]
+        ] = OMIT,
         parallel_tool_calls: typing.Optional[bool] = OMIT,
         store: typing.Optional[bool] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
@@ -298,7 +314,9 @@ class AsyncRawChatCompletionsClient:
                 "logit_bias": logit_bias,
                 "user": user,
                 "response_format": convert_and_respect_annotation_metadata(
-                    object_=response_format, annotation=ResponseFormat, direction="write"
+                    object_=response_format,
+                    annotation=ResponseFormat,
+                    direction="write",
                 ),
                 "seed": seed,
                 "tools": convert_and_respect_annotation_metadata(
@@ -311,7 +329,9 @@ class AsyncRawChatCompletionsClient:
                 "reasoning_effort": reasoning_effort,
                 "service_tier": service_tier,
                 "functions": convert_and_respect_annotation_metadata(
-                    object_=functions, annotation=typing.Sequence[Function], direction="write"
+                    object_=functions,
+                    annotation=typing.Sequence[Function],
+                    direction="write",
                 ),
                 "function_call": convert_and_respect_annotation_metadata(
                     object_=function_call, annotation=FunctionCall, direction="write"
@@ -335,5 +355,13 @@ class AsyncRawChatCompletionsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )

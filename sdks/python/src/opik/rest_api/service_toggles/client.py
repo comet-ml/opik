@@ -23,7 +23,9 @@ class ServiceTogglesClient:
         """
         return self._raw_client
 
-    def get_service_toggles(self, *, request_options: typing.Optional[RequestOptions] = None) -> ServiceTogglesConfig:
+    def get_service_toggles(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> ServiceTogglesConfig:
         """
         Get Service Toggles
 
@@ -43,7 +45,9 @@ class ServiceTogglesClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.service_toggles.get_service_toggles()
         """
-        _response = self._raw_client.get_service_toggles(request_options=request_options)
+        _response = self._raw_client.get_service_toggles(
+            request_options=request_options
+        )
         return _response.data
 
 
@@ -87,5 +91,7 @@ class AsyncServiceTogglesClient:
             await client.service_toggles.get_service_toggles()
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_service_toggles(request_options=request_options)
+        _response = await self._raw_client.get_service_toggles(
+            request_options=request_options
+        )
         return _response.data

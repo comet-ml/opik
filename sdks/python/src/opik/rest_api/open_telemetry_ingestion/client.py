@@ -4,12 +4,17 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
-from .raw_client import AsyncRawOpenTelemetryIngestionClient, RawOpenTelemetryIngestionClient
+from .raw_client import (
+    AsyncRawOpenTelemetryIngestionClient,
+    RawOpenTelemetryIngestionClient,
+)
 
 
 class OpenTelemetryIngestionClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
-        self._raw_client = RawOpenTelemetryIngestionClient(client_wrapper=client_wrapper)
+        self._raw_client = RawOpenTelemetryIngestionClient(
+            client_wrapper=client_wrapper
+        )
 
     @property
     def with_raw_response(self) -> RawOpenTelemetryIngestionClient:
@@ -42,13 +47,17 @@ class OpenTelemetryIngestionClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.open_telemetry_ingestion.receive_protobuf_traces()
         """
-        _response = self._raw_client.receive_protobuf_traces(request_options=request_options)
+        _response = self._raw_client.receive_protobuf_traces(
+            request_options=request_options
+        )
         return _response.data
 
 
 class AsyncOpenTelemetryIngestionClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
-        self._raw_client = AsyncRawOpenTelemetryIngestionClient(client_wrapper=client_wrapper)
+        self._raw_client = AsyncRawOpenTelemetryIngestionClient(
+            client_wrapper=client_wrapper
+        )
 
     @property
     def with_raw_response(self) -> AsyncRawOpenTelemetryIngestionClient:
@@ -84,5 +93,7 @@ class AsyncOpenTelemetryIngestionClient:
             await client.open_telemetry_ingestion.receive_protobuf_traces()
         asyncio.run(main())
         """
-        _response = await self._raw_client.receive_protobuf_traces(request_options=request_options)
+        _response = await self._raw_client.receive_protobuf_traces(
+            request_options=request_options
+        )
         return _response.data

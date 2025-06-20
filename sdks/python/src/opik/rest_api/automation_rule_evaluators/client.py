@@ -4,12 +4,17 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
-from ..types.automation_rule_evaluator_page_public import AutomationRuleEvaluatorPagePublic
+from ..types.automation_rule_evaluator_page_public import (
+    AutomationRuleEvaluatorPagePublic,
+)
 from ..types.automation_rule_evaluator_public import AutomationRuleEvaluatorPublic
 from ..types.automation_rule_evaluator_update import AutomationRuleEvaluatorUpdate
 from ..types.automation_rule_evaluator_write import AutomationRuleEvaluatorWrite
 from ..types.log_page import LogPage
-from .raw_client import AsyncRawAutomationRuleEvaluatorsClient, RawAutomationRuleEvaluatorsClient
+from .raw_client import (
+    AsyncRawAutomationRuleEvaluatorsClient,
+    RawAutomationRuleEvaluatorsClient,
+)
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -17,7 +22,9 @@ OMIT = typing.cast(typing.Any, ...)
 
 class AutomationRuleEvaluatorsClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
-        self._raw_client = RawAutomationRuleEvaluatorsClient(client_wrapper=client_wrapper)
+        self._raw_client = RawAutomationRuleEvaluatorsClient(
+            client_wrapper=client_wrapper
+        )
 
     @property
     def with_raw_response(self) -> RawAutomationRuleEvaluatorsClient:
@@ -67,12 +74,19 @@ class AutomationRuleEvaluatorsClient:
         client.automation_rule_evaluators.find_evaluators()
         """
         _response = self._raw_client.find_evaluators(
-            project_id=project_id, name=name, page=page, size=size, request_options=request_options
+            project_id=project_id,
+            name=name,
+            page=page,
+            size=size,
+            request_options=request_options,
         )
         return _response.data
 
     def create_automation_rule_evaluator(
-        self, *, request: AutomationRuleEvaluatorWrite, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        request: AutomationRuleEvaluatorWrite,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Create automation rule evaluator
@@ -95,7 +109,9 @@ class AutomationRuleEvaluatorsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.automation_rule_evaluators.create_automation_rule_evaluator(request=AutomationRuleEvaluatorWrite_LlmAsJudge(), )
         """
-        _response = self._raw_client.create_automation_rule_evaluator(request=request, request_options=request_options)
+        _response = self._raw_client.create_automation_rule_evaluator(
+            request=request, request_options=request_options
+        )
         return _response.data
 
     def delete_automation_rule_evaluator_batch(
@@ -162,7 +178,9 @@ class AutomationRuleEvaluatorsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.automation_rule_evaluators.get_evaluator_by_id(id='id', )
         """
-        _response = self._raw_client.get_evaluator_by_id(id, project_id=project_id, request_options=request_options)
+        _response = self._raw_client.get_evaluator_by_id(
+            id, project_id=project_id, request_options=request_options
+        )
         return _response.data
 
     def update_automation_rule_evaluator(
@@ -201,7 +219,11 @@ class AutomationRuleEvaluatorsClient:
         return _response.data
 
     def get_evaluator_logs_by_id(
-        self, id: str, *, size: typing.Optional[int] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        size: typing.Optional[int] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> LogPage:
         """
         Get automation rule evaluator logs by id
@@ -226,13 +248,17 @@ class AutomationRuleEvaluatorsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.automation_rule_evaluators.get_evaluator_logs_by_id(id='id', )
         """
-        _response = self._raw_client.get_evaluator_logs_by_id(id, size=size, request_options=request_options)
+        _response = self._raw_client.get_evaluator_logs_by_id(
+            id, size=size, request_options=request_options
+        )
         return _response.data
 
 
 class AsyncAutomationRuleEvaluatorsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
-        self._raw_client = AsyncRawAutomationRuleEvaluatorsClient(client_wrapper=client_wrapper)
+        self._raw_client = AsyncRawAutomationRuleEvaluatorsClient(
+            client_wrapper=client_wrapper
+        )
 
     @property
     def with_raw_response(self) -> AsyncRawAutomationRuleEvaluatorsClient:
@@ -285,12 +311,19 @@ class AsyncAutomationRuleEvaluatorsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.find_evaluators(
-            project_id=project_id, name=name, page=page, size=size, request_options=request_options
+            project_id=project_id,
+            name=name,
+            page=page,
+            size=size,
+            request_options=request_options,
         )
         return _response.data
 
     async def create_automation_rule_evaluator(
-        self, *, request: AutomationRuleEvaluatorWrite, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        request: AutomationRuleEvaluatorWrite,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Create automation rule evaluator
@@ -435,7 +468,11 @@ class AsyncAutomationRuleEvaluatorsClient:
         return _response.data
 
     async def get_evaluator_logs_by_id(
-        self, id: str, *, size: typing.Optional[int] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        size: typing.Optional[int] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> LogPage:
         """
         Get automation rule evaluator logs by id
@@ -463,5 +500,7 @@ class AsyncAutomationRuleEvaluatorsClient:
             await client.automation_rule_evaluators.get_evaluator_logs_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_evaluator_logs_by_id(id, size=size, request_options=request_options)
+        _response = await self._raw_client.get_evaluator_logs_by_id(
+            id, size=size, request_options=request_options
+        )
         return _response.data

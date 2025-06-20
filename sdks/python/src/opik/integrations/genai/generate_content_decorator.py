@@ -50,9 +50,9 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
         args: Optional[Tuple],
         kwargs: Optional[Dict[str, Any]],
     ) -> arguments_helpers.StartSpanParameters:
-        assert (
-            kwargs is not None
-        ), "Expected kwargs to be not None in client.models.generate_content(**kwargs), client.aio.models.generate_content(**kwargs)"
+        assert kwargs is not None, (
+            "Expected kwargs to be not None in client.models.generate_content(**kwargs), client.aio.models.generate_content(**kwargs)"
+        )
 
         model = kwargs.get("model")
 

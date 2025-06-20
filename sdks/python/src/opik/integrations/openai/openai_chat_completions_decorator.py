@@ -52,9 +52,9 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
         args: Optional[Tuple],
         kwargs: Optional[Dict[str, Any]],
     ) -> arguments_helpers.StartSpanParameters:
-        assert (
-            kwargs is not None
-        ), "Expected kwargs to be not None in chat.completion.create(**kwargs), chat.completion.parse(**kwargs) or chat.completion.stream(**kwargs)"
+        assert kwargs is not None, (
+            "Expected kwargs to be not None in chat.completion.create(**kwargs), chat.completion.parse(**kwargs) or chat.completion.stream(**kwargs)"
+        )
 
         name = track_options.name if track_options.name is not None else func.__name__
         if _is_completions_stream_call(
@@ -146,9 +146,9 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
         Iterator[chat_completion_chunk.ChatCompletionChunk],
         AsyncIterator[chat_completion_chunk.ChatCompletionChunk],
     ]:
-        assert (
-            generations_aggregator is not None
-        ), "OpenAI decorator will always get aggregator function as input"
+        assert generations_aggregator is not None, (
+            "OpenAI decorator will always get aggregator function as input"
+        )
 
         if isinstance(output, openai.Stream):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()

@@ -127,7 +127,11 @@ class DatasetsClient:
         client.datasets.create_dataset(name='name', )
         """
         _response = self._raw_client.create_dataset(
-            name=name, id=id, visibility=visibility, description=description, request_options=request_options
+            name=name,
+            id=id,
+            visibility=visibility,
+            description=description,
+            request_options=request_options,
         )
         return _response.data
 
@@ -168,11 +172,16 @@ class DatasetsClient:
         }, )], )
         """
         _response = self._raw_client.create_or_update_dataset_items(
-            items=items, dataset_name=dataset_name, dataset_id=dataset_id, request_options=request_options
+            items=items,
+            dataset_name=dataset_name,
+            dataset_id=dataset_id,
+            request_options=request_options,
         )
         return _response.data
 
-    def get_dataset_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> DatasetPublic:
+    def get_dataset_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> DatasetPublic:
         """
         Get dataset by id
 
@@ -194,7 +203,9 @@ class DatasetsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.datasets.get_dataset_by_id(id='id', )
         """
-        _response = self._raw_client.get_dataset_by_id(id, request_options=request_options)
+        _response = self._raw_client.get_dataset_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     def update_dataset(
@@ -233,11 +244,17 @@ class DatasetsClient:
         client.datasets.update_dataset(id='id', name='name', )
         """
         _response = self._raw_client.update_dataset(
-            id, name=name, description=description, visibility=visibility, request_options=request_options
+            id,
+            name=name,
+            description=description,
+            visibility=visibility,
+            request_options=request_options,
         )
         return _response.data
 
-    def delete_dataset(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    def delete_dataset(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
         """
         Delete dataset by id
 
@@ -262,7 +279,10 @@ class DatasetsClient:
         return _response.data
 
     def delete_dataset_by_name(
-        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        dataset_name: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete dataset by name
@@ -284,11 +304,16 @@ class DatasetsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.datasets.delete_dataset_by_name(dataset_name='dataset_name', )
         """
-        _response = self._raw_client.delete_dataset_by_name(dataset_name=dataset_name, request_options=request_options)
+        _response = self._raw_client.delete_dataset_by_name(
+            dataset_name=dataset_name, request_options=request_options
+        )
         return _response.data
 
     def delete_dataset_items(
-        self, *, item_ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        item_ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete dataset items
@@ -310,11 +335,16 @@ class DatasetsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.datasets.delete_dataset_items(item_ids=['item_ids'], )
         """
-        _response = self._raw_client.delete_dataset_items(item_ids=item_ids, request_options=request_options)
+        _response = self._raw_client.delete_dataset_items(
+            item_ids=item_ids, request_options=request_options
+        )
         return _response.data
 
     def delete_datasets_batch(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete datasets batch
@@ -336,7 +366,9 @@ class DatasetsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.datasets.delete_datasets_batch(ids=['ids'], )
         """
-        _response = self._raw_client.delete_datasets_batch(ids=ids, request_options=request_options)
+        _response = self._raw_client.delete_datasets_batch(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     def find_dataset_items_with_experiment_items(
@@ -393,7 +425,10 @@ class DatasetsClient:
         return _response.data
 
     def get_dataset_by_identifier(
-        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        dataset_name: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetPublic:
         """
         Get dataset by name
@@ -445,7 +480,9 @@ class DatasetsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.datasets.get_dataset_item_by_id(item_id='itemId', )
         """
-        _response = self._raw_client.get_dataset_item_by_id(item_id, request_options=request_options)
+        _response = self._raw_client.get_dataset_item_by_id(
+            item_id, request_options=request_options
+        )
         return _response.data
 
     def get_dataset_items(
@@ -674,7 +711,11 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_dataset(
-            name=name, id=id, visibility=visibility, description=description, request_options=request_options
+            name=name,
+            id=id,
+            visibility=visibility,
+            description=description,
+            request_options=request_options,
         )
         return _response.data
 
@@ -718,7 +759,10 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_or_update_dataset_items(
-            items=items, dataset_name=dataset_name, dataset_id=dataset_id, request_options=request_options
+            items=items,
+            dataset_name=dataset_name,
+            dataset_id=dataset_id,
+            request_options=request_options,
         )
         return _response.data
 
@@ -749,7 +793,9 @@ class AsyncDatasetsClient:
             await client.datasets.get_dataset_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_dataset_by_id(id, request_options=request_options)
+        _response = await self._raw_client.get_dataset_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     async def update_dataset(
@@ -791,11 +837,17 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.update_dataset(
-            id, name=name, description=description, visibility=visibility, request_options=request_options
+            id,
+            name=name,
+            description=description,
+            visibility=visibility,
+            request_options=request_options,
         )
         return _response.data
 
-    async def delete_dataset(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    async def delete_dataset(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
         """
         Delete dataset by id
 
@@ -819,11 +871,16 @@ class AsyncDatasetsClient:
             await client.datasets.delete_dataset(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_dataset(id, request_options=request_options)
+        _response = await self._raw_client.delete_dataset(
+            id, request_options=request_options
+        )
         return _response.data
 
     async def delete_dataset_by_name(
-        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        dataset_name: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete dataset by name
@@ -854,7 +911,10 @@ class AsyncDatasetsClient:
         return _response.data
 
     async def delete_dataset_items(
-        self, *, item_ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        item_ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete dataset items
@@ -879,11 +939,16 @@ class AsyncDatasetsClient:
             await client.datasets.delete_dataset_items(item_ids=['item_ids'], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_dataset_items(item_ids=item_ids, request_options=request_options)
+        _response = await self._raw_client.delete_dataset_items(
+            item_ids=item_ids, request_options=request_options
+        )
         return _response.data
 
     async def delete_datasets_batch(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete datasets batch
@@ -908,7 +973,9 @@ class AsyncDatasetsClient:
             await client.datasets.delete_datasets_batch(ids=['ids'], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_datasets_batch(ids=ids, request_options=request_options)
+        _response = await self._raw_client.delete_datasets_batch(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     async def find_dataset_items_with_experiment_items(
@@ -968,7 +1035,10 @@ class AsyncDatasetsClient:
         return _response.data
 
     async def get_dataset_by_identifier(
-        self, *, dataset_name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        dataset_name: str,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetPublic:
         """
         Get dataset by name
@@ -1026,7 +1096,9 @@ class AsyncDatasetsClient:
             await client.datasets.get_dataset_item_by_id(item_id='itemId', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_dataset_item_by_id(item_id, request_options=request_options)
+        _response = await self._raw_client.get_dataset_item_by_id(
+            item_id, request_options=request_options
+        )
         return _response.data
 
     async def get_dataset_items(

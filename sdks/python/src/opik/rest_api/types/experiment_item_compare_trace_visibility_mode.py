@@ -2,4 +2,6 @@
 
 import typing
 
-ExperimentItemCompareTraceVisibilityMode = typing.Union[typing.Literal["default", "hidden"], typing.Any]
+ExperimentItemCompareTraceVisibilityMode = typing.Union[
+    typing.Literal["default", "hidden"], typing.Any
+]

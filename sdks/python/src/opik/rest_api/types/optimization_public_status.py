@@ -2,4 +2,6 @@
 
 import typing
 
-OptimizationPublicStatus = typing.Union[typing.Literal["running", "completed", "cancelled"], typing.Any]
+OptimizationPublicStatus = typing.Union[
+    typing.Literal["running", "completed", "cancelled"], typing.Any
+]

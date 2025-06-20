@@ -2,4 +2,6 @@
 
 import typing
 
-TracePublicVisibilityMode = typing.Union[typing.Literal["default", "hidden"], typing.Any]
+TracePublicVisibilityMode = typing.Union[
+    typing.Literal["default", "hidden"], typing.Any
+]

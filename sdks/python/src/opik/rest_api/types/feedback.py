@@ -16,15 +16,23 @@ from .numerical_feedback_detail import NumericalFeedbackDetail
 class Base(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: str
-    created_at: typing_extensions.Annotated[typing.Optional[dt.datetime], FieldMetadata(alias="createdAt")] = None
-    created_by: typing_extensions.Annotated[typing.Optional[str], FieldMetadata(alias="createdBy")] = None
-    last_updated_at: typing_extensions.Annotated[typing.Optional[dt.datetime], FieldMetadata(alias="lastUpdatedAt")] = (
-        None
-    )
-    last_updated_by: typing_extensions.Annotated[typing.Optional[str], FieldMetadata(alias="lastUpdatedBy")] = None
+    created_at: typing_extensions.Annotated[
+        typing.Optional[dt.datetime], FieldMetadata(alias="createdAt")
+    ] = None
+    created_by: typing_extensions.Annotated[
+        typing.Optional[str], FieldMetadata(alias="createdBy")
+    ] = None
+    last_updated_at: typing_extensions.Annotated[
+        typing.Optional[dt.datetime], FieldMetadata(alias="lastUpdatedAt")
+    ] = None
+    last_updated_by: typing_extensions.Annotated[
+        typing.Optional[str], FieldMetadata(alias="lastUpdatedBy")
+    ] = None
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:
@@ -42,7 +50,9 @@ class Feedback_Numerical(Base):
     last_updated_by: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:
@@ -60,7 +70,9 @@ class Feedback_Categorical(Base):
     last_updated_by: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:

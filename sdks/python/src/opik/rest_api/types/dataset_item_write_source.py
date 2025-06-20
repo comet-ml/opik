@@ -2,4 +2,6 @@
 
 import typing
 
-DatasetItemWriteSource = typing.Union[typing.Literal["manual", "trace", "span", "sdk"], typing.Any]
+DatasetItemWriteSource = typing.Union[
+    typing.Literal["manual", "trace", "span", "sdk"], typing.Any
+]

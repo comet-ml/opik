@@ -13,15 +13,17 @@ class ColumnCompare(UniversalBaseModel):
     name: typing.Optional[str] = None
     types: typing.Optional[typing.List[ColumnCompareTypesItem]] = None
     filter_field_prefix: typing.Optional[str] = None
-    filter_field: typing_extensions.Annotated[typing.Optional[str], FieldMetadata(alias="filterField")] = (
-        pydantic.Field(default=None)
-    )
+    filter_field: typing_extensions.Annotated[
+        typing.Optional[str], FieldMetadata(alias="filterField")
+    ] = pydantic.Field(default=None)
     """
     The field to use for filtering
     """
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:

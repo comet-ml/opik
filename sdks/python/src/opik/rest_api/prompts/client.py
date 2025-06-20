@@ -64,7 +64,9 @@ class PromptsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.prompts.get_prompts()
         """
-        _response = self._raw_client.get_prompts(page=page, size=size, name=name, request_options=request_options)
+        _response = self._raw_client.get_prompts(
+            page=page, size=size, name=name, request_options=request_options
+        )
         return _response.data
 
     def create_prompt(
@@ -124,7 +126,11 @@ class PromptsClient:
         return _response.data
 
     def create_prompt_version(
-        self, *, name: str, version: PromptVersionDetail, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        version: PromptVersionDetail,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
         Create prompt version
@@ -150,10 +156,14 @@ class PromptsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.prompts.create_prompt_version(name='name', version=PromptVersionDetail(template='template', ), )
         """
-        _response = self._raw_client.create_prompt_version(name=name, version=version, request_options=request_options)
+        _response = self._raw_client.create_prompt_version(
+            name=name, version=version, request_options=request_options
+        )
         return _response.data
 
-    def get_prompt_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> PromptDetail:
+    def get_prompt_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> PromptDetail:
         """
         Get prompt by id
 
@@ -175,7 +185,9 @@ class PromptsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.prompts.get_prompt_by_id(id='id', )
         """
-        _response = self._raw_client.get_prompt_by_id(id, request_options=request_options)
+        _response = self._raw_client.get_prompt_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     def update_prompt(
@@ -215,7 +227,9 @@ class PromptsClient:
         )
         return _response.data
 
-    def delete_prompt(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    def delete_prompt(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
         """
         Delete prompt
 
@@ -240,7 +254,10 @@ class PromptsClient:
         return _response.data
 
     def delete_prompts_batch(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete prompts batch
@@ -262,11 +279,16 @@ class PromptsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.prompts.delete_prompts_batch(ids=['ids'], )
         """
-        _response = self._raw_client.delete_prompts_batch(ids=ids, request_options=request_options)
+        _response = self._raw_client.delete_prompts_batch(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     def get_prompt_version_by_id(
-        self, version_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        version_id: str,
+        *,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
         Get prompt version by id
@@ -289,7 +311,9 @@ class PromptsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.prompts.get_prompt_version_by_id(version_id='versionId', )
         """
-        _response = self._raw_client.get_prompt_version_by_id(version_id, request_options=request_options)
+        _response = self._raw_client.get_prompt_version_by_id(
+            version_id, request_options=request_options
+        )
         return _response.data
 
     def get_prompt_versions(
@@ -325,11 +349,17 @@ class PromptsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.prompts.get_prompt_versions(id='id', )
         """
-        _response = self._raw_client.get_prompt_versions(id, page=page, size=size, request_options=request_options)
+        _response = self._raw_client.get_prompt_versions(
+            id, page=page, size=size, request_options=request_options
+        )
         return _response.data
 
     def retrieve_prompt_version(
-        self, *, name: str, commit: typing.Optional[str] = OMIT, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        commit: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
         Retrieve prompt version
@@ -354,7 +384,9 @@ class PromptsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.prompts.retrieve_prompt_version(name='name', )
         """
-        _response = self._raw_client.retrieve_prompt_version(name=name, commit=commit, request_options=request_options)
+        _response = self._raw_client.retrieve_prompt_version(
+            name=name, commit=commit, request_options=request_options
+        )
         return _response.data
 
 
@@ -409,7 +441,9 @@ class AsyncPromptsClient:
             await client.prompts.get_prompts()
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_prompts(page=page, size=size, name=name, request_options=request_options)
+        _response = await self._raw_client.get_prompts(
+            page=page, size=size, name=name, request_options=request_options
+        )
         return _response.data
 
     async def create_prompt(
@@ -472,7 +506,11 @@ class AsyncPromptsClient:
         return _response.data
 
     async def create_prompt_version(
-        self, *, name: str, version: PromptVersionDetail, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        version: PromptVersionDetail,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
         Create prompt version
@@ -533,7 +571,9 @@ class AsyncPromptsClient:
             await client.prompts.get_prompt_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_prompt_by_id(id, request_options=request_options)
+        _response = await self._raw_client.get_prompt_by_id(
+            id, request_options=request_options
+        )
         return _response.data
 
     async def update_prompt(
@@ -576,7 +616,9 @@ class AsyncPromptsClient:
         )
         return _response.data
 
-    async def delete_prompt(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+    async def delete_prompt(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
         """
         Delete prompt
 
@@ -600,11 +642,16 @@ class AsyncPromptsClient:
             await client.prompts.delete_prompt(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_prompt(id, request_options=request_options)
+        _response = await self._raw_client.delete_prompt(
+            id, request_options=request_options
+        )
         return _response.data
 
     async def delete_prompts_batch(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete prompts batch
@@ -629,11 +676,16 @@ class AsyncPromptsClient:
             await client.prompts.delete_prompts_batch(ids=['ids'], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_prompts_batch(ids=ids, request_options=request_options)
+        _response = await self._raw_client.delete_prompts_batch(
+            ids=ids, request_options=request_options
+        )
         return _response.data
 
     async def get_prompt_version_by_id(
-        self, version_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        version_id: str,
+        *,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
         Get prompt version by id
@@ -659,7 +711,9 @@ class AsyncPromptsClient:
             await client.prompts.get_prompt_version_by_id(version_id='versionId', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_prompt_version_by_id(version_id, request_options=request_options)
+        _response = await self._raw_client.get_prompt_version_by_id(
+            version_id, request_options=request_options
+        )
         return _response.data
 
     async def get_prompt_versions(
@@ -704,7 +758,11 @@ class AsyncPromptsClient:
         return _response.data
 
     async def retrieve_prompt_version(
-        self, *, name: str, commit: typing.Optional[str] = OMIT, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        commit: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
         Retrieve prompt version

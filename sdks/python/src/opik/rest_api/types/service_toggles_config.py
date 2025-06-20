@@ -9,11 +9,17 @@ from ..core.serialization import FieldMetadata
 
 
 class ServiceTogglesConfig(UniversalBaseModel):
-    python_evaluator_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="pythonEvaluatorEnabled")]
-    guardrails_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="guardrailsEnabled")]
+    python_evaluator_enabled: typing_extensions.Annotated[
+        bool, FieldMetadata(alias="pythonEvaluatorEnabled")
+    ]
+    guardrails_enabled: typing_extensions.Annotated[
+        bool, FieldMetadata(alias="guardrailsEnabled")
+    ]
 
     if IS_PYDANTIC_V2:
-        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+            extra="allow", frozen=True
+        )  # type: ignore # Pydantic v2
     else:
 
         class Config:

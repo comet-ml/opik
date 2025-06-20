@@ -19,7 +19,10 @@ class RawGuardrailsClient:
         self._client_wrapper = client_wrapper
 
     def create_guardrails(
-        self, *, guardrails: typing.Sequence[GuardrailWrite], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        guardrails: typing.Sequence[GuardrailWrite],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Batch guardrails for traces
@@ -40,7 +43,9 @@ class RawGuardrailsClient:
             method="POST",
             json={
                 "guardrails": convert_and_respect_annotation_metadata(
-                    object_=guardrails, annotation=typing.Sequence[GuardrailWrite], direction="write"
+                    object_=guardrails,
+                    annotation=typing.Sequence[GuardrailWrite],
+                    direction="write",
                 ),
             },
             headers={
@@ -54,8 +59,16 @@ class RawGuardrailsClient:
                 return HttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
 
 class AsyncRawGuardrailsClient:
@@ -63,7 +76,10 @@ class AsyncRawGuardrailsClient:
         self._client_wrapper = client_wrapper
 
     async def create_guardrails(
-        self, *, guardrails: typing.Sequence[GuardrailWrite], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        guardrails: typing.Sequence[GuardrailWrite],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Batch guardrails for traces
@@ -84,7 +100,9 @@ class AsyncRawGuardrailsClient:
             method="POST",
             json={
                 "guardrails": convert_and_respect_annotation_metadata(
-                    object_=guardrails, annotation=typing.Sequence[GuardrailWrite], direction="write"
+                    object_=guardrails,
+                    annotation=typing.Sequence[GuardrailWrite],
+                    direction="write",
                 ),
             },
             headers={
@@ -98,5 +116,13 @@ class AsyncRawGuardrailsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )

@@ -121,8 +121,16 @@ class RawExperimentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def create_experiment(
         self,
@@ -134,7 +142,9 @@ class RawExperimentsClient:
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
-        prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
+        prompt_versions: typing.Optional[
+            typing.Sequence[PromptVersionLinkWrite]
+        ] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -176,10 +186,14 @@ class RawExperimentsClient:
                 "type": type,
                 "optimization_id": optimization_id,
                 "prompt_version": convert_and_respect_annotation_metadata(
-                    object_=prompt_version, annotation=PromptVersionLinkWrite, direction="write"
+                    object_=prompt_version,
+                    annotation=PromptVersionLinkWrite,
+                    direction="write",
                 ),
                 "prompt_versions": convert_and_respect_annotation_metadata(
-                    object_=prompt_versions, annotation=typing.Sequence[PromptVersionLinkWrite], direction="write"
+                    object_=prompt_versions,
+                    annotation=typing.Sequence[PromptVersionLinkWrite],
+                    direction="write",
                 ),
             },
             headers={
@@ -193,8 +207,16 @@ class RawExperimentsClient:
                 return HttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def create_experiment_items(
         self,
@@ -221,7 +243,9 @@ class RawExperimentsClient:
             method="POST",
             json={
                 "experiment_items": convert_and_respect_annotation_metadata(
-                    object_=experiment_items, annotation=typing.Sequence[ExperimentItem], direction="write"
+                    object_=experiment_items,
+                    annotation=typing.Sequence[ExperimentItem],
+                    direction="write",
                 ),
             },
             headers={
@@ -235,11 +259,22 @@ class RawExperimentsClient:
                 return HttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def delete_experiment_items(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Delete experiment items
@@ -272,11 +307,22 @@ class RawExperimentsClient:
                 return HttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def delete_experiments_by_id(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
         Delete experiments by id
@@ -309,8 +355,16 @@ class RawExperimentsClient:
                 return HttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def experiment_items_bulk(
         self,
@@ -346,7 +400,9 @@ class RawExperimentsClient:
                 "dataset_name": dataset_name,
                 "items": convert_and_respect_annotation_metadata(
                     object_=items,
-                    annotation=typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
+                    annotation=typing.Sequence[
+                        ExperimentItemBulkRecordExperimentItemBulkWriteView
+                    ],
                     direction="write",
                 ),
             },
@@ -383,11 +439,22 @@ class RawExperimentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def find_feedback_score_names(
-        self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        experiment_ids: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[typing.List[str]]:
         """
         Find Feedback Score names
@@ -424,8 +491,16 @@ class RawExperimentsClient:
                 return HttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def get_experiment_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
@@ -473,8 +548,16 @@ class RawExperimentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     def get_experiment_item_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
@@ -522,8 +605,16 @@ class RawExperimentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     @contextlib.contextmanager
     def stream_experiment_items(
@@ -576,17 +667,33 @@ class RawExperimentsClient:
             def stream() -> HttpResponse[typing.Iterator[bytes]]:
                 try:
                     if 200 <= _response.status_code < 300:
-                        _chunk_size = request_options.get("chunk_size", None) if request_options is not None else None
+                        _chunk_size = (
+                            request_options.get("chunk_size", None)
+                            if request_options is not None
+                            else None
+                        )
                         return HttpResponse(
-                            response=_response, data=(_chunk for _chunk in _response.iter_bytes(chunk_size=_chunk_size))
+                            response=_response,
+                            data=(
+                                _chunk
+                                for _chunk in _response.iter_bytes(
+                                    chunk_size=_chunk_size
+                                )
+                            ),
                         )
                     _response.read()
                     _response_json = _response.json()
                 except JSONDecodeError:
                     raise ApiError(
-                        status_code=_response.status_code, headers=dict(_response.headers), body=_response.text
+                        status_code=_response.status_code,
+                        headers=dict(_response.headers),
+                        body=_response.text,
                     )
-                raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+                raise ApiError(
+                    status_code=_response.status_code,
+                    headers=dict(_response.headers),
+                    body=_response_json,
+                )
 
             yield stream()
 
@@ -636,17 +743,33 @@ class RawExperimentsClient:
             def stream() -> HttpResponse[typing.Iterator[bytes]]:
                 try:
                     if 200 <= _response.status_code < 300:
-                        _chunk_size = request_options.get("chunk_size", None) if request_options is not None else None
+                        _chunk_size = (
+                            request_options.get("chunk_size", None)
+                            if request_options is not None
+                            else None
+                        )
                         return HttpResponse(
-                            response=_response, data=(_chunk for _chunk in _response.iter_bytes(chunk_size=_chunk_size))
+                            response=_response,
+                            data=(
+                                _chunk
+                                for _chunk in _response.iter_bytes(
+                                    chunk_size=_chunk_size
+                                )
+                            ),
                         )
                     _response.read()
                     _response_json = _response.json()
                 except JSONDecodeError:
                     raise ApiError(
-                        status_code=_response.status_code, headers=dict(_response.headers), body=_response.text
+                        status_code=_response.status_code,
+                        headers=dict(_response.headers),
+                        body=_response.text,
                     )
-                raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+                raise ApiError(
+                    status_code=_response.status_code,
+                    headers=dict(_response.headers),
+                    body=_response_json,
+                )
 
             yield stream()
 
@@ -743,8 +866,16 @@ class AsyncRawExperimentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def create_experiment(
         self,
@@ -756,7 +887,9 @@ class AsyncRawExperimentsClient:
         type: typing.Optional[ExperimentWriteType] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         prompt_version: typing.Optional[PromptVersionLinkWrite] = OMIT,
-        prompt_versions: typing.Optional[typing.Sequence[PromptVersionLinkWrite]] = OMIT,
+        prompt_versions: typing.Optional[
+            typing.Sequence[PromptVersionLinkWrite]
+        ] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -798,10 +931,14 @@ class AsyncRawExperimentsClient:
                 "type": type,
                 "optimization_id": optimization_id,
                 "prompt_version": convert_and_respect_annotation_metadata(
-                    object_=prompt_version, annotation=PromptVersionLinkWrite, direction="write"
+                    object_=prompt_version,
+                    annotation=PromptVersionLinkWrite,
+                    direction="write",
                 ),
                 "prompt_versions": convert_and_respect_annotation_metadata(
-                    object_=prompt_versions, annotation=typing.Sequence[PromptVersionLinkWrite], direction="write"
+                    object_=prompt_versions,
+                    annotation=typing.Sequence[PromptVersionLinkWrite],
+                    direction="write",
                 ),
             },
             headers={
@@ -815,8 +952,16 @@ class AsyncRawExperimentsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def create_experiment_items(
         self,
@@ -843,7 +988,9 @@ class AsyncRawExperimentsClient:
             method="POST",
             json={
                 "experiment_items": convert_and_respect_annotation_metadata(
-                    object_=experiment_items, annotation=typing.Sequence[ExperimentItem], direction="write"
+                    object_=experiment_items,
+                    annotation=typing.Sequence[ExperimentItem],
+                    direction="write",
                 ),
             },
             headers={
@@ -857,11 +1004,22 @@ class AsyncRawExperimentsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def delete_experiment_items(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Delete experiment items
@@ -894,11 +1052,22 @@ class AsyncRawExperimentsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def delete_experiments_by_id(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
         Delete experiments by id
@@ -931,8 +1100,16 @@ class AsyncRawExperimentsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def experiment_items_bulk(
         self,
@@ -968,7 +1145,9 @@ class AsyncRawExperimentsClient:
                 "dataset_name": dataset_name,
                 "items": convert_and_respect_annotation_metadata(
                     object_=items,
-                    annotation=typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
+                    annotation=typing.Sequence[
+                        ExperimentItemBulkRecordExperimentItemBulkWriteView
+                    ],
                     direction="write",
                 ),
             },
@@ -1005,11 +1184,22 @@ class AsyncRawExperimentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def find_feedback_score_names(
-        self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        experiment_ids: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[typing.List[str]]:
         """
         Find Feedback Score names
@@ -1046,8 +1236,16 @@ class AsyncRawExperimentsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def get_experiment_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
@@ -1095,8 +1293,16 @@ class AsyncRawExperimentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     async def get_experiment_item_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
@@ -1144,8 +1350,16 @@ class AsyncRawExperimentsClient:
                 )
             _response_json = _response.json()
         except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+            raise ApiError(
+                status_code=_response.status_code,
+                headers=dict(_response.headers),
+                body=_response.text,
+            )
+        raise ApiError(
+            status_code=_response.status_code,
+            headers=dict(_response.headers),
+            body=_response_json,
+        )
 
     @contextlib.asynccontextmanager
     async def stream_experiment_items(
@@ -1198,18 +1412,33 @@ class AsyncRawExperimentsClient:
             async def stream() -> AsyncHttpResponse[typing.AsyncIterator[bytes]]:
                 try:
                     if 200 <= _response.status_code < 300:
-                        _chunk_size = request_options.get("chunk_size", None) if request_options is not None else None
+                        _chunk_size = (
+                            request_options.get("chunk_size", None)
+                            if request_options is not None
+                            else None
+                        )
                         return AsyncHttpResponse(
                             response=_response,
-                            data=(_chunk async for _chunk in _response.aiter_bytes(chunk_size=_chunk_size)),
+                            data=(
+                                _chunk
+                                async for _chunk in _response.aiter_bytes(
+                                    chunk_size=_chunk_size
+                                )
+                            ),
                         )
                     await _response.aread()
                     _response_json = _response.json()
                 except JSONDecodeError:
                     raise ApiError(
-                        status_code=_response.status_code, headers=dict(_response.headers), body=_response.text
+                        status_code=_response.status_code,
+                        headers=dict(_response.headers),
+                        body=_response.text,
                     )
-                raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+                raise ApiError(
+                    status_code=_response.status_code,
+                    headers=dict(_response.headers),
+                    body=_response_json,
+                )
 
             yield await stream()
 
@@ -1259,17 +1488,32 @@ class AsyncRawExperimentsClient:
             async def stream() -> AsyncHttpResponse[typing.AsyncIterator[bytes]]:
                 try:
                     if 200 <= _response.status_code < 300:
-                        _chunk_size = request_options.get("chunk_size", None) if request_options is not None else None
+                        _chunk_size = (
+                            request_options.get("chunk_size", None)
+                            if request_options is not None
+                            else None
+                        )
                         return AsyncHttpResponse(
                             response=_response,
-                            data=(_chunk async for _chunk in _response.aiter_bytes(chunk_size=_chunk_size)),
+                            data=(
+                                _chunk
+                                async for _chunk in _response.aiter_bytes(
+                                    chunk_size=_chunk_size
+                                )
+                            ),
                         )
                     await _response.aread()
                     _response_json = _response.json()
                 except JSONDecodeError:
                     raise ApiError(
-                        status_code=_response.status_code, headers=dict(_response.headers), body=_response.text
+                        status_code=_response.status_code,
+                        headers=dict(_response.headers),
+                        body=_response.text,
                     )
-                raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+                raise ApiError(
+                    status_code=_response.status_code,
+                    headers=dict(_response.headers),
+                    body=_response_json,
+                )
 
             yield await stream()

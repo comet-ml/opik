@@ -52,7 +52,9 @@ class ChatCompletionsClient:
         response_format: typing.Optional[ResponseFormat] = OMIT,
         seed: typing.Optional[int] = OMIT,
         tools: typing.Optional[typing.Sequence[Tool]] = OMIT,
-        tool_choice: typing.Optional[typing.Dict[str, typing.Optional[typing.Any]]] = OMIT,
+        tool_choice: typing.Optional[
+            typing.Dict[str, typing.Optional[typing.Any]]
+        ] = OMIT,
         parallel_tool_calls: typing.Optional[bool] = OMIT,
         store: typing.Optional[bool] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
@@ -197,7 +199,9 @@ class AsyncChatCompletionsClient:
         response_format: typing.Optional[ResponseFormat] = OMIT,
         seed: typing.Optional[int] = OMIT,
         tools: typing.Optional[typing.Sequence[Tool]] = OMIT,
-        tool_choice: typing.Optional[typing.Dict[str, typing.Optional[typing.Any]]] = OMIT,
+        tool_choice: typing.Optional[
+            typing.Dict[str, typing.Optional[typing.Any]]
+        ] = OMIT,
         parallel_tool_calls: typing.Optional[bool] = OMIT,
         store: typing.Optional[bool] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,

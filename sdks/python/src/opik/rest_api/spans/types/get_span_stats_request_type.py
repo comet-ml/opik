@@ -2,4 +2,6 @@
 
 import typing
 
-GetSpanStatsRequestType = typing.Union[typing.Literal["general", "tool", "llm", "guardrail"], typing.Any]
+GetSpanStatsRequestType = typing.Union[
+    typing.Literal["general", "tool", "llm", "guardrail"], typing.Any
+]

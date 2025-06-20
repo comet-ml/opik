@@ -2,4 +2,6 @@
 
 import typing
 
-DeleteAttachmentsRequestEntityType = typing.Union[typing.Literal["trace", "span"], typing.Any]
+DeleteAttachmentsRequestEntityType = typing.Union[
+    typing.Literal["trace", "span"], typing.Any
+]
