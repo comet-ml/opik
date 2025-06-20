@@ -4873,27 +4873,27 @@ class TracesResourceTest {
             traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), API_KEY, workspaceName);
 
             // Add feedback scores with different values
-            String scoreName = "accuracy";
+            String scoreName = RandomStringUtils.secure().nextAlphanumeric(10);
             var scoreItems = List.of(
                     FeedbackScoreBatchItem.builder()
                             .threadId(threadId1)
                             .projectName(projectName)
                             .name(scoreName)
-                            .value(BigDecimal.valueOf(0.8)) // Medium score
+                            .value(factory.manufacturePojo(BigDecimal.class)) // Random score
                             .source(ScoreSource.SDK)
                             .build(),
                     FeedbackScoreBatchItem.builder()
                             .threadId(threadId2)
                             .projectName(projectName)
                             .name(scoreName)
-                            .value(BigDecimal.valueOf(0.3)) // Lowest score
+                            .value(factory.manufacturePojo(BigDecimal.class)) // Random score
                             .source(ScoreSource.SDK)
                             .build(),
                     FeedbackScoreBatchItem.builder()
                             .threadId(threadId3)
                             .projectName(projectName)
                             .name(scoreName)
-                            .value(BigDecimal.valueOf(0.9)) // Highest score
+                            .value(factory.manufacturePojo(BigDecimal.class)) // Random score -
                             .source(ScoreSource.SDK)
                             .build());
 
