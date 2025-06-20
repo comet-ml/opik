@@ -819,14 +819,21 @@ class MetaPromptOptimizer(BaseOptimizer):
                         and "prompt" in item
                         and isinstance(item["prompt"], list)
                     ):
+                        # NOTE: might be brittle
+                        if current_prompt.user:
+                            user_text = current_prompt.user
+                        else:
+                            if current_prompt.meesages is not None:
+                                user_text = current_prompt.messages[-1]["content"]
+                            else:
+                                raise Exception(
+                                    "User content not found in chat-prompt!"
+                                )
+
                         valid_prompts.append(
-                            # FIXME: might be brittle
                             chat_prompt.ChatPrompt(
                                 system=item["prompt"][0]["content"],
-                                user=current_prompt.user
-                                or current_prompt.messages[-1]["content"]
-                                if current_prompt.meesages is not None
-                                else "User content not found!",
+                                user=user_text,
                             )
                         )
 
