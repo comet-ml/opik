@@ -12,7 +12,10 @@ class TestThreadsCrud:
     @pytest.mark.parametrize(
         "threads_fixture", ["log_threads_low_level", "log_threads_with_decorator"]
     )
+    @pytest.mark.regression
     @pytest.mark.sanity
+    @pytest.mark.tracing
+    @pytest.mark.threads
     @allure.title("Conversation creation and verification - {threads_fixture}")
     def test_thread_visibility(
         self, page, request, create_project_api, threads_fixture

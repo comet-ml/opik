@@ -1,3 +1,4 @@
+import pytest
 from playwright.sync_api import Page, expect
 from page_objects.TracesPage import TracesPage
 from page_objects.ProjectsPage import ProjectsPage
@@ -11,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 class TestOnlineScoring:
+    @pytest.mark.regression
+    @pytest.mark.online_scoring
     @allure.title("Basic moderation rule creation")
     def test_create_moderation_rule(
         self,
@@ -75,7 +78,7 @@ class TestOnlineScoring:
 
         # Select model
         traces_page.page.get_by_role("combobox").filter(
-            has_text="Select a LLM model"
+            has_text="Select an LLM model"
         ).click()
         traces_page.page.get_by_text("OpenAI").hover()
         traces_page.page.get_by_label("GPT 4o Mini", exact=True).click()
@@ -103,6 +106,8 @@ class TestOnlineScoring:
 
         logger.info("Successfully created and verified moderation rule")
 
+    @pytest.mark.regression
+    @pytest.mark.online_scoring
     @allure.title("Basic online scoring Moderation full flow")
     def test_online_scoring_basic_moderation(
         self,
