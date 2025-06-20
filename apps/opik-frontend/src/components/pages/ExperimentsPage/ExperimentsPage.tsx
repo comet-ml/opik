@@ -25,24 +25,28 @@ import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreC
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
+import CostCell from "@/components/shared/DataTableCells/CostCell";
+import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
 import {
   COLUMN_COMMENTS_ID,
+  COLUMN_DATASET_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
+  COLUMN_METADATA_ID,
   COLUMN_NAME_ID,
   COLUMN_TYPE,
   ColumnData,
   DynamicColumn,
 } from "@/types/shared";
+import { Filter } from "@/types/filters";
 import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import ExperimentsActionsPanel from "@/components/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
-import ExperimentsFiltersButton from "@/components/pages-shared/experiments/ExperimentsFiltersButton/ExperimentsFiltersButton";
 import ExperimentRowActionsCell from "@/components/pages/ExperimentsPage/ExperimentRowActionsCell";
 import FeedbackScoresChartsWrapper from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartsWrapper";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -69,6 +73,12 @@ import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { formatNumericData } from "@/lib/utils";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
+import ExperimentsPathsAutocomplete from "@/components/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
+import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
+import isObject from "lodash/isObject";
 
 const SELECTED_COLUMNS_KEY = "experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "experiments-columns-width";
@@ -108,6 +118,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
         activeVersionId: get(data, "id", null),
       }),
     },
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
   },
   {
     id: "trace_count",
@@ -115,8 +126,20 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     type: COLUMN_TYPE.number,
   },
   {
+    id: "total_estimated_cost",
+    label: "Total Est. Cost",
+    type: COLUMN_TYPE.cost,
+    cell: CostCell as never,
+  },
+  {
+    id: "total_estimated_cost_avg",
+    label: "Avg. Cost per Trace",
+    type: COLUMN_TYPE.cost,
+    cell: CostCell as never,
+  },
+  {
     id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores",
+    label: "Feedback scores (avg.)",
     type: COLUMN_TYPE.numberDictionary,
     accessorFn: (row) =>
       get(row, "feedback_scores", []).map((score) => ({
@@ -128,12 +151,37 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
       getHoverCardName: (row: GroupedExperiment) => row.name,
       isAverageScores: true,
     },
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
   },
   {
     id: COLUMN_COMMENTS_ID,
     label: "Comments",
     type: COLUMN_TYPE.string,
     cell: CommentsCell as never,
+  },
+  {
+    id: COLUMN_METADATA_ID,
+    label: "Configuration",
+    type: COLUMN_TYPE.dictionary,
+    accessorFn: (row) =>
+      isObject(row.metadata)
+        ? JSON.stringify(row.metadata, null, 2)
+        : row.metadata,
+    cell: CodeCell as never,
+  },
+];
+
+export const FILTER_COLUMNS: ColumnData<GroupedExperiment>[] = [
+  {
+    id: COLUMN_DATASET_ID,
+    label: "Dataset",
+    type: COLUMN_TYPE.string,
+    disposable: true,
+  },
+  {
+    id: COLUMN_METADATA_ID,
+    label: "Configuration",
+    type: COLUMN_TYPE.dictionary,
   },
 ];
 
@@ -152,17 +200,21 @@ const ExperimentsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
-  const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const [query] = useQueryParam("new", JsonParam);
+
+  const [openDialog, setOpenDialog] = useState<boolean>(
+    Boolean(query ? query.experiment : false),
+  );
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
 
-  const [page = 1, setPage] = useQueryParam("page", NumberParam, {
+  const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
     updateType: "replaceIn",
   });
 
-  const [datasetId = "", setDatasetId] = useQueryParam("dataset", StringParam, {
+  const [page = 1, setPage] = useQueryParam("page", NumberParam, {
     updateType: "replaceIn",
   });
 
@@ -189,10 +241,46 @@ const ExperimentsPage: React.FunctionComponent = () => {
     };
   }, []);
 
-  const { data, isPending, refetch, datasetsData } = useGroupedExperimentsList({
+  const datasetId = useMemo(
+    () =>
+      filters.find((f: Filter) => f.field === COLUMN_DATASET_ID)?.value || "",
+    [filters],
+  );
+
+  const preProcessedFilters = useMemo(() => {
+    return filters.filter((f: Filter) => f.field !== COLUMN_DATASET_ID);
+  }, [filters]);
+
+  const filtersConfig = useMemo(
+    () => ({
+      rowsMap: {
+        [COLUMN_DATASET_ID]: {
+          keyComponent: DatasetSelectBox,
+          keyComponentProps: {
+            className: "w-full min-w-72",
+          },
+          defaultOperator: "=",
+          operators: [{ label: "=", value: "=" }],
+        },
+        [COLUMN_METADATA_ID]: {
+          keyComponent: ExperimentsPathsAutocomplete,
+          keyComponentProps: {
+            placeholder: "key",
+            excludeRoot: true,
+            datasetId,
+            sorting: sortedColumns,
+          },
+        },
+      },
+    }),
+    [datasetId, sortedColumns],
+  );
+
+  const { data, isPending, refetch } = useGroupedExperimentsList({
     workspaceName,
     groupLimit,
-    datasetId: datasetId!,
+    datasetId,
+    filters: preProcessedFilters,
     sorting: sortedColumns,
     search: search!,
     page: page!,
@@ -218,7 +306,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
   const groupIds = useMemo(() => data?.groupIds ?? [], [data?.groupIds]);
   const total = data?.total ?? 0;
-  const noData = !search && !datasetId;
+  const noData = !search && filters.length === 0;
   const noDataText = noData
     ? "There are no experiments yet"
     : "No search results";
@@ -398,9 +486,13 @@ const ExperimentsPage: React.FunctionComponent = () => {
 
   return (
     <div className="pt-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-1 flex items-center justify-between">
         <h1 className="comet-title-l truncate break-words">Experiments</h1>
       </div>
+      <ExplainerDescription
+        className="mb-4"
+        {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_experiment]}
+      />
       <div className="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
@@ -410,14 +502,16 @@ const ExperimentsPage: React.FunctionComponent = () => {
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
-          <ExperimentsFiltersButton
-            datasetId={datasetId!}
-            onChangeDatasetId={setDatasetId}
+          <FiltersButton
+            columns={FILTER_COLUMNS}
+            config={filtersConfig as never}
+            filters={filters}
+            onChange={setFilters}
           />
         </div>
         <div className="flex items-center gap-2">
           <ExperimentsActionsPanel experiments={selectedRows} />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <TooltipWrapper content="Refresh experiments list">
             <Button
               variant="outline"
@@ -447,11 +541,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
         </div>
       </div>
       {Boolean(experiments.length) && (
-        <FeedbackScoresChartsWrapper
-          entities={experiments}
-          datasetsData={datasetsData}
-          isAverageScores
-        />
+        <FeedbackScoresChartsWrapper entities={experiments} isAverageScores />
       )}
       <DataTable
         columns={columns}
@@ -491,6 +581,7 @@ const ExperimentsPage: React.FunctionComponent = () => {
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
+        datasetName={query?.datasetName}
       />
     </div>
   );

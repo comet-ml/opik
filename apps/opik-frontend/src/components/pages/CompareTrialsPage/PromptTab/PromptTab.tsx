@@ -201,7 +201,7 @@ const PromptTab: React.FunctionComponent<PromptTabProps> = ({
         <div className="flex items-center gap-2">
           {isCompare && (
             <>
-              <Separator orientation="vertical" className="mx-1 h-4" />
+              <Separator orientation="vertical" className="mx-2 h-4" />
               <div className="flex items-center space-x-2">
                 <Label htmlFor="show-doff-only">Show differences only</Label>
                 <Switch

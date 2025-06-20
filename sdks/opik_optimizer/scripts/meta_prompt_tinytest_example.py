@@ -1,19 +1,21 @@
-from opik_optimizer import MetaPromptOptimizer
 from opik.evaluation.metrics import LevenshteinRatio
-from opik_optimizer.demo import get_or_create_dataset
+from opik.evaluation.metrics.score_result import ScoreResult
+from typing import Any, Dict
 
-from opik_optimizer import (
-    MetricConfig,
-    TaskConfig,
-    from_dataset_field,
-    from_llm_response_text,
-)
+from opik_optimizer import ChatPrompt, MetaPromptOptimizer
+from opik_optimizer.datasets import tiny_test
 
 # Get or create the test dataset
-tiny_test_dataset = get_or_create_dataset("tiny-test")
+tiny_test_dataset = tiny_test()
 project_name = "optimize-metaprompt-tinytest"
+
 # Define the initial prompt to optimize - intentionally vague to allow for improvement
-initial_prompt = """Answer the question."""
+initial_prompt = ChatPrompt(
+    messages=[
+        {"role": "system", "content": "Answer the question."},
+        {"role": "user", "content": "{text}"},
+    ]
+)
 
 # Initialize the optimizer with custom parameters
 optimizer = MetaPromptOptimizer(
@@ -27,26 +29,17 @@ optimizer = MetaPromptOptimizer(
     num_threads=16,  # Number of threads for parallel evaluation
 )
 
+
 # Create the optimization configurations
+def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+    metric = LevenshteinRatio()
+    return metric.score(reference=dataset_item["label"], output=llm_output)
 
-metric_config = MetricConfig(
-    metric=LevenshteinRatio(project_name=project_name),
-    inputs={
-        "output": from_llm_response_text(),
-        "reference": from_dataset_field(name="label"),
-    },
-)
-
-task_config = TaskConfig(
-    instruction_prompt=initial_prompt,
-    input_dataset_fields=["text"],
-    output_dataset_field="label",
-)
 
 result = optimizer.optimize_prompt(
+    prompt=initial_prompt,
     dataset=tiny_test_dataset,
-    metric_config=metric_config,
-    task_config=task_config,
+    metric=levenshtein_ratio,
     auto_continue=False,
 )
 

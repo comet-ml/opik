@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.clickhouse.client.ClickHouseException;
+import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
@@ -294,5 +295,17 @@ public class SpanService {
                                 .workspacesSpansCount(items)
                                 .build()))
                 .switchIfEmpty(Mono.just(SpansCountResponse.empty()));
+    }
+
+    @WithSpan
+    public Mono<BiInformationResponse> getSpanBIInformation() {
+        log.info("Getting span BI events daily data");
+        return spanDAO.getSpanBIInformation()
+                .collectList()
+                .flatMap(items -> Mono.just(
+                        BiInformationResponse.builder()
+                                .biInformation(items)
+                                .build()))
+                .switchIfEmpty(Mono.just(BiInformationResponse.empty()));
     }
 }

@@ -29,6 +29,9 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
+import com.comet.opik.api.filter.ExperimentField;
+import com.comet.opik.api.filter.ExperimentFilter;
+import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -38,6 +41,7 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
@@ -59,6 +63,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -76,7 +81,6 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
-import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -105,7 +109,6 @@ import uk.co.jemos.podam.api.PodamUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -129,7 +132,6 @@ import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
@@ -189,7 +191,7 @@ class ExperimentsResourceTest {
     private final AppContextConfig contextConfig;
 
     @RegisterApp
-    private final TestDropwizardAppExtension app;
+    private final TestDropwizardAppExtension APP;
 
     {
         Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
@@ -198,6 +200,9 @@ class ExperimentsResourceTest {
 
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICK_HOUSE_CONTAINER, DATABASE_NAME);
+
+        MigrationUtils.runMysqlDbMigration(MYSQL_CONTAINER);
+        MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
 
         contextConfig = AppContextConfig.builder()
                 .jdbcUrl(MYSQL_CONTAINER.getJdbcUrl())
@@ -208,7 +213,7 @@ class ExperimentsResourceTest {
                 .mockEventBus(Mockito.mock(EventBus.class))
                 .build();
 
-        app = newTestDropwizardAppExtension(contextConfig);
+        APP = newTestDropwizardAppExtension(contextConfig);
     }
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
@@ -224,15 +229,9 @@ class ExperimentsResourceTest {
     private SpanResourceClient spanResourceClient;
 
     @BeforeAll
-    void beforeAll(ClientSupport client, Jdbi jdbi) throws SQLException {
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
+    void beforeAll(ClientSupport client) {
 
-        try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
-
-        baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
 
         ClientSupportUtils.config(client);
@@ -420,7 +419,7 @@ class ExperimentsResourceTest {
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             var workspaceName = UUID.randomUUID().toString();
 
-            var createRequest = getExperimentItemsBatch();
+            var createRequest = createItemsWithoutTrace();
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
@@ -667,7 +666,8 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
-            var createRequest = getExperimentItemsBatch();
+            var createRequest = createItemsWithoutTrace();
+
             createAndAssert(createRequest, API_KEY, workspaceName);
             createRequest.experimentItems().forEach(item -> getAndAssert(item, workspaceName, API_KEY));
 
@@ -902,6 +902,116 @@ class ExperimentsResourceTest {
                     unexpectedExperiments, apiKey, false, Map.of(), null);
             findAndAssert(workspaceName, 2, pageSize, datasetId, name, expectedExperiments2, expectedTotal,
                     unexpectedExperiments, apiKey, false, Map.of(), null);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void findByFilterMetadata(Operator operator, String key, String value) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var name = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var experiments = experimentResourceClient.generateExperimentList()
+                    .stream()
+                    .map(experiment -> experiment.toBuilder()
+                            .datasetName(datasetName)
+                            .name(name)
+                            .metadata(JsonUtils
+                                    .getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"OpenAI, " +
+                                            "Chat-GPT 4.0\",\"trueFlag\":true,\"nullField\":null}]}"))
+                            .build())
+                    .toList();
+            experiments.forEach(expectedExperiment -> createAndAssert(expectedExperiment,
+                    apiKey, workspaceName));
+
+            var unexpectedExperiments = List.of(generateExperiment());
+
+            unexpectedExperiments
+                    .forEach(expectedExperiment -> createAndAssert(expectedExperiment, apiKey, workspaceName));
+
+            var pageSize = experiments.size() - 2;
+            var datasetId = getAndAssert(experiments.getFirst().id(), experiments.getFirst(), workspaceName, apiKey)
+                    .datasetId();
+            var expectedExperiments1 = experiments.subList(pageSize - 1, experiments.size()).reversed();
+            var expectedExperiments2 = experiments.subList(0, pageSize - 1).reversed();
+            var expectedTotal = experiments.size();
+
+            var filters = List.of(ExperimentFilter.builder()
+                    .field(ExperimentField.METADATA)
+                    .operator(operator)
+                    .key(key)
+                    .value(value)
+                    .build());
+
+            findAndAssert(workspaceName, 1, pageSize, datasetId, name, expectedExperiments1, expectedTotal,
+                    unexpectedExperiments, apiKey, false, Map.of(), null, null, null, null, filters);
+            findAndAssert(workspaceName, 2, pageSize, datasetId, name, expectedExperiments2, expectedTotal,
+                    unexpectedExperiments, apiKey, false, Map.of(), null, null, null, null, filters);
+        }
+
+        private Stream<Arguments> findByFilterMetadata() {
+            return Stream.of(
+                    Arguments.of(
+                            Operator.EQUAL,
+                            "$.model[0].version",
+                            "OPENAI, CHAT-GPT 4.0"),
+                    Arguments.of(
+                            Operator.NOT_EQUAL,
+                            "$.model[0].version",
+                            "OPENAI, CHAT-GPT Something"),
+                    Arguments.of(
+                            Operator.EQUAL,
+                            "model[0].year",
+                            "2024"),
+                    Arguments.of(
+                            Operator.NOT_EQUAL,
+                            "model[0].year",
+                            "2023"),
+                    Arguments.of(
+                            Operator.EQUAL,
+                            "model[0].trueFlag",
+                            "TRUE"),
+                    Arguments.of(
+                            Operator.NOT_EQUAL,
+                            "model[0].trueFlag",
+                            "FALSE"),
+                    Arguments.of(
+                            Operator.EQUAL,
+                            "model[0].nullField",
+                            "NULL"),
+                    Arguments.of(
+                            Operator.NOT_EQUAL,
+                            "model[0].version",
+                            "NULL"),
+                    Arguments.of(
+                            Operator.CONTAINS,
+                            "$.model[0].version",
+                            "CHAT-GPT"),
+                    Arguments.of(
+                            Operator.CONTAINS,
+                            "$.model[0].year",
+                            "02"),
+                    Arguments.of(
+                            Operator.CONTAINS,
+                            "$.model[0].trueFlag",
+                            "TRU"),
+                    Arguments.of(
+                            Operator.CONTAINS,
+                            "$.model[0].nullField",
+                            "NUL"),
+                    Arguments.of(
+                            Operator.GREATER_THAN,
+                            "model[0].year",
+                            "2021"),
+                    Arguments.of(
+                            Operator.LESS_THAN,
+                            "model[0].year",
+                            "2031"));
         }
 
         @ParameterizedTest
@@ -1417,6 +1527,7 @@ class ExperimentsResourceTest {
             var expectedExperiment = experiment.toBuilder()
                     .duration(new PercentageValues(quantiles.get(0), quantiles.get(1), quantiles.get(2)))
                     .totalEstimatedCost(getTotalEstimatedCost(spans))
+                    .totalEstimatedCostAvg(getTotalEstimatedCostAvg(spans))
                     .usage(getUsage(spans))
                     .build();
 
@@ -1429,10 +1540,10 @@ class ExperimentsResourceTest {
                     .map(Span::usage)
                     .map(Map::entrySet)
                     .flatMap(Collection::stream)
-                    .collect(groupingBy(Map.Entry::getKey, Collectors.averagingLong(e -> e.getValue())));
+                    .collect(groupingBy(Map.Entry::getKey, Collectors.averagingLong(Map.Entry::getValue)));
         }
 
-        private BigDecimal getTotalEstimatedCost(List<Span> spans) {
+        private BigDecimal getTotalEstimatedCostAvg(List<Span> spans) {
 
             BigDecimal accumulated = spans.stream()
                     .map(Span::totalEstimatedCost)
@@ -1440,6 +1551,12 @@ class ExperimentsResourceTest {
                     .orElse(BigDecimal.ZERO);
 
             return accumulated.divide(BigDecimal.valueOf(spans.size()), ValidationUtils.SCALE, RoundingMode.HALF_UP);
+        }
+
+        private BigDecimal getTotalEstimatedCost(List<Span> spans) {
+            return spans.stream()
+                    .map(Span::totalEstimatedCost)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
 
         @ParameterizedTest
@@ -1715,7 +1832,7 @@ class ExperimentsResourceTest {
                     .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
             findAndAssert(workspaceName, 1, expectedExperiments.size(), null, null, expectedExperiments,
                     expectedExperiments.size(), List.of(), apiKey, false, expectedScores, null, List.of(sortingField),
-                    null, null);
+                    null, null, null);
         }
 
         @ParameterizedTest
@@ -1766,7 +1883,7 @@ class ExperimentsResourceTest {
 
             findAndAssert(workspaceName, 1, expectedExperiments.size(), null, null, expectedExperiments,
                     expectedExperiments.size(), List.of(), apiKey, false, expectedScores, null, List.of(sortingField),
-                    null, null);
+                    null, null, null);
         }
 
         @ParameterizedTest
@@ -1789,6 +1906,7 @@ class ExperimentsResourceTest {
                     false,
                     UUID.randomUUID(),
                     List.of(new SortingField(field, Direction.ASC)),
+                    null,
                     null,
                     null)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
@@ -1947,7 +2065,8 @@ class ExperimentsResourceTest {
             Map<UUID, Map<String, BigDecimal>> expectedScoresPerExperiment,
             UUID promptId) {
         findAndAssert(workspaceName, page, pageSize, datasetId, name, expectedExperiments, expectedTotal,
-                unexpectedExperiments, apiKey, datasetDeleted, expectedScoresPerExperiment, promptId, null, null, null);
+                unexpectedExperiments, apiKey, datasetDeleted, expectedScoresPerExperiment, promptId, null, null, null,
+                null);
     }
 
     private void findAndAssert(
@@ -1966,7 +2085,7 @@ class ExperimentsResourceTest {
             Set<ExperimentType> types) {
         findAndAssert(workspaceName, page, pageSize, datasetId, name, expectedExperiments, expectedTotal,
                 unexpectedExperiments, apiKey, datasetDeleted, expectedScoresPerExperiment, promptId, null,
-                optimizationId, types);
+                optimizationId, types, null);
     }
 
     public Response findExperiment(String workspaceName,
@@ -1979,7 +2098,8 @@ class ExperimentsResourceTest {
             UUID promptId,
             List<SortingField> sortingFields,
             UUID optimizationId,
-            Set<ExperimentType> types) {
+            Set<ExperimentType> types,
+            List<? extends ExperimentFilter> filters) {
 
         WebTarget webTarget = client.target(getExperimentsPath())
                 .queryParam("page", page)
@@ -2010,6 +2130,10 @@ class ExperimentsResourceTest {
             webTarget = webTarget.queryParam("sorting", toURLEncodedQueryParam(sortingFields));
         }
 
+        if (CollectionUtils.isNotEmpty(filters)) {
+            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
         return webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -2032,10 +2156,11 @@ class ExperimentsResourceTest {
             UUID promptId,
             List<SortingField> sortingFields,
             UUID optimizationId,
-            Set<ExperimentType> types) {
+            Set<ExperimentType> types,
+            List<? extends ExperimentFilter> filters) {
         try (var actualResponse = findExperiment(
                 workspaceName, apiKey, page, pageSize, datasetId, name, datasetDeleted, promptId, sortingFields,
-                optimizationId, types)) {
+                optimizationId, types, filters)) {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
             var actualPage = actualResponse.readEntity(ExperimentPage.class);
             assertThat(actualPage.page()).isEqualTo(page);
@@ -2182,16 +2307,11 @@ class ExperimentsResourceTest {
                                     return buildVersionLink(promptVersion);
                                 })
                                 .toList();
-                        var experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
+                        var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(datasetName)
                                 .name(name)
                                 .promptVersion(promptVersions.getFirst())
                                 .promptVersions(promptVersions)
-                                .usage(null)
-                                .duration(null)
-                                .totalEstimatedCost(null)
-                                .type(ExperimentType.REGULAR)
-                                .optimizationId(null)
                                 .build();
                         // Only 2 scores per experiment is enough for this test
                         var scores = IntStream.range(0, 2)
@@ -2487,14 +2607,9 @@ class ExperimentsResourceTest {
             var versionLink = new PromptVersionLink(promptVersion.id(), promptVersion.commit(),
                     promptVersion.promptId());
 
-            var expectedExperiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
+            var expectedExperiment = experimentResourceClient.createPartialExperiment()
                     .promptVersion(versionLink)
                     .promptVersions(List.of(versionLink))
-                    .duration(null)
-                    .usage(null)
-                    .totalEstimatedCost(null)
-                    .type(ExperimentType.REGULAR)
-                    .optimizationId(null)
                     .build();
 
             var expectedId = createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
@@ -2966,10 +3081,10 @@ class ExperimentsResourceTest {
         @Test
         @DisplayName("Success")
         void delete() {
-            var createRequest = getExperimentItemsBatch();
+            var createRequest = createItemsWithoutTrace();
+
             createAndAssert(createRequest, API_KEY, TEST_WORKSPACE);
             createRequest.experimentItems()
-                    .stream()
                     .forEach(item -> getAndAssert(item, TEST_WORKSPACE, API_KEY));
 
             var ids = createRequest.experimentItems().stream().map(ExperimentItem::id).collect(toSet());
@@ -2988,6 +3103,17 @@ class ExperimentsResourceTest {
             ids.forEach(id -> getAndAssertNotFound(id, API_KEY, TEST_WORKSPACE));
         }
 
+    }
+
+    private ExperimentItemsBatch createItemsWithoutTrace() {
+        ExperimentItemsBatch itemsBatch = getExperimentItemsBatch();
+        return itemsBatch.toBuilder()
+                .experimentItems(itemsBatch.experimentItems().stream()
+                        .map(experimentItem -> experimentItem.toBuilder()
+                                .traceVisibilityMode(null)
+                                .build())
+                        .collect(toSet()))
+                .build();
     }
 
     @Nested
@@ -3421,6 +3547,7 @@ class ExperimentsResourceTest {
                                     .feedbackScores(null)
                                     .input(null)
                                     .output(null)
+                                    .traceVisibilityMode(null)
                                     .build())
                             .collect(toSet()))
                     .build();
@@ -3790,7 +3917,7 @@ class ExperimentsResourceTest {
 
             var feedbackScore = createScore();
 
-            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, trace, feedbackScore);
+            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, trace, feedbackScore, null);
 
             var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
             var bulkRecord = ExperimentItemBulkRecord.builder()
@@ -3820,7 +3947,7 @@ class ExperimentsResourceTest {
         }
 
         private List<ExperimentItem> getExpectedItem(DatasetItem datasetItem, Trace trace,
-                FeedbackScore feedbackScore) {
+                FeedbackScore feedbackScore, JsonNode evaluateTaskResult) {
             return List.of(
                     ExperimentItem.builder()
                             .datasetItemId(datasetItem.id())
@@ -3830,12 +3957,13 @@ class ExperimentsResourceTest {
                                             t.endTime()))
                                     .orElse(0.0))
                             .input(Optional.ofNullable(trace).map(Trace::input).orElse(null))
-                            .output(Optional.ofNullable(trace).map(Trace::output).orElse(null))
+                            .output(Optional.ofNullable(trace).map(Trace::output).orElse(evaluateTaskResult))
                             .feedbackScores(List.of(feedbackScore))
                             .createdAt(Optional.ofNullable(trace).map(Trace::createdAt).orElse(null))
                             .lastUpdatedAt(Optional.ofNullable(trace).map(Trace::lastUpdatedAt).orElse(null))
                             .createdBy(USER)
                             .lastUpdatedBy(USER)
+                            .traceVisibilityMode(trace == null ? VisibilityMode.HIDDEN : VisibilityMode.DEFAULT)
                             .build());
         }
 
@@ -3888,7 +4016,7 @@ class ExperimentsResourceTest {
 
             var feedbackScore = createScore();
 
-            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, null, feedbackScore);
+            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, null, feedbackScore, null);
 
             var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
             var bulkItemRecord = ExperimentItemBulkRecord.builder()
@@ -4075,6 +4203,104 @@ class ExperimentsResourceTest {
 
         private String generateLargeString(int size) {
             return "a".repeat(Math.max(0, size));
+        }
+
+        @Test
+        void experimentItemsBulk__whenBothEvaluateTaskResultAndTraceProvided__thenReturnBadRequest() {
+            // given
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    TEST_WORKSPACE,
+                    API_KEY);
+
+            // Create a bulk upload request with both evaluateTaskResult and trace
+            var trace = createTrace();
+            var evaluateTaskResult = podamFactory.manufacturePojo(JsonNode.class);
+
+            var bulkItemRecord = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem.id())
+                    .trace(trace)
+                    .evaluateTaskResult(evaluateTaskResult)
+                    .build();
+
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
+                    .experimentName("Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20))
+                    .datasetName(dataset.name())
+                    .items(List.of(bulkItemRecord))
+                    .build();
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUploadRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var errorMessage = response.readEntity(com.comet.opik.api.error.ErrorMessage.class);
+
+                assertThat(errorMessage.errors()).contains(
+                        "items[0].<list element> cannot provide both evaluate_task_result and trace together");
+            }
+        }
+
+        @Test
+        void experimentItemsBulk__whenOnlyEvaluateTaskResultProvided__thenSucceed() {
+            // given
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    TEST_WORKSPACE,
+                    API_KEY);
+
+            // Create a bulk upload request with only evaluateTaskResult
+            var evaluateTaskResult = podamFactory.manufacturePojo(JsonNode.class);
+            var experimentName = "Test Experiment " + RandomStringUtils.secure().nextAlphanumeric(20);
+
+            var feedbackScore = createScore();
+
+            var bulkItemRecord = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetItem.id())
+                    .evaluateTaskResult(evaluateTaskResult)
+                    .feedbackScores(List.of(feedbackScore))
+                    .build();
+
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(dataset.name())
+                    .items(List.of(bulkItemRecord))
+                    .build();
+
+            List<ExperimentItem> expectedItems = getExpectedItem(datasetItem, null, feedbackScore, evaluateTaskResult);
+
+            // when
+            experimentResourceClient.bulkUploadExperimentItem(bulkUploadRequest, API_KEY, TEST_WORKSPACE);
+
+            // then
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+
+            String[] ignoringFields = Stream
+                    .concat(Arrays.stream(ExperimentTestAssertions.EXPERIMENT_ITEMS_IGNORED_FIELDS),
+                            Stream.of("traceId", "id", "experimentId"))
+                    .toArray(String[]::new);
+
+            ExperimentTestAssertions.assertExperimentResultsIgnoringFields(actualExperimentItems, expectedItems,
+                    ignoringFields);
+
+            Trace trace = traceResourceClient.getById(actualExperimentItems.getFirst().traceId(), TEST_WORKSPACE,
+                    API_KEY);
+
+            assertThat(trace).isNotNull();
+            assertThat(trace.visibilityMode()).isEqualTo(VisibilityMode.HIDDEN);
         }
     }
 }

@@ -9,6 +9,9 @@ import FilterExperimentsToCompareDialog from "@/components/pages-shared/experime
 import useExperimentBatchDeleteMutation from "@/api/datasets/useExperimentBatchDeleteMutation";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { Separator } from "@/components/ui/separator";
 
 type ExperimentsActionsPanelsProps = {
   experiments: Experiment[];
@@ -70,20 +73,30 @@ const ExperimentsActionsPanel: React.FunctionComponent<
         setOpen={setOpen}
         onConfirm={deleteExperimentsHandler}
         title="Delete experiments"
-        description="Are you sure you want to delete all selected experiments?"
+        description="Deleting experiments will remove all samples in these experiments. Related traces won’t be affected. This action cannot be undone. Are you sure you want to continue?"
         confirmText="Delete experiments"
+        confirmButtonVariant="destructive"
       />
-      <TooltipWrapper content="Compare experiments">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleCompareClick}
-          disabled={disabled}
-        >
-          <Split className="mr-2 size-3.5" />
-          Compare
-        </Button>
-      </TooltipWrapper>
+      <div className="inline-flex items-center gap-2">
+        <TooltipWrapper content="Compare experiments">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleCompareClick}
+            disabled={disabled}
+          >
+            <Split className="mr-2 size-3.5" />
+            Compare
+          </Button>
+        </TooltipWrapper>
+        <ExplainerIcon
+          className="-ml-0.5"
+          {...EXPLAINERS_MAP[
+            EXPLAINER_ID.what_does_it_mean_to_compare_my_experiments
+          ]}
+        />
+        <Separator orientation="vertical" className="mx-2 h-4" />
+      </div>
       <TooltipWrapper content="Delete">
         <Button
           variant="outline"

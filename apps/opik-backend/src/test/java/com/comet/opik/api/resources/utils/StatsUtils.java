@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.utils;
 
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.GuardrailsValidation;
@@ -22,7 +23,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -76,6 +76,7 @@ public class StatsUtils {
                 Trace::endTime,
                 Trace::totalEstimatedCost,
                 Trace::guardrailsValidations,
+                Trace::errorInfo,
                 "trace_count");
     }
 
@@ -117,6 +118,7 @@ public class StatsUtils {
                     return BigDecimal.ZERO;
                 },
                 null,
+                Span::errorInfo,
                 "span_count");
     }
 
@@ -132,6 +134,7 @@ public class StatsUtils {
             Function<T, Instant> endProvider,
             Function<T, BigDecimal> totalEstimatedCostProvider,
             Function<T, List<GuardrailsValidation>> guardrailsProvider,
+            Function<T, ErrorInfo> errorProvider,
             String countLabel) {
 
         if (expectedEntities.isEmpty()) {
@@ -146,12 +149,14 @@ public class StatsUtils {
         double tags = 0;
         BigDecimal totalEstimatedCost = BigDecimal.ZERO;
         int countEstimatedCost = 0;
+        long errorCount = 0;
 
         for (T entity : expectedEntities) {
             input += inputProvider.apply(entity) != null ? 1 : 0;
             output += outputProvider.apply(entity) != null ? 1 : 0;
             metadata += metadataProvider.apply(entity) != null ? 1 : 0;
             tags += tagsProvider.apply(entity) != null ? tagsProvider.apply(entity).size() : 0;
+            errorCount += errorProvider.apply(entity) != null ? 1 : 0;
 
             BigDecimal cost = totalEstimatedCostProvider.apply(entity) != null
                     ? totalEstimatedCostProvider.apply(entity)
@@ -222,6 +227,8 @@ public class StatsUtils {
 
         Optional.ofNullable(failedGuardrails).ifPresent(failedGuardrailCount -> stats
                 .add(new CountValueStat(StatsMapper.GUARDRAILS_FAILED_COUNT, failedGuardrailCount)));
+
+        stats.add(new CountValueStat(StatsMapper.ERROR_COUNT, errorCount));
 
         return stats;
     }
@@ -405,7 +412,7 @@ public class StatsUtils {
     public static Map<String, Long> aggregateSpansUsage(List<Span> spans) {
         return spans.stream()
                 .flatMap(span -> span.usage().entrySet().stream())
-                .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), Long.valueOf(entry.getValue())))
+                .map(entry -> Map.entry(entry.getKey(), Long.valueOf(entry.getValue())))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
     }
 

@@ -166,6 +166,43 @@ class TracesClient:
         )
         return _response.data
 
+    def close_trace_thread(
+        self,
+        *,
+        thread_id: str,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Close trace thread
+
+        Parameters
+        ----------
+        thread_id : str
+
+        project_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.traces.close_trace_thread(thread_id='thread_id', )
+        """
+        _response = self._raw_client.close_trace_thread(
+            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
+        )
+        return _response.data
+
     def get_traces_by_project(
         self,
         *,
@@ -670,16 +707,23 @@ class TracesClient:
         return _response.data
 
     def get_trace_thread(
-        self, *, project_id: str, thread_id: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        thread_id: str,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThread:
         """
         Get trace thread
 
         Parameters
         ----------
-        project_id : str
-
         thread_id : str
+
+        project_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -693,10 +737,10 @@ class TracesClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.traces.get_trace_thread(project_id='project_id', thread_id='thread_id', )
+        client.traces.get_trace_thread(thread_id='thread_id', )
         """
         _response = self._raw_client.get_trace_thread(
-            project_id=project_id, thread_id=thread_id, request_options=request_options
+            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
         )
         return _response.data
 
@@ -709,6 +753,7 @@ class TracesClient:
         project_id: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThreadPage:
         """
@@ -727,6 +772,8 @@ class TracesClient:
         truncate : typing.Optional[bool]
 
         filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -749,7 +796,45 @@ class TracesClient:
             project_id=project_id,
             truncate=truncate,
             filters=filters,
+            sorting=sorting,
             request_options=request_options,
+        )
+        return _response.data
+
+    def open_trace_thread(
+        self,
+        *,
+        thread_id: str,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Open trace thread
+
+        Parameters
+        ----------
+        thread_id : str
+
+        project_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.traces.open_trace_thread(thread_id='thread_id', )
+        """
+        _response = self._raw_client.open_trace_thread(
+            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
         )
         return _response.data
 
@@ -1031,6 +1116,46 @@ class AsyncTracesClient:
             created_by=created_by,
             last_updated_by=last_updated_by,
             request_options=request_options,
+        )
+        return _response.data
+
+    async def close_trace_thread(
+        self,
+        *,
+        thread_id: str,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Close trace thread
+
+        Parameters
+        ----------
+        thread_id : str
+
+        project_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.traces.close_trace_thread(thread_id='thread_id', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.close_trace_thread(
+            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
         )
         return _response.data
 
@@ -1579,16 +1704,23 @@ class AsyncTracesClient:
         return _response.data
 
     async def get_trace_thread(
-        self, *, project_id: str, thread_id: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        thread_id: str,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThread:
         """
         Get trace thread
 
         Parameters
         ----------
-        project_id : str
-
         thread_id : str
+
+        project_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1604,11 +1736,11 @@ class AsyncTracesClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.traces.get_trace_thread(project_id='project_id', thread_id='thread_id', )
+            await client.traces.get_trace_thread(thread_id='thread_id', )
         asyncio.run(main())
         """
         _response = await self._raw_client.get_trace_thread(
-            project_id=project_id, thread_id=thread_id, request_options=request_options
+            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
         )
         return _response.data
 
@@ -1621,6 +1753,7 @@ class AsyncTracesClient:
         project_id: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThreadPage:
         """
@@ -1639,6 +1772,8 @@ class AsyncTracesClient:
         truncate : typing.Optional[bool]
 
         filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1664,7 +1799,48 @@ class AsyncTracesClient:
             project_id=project_id,
             truncate=truncate,
             filters=filters,
+            sorting=sorting,
             request_options=request_options,
+        )
+        return _response.data
+
+    async def open_trace_thread(
+        self,
+        *,
+        thread_id: str,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Open trace thread
+
+        Parameters
+        ----------
+        thread_id : str
+
+        project_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.traces.open_trace_thread(thread_id='thread_id', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.open_trace_thread(
+            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
         )
         return _response.data
 

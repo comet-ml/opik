@@ -150,4 +150,152 @@ class RedissonLockServiceIntegrationTest {
                 .verifyComplete();
     }
 
+    @Test
+    void testLockUsingToken_HappyPath(LockService lockService, RedissonReactiveClient redisClient) {
+        // Create a unique lock
+        LockService.Lock lock = new LockService.Lock(UUID.randomUUID(), "token-lock");
+
+        // Verify lock acquisition succeeds
+        StepVerifier.create(lockService.lockUsingToken(lock, Duration.ofSeconds(5)))
+                .assertNext(acquired -> assertThat(acquired).isTrue())
+                .verifyComplete();
+
+        // Verify the lock exists in Redis
+        StepVerifier.create(redisClient.getBucket(lock.key()).isExists())
+                .assertNext(exists -> assertThat(exists).isTrue())
+                .verifyComplete();
+
+        // Verify attempting to acquire the same lock fails
+        StepVerifier.create(lockService.lockUsingToken(lock, Duration.ofSeconds(5)))
+                .assertNext(acquired -> assertThat(acquired).isFalse())
+                .verifyComplete();
+
+        // Unlock the lock
+        StepVerifier.create(lockService.unlockUsingToken(lock))
+                .verifyComplete();
+
+        // Verify the lock no longer exists
+        StepVerifier.create(redisClient.getBucket(lock.key()).isExists())
+                .assertNext(exists -> assertThat(exists).isFalse())
+                .verifyComplete();
+
+        // Verify we can acquire the lock again
+        StepVerifier.create(lockService.lockUsingToken(lock, Duration.ofSeconds(5)))
+                .assertNext(acquired -> assertThat(acquired).isTrue())
+                .verifyComplete();
+    }
+
+    @Test
+    void testLockUsingToken_Eviction(LockService lockService, RedissonReactiveClient redisClient) {
+        // Create a unique lock
+        LockService.Lock lock = new LockService.Lock(UUID.randomUUID(), "token-lock-eviction");
+
+        // Acquire the lock with a short timeout
+        StepVerifier.create(lockService.lockUsingToken(lock, Duration.ofMillis(500)))
+                .assertNext(acquired -> assertThat(acquired).isTrue())
+                .verifyComplete();
+
+        // Verify the lock exists
+        StepVerifier.create(redisClient.getBucket(lock.key()).isExists())
+                .assertNext(exists -> assertThat(exists).isTrue())
+                .verifyComplete();
+
+        // Wait for the lock to expire
+        Mono.delay(Duration.ofMillis(700)).block();
+
+        // Verify the lock has been evicted
+        StepVerifier.create(redisClient.getBucket(lock.key()).isExists())
+                .assertNext(exists -> assertThat(exists).isFalse())
+                .verifyComplete();
+
+        // Verify we can acquire the lock again
+        StepVerifier.create(lockService.lockUsingToken(lock, Duration.ofSeconds(5)))
+                .assertNext(acquired -> assertThat(acquired).isTrue())
+                .verifyComplete();
+    }
+
+    @Test
+    void testBestEffortLock_HappyPath(LockService lockService) {
+        // Create a unique lock
+        LockService.Lock lock = new LockService.Lock(UUID.randomUUID(), "best-effort-lock");
+        List<String> results = new ArrayList<>();
+
+        // Define the main action and fallback action
+        Mono<String> mainAction = Mono.fromCallable(() -> {
+            results.add("main-action");
+            return "main-result";
+        });
+
+        Mono<Void> fallbackAction = Mono.fromCallable(() -> {
+            results.add("fallback-action");
+            return null;
+        });
+
+        // Execute best effort lock - should succeed
+        StepVerifier.create(lockService.bestEffortLock(
+                lock,
+                mainAction,
+                fallbackAction,
+                Duration.ofSeconds(1), // action timeout
+                Duration.ofSeconds(1) // lock wait time
+        ))
+                .expectNext("main-result")
+                .verifyComplete();
+
+        // Verify the main action was executed
+        assertEquals(1, results.size());
+        assertEquals("main-action", results.getFirst());
+    }
+
+    @Test
+    void testBestEffortLock_FallbackWhenLockUnavailable(LockService lockService, RedissonReactiveClient redisClient) {
+        // Create two locks with the same key to simulate contention
+        LockService.Lock lock = new LockService.Lock(UUID.randomUUID(), "best-effort-lock-fallback");
+        List<String> results = new ArrayList<>();
+
+        // Define actions for the first lock holder
+        Mono<String> longRunningAction = Mono.fromCallable(() -> {
+            // Simulate a long-running operation that holds the lock
+            Mono.delay(Duration.ofMillis(500)).block();
+            return "long-running-completed";
+        });
+
+        // Define actions for the second lock attempt
+        Mono<String> mainAction = Mono.fromCallable(() -> {
+            results.add("main-action");
+            return "main-result";
+        });
+
+        Mono<Void> fallbackAction = Mono.fromCallable(() -> {
+            results.add("fallback-action");
+            return null;
+        });
+
+        // First, acquire the lock with a long-running action (in a separate thread)
+        Mono<String> firstLockOperation = Mono.defer(() -> lockService.bestEffortLock(lock, longRunningAction,
+                Mono.empty(),
+                Duration.ofMillis(900), // action timeout
+                Duration.ofMillis(200) // lock wait time
+        ));
+
+        // Start the first operation in a separate thread
+        Mono<String> secondLockOperation = Mono.defer(() -> lockService.bestEffortLock(lock, mainAction,
+                fallbackAction,
+                Duration.ofMillis(900), // action timeout
+                Duration.ofMillis(200) // lock wait time
+        ));
+
+        // Give the first operation time to acquire the lock
+        Schedulers.boundedElastic().schedule(firstLockOperation::subscribe);
+
+        Mono.delay(Duration.ofMillis(100)).block();
+
+        // Now try to acquire the same lock with bestEffortLock
+        StepVerifier.create(secondLockOperation)
+                .verifyComplete();
+
+        // Verify the fallback action was executed
+        assertEquals(1, results.size());
+        assertEquals("fallback-action", results.getFirst());
+    }
 }

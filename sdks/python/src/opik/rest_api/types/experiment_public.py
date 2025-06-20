@@ -27,6 +27,7 @@ class ExperimentPublic(UniversalBaseModel):
     created_at: typing.Optional[dt.datetime] = None
     duration: typing.Optional[PercentageValuesPublic] = None
     total_estimated_cost: typing.Optional[float] = None
+    total_estimated_cost_avg: typing.Optional[float] = None
     usage: typing.Optional[typing.Dict[str, float]] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None

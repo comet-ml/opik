@@ -9,6 +9,7 @@ import isFunction from "lodash/isFunction";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogAutoScrollBody,
   DialogClose,
   DialogContent,
   DialogFooter,
@@ -31,7 +32,7 @@ import {
 } from "@/types/providers";
 
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
-import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import useProviderKeysDeleteMutation from "@/api/provider-keys/useProviderKeysDeleteMutation";
 import ProviderSelect from "@/components/pages-shared/llm/ProviderSelect/ProviderSelect";
 import useProviderKeysUpdateMutation from "@/api/provider-keys/useProviderKeysUpdateMutation";
@@ -45,6 +46,8 @@ import {
 import CloudAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CloudAIProviderDetails";
 import LocalAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/LocalAIProviderDetails";
 import VertexAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/VertexAIProviderDetails";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 
 type ManageAIProviderDialogProps = {
   providerKey?: ProviderKey;
@@ -239,52 +242,59 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         <DialogHeader>
           <DialogTitle>Provider configuration</DialogTitle>
         </DialogHeader>
-        <Form {...form}>
-          <form
-            className="flex flex-col gap-4 pb-4"
-            onSubmit={form.handleSubmit(onSubmit)}
-          >
-            <FormField
-              control={form.control}
-              name="provider"
-              render={({ field, formState }) => {
-                const validationErrors = get(formState.errors, ["provider"]);
+        <DialogAutoScrollBody>
+          <ExplainerDescription
+            className="mb-4"
+            {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_an_ai_provider]}
+          />
+          <Form {...form}>
+            <form
+              className="flex flex-col gap-4 pb-4"
+              onSubmit={form.handleSubmit(onSubmit)}
+            >
+              <FormField
+                control={form.control}
+                name="provider"
+                render={({ field, formState }) => {
+                  const validationErrors = get(formState.errors, ["provider"]);
 
-                return (
-                  <FormItem>
-                    <Label>Provider</Label>
-                    <FormControl>
-                      <ProviderSelect
-                        disabled={Boolean(providerKey)}
-                        value={(field.value as PROVIDER_TYPE) || ""}
-                        onChange={(v) => {
-                          const p = v as PROVIDER_TYPE;
+                  return (
+                    <FormItem>
+                      <Label>Provider</Label>
+                      <FormControl>
+                        <ProviderSelect
+                          disabled={Boolean(providerKey)}
+                          value={(field.value as PROVIDER_TYPE) || ""}
+                          onChange={(v) => {
+                            const p = v as PROVIDER_TYPE;
 
-                          form.setValue(
-                            "locationType",
-                            PROVIDERS[p].locationType,
-                          );
-                          field.onChange(p);
-                        }}
-                        configuredProviderKeys={configuredProviderKeys}
-                        hasError={Boolean(validationErrors?.message)}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                );
-              }}
-            />
-            {(isConfiguredProvider || providerKey) && isCloudProvider && (
-              <CalloutAlert
-                title="Editing an existing key"
-                description="A key is already set for this provider. Since AI provider configurations are workspace-wide, adding a new key will overwrite the existing one for everyone."
-                Icon={MessageCircleWarning}
+                            form.setValue(
+                              "locationType",
+                              PROVIDERS[p].locationType,
+                            );
+                            field.onChange(p);
+                          }}
+                          configuredProviderKeys={configuredProviderKeys}
+                          hasError={Boolean(validationErrors?.message)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
-            )}
-            {getProviderDetails()}
-          </form>
-        </Form>
+              {(isConfiguredProvider || providerKey) && isCloudProvider && (
+                <ExplainerCallout
+                  Icon={MessageCircleWarning}
+                  {...EXPLAINERS_MAP[
+                    EXPLAINER_ID.what_happens_if_i_edit_an_ai_provider
+                  ]}
+                />
+              )}
+              {getProviderDetails()}
+            </form>
+          </Form>
+        </DialogAutoScrollBody>
         <DialogFooter>
           {isConfiguredProvider && (
             <>
@@ -313,6 +323,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         title="Delete configuration"
         description="This configuration is shared across the workspace. Deleting it will remove access for everyone. This action can’t be undone. Are you sure you want to proceed?"
         confirmText="Delete configuration"
+        confirmButtonVariant="destructive"
       />
     </Dialog>
   );

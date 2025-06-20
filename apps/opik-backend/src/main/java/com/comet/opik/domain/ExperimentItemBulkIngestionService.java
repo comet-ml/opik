@@ -18,7 +18,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.jetbrains.annotations.NotNull;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple3;
 
@@ -101,7 +100,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
         });
     }
 
-    private @NotNull Mono<? extends Tuple3<Long, ? extends Number, Integer>> saveAll(List<Trace> traces,
+    private Mono<? extends Tuple3<Long, ? extends Number, Integer>> saveAll(List<Trace> traces,
             List<Span> spans, List<FeedbackScoreBatchItem> feedbackScores) {
         return Mono.defer(() -> Mono.zip(
                 saveTraces(traces),
@@ -109,19 +108,19 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                 saveFeedBackScores(feedbackScores)));
     }
 
-    private @NotNull Mono<Long> saveTraces(List<Trace> traces) {
+    private Mono<Long> saveTraces(List<Trace> traces) {
         return traceService.create(new TraceBatch(traces))
                 .retryWhen(AsyncUtils.handleConnectionError());
     }
 
-    private @NotNull Mono<? extends Number> saveSpans(List<Span> spans) {
+    private Mono<? extends Number> saveSpans(List<Span> spans) {
         return spans.isEmpty()
                 ? Mono.just(0)
                 : spanService.create(new SpanBatch(spans))
                         .retryWhen(AsyncUtils.handleConnectionError());
     }
 
-    private @NotNull Mono<Integer> saveFeedBackScores(List<FeedbackScoreBatchItem> feedbackScores) {
+    private Mono<Integer> saveFeedBackScores(List<FeedbackScoreBatchItem> feedbackScores) {
         return feedbackScores.isEmpty()
                 ? Mono.just(0)
                 : feedbackScoreService.scoreBatchOfTraces(feedbackScores)
@@ -144,6 +143,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                 trace = Trace.builder()
                         .id(idGenerator.generateId())
                         .projectName(ProjectService.DEFAULT_PROJECT)
+                        .output(item.evaluateTaskResult())
                         .startTime(now)
                         .endTime(now)
                         .visibilityMode(VisibilityMode.HIDDEN)

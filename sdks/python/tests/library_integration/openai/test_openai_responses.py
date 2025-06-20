@@ -76,6 +76,7 @@ def test_openai_client_responses_create__happyflow(
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=expected_project_name,
         spans=[
             SpanModel(
@@ -91,7 +92,7 @@ def test_openai_client_responses_create__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
                 spans=[],
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS),
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
             )
         ],
@@ -134,6 +135,7 @@ def test_openai_responses_create__async_call_made_in_another_tracked_async_funct
         input={},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -154,7 +156,7 @@ def test_openai_responses_create__async_call_made_in_another_tracked_async_funct
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
-                        model=ANY_STRING(startswith=MODEL_FOR_TESTS),
+                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider="openai",
                     )
                 ],
@@ -203,11 +205,12 @@ def test_openai_client_responses_create_raises_an_error__span_and_trace_finished
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=ANY_BUT_NONE,
         error_info={
-            "exception_type": ANY_STRING(),
-            "message": ANY_STRING(),
-            "traceback": ANY_STRING(),
+            "exception_type": ANY_STRING,
+            "message": ANY_STRING,
+            "traceback": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -230,9 +233,9 @@ def test_openai_client_responses_create_raises_an_error__span_and_trace_finished
                 model=MODEL_FOR_TESTS,
                 provider="openai",
                 error_info={
-                    "exception_type": ANY_STRING(),
-                    "message": ANY_STRING(),
-                    "traceback": ANY_STRING(),
+                    "exception_type": ANY_STRING,
+                    "message": ANY_STRING,
+                    "traceback": ANY_STRING,
                 },
                 spans=[],
             )
@@ -274,6 +277,7 @@ def test_openai_client_responses_create_stream__happyflow(fake_backend):
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -287,7 +291,7 @@ def test_openai_client_responses_create_stream__happyflow(fake_backend):
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS),
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
             )
         ],
@@ -330,6 +334,7 @@ async def test_openai_client_responses_create_async__happyflow(fake_backend):
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -343,7 +348,7 @@ async def test_openai_client_responses_create_async__happyflow(fake_backend):
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS),
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
             )
         ],
@@ -388,6 +393,7 @@ async def test_openai_client_responses_create_stream_async__happyflow(fake_backe
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -401,7 +407,7 @@ async def test_openai_client_responses_create_stream_async__happyflow(fake_backe
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS),
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
             )
         ],
@@ -462,6 +468,7 @@ def test_openai_client_responses_parse__happy_flow(
         tags=["openai"],
         metadata=ANY_DICT,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -475,7 +482,7 @@ def test_openai_client_responses_parse__happy_flow(
                 usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS),
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
             )
         ],
@@ -527,6 +534,7 @@ async def test_openai_client_responses_parse_async__happy_flow(fake_backend):
         tags=["openai"],
         metadata=ANY_DICT,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -539,7 +547,7 @@ async def test_openai_client_responses_parse_async__happy_flow(fake_backend):
                 type="llm",
                 usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                 end_time=ANY_BUT_NONE,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS),
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
             )
         ],
@@ -599,11 +607,12 @@ def test_openai_client_responses_parse_raises_an_error__span_and_trace_finished_
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=ANY_BUT_NONE,
         error_info=ErrorInfoDict(
-            exception_type=ANY_STRING(),
-            message=ANY_STRING(),
-            traceback=ANY_STRING(),
+            exception_type=ANY_STRING,
+            message=ANY_STRING,
+            traceback=ANY_STRING,
         ),
         spans=[
             SpanModel(
@@ -627,9 +636,9 @@ def test_openai_client_responses_parse_raises_an_error__span_and_trace_finished_
                 model=MODEL_FOR_TESTS,
                 provider="openai",
                 error_info=ErrorInfoDict(
-                    exception_type=ANY_STRING(),
-                    message=ANY_STRING(),
-                    traceback=ANY_STRING(),
+                    exception_type=ANY_STRING,
+                    message=ANY_STRING,
+                    traceback=ANY_STRING,
                 ),
                 spans=[],
             )

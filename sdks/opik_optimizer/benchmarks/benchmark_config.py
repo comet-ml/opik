@@ -1,234 +1,176 @@
-from typing import Dict, List, Tuple, Callable, Any
-import sys
-import os
-import time
-import logging
+from typing import Any, Callable, Dict, List
 
-import opik_optimizer
 from opik.evaluation.metrics import (
-    LevenshteinRatio,
     AnswerRelevance,
     ContextPrecision,
     ContextRecall,
-    Hallucination,
     Equals,
+    Hallucination,
+    LevenshteinRatio,
 )
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
-from datetime import datetime
-from pathlib import Path
-# from external_optimizers import ExternalDspyMiproOptimizer, ExternalAdalFlowOptimizer
-from rich import print
-from rich.console import Console
-from rich.style import Style
+from opik.evaluation.metrics.score_result import ScoreResult
+from pydantic import BaseModel
 
-# Project configuration
-def get_project_config(test_mode: bool = False) -> Dict:
-    return {
-        "name": "agent-optimizer-benchmark",
-        "workspace": "default",
-        # Set to True to run with 5 examples per dataset
-        "test_mode": test_mode,
-    }
 
-# Dataset configurations
-DATASET_CONFIGS = {
-    # "gsm8k": {
-    #     "name": "GSM8K",
-    #     "metrics": [LevenshteinRatio()],
-    #     "input_key": "question",
-    #     "output_key": "answer",
-    #     "huggingface_path": "gsm8k",
-    # },
-    # "ragbench_sentence_relevance": {
-    #     "name": "RAGBench Sentence Relevance",
-    #     "metrics": [AnswerRelevance(require_context=False)],
-    #     "input_key": "question",
-    #     "output_key": "sentence",
-    #     "huggingface_path": "ragbench_sentence_relevance",
-    # },
-    # "election_questions": {
-    #     "name": "Election Questions",
-    #     "metrics": [Hallucination()],
-    #     "input_key": "question",
-    #     "output_key": "label",
-    #     "huggingface_path": "election_questions",
-    # },
-    "medhallu": {
-        "name": "MedHallu",
-        "metrics": [Hallucination(), AnswerRelevance(require_context=False)],
-        "input_key": "question",
-        "output_key": "ground_truth",
-        "huggingface_path": "medhallu",
-    },
-    # "rag_hallucinations": {
-    #     "name": "RAG Hallucinations",
-    #     "metrics": [Hallucination(), ContextPrecision()],
-    #     "input_key": "question",
-    #     "output_key": "answer",
-    #     "huggingface_path": "rag_hallucinations",
-    # },
-    # "hotpotqa": {
-    #     "name": "HotpotQA",
-    #     "metrics": [AnswerRelevance(), ContextPrecision()],
-    #     "input_key": "question",
-    #     "output_key": "answer",
-    #     "huggingface_path": "hotpot_qa",
-    # },
-    # "arc": {
-    #     "name": "ARC",
-    #     "metrics": [Equals()],
-    #     "input_key": "question",
-    #     "output_key": "answer",
-    #     "huggingface_path": "ai2_arc",
-    # },
-    "truthfulqa": {
-        "name": "TruthfulQA",
-        "metrics": [Hallucination(), AnswerRelevance()],
-        "input_key": "question",
-        "output_key": "answer",
-        "huggingface_path": "truthful_qa",
-    },
-    # "cnn_dailymail": {
-    #     "name": "CNN/Daily Mail",
-    #     "metrics": [LevenshteinRatio(), ContextRecall()],
-    #     "input_key": "article",
-    #     "output_key": "highlights",
-    #     "huggingface_path": "cnn_dailymail",
-    # },
+class BenchmarkDatasetConfig(BaseModel):
+    model_config = {"arbitrary_types_allowed": True}
+
+    name: str
+    display_name: str
+    metrics: List[Callable]
+
+
+class BenchmarkProjectConfig(BaseModel):
+    name: str
+    workspace: str
+    test_mode: bool
+
+
+class BenchmarkOptimizerConfig(BaseModel):
+    class_name: str
+    params: Dict[str, Any]
+
+
+class BenchmarkExperimentConfig(BaseModel):
+    dataset_name: str
+    optimizer: str
+    model_name: str
+    timestamp: str
+    test_mode: bool
+    environment: Dict[str, Any]
+    parameters: Dict[str, Any]
+    metrics: List[str]
+
+
+def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+    return LevenshteinRatio().score(reference=dataset_item["answer"], output=llm_output)
+
+
+def equals(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+    return Equals().score(reference=dataset_item["answer"], output=llm_output)
+
+
+def create_answer_relevance_metric(name_input_col: str) -> Callable:
+    def answer_relevance(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+        return AnswerRelevance(require_context=False).score(
+            input=dataset_item[name_input_col], output=llm_output
+        )
+
+    return answer_relevance
+
+
+def create_context_precision(name_input_col: str) -> Callable:
+    def context_precision(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+        return ContextPrecision().score(
+            input=dataset_item[name_input_col], output=llm_output
+        )
+
+    return context_precision
+
+
+def create_context_recall(name_input_col: str) -> Callable:
+    def context_recall(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+        return ContextRecall().score(
+            input=dataset_item[name_input_col], output=llm_output
+        )
+
+    return context_recall
+
+
+def hallucination(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+    return Hallucination().score(input=dataset_item["question"], output=llm_output)
+
+
+DATASET_CONFIG = {
+    "gsm8k": BenchmarkDatasetConfig(
+        name="gsm8k", display_name="GSM8K", metrics=[levenshtein_ratio]
+    ),
+    "ragbench_sentence_relevance": BenchmarkDatasetConfig(
+        name="ragbench_sentence_relevance",
+        display_name="RAGBench Sentence Relevance",
+        metrics=[create_answer_relevance_metric("question")],
+    ),
+    "election_questions": BenchmarkDatasetConfig(
+        name="election_questions",
+        display_name="Election Questions",
+        metrics=[hallucination],
+    ),
+    "medhallu": BenchmarkDatasetConfig(
+        name="MedHallu",
+        display_name="MedHallu",
+        metrics=[hallucination, create_answer_relevance_metric("question")],
+    ),
+    "rag_hallucinations": BenchmarkDatasetConfig(
+        name="rag_hallucinations",
+        display_name="RAG Hallucinations",
+        metrics=[hallucination, create_context_precision("question")],
+    ),
+    "hotpot_300": BenchmarkDatasetConfig(
+        name="hotpot_300",
+        display_name="HotpotQA",
+        metrics=[
+            create_answer_relevance_metric("question"),
+            create_context_precision("question"),
+        ],
+    ),
+    "ai2_arc": BenchmarkDatasetConfig(
+        name="ai2_arc", display_name="ARC", metrics=[equals]
+    ),
+    "truthful_qa": BenchmarkDatasetConfig(
+        name="TruthfulQA",
+        display_name="TruthfulQA",
+        metrics=[hallucination, create_answer_relevance_metric("question")],
+    ),
+    "cnn_dailymail": BenchmarkDatasetConfig(
+        name="cnn_dailymail",
+        display_name="CNN/Daily Mail",
+        metrics=[levenshtein_ratio, create_context_recall("article")],
+    ),
 }
 
-# Optimizer configurations
-OPTIMIZER_CONFIGS = {
-    ##############
-    # TEST configs
-    ##############
-
-    # "few_shot": {
-    #     "class": "FewShotBayesianOptimizer",
-    #     "params": {
-    #         "min_examples": 2,
-    #         "max_examples": 3,
-    #         "n_threads": 6,
-    #         "n_trials": 3,
-    #         "n_samples": 100,
-    #         "seed": 42,
-    #         "verbose": 0,
-    #     },
-    # },
-    # "meta_prompt": {
-    #     "class": "MetaPromptOptimizer",
-    #     "params": {
-    #         "max_rounds": 2,
-    #         "num_prompts_per_round": 2,
-    #         "improvement_threshold": 0.01,
-    #         "temperature": 0.1,
-    #         "max_completion_tokens": 9000,
-    #         "num_threads": 5,
-    #         "subsample_size": 5,
-    #         "seed": 42,
-    #         "verbose": 0,
-    #     },
-    # },
-    # "mipro": {
-    #     "class": "MiproOptimizer",
-    #     "params": {
-    #         "temperature": 0.1,
-    #         "max_tokens": 5000,
-    #         "num_threads": 10,
-    #         "seed": 42,
-    #         "verbose": 0,
-    #     },
-    # },
-
-
-    ##############
-    # Live Benchmark configs
-    ##############
-
-    # "few_shot": {
-    #     "class": "FewShotBayesianOptimizer",
-    #     "params": {
-    #         "min_examples": 3,
-    #         "max_examples": 7,
-    #         "n_threads": 4,
-    #         "seed": 42,
-    #         "n_trials": 10,
-    #         "n_samples": 100,
-    #         "verbose": 0,
-    #     },
-    # },
-    "meta_prompt": {
-        "class": "MetaPromptOptimizer",
-        "params": {
+OPTIMIZER_CONFIGS: Dict[str, BenchmarkOptimizerConfig] = {
+    "few_shot": BenchmarkOptimizerConfig(
+        class_name="FewShotBayesianOptimizer",
+        params={
+            "min_examples": 2,
+            "max_examples": 7,
+            "n_threads": 4,
+            "n_trials": 10,
+            "n_samples": 100,
+            "seed": 42,
+        },
+    ),
+    "meta_prompt": BenchmarkOptimizerConfig(
+        class_name="MetaPromptOptimizer",
+        params={
             "max_rounds": 3,
             "num_prompts_per_round": 4,
-            "improvement_threshold": 0.01,
             "temperature": 0.1,
             "max_completion_tokens": 9000,
             "num_threads": 5,
-            "subsample_size": 10,
-            "verbose": 0,
-            "enable_context": True,
+            "seed": 42,
         },
-    },
-    "meta_prompt_no_context": {
-        "class": "MetaPromptOptimizer",
-        "params": {
-            "max_rounds": 3,
-            "num_prompts_per_round": 4,
-            "improvement_threshold": 0.01,
-            "temperature": 0.1,
-            "max_completion_tokens": 9000,
-            "num_threads": 5,
-            "subsample_size": 10,
-            "verbose": 0,
-            "enable_context": False,
+    ),
+    "evolutionary_optimizer": BenchmarkOptimizerConfig(
+        class_name="EvolutionaryOptimizer",
+        params={
+            "population_size": 10,
+            "num_generations": 4,
+            "mutation_rate": 0.2,
+            "crossover_rate": 0.8,
+            "tournament_size": 4,
+            "num_threads": 4,
+            "elitism_size": 2,
+            "adaptive_mutation": True,
+            "enable_moo": False,
+            "enable_llm_crossover": False,
+            "seed": 42,
+            "infer_output_style": True,
         },
-    },
-    "meta_prompt_single_cot": {
-        "class": "MetaPromptOptimizer",
-        "params": {
-            "max_rounds": 1,
-            "num_prompts_per_round": 1,
-            "improvement_threshold": 0.01,
-            "temperature": 0.1,
-            "max_completion_tokens": 9000,
-            "num_threads": 5,
-            "subsample_size": 10,
-            "verbose": 0,
-            "enable_context": False,
-        },
-    },
-    # "mipro": {
-    #     "class": "MiproOptimizer",
-    #     "params": {
-    #         "temperature": 0.1,
-    #         "max_tokens": 5000,
-    #         "num_threads": 10,
-    #         "verbose": 0,
-    #     },
-    # },
-    # "external_dspy_mipro": {
-    #     "class": "ExternalDspyMiproOptimizer",
-    #     "params": {
-    #         "temperature": 0.1,
-    #         "max_tokens": 5000,
-    #         "num_threads": 1,
-    #     },
-    # },
-    # "external_adalflow": {
-    #     "class": "ExternalAdalFlowOptimizer",
-    #     "params": {
-    #         "temperature": 0.1,
-    #         "max_tokens": 5000,
-    #         "num_threads": 1,
-    #     },
-    # },
+    ),
 }
 
-MODELS_TO_RUN = [
+MODELS = [
     # Standard models
     # "openai/gpt-4.1-2025-04-14",
     "openai/gpt-4o-mini",
@@ -240,43 +182,62 @@ MODELS_TO_RUN = [
     # "openrouter/google/gemini-2.5-pro-preview",
 ]
 
-# Initial prompts for each dataset
 INITIAL_PROMPTS = {
-    "gsm8k": "Solve the following math problem step by step.",
-    "ragbench_sentence_relevance": "Evaluate whether the given sentence is relevant to answering the question.",
-    "election_questions": "Classify whether the following question about US elections is harmful or harmless.",
-    "medhallu": "Answer the medical question accurately based on the given knowledge, avoiding any hallucinations.",
-    "rag_hallucinations": "Answer the question based on the given context, ensuring all information is supported by the context.",
-    "hotpotqa": "Answer the question based on the given context.",
-    "arc": "Select the correct answer from the given options.",
-    "truthfulqa": "Provide a truthful and accurate answer to the question.",
-    "cnn_dailymail": "Summarize the following article concisely.",
-}
-
-
-def get_experiment_config(dataset_name: str, optimizer_name: str, model_name: str, test_mode: bool = False) -> Dict:
-    """Get experiment configuration with metadata."""
-    version_info = sys.version_info
-    
-    # Get base optimizer params and add model_name
-    optimizer_params = OPTIMIZER_CONFIGS.get(optimizer_name, {}).get("params", {})
-    current_params = optimizer_params.copy()
-    current_params["model"] = model_name
-
-    return {
-        "dataset": dataset_name,
-        "optimizer": optimizer_name,
-        "model_name": model_name,
-        "timestamp": datetime.now().isoformat(),
-        "test_mode": test_mode,  # Include test mode in experiment config
-        "environment": {
-            "python_version": "{}.{}.{}".format(
-                version_info.major, version_info.minor, version_info.micro
-            ),
-            "opik_version": opik_optimizer.__version__,
+    "gsm8k": [
+        {"role": "system", "content": "Solve the following math problem step by step."},
+        {"role": "user", "content": "{question}"},
+    ],
+    "ragbench_sentence_relevance": [
+        {
+            "role": "system",
+            "content": "Evaluate whether the given sentence is relevant to answering the question.",
         },
-        # Store the specific parameters used for this optimizer run
-        "parameters": current_params, 
-        "metrics": [str(m) for m in DATASET_CONFIGS[dataset_name]["metrics"]],
-    }
-
+        {"role": "user", "content": "Question: {question}\nSentence: {sentence}"},
+    ],
+    "election_questions": [
+        {
+            "role": "system",
+            "content": "Classify whether the following question about US elections is harmful or harmless.",
+        },
+        {"role": "user", "content": "{question}"},
+    ],
+    "medhallu": [
+        {
+            "role": "system",
+            "content": "Answer the medical question accurately based on the given knowledge, avoiding any hallucinations.",
+        },
+        {"role": "user", "content": "{question}"},
+    ],
+    "rag_hallucinations": [
+        {
+            "role": "system",
+            "content": "Answer the question based on the given context, ensuring all information is supported by the context.",
+        },
+        {"role": "user", "content": "{question}"},
+    ],
+    "hotpot_300": [
+        {
+            "role": "system",
+            "content": "Answer the question based on the given context.",
+        },
+        {"role": "user", "content": "{question}"},
+    ],
+    "ai2_arc": [
+        {
+            "role": "system",
+            "content": "Select the correct answer from the given options.",
+        },
+        {"role": "user", "content": "Question: {question}\nChoices: {choices}"},
+    ],
+    "truthful_qa": [
+        {
+            "role": "system",
+            "content": "Provide a truthful and accurate answer to the question.",
+        },
+        {"role": "user", "content": "{question}"},
+    ],
+    "cnn_dailymail": [
+        {"role": "system", "content": "Summarize the following article concisely."},
+        {"role": "user", "content": "{article}"},
+    ],
+}

@@ -1,7 +1,7 @@
 package com.comet.opik.api;
 
-import com.comet.opik.api.validate.InRange;
-import com.comet.opik.api.validate.InRangeValidator;
+import com.comet.opik.api.validation.InRange;
+import com.comet.opik.api.validation.InRangeValidator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -63,7 +63,9 @@ public record Trace(
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision") Double duration,
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) String threadId,
         @JsonView({
-                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) VisibilityMode visibilityMode){
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) VisibilityMode visibilityMode,
+        @JsonView({
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) int llmSpanCount){
 
     @Builder(toBuilder = true)
     public record TracePage(
@@ -99,6 +101,7 @@ public record Trace(
         GUARDRAILS_VALIDATIONS("guardrails_validations"),
         TOTAL_ESTIMATED_COST("total_estimated_cost"),
         SPAN_COUNT("span_count"),
+        LLM_SPAN_COUNT("llm_span_count"),
         DURATION("duration"),
         THREAD_ID("thread_id"),
         VISIBILITY_MODE("visibility_mode"),
