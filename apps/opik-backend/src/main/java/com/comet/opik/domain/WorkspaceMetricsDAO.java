@@ -6,7 +6,7 @@ import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.github.f4b6a3.uuid.UuidCreator;
+import com.fasterxml.uuid.Generators;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
@@ -24,7 +24,6 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -134,8 +133,6 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
     private final @NonNull TransactionTemplateAsync template;
 
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mmX");
-
     @Override
     public Mono<List<WorkspaceMetricsSummaryResponse.Result>> getFeedbackScoresSummary(
             @NonNull WorkspaceMetricsSummaryRequest request) {
@@ -164,8 +161,9 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
         var statement = connection.createStatement(query)
                 .bind("timestamp_start", request.intervalStart().toString())
                 .bind("timestamp_end", request.intervalEnd().toString())
-                .bind("id_start", UuidCreator.getTimeOrderedEpoch(request.intervalStart()))
-                .bind("id_end", UuidCreator.getTimeOrderedEpoch(request.intervalEnd()))
+                .bind("id_start",
+                        Generators.timeBasedEpochGenerator().construct(request.intervalStart().toEpochMilli()))
+                .bind("id_end", Generators.timeBasedEpochGenerator().construct(request.intervalEnd().toEpochMilli()))
                 .bind("name", request.name());
 
         if (CollectionUtils.isNotEmpty(request.projectIds())) {
@@ -198,10 +196,12 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
         }
 
         var statement = connection.createStatement(template.render())
-                .bind("id_start", UuidCreator.getTimeOrderedEpoch(request.intervalStart()))
-                .bind("id_end", UuidCreator.getTimeOrderedEpoch(request.intervalEnd()))
+                .bind("id_start",
+                        Generators.timeBasedEpochGenerator().construct(request.intervalStart().toEpochMilli()))
+                .bind("id_end", Generators.timeBasedEpochGenerator().construct(request.intervalEnd().toEpochMilli()))
                 .bind("id_prior_start",
-                        UuidCreator.getTimeOrderedEpoch(getPriorStart(request.intervalStart(), request.intervalEnd())));
+                        Generators.timeBasedEpochGenerator().construct(
+                                getPriorStart(request.intervalStart(), request.intervalEnd()).toEpochMilli()));
 
         if (CollectionUtils.isNotEmpty(request.projectIds())) {
             statement.bind("project_ids", request.projectIds());
@@ -234,7 +234,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
         var dataItems = Arrays.stream(dataArray)
                 .filter(CollectionUtils::isNotEmpty)
                 .map(dataItem -> DataPoint.<Double>builder()
-                        .time(OffsetDateTime.parse(dataItem.get(0).toString(), DATE_TIME_FORMATTER).toInstant())
+                        .time(((OffsetDateTime) dataItem.get(0)).toInstant())
                         .value(Optional.ofNullable(dataItem.get(1)).map(Object::toString)
                                 .map(Double::parseDouble)
                                 .orElse(null))

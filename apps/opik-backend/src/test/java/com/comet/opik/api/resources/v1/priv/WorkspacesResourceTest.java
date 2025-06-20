@@ -358,18 +358,16 @@ class WorkspacesResourceTest {
 
         private List<DataPoint<Double>> prepareMetricsDailyData(Collection<Double> scores) {
 
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mmX");
-
-            String todayTime = LocalDate
+            Instant todayTime = LocalDate
                     .now(ZoneOffset.UTC)
                     .atStartOfDay(ZoneOffset.UTC)
-                    .format(formatter);
+                    .toInstant();
 
-            String yesterdayTime = LocalDate
+            Instant yesterdayTime = LocalDate
                     .now(ZoneOffset.UTC)
                     .minusDays(1)
                     .atStartOfDay(ZoneOffset.UTC)
-                    .format(formatter);
+                    .toInstant();
 
             var avgValue = scores.stream()
                     .mapToDouble(Double::doubleValue)
@@ -377,11 +375,11 @@ class WorkspacesResourceTest {
                     .orElse(0.0);
 
             return List.of(DataPoint.<Double>builder()
-                    .time(OffsetDateTime.parse(yesterdayTime, formatter).toInstant())
+                    .time(yesterdayTime)
                     .value(null)
                     .build(),
                     DataPoint.<Double>builder()
-                            .time(OffsetDateTime.parse(todayTime, formatter).toInstant())
+                            .time(todayTime)
                             .value(scores.isEmpty() ? null : avgValue)
                             .build());
         }
