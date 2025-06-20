@@ -325,16 +325,38 @@ clickhouse:
   zookeeper:
       host: opik-zookeeper
   backup: 
-    enabled: false
+    enabled: true
     successfulJobsHistoryLimit: 1
     serviceAccount:
-        enabled: false
-        create: true
-        annotations: {}
+      annotations: {}
+      create: false
+      name: clickhouse-backup
     # bucketURL: ""
     # secretName: ""
     # schedule: ""
     # baseBackup: ""
+    command:
+      - /bin/bash
+      - '-cx'
+      - |
+        if [ $(date +%j) -eq 1 ]; then
+          echo "Running backup for the first day of the year"
+          export BACKUP_PREFIX=yearly/
+        elif [ $(date +%d) -eq 1 ]; then
+          echo "Skipping backup, not the first day of the year"
+          export BACKUP_PREFIX=monthly/
+        else
+          echo "Running backup for the current day"
+          export BACKUP_PREFIX=""
+        fi
+        export BACKUP_NAME=${BACKUP_PREFIX}backup$(date +'%Y%m%d%H%M')
+        BACKUP_QUERY_FILE=$(mktemp --suffix .sql /tmp/clickhouse-backup-query.XXXXXX)
+        cat << BACKUP_SQL | tee "${BACKUP_QUERY_FILE}"
+          BACKUP ALL EXCEPT DATABASE system 
+            TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${BACKUP_NAME}/', '${ACCESS_KEY}', '${SECRET_KEY}');
+        BACKUP_SQL
+        clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file="${BACKUP_QUERY_FILE}"
+            
   monitoring:
     enabled: false
     username: opikmon # readonly user

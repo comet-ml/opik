@@ -56,3 +56,13 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+{{/*
+Create the name of the service account to use
+*/}}
+{{- define "clickhouse.backup.serviceAccountName" -}}
+{{- if .Values.clickhouse.backup.serviceAccount.create }}
+{{- default (include "opik.fullname" .) .Values.clickhouse.backup.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.clickhouse.backup.serviceAccount.name }}
+{{- end }}
+{{- end }}
