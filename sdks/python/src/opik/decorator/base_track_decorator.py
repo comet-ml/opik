@@ -460,40 +460,60 @@ class BaseTrackDecorator(abc.ABC):
         generators_trace_to_end: Optional[trace.TraceData] = None,
         flush: bool = False,
     ) -> None:
+        try:
+            self.__after_call_unsafe(
+                output=output,
+                error_info=error_info,
+                capture_output=capture_output,
+                generators_span_to_end=generators_span_to_end,
+                generators_trace_to_end=generators_trace_to_end,
+                flush=flush,
+            )
+        except Exception as exception:
+            LOGGER.error(
+                logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_FINALIZATION_FOR_TRACKED_FUNCTION,
+                output,
+                str(exception),
+                exc_info=True,
+            )
+
+    def __after_call_unsafe(
+        self,
+        output: Optional[Any],
+        error_info: Optional[ErrorInfoDict],
+        capture_output: bool,
+        generators_span_to_end: Optional[span.SpanData] = None,
+        generators_trace_to_end: Optional[trace.TraceData] = None,
+        flush: bool = False,
+    ) -> None:
         if self.disabled or not is_tracing_active():
             return
 
-        # Simplified logic for ending spans and traces
-        try:
-            client = opik_client.get_client_cached()
-            
-            if generators_span_to_end:
-                span_to_end = generators_span_to_end
-                trace_to_end = generators_trace_to_end
-            else:
-                span_to_end, trace_to_end = pop_end_candidates()
+        if generators_span_to_end:
+            span_to_end = generators_span_to_end
+            trace_to_end = generators_trace_to_end
+        else:
+            span_to_end, trace_to_end = pop_end_candidates()
 
-            if error_info:
-                span_to_end.error_info = error_info
+        if error_info:
+            span_to_end.error_info = error_info
 
-            end_span_arguments = self._end_span_inputs_preprocessor(
-                output=output,
-                capture_output=capture_output,
-                current_span_data=span_to_end,
-            )
-            span_to_end.update(**end_span_arguments)
-            client.span(**span_to_end.as_parameters)
+        end_span_arguments = self._end_span_inputs_preprocessor(
+            output=output,
+            capture_output=capture_output,
+            current_span_data=span_to_end,
+        )
+        span_to_end.update(**end_span_arguments)
 
-            if trace_to_end:
-                trace_to_end.update(**end_span_arguments)
-                client.trace(**trace_to_end.as_parameters)
+        client = opik_client.get_client_cached()
+        client.span(**span_to_end.as_parameters)
 
-            if flush:
-                client.flush()
-        except Exception as e:
-            LOGGER.error(
-                "Failed to finalize span: %s", e, exc_info=True
-            )
+        if trace_to_end:
+            trace_to_end.update(**end_span_arguments)
+            client.trace(**trace_to_end.as_parameters)
+
+        if flush:
+            client.flush()
 
     @abc.abstractmethod
     def _streams_handler(
