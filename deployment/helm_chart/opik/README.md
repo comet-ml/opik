@@ -95,6 +95,22 @@ Call opik api on http://localhost:5173/api
 | clickhouse.adminUser.password | string | `"opik"` |  |
 | clickhouse.adminUser.useSecret.enabled | bool | `false` |  |
 | clickhouse.adminUser.username | string | `"opik"` |  |
+| clickhouse.backup.enabled | bool | `false` |  |
+| clickhouse.backup.env.ALLOW_EMPTY_BACKUPS | bool | `true` |  |
+| clickhouse.backup.env.API_CREATE_INTEGRATION_TABLES | bool | `true` |  |
+| clickhouse.backup.env.API_LISTEN | string | `"0.0.0.0:7171"` |  |
+| clickhouse.backup.env.BACKUPS_TO_KEEP_REMOTE | int | `3` |  |
+| clickhouse.backup.env.LOG_LEVEL | string | `"debug"` |  |
+| clickhouse.backup.env.REMOTE_STORAGE | string | `"s3"` |  |
+| clickhouse.backup.env.S3_ACCESS_KEY | string | `""` |  |
+| clickhouse.backup.env.S3_ACL | string | `"private"` |  |
+| clickhouse.backup.env.S3_BUCKET | string | `"clickhouse-backup"` |  |
+| clickhouse.backup.env.S3_FORCE_PATH_STYLE | bool | `true` |  |
+| clickhouse.backup.env.S3_PATH | string | `"backup/shard-{shard}"` |  |
+| clickhouse.backup.env.S3_SECRET_KEY | string | `""` |  |
+| clickhouse.backup.image | string | `"altinity/clickhouse-backup:latest"` |  |
+| clickhouse.backup.imagePullPolicy | string | `"Always"` |  |
+| clickhouse.backup.port | int | `7171` |  |
 | clickhouse.backup.command[0] | string | `"/bin/bash"` |  |
 | clickhouse.backup.command[1] | string | `"-cx"` |  |
 | clickhouse.backup.command[2] | string | `"export backupname=backup$(date +'%Y%m%d%H%M')\necho \"BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');\" > /tmp/backQuery.sql\nclickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql"` |  |
