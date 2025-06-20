@@ -5190,22 +5190,21 @@ class TracesResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-
-            var llmSpanCount = RandomUtils.secure().randomInt(1, 7);
-            var spanCount = llmSpanCount + RandomUtils.secure().randomInt(1, 7);
-
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
+                    .map(trace -> {
+                        var llmSpanCount = RandomUtils.secure().randomInt(1, 7);
+                        return trace.toBuilder()
                             .projectId(null)
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
                             .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
                             .comments(null)
-                            .spanCount(spanCount)
+                            .spanCount(llmSpanCount + RandomUtils.secure().randomInt(1, 7))
                             .llmSpanCount(llmSpanCount)
-                            .build())
+                            .build();
+                    })
                     .map(trace -> trace.toBuilder()
                             .duration(trace.startTime().until(trace.endTime(), ChronoUnit.MICROS) / 1000.0)
                             .build())
