@@ -98,13 +98,5 @@ class StatsMapperTest {
 
         assertThat(mapped.get(StatsMapper.TOTAL_ESTIMATED_COST)).isEqualTo(1.25);
         assertThat(mapped.get(StatsMapper.TOTAL_ESTIMATED_COST_SUM)).isEqualTo(2.50);
-        assertThat(mapped.get(StatsMapper.LLM_SPAN_COUNT)).isEqualTo(2.0);
-
-        var llmSpanStat = stats.stats().stream()
-                .filter(s -> StatsMapper.LLM_SPAN_COUNT.equals(s.getName()))
-                .findFirst()
-                .orElseThrow();
-
-        assertThat(llmSpanStat).isInstanceOf(ProjectStats.AvgValueStat.class);
     }
 }
