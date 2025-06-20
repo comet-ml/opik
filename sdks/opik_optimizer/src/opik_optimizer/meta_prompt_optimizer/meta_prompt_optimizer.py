@@ -824,7 +824,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                             chat_prompt.ChatPrompt(
                                 system=item["prompt"][0]["content"],
                                 user=current_prompt.user
-                                or current_prompt.messages[-1]["content"],
+                                or current_prompt.messages[-1]["content"]
+                                if current_prompt.meesages is not None
+                                else "User content not found!",
                             )
                         )
 
