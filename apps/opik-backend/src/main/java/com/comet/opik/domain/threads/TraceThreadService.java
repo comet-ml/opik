@@ -97,7 +97,8 @@ class TraceThreadServiceImpl implements TraceThreadService {
     }
 
     private TraceThreadModel mapToModel(TraceThreadIdModel traceThread, String userName, Instant lastUpdatedAt) {
-        return TraceThreadMapper.INSTANCE.mapFromThreadIdModel(traceThread, userName, TraceThreadStatus.ACTIVE, lastUpdatedAt);
+        return TraceThreadMapper.INSTANCE.mapFromThreadIdModel(traceThread, userName, TraceThreadStatus.ACTIVE,
+                lastUpdatedAt);
     }
 
     private Mono<Void> saveTraceThreads(UUID projectId, List<TraceThreadModel> traceThreads) {

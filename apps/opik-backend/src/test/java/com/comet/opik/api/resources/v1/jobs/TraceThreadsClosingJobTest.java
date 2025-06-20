@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.jobs;
 
-import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -49,7 +49,6 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
-
 import static com.comet.opik.domain.threads.TraceThreadModel.builder;
 
 @DisplayName("Trace Threads Closing Job Test")

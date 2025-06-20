@@ -1063,7 +1063,7 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     /***
-     * When treating a list of traces as threads, a number of aggregation are performed to get the thread details.
+     * When treating a list of traces as threads, many aggregations are performed to get the thread details.
      * <p>
      * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
      ***/
@@ -1129,41 +1129,59 @@ class TraceDAOImpl implements TraceDAO {
                 AND thread_id IN (SELECT thread_id FROM traces_final)
             )
             SELECT
-                count(DISTINCT t.thread_id) as count
+                count(DISTINCT t.id) AS count
             FROM (
                 SELECT
-                    t.thread_id as id,
                     t.workspace_id as workspace_id,
-                    t.project_id as project_id
-                    <if(trace_thread_filters)>
-                    , min(t.start_time) as start_time,
-                    max(t.end_time) as end_time,
-                    if(end_time IS NOT NULL AND start_time IS NOT NULL
-                           AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                       (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                       NULL) AS duration,
-                    argMin(t.input, t.start_time) as first_message,
-                    argMax(t.output, t.end_time) as last_message,
-                    count(DISTINCT t.id) * 2 as number_of_messages,
-                    sum(s.total_estimated_cost) as total_estimated_cost,
-                    sumMap(s.usage) as usage,
-                    argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
-                    max(t.last_updated_at) as last_updated_at,
-                    argMin(t.created_by, t.created_at) as created_by,
-                    min(t.created_at) as created_at
-                    <endif>
-                FROM traces_final AS t
-                <if(trace_thread_filters)>
-                LEFT JOIN spans_agg AS s ON t.id = s.trace_id
-                <endif>
-                GROUP BY t.workspace_id, t.project_id, t.thread_id
+                    t.project_id as project_id,
+                    t.id as id,
+                    t.start_time as start_time,
+                    t.end_time as end_time,
+                    t.duration as duration,
+                    t.first_message as first_message,
+                    t.last_message as last_message,
+                    t.number_of_messages as number_of_messages,
+                    t.total_estimated_cost as total_estimated_cost,
+                    t.usage as usage,
+                    if(tt.created_by = '', t.created_by, tt.created_by) as created_by,
+                    if(tt.last_updated_by = '', t.last_updated_by, tt.last_updated_by) as last_updated_by,
+                    if(tt.last_updated_at == toDateTime64(0, 6, 'UTC'), t.last_updated_at, tt.last_updated_at) as last_updated_at,
+                    if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
+                    if(tt.status = 'unknown', 'active', tt.status) as status,
+                    if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
+                    fsagg.feedback_scores_list as feedback_scores_list,
+                    fsagg.feedback_scores as feedback_scores
+                FROM (
+                    SELECT
+                        t.thread_id as id,
+                        t.workspace_id as workspace_id,
+                        t.project_id as project_id,
+                        min(t.start_time) as start_time,
+                        max(t.end_time) as end_time,
+                        if(end_time IS NOT NULL AND start_time IS NOT NULL
+                               AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                           (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                           NULL) AS duration,
+                        <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
+                        <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
+                        count(DISTINCT t.id) * 2 as number_of_messages,
+                        sum(s.total_estimated_cost) as total_estimated_cost,
+                        sumMap(s.usage) as usage,
+                        max(t.last_updated_at) as last_updated_at,
+                        argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
+                        argMin(t.created_by, t.created_at) as created_by,
+                        min(t.created_at) as created_at
+                    FROM traces_final AS t
+                        LEFT JOIN spans_agg AS s ON t.id = s.trace_id
+                    GROUP BY
+                        t.workspace_id, t.project_id, t.thread_id
+                ) AS t
+                LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
+                    AND t.project_id = tt.project_id
+                    AND t.id = tt.thread_id
+                LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
+                <if(trace_thread_filters)>WHERE <trace_thread_filters><endif>
             ) AS t
-            LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
-                AND t.project_id = tt.project_id
-                AND t.id = tt.thread_id
-            FETCH JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
-            <if(trace_thread_filters)>WHERE <trace_thread_filters><endif>
-            ;
             """;
 
     /***
@@ -1235,7 +1253,7 @@ class TraceDAOImpl implements TraceDAO {
             SELECT
                 t.workspace_id as workspace_id,
                 t.project_id as project_id,
-                t.thread_id as id,
+                t.id as id,
                 t.start_time as start_time,
                 t.end_time as end_time,
                 t.duration as duration,
@@ -1249,7 +1267,7 @@ class TraceDAOImpl implements TraceDAO {
                 if(tt.last_updated_at == toDateTime64(0, 6, 'UTC'), t.last_updated_at, tt.last_updated_at) as last_updated_at,
                 if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
                 if(tt.status = 'unknown', 'active', tt.status) as status,
-                if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, NULL, tt.thread_model_id) as thread_model_id,
+                if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
                 fsagg.feedback_scores_list as feedback_scores_list,
                 fsagg.feedback_scores as feedback_scores
             FROM (
@@ -1280,9 +1298,9 @@ class TraceDAOImpl implements TraceDAO {
             LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
                 AND t.project_id = tt.project_id
                 AND t.id = tt.thread_id
-            FETCH JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
-            <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC <else> ORDER BY last_updated_at DESC, start_time ASC, end_time DESC <endif>
+            LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
             <if(trace_thread_filters)>WHERE <trace_thread_filters><endif>
+            <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC <else> ORDER BY last_updated_at DESC, start_time ASC, end_time DESC <endif>
             LIMIT :limit OFFSET :offset
             ;
             """;
@@ -1383,7 +1401,7 @@ class TraceDAOImpl implements TraceDAO {
                 if(tt.last_updated_at == toDateTime64(0, 6, 'UTC'), t.last_updated_at, tt.last_updated_at) as last_updated_at,
                 if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
                 if(tt.status = 'unknown', 'active', tt.status) as status,
-                if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, NULL, tt.thread_model_id) as thread_model_id,
+                if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
                 fsagg.feedback_scores_list as feedback_scores_list,
                 fsagg.feedback_scores as feedback_scores
             FROM (
