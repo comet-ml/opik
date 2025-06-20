@@ -11,7 +11,6 @@ import java.util.stream.Collectors;
 @Slf4j
 public class DatabaseUtils {
     public static DataSourceFactory filterProperties(DataSourceFactory dataSourceFactory) {
-        log.info("Initial MySQL properties: {}", dataSourceFactory.getProperties());
         var filteredProperties = dataSourceFactory.getProperties()
                 .entrySet()
                 .stream()
@@ -20,7 +19,6 @@ public class DatabaseUtils {
                         java.util.Map.Entry::getKey,
                         java.util.Map.Entry::getValue));
         dataSourceFactory.setProperties(filteredProperties);
-        log.info("Filtered MySQL properties: {}", filteredProperties);
 
         return dataSourceFactory;
     }
