@@ -91,6 +91,9 @@ spec:
             image: {{ .Values.clickhouse.backup.image }}
             imagePullPolicy: {{ .Values.clickhouse.backup.imagePullPolicy | default "IfNotPresent" }}
             {{- with .Values.clickhouse.backup.resources }}
+            resources:
+            {{- toYaml . | nindent 14 }}
+            {{- end }}
             args: ["server"]
             {{- with .Values.clickhouse.backup.env }}
             env:
