@@ -2,6 +2,7 @@ package com.comet.opik;
 
 import com.comet.opik.api.error.JsonProcessingExceptionMapper;
 import com.comet.opik.infrastructure.ConfigurationModule;
+import com.comet.opik.infrastructure.DatabaseUtils;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.AuthModule;
@@ -70,7 +71,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
         bootstrap.addBundle(LiquibaseBundle.builder()
                 .name(DB_APP_STATE_NAME)
                 .migrationsFileName(DB_APP_STATE_MIGRATIONS_FILE_NAME)
-                .dataSourceFactoryFunction(OpikConfiguration::getDatabase)
+                .dataSourceFactoryFunction(conf -> DatabaseUtils.filterProperties(conf.getDatabase()))
                 .build());
         bootstrap.addBundle(LiquibaseBundle.builder()
                 .name(DB_APP_ANALYTICS_NAME)
@@ -78,7 +79,9 @@ public class OpikApplication extends Application<OpikConfiguration> {
                 .dataSourceFactoryFunction(OpikConfiguration::getDatabaseAnalyticsMigrations)
                 .build());
         bootstrap.addBundle(GuiceBundle.builder()
-                .bundles(JdbiBundle.<OpikConfiguration>forDatabase((conf, env) -> conf.getDatabase())
+                .bundles(JdbiBundle
+                        .<OpikConfiguration>forDatabase(
+                                (conf, env) -> DatabaseUtils.filterProperties(conf.getDatabase()))
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),
