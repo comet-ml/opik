@@ -52,8 +52,11 @@ public class StatsMapper {
                 .add(new CountValueStat(INPUT, row.get("input", Long.class)))
                 .add(new CountValueStat(OUTPUT, row.get("output", Long.class)))
                 .add(new CountValueStat(METADATA, row.get("metadata", Long.class)))
-                .add(new AvgValueStat(TAGS, row.get("tags", Double.class)))
-                .add(new AvgValueStat(LLM_SPAN_COUNT, row.get(LLM_SPAN_COUNT_AVG, Double.class)));
+                .add(new AvgValueStat(TAGS, row.get("tags", Double.class)));
+
+        if (entityCountLabel.equals("trace_count")) {
+            stats.add(new AvgValueStat(LLM_SPAN_COUNT, row.get(LLM_SPAN_COUNT_AVG, Double.class)));
+        }
 
         BigDecimal totalEstimatedCostAvg = row.get(TOTAL_ESTIMATED_COST_AVG, BigDecimal.class);
         if (totalEstimatedCostAvg == null) {
