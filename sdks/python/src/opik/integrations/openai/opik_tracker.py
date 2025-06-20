@@ -1,7 +1,6 @@
 from typing import Optional, TypeVar
 
 import openai
-from opik.config import is_tracing_active
 
 from . import (
     chat_completion_chunks_aggregator,
@@ -32,10 +31,6 @@ def track_openai(
     Returns:
         The modified OpenAI client with Opik tracking enabled.
     """
-    # Check if tracing is active
-    if not is_tracing_active():
-        return openai_client
-        
     if hasattr(openai_client, "opik_tracked"):
         return openai_client
 

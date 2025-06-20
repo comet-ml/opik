@@ -34,30 +34,6 @@ CONFIG_FILE_PATH_DEFAULT: Final[str] = "~/.opik.config"
 
 LOGGER = logging.getLogger(__name__)
 
-_tracing_active = True  # Default to enabled
-
-def set_tracing_active(active: bool) -> None:
-    """
-    Enable or disable Opik tracing globally at runtime.
-    
-    Args:
-        active: If True, tracing is enabled. If False, tracing is disabled.
-    """
-    global _tracing_active
-    _tracing_active = active
-
-def is_tracing_active() -> bool:
-    """
-    Check if Opik tracing is currently active.
-    
-    Returns:
-        True if tracing is active, False otherwise.
-    """
-    global _tracing_active
-    if os.environ.get("OPIK_TRACK_DISABLE", "").lower() in ("true", "1", "yes"):
-        return False
-    return _tracing_active
-
 
 class IniConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     """

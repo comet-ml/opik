@@ -365,9 +365,10 @@ class OpikTracer(BaseTracer):
         config = self._opik_client.config
         if config.track_disable:
             return True
-        
+
         # Add check for dynamic tracing state
-        from opik.config import is_tracing_active
+        from opik.decorator import is_tracing_active
+
         if not is_tracing_active():
             return True
 
