@@ -18,7 +18,7 @@ class SpanWrite(UniversalBaseModel):
     If null, the default project is used
     """
 
-    trace_id: str
+    trace_id: typing.Optional[str] = None
     parent_span_id: typing.Optional[str] = None
     name: typing.Optional[str] = None
     type: typing.Optional[SpanWriteType] = None

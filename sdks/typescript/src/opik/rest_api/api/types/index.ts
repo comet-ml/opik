@@ -251,6 +251,7 @@ export * from "./FeedbackScoreBatchItemSource";
 export * from "./FeedbackScoreBatchItem";
 export * from "./SpanFilterPublicOperator";
 export * from "./SpanFilterPublic";
+export * from "./TraceThreadIdentifier";
 export * from "./TraceWrite";
 export * from "./TraceBatch";
 export * from "./CheckPublicName";

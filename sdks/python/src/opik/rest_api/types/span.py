@@ -21,7 +21,7 @@ class Span(UniversalBaseModel):
     """
 
     project_id: typing.Optional[str] = None
-    trace_id: str
+    trace_id: typing.Optional[str] = None
     parent_span_id: typing.Optional[str] = None
     name: typing.Optional[str] = None
     type: typing.Optional[SpanType] = None

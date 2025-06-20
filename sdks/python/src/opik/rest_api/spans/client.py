@@ -242,10 +242,10 @@ class SpansClient:
     def create_span(
         self,
         *,
-        trace_id: str,
         start_time: dt.datetime,
         id: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
+        trace_id: typing.Optional[str] = OMIT,
         parent_span_id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         type: typing.Optional[SpanWriteType] = OMIT,
@@ -268,14 +268,14 @@ class SpansClient:
 
         Parameters
         ----------
-        trace_id : str
-
         start_time : dt.datetime
 
         id : typing.Optional[str]
 
         project_name : typing.Optional[str]
             If null, the default project is used
+
+        trace_id : typing.Optional[str]
 
         parent_span_id : typing.Optional[str]
 
@@ -319,13 +319,13 @@ class SpansClient:
         from Opik import OpikApi
         import datetime
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.spans.create_span(trace_id='trace_id', start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+        client.spans.create_span(start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
         """
         _response = self._raw_client.create_span(
-            trace_id=trace_id,
             start_time=start_time,
             id=id,
             project_name=project_name,
+            trace_id=trace_id,
             parent_span_id=parent_span_id,
             name=name,
             type=type,
@@ -368,7 +368,7 @@ class SpansClient:
         from Opik import SpanWrite
         import datetime
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.spans.create_spans(spans=[SpanWrite(trace_id='trace_id', start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )], )
+        client.spans.create_spans(spans=[SpanWrite(start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )], )
         """
         _response = self._raw_client.create_spans(spans=spans, request_options=request_options)
         return _response.data
@@ -1051,10 +1051,10 @@ class AsyncSpansClient:
     async def create_span(
         self,
         *,
-        trace_id: str,
         start_time: dt.datetime,
         id: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
+        trace_id: typing.Optional[str] = OMIT,
         parent_span_id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         type: typing.Optional[SpanWriteType] = OMIT,
@@ -1077,14 +1077,14 @@ class AsyncSpansClient:
 
         Parameters
         ----------
-        trace_id : str
-
         start_time : dt.datetime
 
         id : typing.Optional[str]
 
         project_name : typing.Optional[str]
             If null, the default project is used
+
+        trace_id : typing.Optional[str]
 
         parent_span_id : typing.Optional[str]
 
@@ -1130,14 +1130,14 @@ class AsyncSpansClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.spans.create_span(trace_id='trace_id', start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+            await client.spans.create_span(start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
         asyncio.run(main())
         """
         _response = await self._raw_client.create_span(
-            trace_id=trace_id,
             start_time=start_time,
             id=id,
             project_name=project_name,
+            trace_id=trace_id,
             parent_span_id=parent_span_id,
             name=name,
             type=type,
@@ -1182,7 +1182,7 @@ class AsyncSpansClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.spans.create_spans(spans=[SpanWrite(trace_id='trace_id', start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )], )
+            await client.spans.create_spans(spans=[SpanWrite(start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )], )
         asyncio.run(main())
         """
         _response = await self._raw_client.create_spans(spans=spans, request_options=request_options)

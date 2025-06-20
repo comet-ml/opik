@@ -203,6 +203,7 @@ paths:
         in: query
         required: true
         schema:
+          minLength: 1
           type: string
       responses:
         "200":
@@ -313,11 +314,13 @@ paths:
         in: query
         required: true
         schema:
+          minLength: 1
           type: string
       - name: mime_type
         in: query
         required: true
         schema:
+          minLength: 1
           type: string
       responses:
         "200":
@@ -883,6 +886,7 @@ paths:
         in: query
         required: true
         schema:
+          minLength: 1
           type: string
       - name: filters
         in: query
@@ -2888,6 +2892,21 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/traces/threads/close:
+    put:
+      tags:
+      - Traces
+      summary: Close trace thread
+      description: Close trace thread
+      operationId: closeTraceThread
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TraceThreadIdentifier"
+      responses:
+        "204":
+          description: No Content
   /v1/private/traces:
     get:
       tags:
@@ -3263,6 +3282,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TraceThreadPage"
+  /v1/private/traces/threads/open:
+    put:
+      tags:
+      - Traces
+      summary: Open trace thread
+      description: Open trace thread
+      operationId: openTraceThread
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TraceThreadIdentifier"
+      responses:
+        "204":
+          description: No Content
   /v1/private/traces/feedback-scores:
     put:
       tags:
@@ -3650,6 +3684,7 @@ components:
       type: object
       properties:
         file_name:
+          minLength: 1
           type: string
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
@@ -3673,6 +3708,7 @@ components:
         mime_type:
           type: string
         upload_id:
+          minLength: 1
           type: string
         uploaded_file_parts:
           type: array
@@ -3685,6 +3721,7 @@ components:
       type: object
       properties:
         e_tag:
+          minLength: 1
           type: string
         part_number:
           type: integer
@@ -3720,6 +3757,7 @@ components:
       type: object
       properties:
         upload_id:
+          minLength: 1
           type: string
         pre_sign_urls:
           type: array
@@ -3735,6 +3773,7 @@ components:
       type: object
       properties:
         file_name:
+          minLength: 1
           type: string
         num_of_file_parts:
           type: integer
@@ -3758,6 +3797,7 @@ components:
           format: uuid
           readOnly: true
         path:
+          minLength: 1
           type: string
     AuthDetailsHolder:
       type: object
@@ -3783,6 +3823,7 @@ components:
           type: string
           readOnly: true
         name:
+          minLength: 1
           type: string
         sampling_rate:
           type: number
@@ -3914,6 +3955,7 @@ components:
         metric:
           type: string
         arguments:
+          minProperties: 1
           type: object
           additionalProperties:
             type: string
@@ -3951,6 +3993,7 @@ components:
           type: string
           format: uuid
         name:
+          minLength: 1
           type: string
         sampling_rate:
           type: number
@@ -4044,6 +4087,7 @@ components:
         metric:
           type: string
         arguments:
+          minProperties: 1
           type: object
           additionalProperties:
             type: string
@@ -4089,6 +4133,7 @@ components:
           type: string
           readOnly: true
         name:
+          minLength: 1
           type: string
         sampling_rate:
           type: number
@@ -4224,6 +4269,7 @@ components:
         metric:
           type: string
         arguments:
+          minProperties: 1
           type: object
           additionalProperties:
             type: string
@@ -4244,6 +4290,7 @@ components:
           type: string
           readOnly: true
         name:
+          minLength: 1
           type: string
         sampling_rate:
           type: number
@@ -4327,6 +4374,7 @@ components:
       type: object
       properties:
         name:
+          minLength: 1
           type: string
         sampling_rate:
           type: number
@@ -4621,6 +4669,7 @@ components:
           type: string
           format: uuid
         name:
+          minLength: 1
           type: string
         visibility:
           type: string
@@ -4681,6 +4730,7 @@ components:
           type: string
           format: uuid
         name:
+          minLength: 1
           type: string
         visibility:
           type: string
@@ -4700,6 +4750,7 @@ components:
           format: uuid
           readOnly: true
         text:
+          minLength: 1
           type: string
         created_at:
           type: string
@@ -4856,6 +4907,7 @@ components:
       type: object
       properties:
         name:
+          minLength: 1
           type: string
         category_name:
           type: string
@@ -4945,6 +4997,7 @@ components:
       type: object
       properties:
         dataset_name:
+          minLength: 1
           type: string
     DatasetItemsDelete:
       required:
@@ -4991,6 +5044,7 @@ components:
           format: uuid
           readOnly: true
         text:
+          minLength: 1
           type: string
         created_at:
           type: string
@@ -5151,6 +5205,7 @@ components:
       type: object
       properties:
         name:
+          minLength: 1
           type: string
         category_name:
           type: string
@@ -5217,6 +5272,7 @@ components:
           type: string
           format: uuid
         name:
+          minLength: 1
           type: string
         visibility:
           type: string
@@ -5274,6 +5330,7 @@ components:
       type: object
       properties:
         dataset_name:
+          minLength: 1
           type: string
     DatasetItem_Public:
       required:
@@ -5451,6 +5508,7 @@ components:
       type: object
       properties:
         dataset_name:
+          minLength: 1
           type: string
         last_retrieved_id:
           type: string
@@ -5466,6 +5524,7 @@ components:
       type: object
       properties:
         name:
+          minLength: 1
           type: string
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
@@ -5484,6 +5543,7 @@ components:
           type: string
           format: uuid
         dataset_name:
+          minLength: 1
           type: string
         dataset_id:
           type: string
@@ -5558,6 +5618,7 @@ components:
       type: object
       properties:
         name:
+          minLength: 1
           type: string
         value:
           type: number
@@ -5596,6 +5657,7 @@ components:
           type: string
           format: uuid
         dataset_name:
+          minLength: 1
           type: string
         name:
           type: string
@@ -5684,10 +5746,12 @@ components:
       type: object
       properties:
         exception_type:
+          minLength: 1
           type: string
         message:
           type: string
         traceback:
+          minLength: 1
           type: string
     ExperimentItemBulkRecord:
       required:
@@ -5721,8 +5785,10 @@ components:
       type: object
       properties:
         experiment_name:
+          minLength: 1
           type: string
         dataset_name:
+          minLength: 1
           type: string
         items:
           maxItems: 250
@@ -5744,7 +5810,6 @@ components:
     Span:
       required:
       - start_time
-      - trace_id
       type: object
       properties:
         id:
@@ -5940,10 +6005,12 @@ components:
       type: object
       properties:
         exception_type:
+          minLength: 1
           type: string
         message:
           type: string
         traceback:
+          minLength: 1
           type: string
     ExperimentItemBulkRecord_ExperimentItemBulkWriteView:
       required:
@@ -5977,8 +6044,10 @@ components:
       type: object
       properties:
         experiment_name:
+          minLength: 1
           type: string
         dataset_name:
+          minLength: 1
           type: string
         items:
           maxItems: 250
@@ -5994,6 +6063,7 @@ components:
       type: object
       properties:
         name:
+          minLength: 1
           type: string
         category_name:
           type: string
@@ -6142,6 +6212,7 @@ components:
           format: uuid
           readOnly: true
         text:
+          minLength: 1
           type: string
         created_at:
           type: string
@@ -6187,6 +6258,7 @@ components:
           type: string
           format: uuid
         dataset_name:
+          minLength: 1
           type: string
         dataset_id:
           type: string
@@ -6261,6 +6333,7 @@ components:
       type: object
       properties:
         name:
+          minLength: 1
           type: string
         value:
           type: number
@@ -6307,6 +6380,7 @@ components:
       type: object
       properties:
         experiment_name:
+          minLength: 1
           type: string
         limit:
           maximum: 2000
@@ -6336,6 +6410,7 @@ components:
       type: object
       properties:
         name:
+          minLength: 1
           type: string
         limit:
           maximum: 2000
@@ -6392,6 +6467,7 @@ components:
           format: uuid
           readOnly: true
         name:
+          minLength: 1
           type: string
         createdAt:
           type: string
@@ -6486,6 +6562,7 @@ components:
           format: uuid
           readOnly: true
         name:
+          minLength: 1
           type: string
         type:
           type: string
@@ -6582,6 +6659,7 @@ components:
           format: uuid
           readOnly: true
         name:
+          minLength: 1
           type: string
         createdAt:
           type: string
@@ -6654,6 +6732,7 @@ components:
           format: uuid
           readOnly: true
         name:
+          minLength: 1
           type: string
         createdAt:
           type: string
@@ -6712,6 +6791,7 @@ components:
           format: uuid
           readOnly: true
         name:
+          minLength: 1
           type: string
         type:
           type: string
@@ -6875,6 +6955,7 @@ components:
           - openrouter
           - vertex-ai
         api_key:
+          minLength: 1
           type: string
         name:
           maxLength: 150
@@ -6924,6 +7005,7 @@ components:
           - openrouter
           - vertex-ai
         api_key:
+          minLength: 1
           type: string
         name:
           maxLength: 150
@@ -6969,6 +7051,7 @@ components:
           - openrouter
           - vertex-ai
         api_key:
+          minLength: 1
           type: string
         name:
           maxLength: 150
@@ -6991,6 +7074,7 @@ components:
       type: object
       properties:
         api_key:
+          minLength: 1
           type: string
         name:
           maxLength: 150
@@ -7011,8 +7095,10 @@ components:
         name:
           type: string
         dataset_name:
+          minLength: 1
           type: string
         objective_name:
+          minLength: 1
           type: string
         status:
           type: string
@@ -7061,8 +7147,10 @@ components:
         name:
           type: string
         dataset_name:
+          minLength: 1
           type: string
         objective_name:
+          minLength: 1
           type: string
         status:
           type: string
@@ -7108,8 +7196,10 @@ components:
         name:
           type: string
         dataset_name:
+          minLength: 1
           type: string
         objective_name:
+          minLength: 1
           type: string
         status:
           type: string
@@ -7178,6 +7268,7 @@ components:
           format: uuid
           readOnly: true
         name:
+          minLength: 1
           type: string
         visibility:
           type: string
@@ -7242,6 +7333,7 @@ components:
       type: object
       properties:
         name:
+          minLength: 1
           type: string
         visibility:
           type: string
@@ -7280,6 +7372,7 @@ components:
           format: uuid
           readOnly: true
         name:
+          minLength: 1
           type: string
         visibility:
           type: string
@@ -7444,6 +7537,7 @@ components:
       type: object
       properties:
         name:
+          minLength: 1
           type: string
         value:
           type: number
@@ -7468,6 +7562,7 @@ components:
           format: uuid
           readOnly: true
         name:
+          minLength: 1
           type: string
         visibility:
           type: string
@@ -7539,6 +7634,7 @@ components:
       type: object
       properties:
         name:
+          minLength: 1
           type: string
     ProjectUpdate:
       type: object
@@ -7562,6 +7658,7 @@ components:
           type: string
           format: uuid
         name:
+          minLength: 1
           type: string
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
@@ -7617,6 +7714,7 @@ components:
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
         template:
+          minLength: 1
           type: string
         metadata:
           $ref: "#/components/schemas/JsonNode"
@@ -7651,6 +7749,7 @@ components:
           type: string
           format: uuid
         name:
+          minLength: 1
           type: string
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
@@ -7688,6 +7787,7 @@ components:
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
         template:
+          minLength: 1
           type: string
         metadata:
           $ref: "#/components/schemas/JsonNode_Detail"
@@ -7729,6 +7829,7 @@ components:
       type: object
       properties:
         name:
+          minLength: 1
           type: string
         version:
           $ref: "#/components/schemas/PromptVersion_Detail"
@@ -7741,6 +7842,7 @@ components:
           type: string
           format: uuid
         name:
+          minLength: 1
           type: string
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
@@ -7800,6 +7902,7 @@ components:
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
         template:
+          minLength: 1
           type: string
         metadata:
           $ref: "#/components/schemas/JsonNode_Public"
@@ -7842,6 +7945,7 @@ components:
           type: string
           format: uuid
         name:
+          minLength: 1
           type: string
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
@@ -7870,6 +7974,7 @@ components:
       type: object
       properties:
         name:
+          minLength: 1
           type: string
         commit:
           type: string
@@ -7879,6 +7984,7 @@ components:
       type: object
       properties:
         name:
+          minLength: 1
           type: string
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
@@ -7900,10 +8006,12 @@ components:
       type: object
       properties:
         exception_type:
+          minLength: 1
           type: string
         message:
           type: string
         traceback:
+          minLength: 1
           type: string
     JsonListString_Write:
       type: object
@@ -7916,7 +8024,6 @@ components:
     Span_Write:
       required:
       - start_time
-      - trace_id
       type: object
       properties:
         id:
@@ -8006,6 +8113,7 @@ components:
       type: object
       properties:
         name:
+          minLength: 1
           type: string
     ErrorInfo_Public:
       required:
@@ -8014,10 +8122,12 @@ components:
       type: object
       properties:
         exception_type:
+          minLength: 1
           type: string
         message:
           type: string
         traceback:
+          minLength: 1
           type: string
     FeedbackScore_Public:
       required:
@@ -8027,6 +8137,7 @@ components:
       type: object
       properties:
         name:
+          minLength: 1
           type: string
         category_name:
           type: string
@@ -8070,7 +8181,6 @@ components:
     Span_Public:
       required:
       - start_time
-      - trace_id
       type: object
       properties:
         id:
@@ -8259,6 +8369,7 @@ components:
           type: string
           description: "If null, the default project is used"
         name:
+          minLength: 1
           type: string
         category_name:
           type: string
@@ -8394,6 +8505,19 @@ components:
           type: number
         error_info:
           $ref: "#/components/schemas/ErrorInfo"
+    TraceThreadIdentifier:
+      required:
+      - thread_id
+      type: object
+      properties:
+        project_name:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        thread_id:
+          minLength: 1
+          type: string
     Trace_Write:
       required:
       - start_time
@@ -8472,6 +8596,7 @@ components:
           minItems: 1
           type: array
           items:
+            minLength: 1
             type: string
     Check_Public:
       type: object
@@ -8629,17 +8754,6 @@ components:
         created_at:
           type: string
           format: date-time
-    TraceThreadIdentifier:
-      required:
-      - project_id
-      - thread_id
-      type: object
-      properties:
-        project_id:
-          type: string
-          format: uuid
-        thread_id:
-          type: string
     TraceThreadPage:
       type: object
       properties:

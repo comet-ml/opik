@@ -9,7 +9,7 @@ export interface SpanPublic {
     /** If null, the default project is used */
     projectName?: string;
     projectId?: string;
-    traceId: string;
+    traceId?: string;
     parentSpanId?: string;
     name?: string;
     type?: OpikApi.SpanPublicType;
