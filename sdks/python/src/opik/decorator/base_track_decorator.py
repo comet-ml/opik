@@ -419,29 +419,12 @@ class BaseTrackDecorator(abc.ABC):
         kwargs: Dict[str, Any],
     ) -> None:
         try:
-            opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict] = (
-                kwargs.pop("opik_distributed_trace_headers", None)
-            )
-
-            start_span_arguments = self._start_span_inputs_preprocessor(
+            self.__before_call_unsafe(
                 func=func,
                 track_options=track_options,
                 args=args,
                 kwargs=kwargs,
             )
-
-            created_trace_data, created_span_data = (
-                span_creation_handler.create_span_for_current_context(
-                    start_span_arguments=start_span_arguments,
-                    distributed_trace_headers=opik_distributed_trace_headers,
-                )
-            )
-            if created_trace_data is not None:
-                context_storage.set_trace_data(created_trace_data)
-                TRACES_CREATED_BY_DECORATOR.add(created_trace_data.id)
-
-            context_storage.add_span_data(created_span_data)
-
         except Exception as exception:
             LOGGER.error(
                 logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION,
@@ -450,6 +433,63 @@ class BaseTrackDecorator(abc.ABC):
                 str(exception),
                 exc_info=True,
             )
+
+    def __before_call_unsafe(
+        self,
+        func: Callable,
+        track_options: arguments_helpers.TrackOptions,
+        args: Tuple,
+        kwargs: Dict[str, Any],
+    ) -> None:
+        opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict] = None
+
+        try:
+            opik_distributed_trace_headers = kwargs.pop(
+                "opik_distributed_trace_headers", None
+            )
+
+            start_span_arguments = self._start_span_inputs_preprocessor(
+                func=func,
+                track_options=track_options,
+                args=args,
+                kwargs=kwargs,
+            )
+        except Exception as exception:
+            LOGGER.error(
+                logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_CREATION_FOR_TRACKED_FUNCTION,
+                func.__name__,
+                (args, kwargs),
+                str(exception),
+                exc_info=True,
+            )
+
+            start_span_arguments = arguments_helpers.StartSpanParameters(
+                name=func.__name__,
+                type=track_options.type,
+                tags=track_options.tags,
+                metadata=track_options.metadata,
+                project_name=track_options.project_name,
+            )
+
+        created_trace_data, created_span_data = (
+            span_creation_handler.create_span_respecting_context(
+                start_span_arguments=start_span_arguments,
+                distributed_trace_headers=opik_distributed_trace_headers,
+            )
+        )
+        client = opik_client.get_client_cached()
+
+        if client.config.log_start_trace_span:
+            client.span(**created_span_data.as_start_parameters)
+
+        if created_trace_data is not None:
+            context_storage.set_trace_data(created_trace_data)
+            TRACES_CREATED_BY_DECORATOR.add(created_trace_data.id)
+
+            if client.config.log_start_trace_span:
+                client.trace(**created_trace_data.as_start_parameters)
+
+        context_storage.add_span_data(created_span_data)
 
     def _after_call(
         self,
@@ -486,31 +526,52 @@ class BaseTrackDecorator(abc.ABC):
         generators_trace_to_end: Optional[trace.TraceData] = None,
         flush: bool = False,
     ) -> None:
-        if self.disabled or not is_tracing_active():
+        if self.disabled:
             return
 
-        if generators_span_to_end:
-            span_to_end = generators_span_to_end
-            trace_to_end = generators_trace_to_end
+        if generators_span_to_end is None:
+            span_data_to_end, trace_data_to_end = pop_end_candidates()
         else:
-            span_to_end, trace_to_end = pop_end_candidates()
+            span_data_to_end, trace_data_to_end = (
+                generators_span_to_end,
+                generators_trace_to_end,
+            )
 
-        if error_info:
-            span_to_end.error_info = error_info
+        if output is not None:
+            try:
+                end_arguments = self._end_span_inputs_preprocessor(
+                    output=output,
+                    capture_output=capture_output,
+                    current_span_data=span_data_to_end,
+                )
+            except Exception as e:
+                LOGGER.error(
+                    logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_FINALIZATION_FOR_TRACKED_FUNCTION,
+                    output,
+                    str(e),
+                    exc_info=True,
+                )
 
-        end_span_arguments = self._end_span_inputs_preprocessor(
-            output=output,
-            capture_output=capture_output,
-            current_span_data=span_to_end,
-        )
-        span_to_end.update(**end_span_arguments)
+                end_arguments = arguments_helpers.EndSpanParameters(
+                    output={"output": output}
+                )
+        else:
+            end_arguments = arguments_helpers.EndSpanParameters(error_info=error_info)
 
         client = opik_client.get_client_cached()
-        client.span(**span_to_end.as_parameters)
 
-        if trace_to_end:
-            trace_to_end.update(**end_span_arguments)
-            client.trace(**trace_to_end.as_parameters)
+        span_data_to_end.init_end_time().update(
+            **end_arguments.to_kwargs(),
+        )
+
+        client.span(**span_data_to_end.as_parameters)
+
+        if trace_data_to_end is not None:
+            trace_data_to_end.init_end_time().update(
+                **end_arguments.to_kwargs(ignore_keys=["usage", "model", "provider"]),
+            )
+
+            client.trace(**trace_data_to_end.as_parameters)
 
         if flush:
             client.flush()

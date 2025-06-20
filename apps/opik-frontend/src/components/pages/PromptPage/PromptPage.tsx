@@ -9,6 +9,8 @@ import DateTag from "@/components/shared/DateTag/DateTag";
 import PromptTab from "@/components/pages/PromptPage/PromptTab/PromptTab";
 import CommitsTab from "@/components/pages/PromptPage/CommitsTab/CommitsTab";
 import ExperimentsTab from "@/components/pages/PromptPage/ExperimentsTab/ExperimentsTab";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 
 const PromptPage: React.FunctionComponent = () => {
   const [tab, setTab] = useQueryParam("tab", StringParam);
@@ -52,9 +54,19 @@ const PromptPage: React.FunctionComponent = () => {
           </TabsTrigger>
           <TabsTrigger variant="underline" value="experiments">
             Experiments
+            <ExplainerIcon
+              className="ml-1"
+              {...EXPLAINERS_MAP[
+                EXPLAINER_ID.why_do_i_have_experiments_in_the_prompt_library
+              ]}
+            />
           </TabsTrigger>
           <TabsTrigger variant="underline" value="commits">
             Commits
+            <ExplainerIcon
+              className="ml-1"
+              {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_commits]}
+            />
           </TabsTrigger>
         </TabsList>
         <TabsContent value="prompt">

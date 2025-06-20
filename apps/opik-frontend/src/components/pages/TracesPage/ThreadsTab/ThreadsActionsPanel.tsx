@@ -58,8 +58,9 @@ const ThreadsActionsPanel: React.FunctionComponent<
         setOpen={setOpen}
         onConfirm={deleteThreadsHandler}
         title="Delete threads"
-        description="Are you sure you want to delete all selected threads?"
+        description="Deleting threads will also remove all linked traces and their data. This action cannot be undone. Are you sure you want to continue?"
         confirmText="Delete threads"
+        confirmButtonVariant="destructive"
       />
       <ExportToButton
         disabled={disabled || columnsToExport.length === 0}

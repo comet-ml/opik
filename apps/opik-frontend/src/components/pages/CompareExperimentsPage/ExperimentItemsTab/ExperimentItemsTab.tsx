@@ -23,7 +23,6 @@ import useLocalStorageState from "use-local-storage-state";
 import {
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_COMMENTS_ID,
-  COLUMN_CREATED_AT_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
@@ -51,13 +50,12 @@ import CompareExperimentsNameHeader from "@/components/pages-shared/experiments/
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import Loader from "@/components/shared/Loader/Loader";
-import CalloutAlert from "@/components/shared/CalloutAlert/CalloutAlert";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
 import { Experiment, ExperimentsCompare } from "@/types/datasets";
 import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import { formatDate } from "@/lib/date";
 import {
   convertColumnDataToColumn,
   hasAnyVisibleColumns,
@@ -79,6 +77,7 @@ import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -320,13 +319,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const datasetColumnsData = useMemo(() => {
     return [
-      {
-        id: COLUMN_CREATED_AT_ID,
-        label: "Created",
-        type: COLUMN_TYPE.time,
-        accessorFn: (row) => formatDate(row.created_at),
-        verticalAlignment: calculateVerticalAlignment(experimentsCount),
-      },
       ...dynamicDatasetColumns.map(
         ({ label, id, columnType }) =>
           ({
@@ -417,7 +409,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           callback: handleRowClick,
           asId: true,
         },
-        size: 165,
+        size: 180,
+        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_dataset_item],
       }),
     ];
 
@@ -638,15 +631,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   return (
     <>
-      <PageBodyStickyContainer
-        className="pb-4"
-        direction="horizontal"
-        limitWidth
-      >
-        <CalloutAlert
-          description="Experiment items are individual evaluations that connect a dataset sample with its LLM output, feedback scores, and trace."
-          docLink="/evaluation/overview"
-          docHash="#analyzing-evaluation-results"
+      <PageBodyStickyContainer direction="horizontal" limitWidth>
+        <ExplainerCallout
+          className="mb-4"
+          {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_experiment_items]}
         />
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
@@ -668,7 +656,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             columnsToExport={columnsToExport}
             experiments={experiments}
           />
-          <Separator orientation="vertical" className="mx-1 h-4" />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}

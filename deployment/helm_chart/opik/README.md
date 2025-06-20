@@ -80,7 +80,7 @@ Call opik api on http://localhost:5173/api
 | https://charts.bitnami.com/bitnami | minio | 15.0.7 |
 | https://charts.bitnami.com/bitnami | mysql | 11.1.9 |
 | https://charts.bitnami.com/bitnami | redis | 18.19.2 |
-| https://charts.bitnami.com/bitnami | zookeeper | 12.12.1 |
+| https://charts.bitnami.com/bitnami | zookeeper | 13.8.3 |
 | https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.23.7 |
 | oci://registry-1.docker.io/bitnamicharts | common | 2.x.x |
 
@@ -206,6 +206,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.OTEL_METRIC_EXPORT_INTERVAL | string | `"60000"` |  |
 | component.python-backend.env.OTEL_PROPAGATORS | string | `"tracecontext,baggage"` |  |
 | component.python-backend.env.OTEL_SERVICE_NAME | string | `"opik-python-backend"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_ALLOW_NETWORK | string | `"false"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS | string | `"3"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY | string | `"ghcr.io/comet-ml/opik"` |  |

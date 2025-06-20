@@ -7,6 +7,7 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { FeedbackScoreAverage } from "./FeedbackScoreAverage";
 import { PercentageValues } from "./PercentageValues";
+import { ErrorCountWithDeviation } from "./ErrorCountWithDeviation";
 
 export const ProjectStatsSummaryItem: core.serialization.ObjectSchema<
     serializers.ProjectStatsSummaryItem.Raw,
@@ -29,6 +30,7 @@ export const ProjectStatsSummaryItem: core.serialization.ObjectSchema<
         "guardrails_failed_count",
         core.serialization.number().optional(),
     ),
+    errorCount: core.serialization.property("error_count", ErrorCountWithDeviation.optional()),
 });
 
 export declare namespace ProjectStatsSummaryItem {
@@ -41,5 +43,6 @@ export declare namespace ProjectStatsSummaryItem {
         usage?: Record<string, number> | null;
         trace_count?: number | null;
         guardrails_failed_count?: number | null;
+        error_count?: ErrorCountWithDeviation.Raw | null;
     }
 }

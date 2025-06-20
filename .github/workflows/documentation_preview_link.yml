@@ -12,7 +12,7 @@ jobs:
         steps:
             - name: Checkout repository
               uses: actions/checkout@v4
-
+                
             - name: Install Fern
               run: npm install -g fern-api
 

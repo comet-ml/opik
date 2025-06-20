@@ -1,22 +1,22 @@
 from opik.evaluation import metrics
 from opik.evaluation.metrics import score_result
-from opik_optimizer import FewShotBayesianOptimizer
-from opik_optimizer.demo import get_or_create_dataset
+from typing import Any, Dict
 
-from opik_optimizer import (
-    MetricConfig,
-    TaskConfig,
-    from_dataset_field,
-    from_llm_response_text,
-)
+from opik_optimizer import ChatPrompt, FewShotBayesianOptimizer
+from opik_optimizer.datasets import halu_eval_300
 
 
 class HaluEvalObjective(metrics.BaseMetric):
-    def __init__(self, name: str = "halu_eval_objective", track: bool = True, **kwargs):
+    def __init__(
+        self,
+        name: str = "halu_eval_objective",
+        track: bool = True,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(name=name, track=track, **kwargs)
 
     def score(
-        self, ground_truth: str, output: str, **ignored_kwargs
+        self, ground_truth: str, output: str, **ignored_kwargs: Any
     ) -> score_result.ScoreResult:
         ground_truth = ground_truth.lower()
         output = output.lower()
@@ -42,16 +42,22 @@ class HaluEvalObjective(metrics.BaseMetric):
 
 
 project_name = "optimize-few-shot-bayesian-halueval"
-halu_eval_accuracy = HaluEvalObjective(project_name=project_name)
-halu_eval_dataset = get_or_create_dataset("halu-eval-300")
+halu_eval_dataset = halu_eval_300()
 
 
 # For chat prompts instruction doesn't need to contain input parameters from dataset examples.
-prompt_instruction = """
+initial_system_prompt = """
 Detect hallucinations in the given user inputs and llm_output pairs.
 
 Answer with just one word: 'yes' if there is a hallucination and 'no' if there is not.
 """
+
+prompt = ChatPrompt(
+    messages=[
+        {"role": "system", "content": initial_system_prompt},
+        {"role": "user", "content": "{input}"},
+    ]
+)
 
 optimizer = FewShotBayesianOptimizer(
     model="gpt-4o-mini",
@@ -62,25 +68,20 @@ optimizer = FewShotBayesianOptimizer(
     seed=42,
 )
 
-metric_config = MetricConfig(
-    metric=halu_eval_accuracy,
-    inputs={
-        "output": from_llm_response_text(),
-        "ground_truth": from_dataset_field(name="expected_hallucination_label"),
-    },
-)
 
-task_config = TaskConfig(
-    instruction_prompt=prompt_instruction,
-    input_dataset_fields=["input", "llm_output"],
-    output_dataset_field="expected_hallucination_label",
-    use_chat_prompt=True,
-)
+def halu_eval_accuracy(
+    dataset_item: Dict[str, Any], llm_output: str
+) -> score_result.ScoreResult:
+    metric = HaluEvalObjective()
+    return metric.score(
+        ground_truth=dataset_item["expected_hallucination_label"], output=llm_output
+    )
+
 
 result = optimizer.optimize_prompt(
+    prompt=prompt,
     dataset=halu_eval_dataset,
-    metric_config=metric_config,
-    task_config=task_config,
+    metric=halu_eval_accuracy,
     n_trials=10,
     n_samples=200,
 )

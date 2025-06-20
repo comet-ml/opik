@@ -1,17 +1,45 @@
-import opik
 import logging
 from typing import Any, Callable, Dict, List, Optional
-from opik_optimizer.optimization_config.configs import MetricConfig
-from opik.evaluation.metrics import score_result
 
+import opik
 from opik.evaluation import evaluator as opik_evaluator
+from opik.evaluation.metrics import base_metric, score_result
 
 logger = logging.getLogger(__name__)
+
+
+def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
+    class MetricClass(base_metric.BaseMetric):
+        def __init__(self) -> None:
+            self.name = metric.__name__
+
+        def score(self, llm_output: str, **kwargs: Any) -> score_result.ScoreResult:
+            try:
+                metric_val = metric(dataset_item=kwargs, llm_output=llm_output)
+                if isinstance(metric_val, score_result.ScoreResult):
+                    return score_result.ScoreResult(
+                        name=self.name,
+                        value=metric_val.value,
+                        scoring_failed=metric_val.scoring_failed,
+                        metadata=metric_val.metadata,
+                        reason=metric_val.reason,
+                    )
+                else:
+                    return score_result.ScoreResult(
+                        name=self.name, value=metric_val, scoring_failed=False
+                    )
+            except Exception:
+                return score_result.ScoreResult(
+                    name=self.name, value=0, scoring_failed=True
+                )
+
+    return MetricClass()
+
 
 def evaluate(
     dataset: opik.Dataset,
     evaluated_task: Callable[[Dict[str, Any]], Dict[str, Any]],
-    metric_config: MetricConfig,
+    metric: Callable,
     num_threads: int,
     optimization_id: Optional[str] = None,
     dataset_item_ids: Optional[List[str]] = None,
@@ -25,7 +53,8 @@ def evaluate(
 
     Args:
         dataset: A list of dictionaries representing the dataset.
-        metric_config: The metric configuration to use for evaluation.
+        metric: A metric function, this function should have two arguments:
+            dataset_item and llm_output
         evaluated_task: A function that takes a dataset item dict as input and returns a dictionary with output(s).
         dataset_item_ids: Optional list of dataset item IDs to evaluate.
         project_name: Optional project name for evaluation.
@@ -38,7 +67,7 @@ def evaluate(
     Returns:
         float: The average score of the evaluated task.
     """
-    items = dataset.get_items(dataset_item_ids)
+    items = dataset.get_items(n_samples)
     if not items:
         print("[DEBUG] Empty dataset, returning 0.0")
         return 0.0
@@ -46,21 +75,7 @@ def evaluate(
     if dataset_item_ids:
         items = [item for item in items if item.get("id") in dataset_item_ids]
 
-    if n_samples:
-        items = items[:n_samples]
-
-    # TODO: move to debug logger
-    # print(f"[DEBUG] Starting evaluation with task: {evaluated_task}")
-    # print(f"[DEBUG] Items to evaluate: {items}")
-    # print(f"[DEBUG] Metric config inputs: {metric_config.inputs}")
-    # print(f"[DEBUG] Number of threads: {num_threads}")
-    # print(f"[DEBUG] Project name: {project_name}")
-
-    scoring_key_mapping = {
-        key: value if isinstance(value, str) else value.__name__
-        for key, value in metric_config.inputs.items()
-    }
-    scoring_key_mapping["output"] = "_llm_task_output"
+    eval_metrics = [_create_metric_class(metric)]
 
     if optimization_id is not None:
         result = opik_evaluator.evaluate_optimization_trial(
@@ -68,9 +83,8 @@ def evaluate(
             dataset=dataset,
             task=evaluated_task,
             project_name=project_name,
-            scoring_key_mapping=scoring_key_mapping,
             dataset_item_ids=dataset_item_ids,
-            scoring_metrics=[metric_config.metric],
+            scoring_metrics=eval_metrics,
             task_threads=num_threads,
             nb_samples=n_samples,
             experiment_config=experiment_config,
@@ -81,9 +95,8 @@ def evaluate(
             dataset=dataset,
             task=evaluated_task,
             project_name=project_name,
-            scoring_key_mapping=scoring_key_mapping,
             dataset_item_ids=dataset_item_ids,
-            scoring_metrics=[metric_config.metric],
+            scoring_metrics=eval_metrics,
             task_threads=num_threads,
             nb_samples=n_samples,
             experiment_config=experiment_config,

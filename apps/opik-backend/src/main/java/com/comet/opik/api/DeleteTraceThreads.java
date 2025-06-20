@@ -1,6 +1,6 @@
 package com.comet.opik.api;
 
-import com.comet.opik.api.validate.DeleteTraceThreadsValidation;
+import com.comet.opik.api.validation.DeleteTraceThreadsValidation;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;

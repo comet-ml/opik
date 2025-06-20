@@ -2,6 +2,7 @@ import datetime
 import os
 from typing import Any
 from zoneinfo import ZoneInfo
+
 from google.adk.agents import Agent
 from google.adk.agents.callback_context import CallbackContext
 
@@ -67,7 +68,7 @@ def after_agent_callback(
     callback_context: CallbackContext, *args: Any, **kwargs: Any
 ) -> None:
     opik_tracer.after_agent_callback(callback_context, *args, **kwargs)
-    opik_tracer._client.flush()
+    opik_tracer.flush()
 
 
 root_agent = Agent(

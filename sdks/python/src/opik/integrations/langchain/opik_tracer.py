@@ -1,12 +1,12 @@
 import logging
 import datetime
-from typing import Any, Dict, List, Literal, Optional, Set, TYPE_CHECKING, cast
-
+from typing import Any, Dict, List, Literal, Optional, Set, TYPE_CHECKING, cast, Tuple
+import contextvars
 from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
 from langchain_core.tracers.schemas import Run
 
-from opik import dict_utils, opik_context, llm_usage
+from opik import dict_utils, llm_usage
 from opik.api_objects import span, trace
 from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
 from opik.validation import parameters_validator
@@ -19,6 +19,7 @@ from . import (
     opik_encoder_extension,
 )
 from ...api_objects import helpers, opik_client
+from opik import context_storage
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -106,6 +107,12 @@ class OpikTracer(BaseTracer):
 
         self._thread_id = thread_id
 
+        self._opik_context_storage = context_storage.get_current_context_instance()
+
+        self._root_run_external_parent_span_id: contextvars.ContextVar[
+            Optional[str]
+        ] = contextvars.ContextVar("root_run_external_parent_span_id", default=None)
+
     def _persist_run(self, run: "Run") -> None:
         run_dict: Dict[str, Any] = run.dict()
 
@@ -122,6 +129,8 @@ class OpikTracer(BaseTracer):
 
         span_data = self._span_data_map[run.id]
 
+        self._ensure_no_hanging_opik_tracer_spans()
+
         if span_data.trace_id not in self._externally_created_traces_ids:
             trace_data = self._created_traces_data_map[run.id]
 
@@ -130,77 +139,68 @@ class OpikTracer(BaseTracer):
                 trace_data.input = run_dict["inputs"]
 
             trace_data.init_end_time().update(output=output, error_info=error_info)
-            trace_ = self._opik_client.trace(**trace_data.__dict__)
+            trace_ = self._opik_client.trace(**trace_data.as_parameters)
+
+            assert trace_ is not None
             self._created_traces.append(trace_)
+            self._opik_context_storage.pop_trace_data(ensure_id=trace_data.id)
 
-    def _process_start_span(self, run: "Run") -> None:
-        run_dict: Dict[str, Any] = run.dict()
-        if not run.parent_run_id:
-            # This is the first run for the chain.
-            self._track_root_run(run_dict)
+    def _ensure_no_hanging_opik_tracer_spans(self) -> None:
+        root_run_external_parent_span_id = self._root_run_external_parent_span_id.get()
+        there_were_no_external_spans_before_chain_invocation = (
+            root_run_external_parent_span_id is None
+        )
+
+        if there_were_no_external_spans_before_chain_invocation:
+            self._opik_context_storage.clear_spans()
         else:
-            parent_span_data = self._span_data_map[run.parent_run_id]
-
-            project_name = helpers.resolve_child_span_project_name(
-                parent_span_data.project_name,
-                self._project_name,
+            assert root_run_external_parent_span_id is not None
+            self._opik_context_storage.trim_span_data_stack_to_certain_span(
+                root_run_external_parent_span_id
             )
 
-            span_data = span.SpanData(
-                trace_id=parent_span_data.trace_id,
-                parent_span_id=parent_span_data.id,
-                input=run_dict["inputs"],
-                metadata=run_dict["extra"],
-                name=run.name,
-                type=_get_span_type(run_dict),
-                project_name=project_name,
-            )
-            span_data.update(metadata={"created_from": "langchain"})
-
-            self._span_data_map[run.id] = span_data
-
-            if span_data.trace_id not in self._externally_created_traces_ids:
-                self._created_traces_data_map[run.id] = self._created_traces_data_map[
-                    run.parent_run_id
-                ]
-
-    def _track_root_run(self, run_dict: Dict[str, Any]) -> None:
+    def _track_root_run(
+        self, run_dict: Dict[str, Any]
+    ) -> Tuple[Optional[trace.TraceData], span.SpanData]:
         run_metadata = run_dict["extra"].get("metadata", {})
         root_metadata = dict_utils.deepmerge(self._trace_default_metadata, run_metadata)
         self._update_thread_id_from_metadata(run_dict)
 
         if self._distributed_headers:
-            self._attach_span_to_distributed_headers(
+            new_span_data = self._attach_span_to_distributed_headers(
                 run_dict=run_dict,
                 root_metadata=root_metadata,
             )
-            return
+            return None, new_span_data
 
-        current_span_data = opik_context.get_current_span_data()
+        current_span_data = self._opik_context_storage.top_span_data()
+        self._root_run_external_parent_span_id.set(
+            current_span_data.id if current_span_data is not None else None
+        )
         if current_span_data is not None:
-            self._attach_span_to_existing_span(
+            new_span_data = self._attach_span_to_existing_span(
                 run_dict=run_dict,
                 current_span_data=current_span_data,
                 root_metadata=root_metadata,
             )
-            return
+            return None, new_span_data
 
-        current_trace_data = opik_context.get_current_trace_data()
+        current_trace_data = self._opik_context_storage.get_trace_data()
         if current_trace_data is not None:
-            self._attach_span_to_existing_trace(
+            new_span_data = self._attach_span_to_existing_trace(
                 run_dict=run_dict,
                 current_trace_data=current_trace_data,
                 root_metadata=root_metadata,
             )
-            return
+            return None, new_span_data
 
-        self._initialize_span_and_trace_from_scratch(
+        return self._initialize_span_and_trace_from_scratch(
             run_dict=run_dict, root_metadata=root_metadata
         )
 
     def _initialize_span_and_trace_from_scratch(
         self, run_dict: Dict[str, Any], root_metadata: Dict[str, Any]
-    ) -> None:
+    ) -> Tuple[trace.TraceData, span.SpanData]:
         trace_data = trace.TraceData(
             name=run_dict["name"],
             input=run_dict["inputs"],
@@ -212,7 +212,7 @@ class OpikTracer(BaseTracer):
 
         self._created_traces_data_map[run_dict["id"]] = trace_data
 
-        span_ = span.SpanData(
+        span_data = span.SpanData(
             trace_id=trace_data.id,
             parent_span_id=None,
             name=run_dict["name"],
@@ -223,14 +223,16 @@ class OpikTracer(BaseTracer):
             project_name=self._project_name,
         )
 
-        self._span_data_map[run_dict["id"]] = span_
+        self._span_data_map[run_dict["id"]] = span_data
+
+        return trace_data, span_data
 
     def _attach_span_to_existing_span(
         self,
         run_dict: Dict[str, Any],
         current_span_data: span.SpanData,
         root_metadata: Dict[str, Any],
-    ) -> None:
+    ) -> span.SpanData:
         project_name = helpers.resolve_child_span_project_name(
             current_span_data.project_name,
             self._project_name,
@@ -249,12 +251,14 @@ class OpikTracer(BaseTracer):
         self._span_data_map[run_dict["id"]] = span_data
         self._externally_created_traces_ids.add(span_data.trace_id)
 
+        return span_data
+
     def _attach_span_to_existing_trace(
         self,
         run_dict: Dict[str, Any],
         current_trace_data: trace.TraceData,
         root_metadata: Dict[str, Any],
-    ) -> None:
+    ) -> span.SpanData:
         project_name = helpers.resolve_child_span_project_name(
             current_trace_data.project_name,
             self._project_name,
@@ -272,12 +276,13 @@ class OpikTracer(BaseTracer):
         )
         self._span_data_map[run_dict["id"]] = span_data
         self._externally_created_traces_ids.add(current_trace_data.id)
+        return span_data
 
     def _attach_span_to_distributed_headers(
         self,
         run_dict: Dict[str, Any],
         root_metadata: Dict[str, Any],
-    ) -> None:
+    ) -> span.SpanData:
         if self._distributed_headers is None:
             raise ValueError("Distributed headers are not set")
 
@@ -293,49 +298,113 @@ class OpikTracer(BaseTracer):
         )
         self._span_data_map[run_dict["id"]] = span_data
         self._externally_created_traces_ids.add(span_data.trace_id)
+        return span_data
+
+    def _process_start_span(self, run: "Run") -> None:
+        run_dict: Dict[str, Any] = run.dict()
+        new_span_data: span.SpanData
+        new_trace_data: Optional[trace.TraceData] = None
+
+        if not run.parent_run_id:
+            # This is the first run for the chain.
+            new_trace_data, new_span_data = self._track_root_run(run_dict)
+            if new_trace_data is not None:
+                self._opik_context_storage.set_trace_data(new_trace_data)
+                if self._opik_client.config.log_start_trace_span:
+                    self._opik_client.trace(**new_trace_data.as_start_parameters)
+
+            self._opik_context_storage.add_span_data(new_span_data)
+            if self._opik_client.config.log_start_trace_span:
+                self._opik_client.span(**new_span_data.as_start_parameters)
+            return
+
+        parent_span_data = self._span_data_map[run.parent_run_id]
+
+        project_name = helpers.resolve_child_span_project_name(
+            parent_span_data.project_name,
+            self._project_name,
+        )
+
+        new_span_data = span.SpanData(
+            trace_id=parent_span_data.trace_id,
+            parent_span_id=parent_span_data.id,
+            input=run_dict["inputs"],
+            metadata=run_dict["extra"],
+            name=run.name,
+            type=_get_span_type(run_dict),
+            project_name=project_name,
+        )
+        new_span_data.update(metadata={"created_from": "langchain"})
+
+        self._span_data_map[run.id] = new_span_data
+
+        if new_span_data.trace_id not in self._externally_created_traces_ids:
+            self._created_traces_data_map[run.id] = self._created_traces_data_map[
+                run.parent_run_id
+            ]
+
+        self._opik_context_storage.add_span_data(new_span_data)
+        if self._opik_client.config.log_start_trace_span:
+            self._opik_client.span(**new_span_data.as_start_parameters)
 
     def _process_end_span(self, run: "Run") -> None:
-        run_dict: Dict[str, Any] = run.dict()
-        span_data = self._span_data_map[run.id]
-        usage_info = llm_usage.LLMUsageInfo()
+        try:
+            run_dict: Dict[str, Any] = run.dict()
+            span_data = self._span_data_map[run.id]
+            usage_info = llm_usage.LLMUsageInfo()
 
-        if openai_run_helpers.is_openai_run(run):
-            usage_info = openai_run_helpers.get_llm_usage_info(run_dict)
-        elif anthropic_vertexai_run_helpers.is_anthropic_vertexai_run(run):
-            usage_info = anthropic_vertexai_run_helpers.get_llm_usage_info(run_dict)
-        elif google_run_helpers.is_google_run(run):
-            usage_info = google_run_helpers.get_llm_usage_info(run_dict)
-        elif anthropic_run_helpers.is_anthropic_run(run):
-            usage_info = anthropic_run_helpers.get_llm_usage_info(run_dict)
+            if openai_run_helpers.is_openai_run(run):
+                usage_info = openai_run_helpers.get_llm_usage_info(run_dict)
+            elif anthropic_vertexai_run_helpers.is_anthropic_vertexai_run(run):
+                usage_info = anthropic_vertexai_run_helpers.get_llm_usage_info(run_dict)
+            elif google_run_helpers.is_google_run(run):
+                usage_info = google_run_helpers.get_llm_usage_info(run_dict)
+            elif anthropic_run_helpers.is_anthropic_run(run):
+                usage_info = anthropic_run_helpers.get_llm_usage_info(run_dict)
 
-        # workaround for `.astream()` method usage
-        if span_data.input == {"input": ""}:
-            span_data.input = run_dict["inputs"]
+            # workaround for `.astream()` method usage
+            if span_data.input == {"input": ""}:
+                span_data.input = run_dict["inputs"]
 
-        span_data.init_end_time().update(
-            output=run_dict["outputs"],
-            usage=usage_info.usage.provider_usage.model_dump()
-            if isinstance(usage_info.usage, llm_usage.OpikUsage)
-            else usage_info.usage,
-            provider=usage_info.provider,
-            model=usage_info.model,
-        )
+            span_data.init_end_time().update(
+                output=run_dict["outputs"],
+                usage=usage_info.usage.provider_usage.model_dump()
+                if isinstance(usage_info.usage, llm_usage.OpikUsage)
+                else usage_info.usage,
+                provider=usage_info.provider,
+                model=usage_info.model,
+            )
 
-        self._opik_client.span(**span_data.__dict__)
+            self._opik_client.span(**span_data.as_parameters)
+        except Exception as e:
+            LOGGER.debug(f"Failed during _process_end_span: {e}")
+        finally:
+            self._opik_context_storage.trim_span_data_stack_to_certain_span(
+                span_id=span_data.id
+            )
+            self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
 
     def _process_end_span_with_error(self, run: "Run") -> None:
-        run_dict: Dict[str, Any] = run.dict()
-        span_data = self._span_data_map[run.id]
-        error_info: ErrorInfoDict = {
-            "exception_type": "Exception",
-            "traceback": run_dict["error"],
-        }
+        try:
+            run_dict: Dict[str, Any] = run.dict()
+            span_data = self._span_data_map[run.id]
+            error_info: ErrorInfoDict = {
+                "exception_type": "Exception",
+                "traceback": run_dict["error"],
+            }
 
-        span_data.init_end_time().update(
-            output=None,
-            error_info=error_info,
-        )
-        self._opik_client.span(**span_data.__dict__)
+            span_data.init_end_time().update(
+                output=None,
+                error_info=error_info,
+            )
+            self._opik_client.span(**span_data.as_parameters)
+        except Exception as e:
+            LOGGER.debug(f"Failed during _process_end_span_with_error: {e}")
+        finally:
+            self._opik_context_storage.trim_span_data_stack_to_certain_span(
+                span_id=span_data.id
+            )
+            self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
 
     def _update_thread_id_from_metadata(self, run_dict: Dict[str, Any]) -> None:
         if not self._thread_id:

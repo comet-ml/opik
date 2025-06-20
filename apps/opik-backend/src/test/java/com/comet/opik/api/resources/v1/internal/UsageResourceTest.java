@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -24,7 +25,6 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import lombok.extern.slf4j.Slf4j;
-import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -42,7 +42,6 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -50,7 +49,6 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -90,6 +88,9 @@ class UsageResourceTest {
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICK_HOUSE_CONTAINER, DATABASE_NAME);
 
+        MigrationUtils.runMysqlDbMigration(MYSQL_CONTAINER);
+        MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
+
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MYSQL_CONTAINER.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
@@ -103,17 +104,9 @@ class UsageResourceTest {
     private ExperimentResourceClient experimentResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplateAsync clickHouseTemplate,
-            TransactionTemplate mySqlTemplate) throws SQLException {
-
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
-        try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
-
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+    void setUpAll(ClientSupport client, TransactionTemplateAsync clickHouseTemplate,
+            TransactionTemplate mySqlTemplate) {
+        this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
         this.clickHouseTemplate = clickHouseTemplate;
         this.mySqlTemplate = mySqlTemplate;
@@ -241,6 +234,19 @@ class UsageResourceTest {
                     .toList();
             biInfoTest(traces, TRACE_RESOURCE_URL_TEMPLATE, "traces",
                     subtractClickHouseTableRecordsCreatedAtOneDay("traces"));
+        }
+
+        @Test
+        @DisplayName("Get spans daily info for BI events, no Auth")
+        void spanBiInfoTest() {
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .build())
+                    .toList();
+            biInfoTest(spans, SPANS_RESOURCE_URL_TEMPLATE, "spans",
+                    subtractClickHouseTableRecordsCreatedAtOneDay("spans"));
         }
 
         @Test

@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
+import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -229,6 +230,24 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
     }
 
+    public TraceThreadPage getTraceThreads(UUID projectId, String apiKey, String workspaceName,
+            List<SortingField> sortingFields) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .queryParam("project_id", projectId)
+                .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields),
+                        StandardCharsets.UTF_8))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.hasEntity()).isTrue();
+            return response.readEntity(TraceThreadPage.class);
+        }
+    }
+
     public TraceThread getTraceThread(String threadId, UUID projectId, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
@@ -358,4 +377,35 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
         return actualResponse.readEntity(Trace.TracePage.class);
     }
+
+    public void openTraceThread(String threadId, UUID projectId, String projectName, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("open")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(TraceThreadIdentifier.builder().projectId(projectId).projectName(projectName)
+                        .threadId(threadId).build()))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public void closeTraceThread(String threadId, UUID projectId, String projectName, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("close")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(TraceThreadIdentifier.builder().projectId(projectId).projectName(projectName)
+                        .threadId(threadId).build()))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
 }

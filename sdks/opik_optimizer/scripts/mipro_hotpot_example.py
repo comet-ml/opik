@@ -1,17 +1,15 @@
 import dspy
 
+from typing import Any, Dict
 from opik.evaluation.metrics import Equals
-from opik_optimizer import MiproOptimizer
-from opik_optimizer.demo import get_or_create_dataset, get_litellm_cache
-from opik_optimizer import (
-    MetricConfig,
-    TaskConfig,
-    from_dataset_field,
-    from_llm_response_text,
-)
+from opik.evaluation.metrics.score_result import ScoreResult
+
+from opik_optimizer import MiproOptimizer, TaskConfig
+from opik_optimizer.datasets import hotpot_300
+from opik_optimizer.demo import get_litellm_cache
 
 project_name = "optimize-mipro-hotpot"
-opik_dataset = get_or_create_dataset("hotpot-300")
+opik_dataset = hotpot_300()
 get_litellm_cache("test")
 
 optimizer = MiproOptimizer(
@@ -20,6 +18,7 @@ optimizer = MiproOptimizer(
     project_name=project_name,
     num_threads=16,
 )
+
 
 # Tools:
 def search_wikipedia(query: str) -> list[str]:
@@ -33,13 +32,10 @@ def search_wikipedia(query: str) -> list[str]:
     return [x["text"] for x in results]
 
 
-metric_config = MetricConfig(
-    metric=Equals(project_name=project_name),
-    inputs={
-        "output": from_llm_response_text(),
-        "reference": from_dataset_field(name="answer"),
-    },
-)
+def equals(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+    metric = Equals()
+    return metric.score(reference=dataset_item["answer"], output=llm_output)
+
 
 task_config = TaskConfig(
     instruction_prompt="Answer the question",
@@ -49,9 +45,9 @@ task_config = TaskConfig(
 )
 
 result = optimizer.optimize_prompt(
-    dataset=opik_dataset,
-    metric_config=metric_config,
     task_config=task_config,
+    metric=equals,
+    dataset=opik_dataset,
     n_samples=50,
     auto=None,
 )

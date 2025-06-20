@@ -1,5 +1,6 @@
 package com.comet.opik.domain.filter;
 
+import com.comet.opik.api.filter.ExperimentField;
 import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.FieldType;
@@ -58,6 +59,8 @@ public class FilterQueryBuilder {
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
     private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
     private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
+    private static final String VISIBILITY_MODE_DB = "visibility_mode";
+    private static final String ERROR_INFO_DB = "error_info";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -80,7 +83,8 @@ public class FilterQueryBuilder {
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 1",
                             FieldType.DICTIONARY,
-                            "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)")))
+                            "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)",
+                            FieldType.ENUM, "%1$s = :filter%2$d")))
                     .put(Operator.NOT_EQUAL, new EnumMap<>(Map.of(
                             FieldType.STRING, "lower(%1$s) != lower(:filter%2$d)",
                             FieldType.DATE_TIME, "%1$s != parseDateTime64BestEffort(:filter%2$d, 9)",
@@ -88,7 +92,8 @@ public class FilterQueryBuilder {
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 0",
                             FieldType.DICTIONARY,
-                            "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)")))
+                            "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)",
+                            FieldType.ENUM, "%1$s != :filter%2$d")))
                     .put(Operator.GREATER_THAN, new EnumMap<>(Map.of(
                             FieldType.DATE_TIME, "%1$s > parseDateTime64BestEffort(:filter%2$d, 9)",
                             FieldType.NUMBER, "%1$s > :filter%2$d",
@@ -115,10 +120,14 @@ public class FilterQueryBuilder {
                             "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 <= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")))
                     .put(Operator.IS_EMPTY, new EnumMap<>(Map.of(
                             FieldType.FEEDBACK_SCORES_NUMBER,
-                            "empty(arrayFilter(element -> (element = lower(:filterKey%2$d)), groupArray(lower(name)))) = 0")))
+                            "empty(arrayFilter(element -> (element = lower(:filterKey%2$d)), groupArray(lower(name)))) = 0",
+                            FieldType.ERROR_CONTAINER,
+                            "empty(%1$s)")))
                     .put(Operator.IS_NOT_EMPTY, new EnumMap<>(Map.of(
                             FieldType.FEEDBACK_SCORES_NUMBER,
-                            "empty(arrayFilter(element -> (element.1 = lower(:filterKey%2$d)), groupArray(tuple(lower(name), %1$s)))) = 0")))
+                            "empty(arrayFilter(element -> (element.1 = lower(:filterKey%2$d)), groupArray(tuple(lower(name), %1$s)))) = 0",
+                            FieldType.ERROR_CONTAINER,
+                            "notEmpty(%1$s)")))
                     .build());
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(
@@ -139,6 +148,8 @@ public class FilterQueryBuilder {
                     .put(TraceField.DURATION, DURATION_ANALYTICS_DB)
                     .put(TraceField.THREAD_ID, THREAD_ID_ANALYTICS_DB)
                     .put(TraceField.GUARDRAILS, GUARDRAILS_RESULT_DB)
+                    .put(TraceField.VISIBILITY_MODE, VISIBILITY_MODE_DB)
+                    .put(TraceField.ERROR_INFO, ERROR_INFO_DB)
                     .build());
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
@@ -170,6 +181,12 @@ public class FilterQueryBuilder {
                     .put(SpanField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(SpanField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(SpanField.DURATION, DURATION_ANALYTICS_DB)
+                    .put(SpanField.ERROR_INFO, ERROR_INFO_DB)
+                    .build());
+
+    private static final Map<ExperimentField, String> EXPERIMENT_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<ExperimentField, String>builder()
+                    .put(ExperimentField.METADATA, METADATA_ANALYTICS_DB)
                     .build());
 
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
@@ -191,6 +208,8 @@ public class FilterQueryBuilder {
                     .add(TraceField.DURATION)
                     .add(TraceField.THREAD_ID)
                     .add(TraceField.GUARDRAILS)
+                    .add(TraceField.VISIBILITY_MODE)
+                    .add(TraceField.ERROR_INFO)
                     .build()),
             FilterStrategy.TRACE_AGGREGATION, EnumSet.copyOf(ImmutableSet.<TraceField>builder()
                     .add(TraceField.USAGE_COMPLETION_TOKENS)
@@ -214,6 +233,7 @@ public class FilterQueryBuilder {
                     .add(SpanField.USAGE_PROMPT_TOKENS)
                     .add(SpanField.USAGE_TOTAL_TOKENS)
                     .add(SpanField.DURATION)
+                    .add(SpanField.ERROR_INFO)
                     .build()),
             FilterStrategy.FEEDBACK_SCORES, ImmutableSet.<Field>builder()
                     .add(TraceField.FEEDBACK_SCORES)
@@ -223,6 +243,9 @@ public class FilterQueryBuilder {
             FilterStrategy.EXPERIMENT_ITEM, EnumSet.copyOf(ImmutableSet.<ExperimentsComparisonValidKnownField>builder()
                     .add(ExperimentsComparisonValidKnownField.OUTPUT)
                     .build()),
+            FilterStrategy.EXPERIMENT, ImmutableSet.<Field>builder()
+                    .add(ExperimentField.METADATA)
+                    .build(),
             FilterStrategy.TRACE_THREAD, EnumSet.copyOf(ImmutableSet.<TraceThreadField>builder()
                     .add(TraceThreadField.ID)
                     .add(TraceThreadField.NUMBER_OF_MESSAGES)
@@ -278,11 +301,16 @@ public class FilterQueryBuilder {
         // we want to apply the is empty filter only in the case below
         if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.FEEDBACK_SCORES));
-        } else if (filter.operator() == Operator.IS_EMPTY) {
+        } else if (filter.operator() == Operator.IS_EMPTY && isFeedBackScore(filter)) {
             return Optional.empty();
         }
 
         return Optional.ofNullable(FILTER_STRATEGY_MAP.get(filterStrategy));
+    }
+
+    private static boolean isFeedBackScore(Filter filter) {
+        return Set.of(TraceField.FEEDBACK_SCORES, SpanField.FEEDBACK_SCORES,
+                ExperimentsComparisonValidKnownField.FEEDBACK_SCORES).contains(filter.field());
     }
 
     private String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
@@ -300,6 +328,7 @@ public class FilterQueryBuilder {
         return switch (field) {
             case TraceField traceField -> TRACE_FIELDS_MAP.get(traceField);
             case SpanField spanField -> SPAN_FIELDS_MAP.get(spanField);
+            case ExperimentField experimentField -> EXPERIMENT_FIELDS_MAP.get(experimentField);
             case ExperimentsComparisonValidKnownField experimentsComparisonValidKnownField ->
                 EXPERIMENTS_COMPARISON_FIELDS_MAP.get(experimentsComparisonValidKnownField);
             case TraceThreadField traceThreadField -> TRACE_THREAD_FIELDS_MAP.get(traceThreadField);

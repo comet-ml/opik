@@ -13,7 +13,8 @@ public enum FieldType {
     FEEDBACK_SCORES_NUMBER("feedback_scores_number"),
     DICTIONARY("dictionary"),
     LIST("list"),
-    ;
+    ENUM("enum"),
+    ERROR_CONTAINER("error_container");
 
     @JsonValue
     private final String queryParamType;

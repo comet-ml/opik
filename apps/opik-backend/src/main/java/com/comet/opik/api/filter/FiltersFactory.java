@@ -31,6 +31,7 @@ public class FiltersFactory {
     private static final Map<FieldType, Function<Filter, Boolean>> FIELD_TYPE_VALIDATION_MAP = new EnumMap<>(
             ImmutableMap.<FieldType, Function<Filter, Boolean>>builder()
                     .put(FieldType.STRING, filter -> StringUtils.isNotBlank(filter.value()))
+                    .put(FieldType.ENUM, filter -> StringUtils.isNotBlank(filter.value()))
                     .put(FieldType.DATE_TIME, filter -> {
                         try {
                             Instant.parse(filter.value());
@@ -56,6 +57,14 @@ public class FiltersFactory {
                             log.error("Invalid BigDecimal format '{}'", filter.value(), exception);
                             return false;
                         }
+                    })
+                    .put(FieldType.ERROR_CONTAINER, filter -> {
+                        if (Operator.NO_VALUE_OPERATORS.contains(filter.operator())) {
+                            // don't validate value in case it's not needed
+                            return true;
+                        }
+
+                        return false;
                     })
                     .put(FieldType.DICTIONARY, filter -> StringUtils.isNotBlank(filter.value()) &&
                             StringUtils.isNotBlank(filter.key()))
