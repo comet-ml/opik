@@ -80,3 +80,13 @@ def split_dict_by_keys(input_dict: Dict, keys: List) -> Tuple[Dict, Dict]:
 
 def _is_dict(item: Any) -> bool:
     return isinstance(item, dict)
+
+
+def add_prefix_to_keys_of_a_dict(
+    d: Dict[str, Any], prefix: str, delim: str = "."
+) -> Dict[str, Any]:
+    """
+    For example, if d = {"key1": "value1"}, prefix = "parent", delim = "."
+    the result will be {"parent.key1": "value1"}
+    """
+    return {f"{prefix}{delim}{key}": value for key, value in d.items()}

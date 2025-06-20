@@ -4,7 +4,9 @@ import openai
 
 from . import (
     chat_completion_chunks_aggregator,
+    openai_audio_speech_decorator,
     openai_chat_completions_decorator,
+    speech_chunks_aggregator,
 )
 
 OpenAIClient = TypeVar("OpenAIClient", openai.OpenAI, openai.AsyncOpenAI)
@@ -38,10 +40,41 @@ def track_openai(
 
     _patch_openai_chat_completions(openai_client, project_name)
 
+    if hasattr(openai_client, "audio"):
+        _patch_openai_audio_speech(openai_client, project_name)
+
     if hasattr(openai_client, "responses"):
         _patch_openai_responses(openai_client, project_name)
 
     return openai_client
+
+
+def _patch_openai_audio_speech(
+    openai_client: OpenAIClient,
+    project_name: Optional[str] = None,
+) -> None:
+    audio_speech_decorator_factory = (
+        openai_audio_speech_decorator.OpenaiAudioSpeechTrackDecorator()
+    )
+    if openai_client.base_url.host != "api.openai.com":
+        audio_speech_decorator_factory.provider = openai_client.base_url.host
+
+    audio_speech_create_decorator = audio_speech_decorator_factory.track(
+        type="llm",
+        name="audio_speech_create",
+        generations_aggregator=speech_chunks_aggregator.aggregate,
+        project_name=project_name,
+    )
+
+    openai_client.audio.speech.create = audio_speech_create_decorator(
+        openai_client.audio.speech.create
+    )
+    if hasattr(openai_client.audio.speech, "with_streaming_response"):
+        openai_client.audio.speech.with_streaming_response.create = (
+            audio_speech_create_decorator(
+                openai_client.audio.speech.with_streaming_response.create
+            )
+        )
 
 
 def _patch_openai_chat_completions(

@@ -485,33 +485,9 @@ class BaseTrackDecorator(abc.ABC):
         generators_trace_to_end: Optional[trace.TraceData] = None,
         flush: bool = False,
     ) -> None:
-        try:
-            self.__after_call_unsafe(
-                output=output,
-                error_info=error_info,
-                capture_output=capture_output,
-                generators_span_to_end=generators_span_to_end,
-                generators_trace_to_end=generators_trace_to_end,
-                flush=flush,
-            )
-        except Exception as exception:
-            LOGGER.error(
-                logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_FINALIZATION_FOR_TRACKED_FUNCTION,
-                output,
-                str(exception),
-                exc_info=True,
-            )
+        if self.disabled:
+            return
 
-    def __after_call_unsafe(
-        self,
-        output: Optional[Any],
-        error_info: Optional[ErrorInfoDict],
-        capture_output: bool,
-        generators_span_to_end: Optional[span.SpanData] = None,
-        generators_trace_to_end: Optional[trace.TraceData] = None,
-        flush: bool = False,
-    ) -> None:
-        # Always pop from context to keep it clean, even if tracing is disabled.
         if generators_span_to_end is None:
             span_data_to_end, trace_data_to_end = pop_end_candidates()
         else:
@@ -519,10 +495,6 @@ class BaseTrackDecorator(abc.ABC):
                 generators_span_to_end,
                 generators_trace_to_end,
             )
-
-        # Now, check if we should actually submit the trace.
-        if self.disabled or not is_tracing_active():
-            return
 
         if output is not None:
             try:
@@ -539,50 +511,27 @@ class BaseTrackDecorator(abc.ABC):
                     exc_info=True,
                 )
 
-            except Exception as e:
-                LOGGER.error(
-                    logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_FINALIZATION_FOR_TRACKED_FUNCTION,
-                    output,
-                    str(e),
-                    exc_info=True,
-                )
-
                 end_arguments = arguments_helpers.EndSpanParameters(
                     output={"output": output}
-                    output={"output": output}
                 )
         else:
             end_arguments = arguments_helpers.EndSpanParameters(error_info=error_info)
-        else:
-            end_arguments = arguments_helpers.EndSpanParameters(error_info=error_info)
 
-        client = opik_client.get_client_cached()
         client = opik_client.get_client_cached()
 
         span_data_to_end.init_end_time().update(
             **end_arguments.to_kwargs(),
         )
-        span_data_to_end.init_end_time().update(
-            **end_arguments.to_kwargs(),
-        )
 
-        client.span(**span_data_to_end.as_parameters)
         client.span(**span_data_to_end.as_parameters)
 
         if trace_data_to_end is not None:
             trace_data_to_end.init_end_time().update(
                 **end_arguments.to_kwargs(ignore_keys=["usage", "model", "provider"]),
             )
-        if trace_data_to_end is not None:
-            trace_data_to_end.init_end_time().update(
-                **end_arguments.to_kwargs(ignore_keys=["usage", "model", "provider"]),
-            )
 
             client.trace(**trace_data_to_end.as_parameters)
-            client.trace(**trace_data_to_end.as_parameters)
 
-        if flush:
-            client.flush()
         if flush:
             client.flush()
 
