@@ -212,4 +212,5 @@ public class TraceAssertions {
         assertThat(actualTraceThreadModels.stream().map(TraceThreadModel::id))
                 .allMatch(Objects::nonNull);
     }
+
 }

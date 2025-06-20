@@ -553,6 +553,9 @@ class TraceDAOImpl implements TraceDAO {
                 <if(sort_has_feedback_scores)>
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
                 <endif>
+                <if(sort_has_span_statistics)>
+                LEFT JOIN spans_agg s ON t.id = s.trace_id
+                <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(last_received_trace_id)> AND id \\< :last_received_trace_id <endif>
@@ -1795,6 +1798,15 @@ class TraceDAOImpl implements TraceDAO {
                 .then();
     }
 
+    private boolean hasSpanStatistics(String sortFields) {
+        if (sortFields == null) {
+            return false;
+        }
+        return sortFields.contains("usage")
+                || sortFields.contains("span_count")
+                || sortFields.contains("total_estimated_cost");
+    }
+
     private Mono<? extends Result> getTracesByProjectId(
             int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection) {
 
@@ -1812,6 +1824,10 @@ class TraceDAOImpl implements TraceDAO {
 
                     if (sortFields.contains("feedback_scores")) {
                         finalTemplate.add("sort_has_feedback_scores", true);
+                    }
+
+                    if (hasSpanStatistics(sortFields)) {
+                        finalTemplate.add("sort_has_span_statistics", true);
                     }
 
                     finalTemplate.add("sort_fields", sortFields);

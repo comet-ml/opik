@@ -106,6 +106,8 @@ from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEnti
 from .delete_feedback_score import DeleteFeedbackScore
 from .delete_ids_holder import DeleteIdsHolder
 from .delta import Delta
+from .error_count_with_deviation import ErrorCountWithDeviation
+from .error_count_with_deviation_detailed import ErrorCountWithDeviationDetailed
 from .error_info import ErrorInfo
 from .error_info_experiment_item_bulk_write_view import ErrorInfoExperimentItemBulkWriteView
 from .error_info_public import ErrorInfoPublic
@@ -263,6 +265,7 @@ from .provider_api_key_public import ProviderApiKeyPublic
 from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
 from .response_format import ResponseFormat
 from .response_format_type import ResponseFormatType
+from .result import Result
 from .results_number_public import ResultsNumberPublic
 from .score_name import ScoreName
 from .service_toggles_config import ServiceTogglesConfig
@@ -300,6 +303,7 @@ from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
+from .workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
 from .workspace_name_holder import WorkspaceNameHolder
 from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
@@ -393,6 +397,8 @@ __all__ = [
     "DeleteFeedbackScore",
     "DeleteIdsHolder",
     "Delta",
+    "ErrorCountWithDeviation",
+    "ErrorCountWithDeviationDetailed",
     "ErrorInfo",
     "ErrorInfoExperimentItemBulkWriteView",
     "ErrorInfoPublic",
@@ -552,6 +558,7 @@ __all__ = [
     "ProviderApiKeyPublicProvider",
     "ResponseFormat",
     "ResponseFormatType",
+    "Result",
     "ResultsNumberPublic",
     "ScoreName",
     "ServiceTogglesConfig",
@@ -589,6 +596,7 @@ __all__ = [
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
+    "WorkspaceMetricsSummaryResponse",
     "WorkspaceNameHolder",
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",

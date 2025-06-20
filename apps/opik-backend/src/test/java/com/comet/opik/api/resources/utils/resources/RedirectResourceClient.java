@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.resources.utils.TestUtils;
 import org.glassfish.jersey.client.ClientProperties;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
@@ -16,7 +17,7 @@ public class RedirectResourceClient {
 
     public RedirectResourceClient(ClientSupport client) {
         this.client = client;
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURI = TestUtils.getBaseUrl(client);
     }
 
     public String projectsRedirect(UUID traceId, String sessionToken, String workspaceName, String path,
