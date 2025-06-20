@@ -419,49 +419,15 @@ class BaseTrackDecorator(abc.ABC):
         generators_trace_to_end: Optional[trace.TraceData] = None,
         flush: bool = False,
     ) -> None:
-        if self.disabled:
-            return
-
         try:
-            if generators_span_to_end is None:
-                span_data_to_end, trace_data_to_end = pop_end_candidates()
-            else:
-                span_data_to_end, trace_data_to_end = (
-                    generators_span_to_end,
-                    generators_trace_to_end,
-                )
-
-            if output is not None:
-                end_arguments = self._end_span_inputs_preprocessor(
-                    output=output,
-                    capture_output=capture_output,
-                    current_span_data=span_data_to_end,
-                )
-            else:
-                end_arguments = arguments_helpers.EndSpanParameters(
-                    error_info=error_info
-                )
-
-            client = opik_client.get_client_cached()
-
-            span_data_to_end.init_end_time().update(
-                **end_arguments.to_kwargs(),
+            self.__after_call_unsafe(
+                output=output,
+                error_info=error_info,
+                capture_output=capture_output,
+                generators_span_to_end=generators_span_to_end,
+                generators_trace_to_end=generators_trace_to_end,
+                flush=flush,
             )
-
-            client.span(**span_data_to_end.__dict__)
-
-            if trace_data_to_end is not None:
-                trace_data_to_end.init_end_time().update(
-                    **end_arguments.to_kwargs(
-                        ignore_keys=["usage", "model", "provider"]
-                    ),
-                )
-
-                client.trace(**trace_data_to_end.__dict__)
-
-            if flush:
-                client.flush()
-
         except Exception as exception:
             LOGGER.error(
                 logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_FINALIZATION_FOR_TRACKED_FUNCTION,
@@ -469,6 +435,67 @@ class BaseTrackDecorator(abc.ABC):
                 str(exception),
                 exc_info=True,
             )
+
+    def __after_call_unsafe(
+        self,
+        output: Optional[Any],
+        error_info: Optional[ErrorInfoDict],
+        capture_output: bool,
+        generators_span_to_end: Optional[span.SpanData] = None,
+        generators_trace_to_end: Optional[trace.TraceData] = None,
+        flush: bool = False,
+    ) -> None:
+        # Always pop from context to keep it clean, even if tracing is disabled.
+        if generators_span_to_end is None:
+            span_data_to_end, trace_data_to_end = pop_end_candidates()
+        else:
+            span_data_to_end, trace_data_to_end = (
+                generators_span_to_end,
+                generators_trace_to_end,
+            )
+
+        # Now, check if we should actually submit the trace.
+        if self.disabled or not is_tracing_active():
+            return
+
+        if output is not None:
+            try:
+                end_arguments = self._end_span_inputs_preprocessor(
+                    output=output,
+                    capture_output=capture_output,
+                    current_span_data=span_data_to_end,
+                )
+            except Exception as e:
+                LOGGER.error(
+                    logging_messages.UNEXPECTED_EXCEPTION_ON_SPAN_FINALIZATION_FOR_TRACKED_FUNCTION,
+                    output,
+                    str(e),
+                    exc_info=True,
+                )
+
+                end_arguments = arguments_helpers.EndSpanParameters(
+                    output={"output": output}
+                )
+        else:
+            end_arguments = arguments_helpers.EndSpanParameters(error_info=error_info)
+
+        client = opik_client.get_client_cached()
+
+        span_data_to_end.init_end_time().update(
+            **end_arguments.to_kwargs(),
+        )
+
+        client.span(**span_data_to_end.as_parameters)
+
+        if trace_data_to_end is not None:
+            trace_data_to_end.init_end_time().update(
+                **end_arguments.to_kwargs(ignore_keys=["usage", "model", "provider"]),
+            )
+
+            client.trace(**trace_data_to_end.as_parameters)
+
+        if flush:
+            client.flush()
 
     @abc.abstractmethod
     def _streams_handler(
