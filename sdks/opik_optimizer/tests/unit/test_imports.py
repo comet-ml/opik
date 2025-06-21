@@ -61,10 +61,10 @@ def test_chat_prompt_import_and_creation() -> None:
     prompt = ChatPrompt(messages=messages)
 
     # Validate basic properties
-    assert prompt.formatted_messages == messages
-    assert len(prompt.formatted_messages) == 2
-    assert prompt.formatted_messages[0]["role"] == "system"
-    assert prompt.formatted_messages[1]["role"] == "user"
+    assert prompt.get_messages() == messages
+    assert len(prompt.get_messages()) == 2
+    assert prompt.get_messages()[0]["role"] == "system"
+    assert prompt.get_messages()[1]["role"] == "user"
 
 
 def test_optimization_result_import_and_creation() -> None:
