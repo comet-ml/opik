@@ -7,6 +7,8 @@ import copy
 from pydantic import BaseModel, Field
 
 from opik import Dataset
+from opik.opik_context import get_current_span_data
+from opik import track
 
 import litellm
 from litellm.integrations.opik.opik import OpikLogger
@@ -142,7 +144,7 @@ class OptimizableAgent:
                     )
                 )
                 self.tool_map[agent_config.tools[tool_key]["function"].__name__] = (
-                    agent_config.tools[tool_key]["function"]
+                    track(type="tool")(agent_config.tools[tool_key]["function"])
                 )
 
     @_throttle.rate_limited(_limiter)
@@ -158,6 +160,12 @@ class OptimizableAgent:
             seed=seed,
             tools=tool_definitions,
             tool_choice="auto" if tool_definitions is not None else None,
+            metadata={
+                "opik": {
+                    "current_span_data": get_current_span_data(),
+                    "tags": ["streaming-test"],
+                },
+            },
             **self.model_kwargs,
         )
         return response
@@ -257,11 +265,14 @@ class OptimizableAgent:
         dataset: Dataset,
         metric: Callable,
         n_threads: int,
-        verbose: int = 0,
+        verbose: int = 1,
         dataset_item_ids: Optional[List[str]] = None,
         experiment_config: Optional[Dict] = None,
         n_samples: Optional[int] = None,
+        seed: Optional[int] = None,
     ) -> float:
+        random.seed(seed)
+
         prompt = self.agent_config.chat_prompt
 
         def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
