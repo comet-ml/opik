@@ -75,6 +75,7 @@ public class StatsUtils {
                 Trace::startTime,
                 Trace::endTime,
                 Trace::totalEstimatedCost,
+                Trace::llmSpanCount,
                 Trace::guardrailsValidations,
                 Trace::errorInfo,
                 "trace_count");
@@ -118,6 +119,7 @@ public class StatsUtils {
                     return BigDecimal.ZERO;
                 },
                 null,
+                null,
                 Span::errorInfo,
                 "span_count");
     }
@@ -133,6 +135,7 @@ public class StatsUtils {
             Function<T, Instant> startProvider,
             Function<T, Instant> endProvider,
             Function<T, BigDecimal> totalEstimatedCostProvider,
+            Function<T, Integer> llmSpanCountProvider,
             Function<T, List<GuardrailsValidation>> guardrailsProvider,
             Function<T, ErrorInfo> errorProvider,
             String countLabel) {
@@ -149,6 +152,7 @@ public class StatsUtils {
         double tags = 0;
         BigDecimal totalEstimatedCost = BigDecimal.ZERO;
         int countEstimatedCost = 0;
+        int llmSpanCount = 0;
         long errorCount = 0;
 
         for (T entity : expectedEntities) {
@@ -157,6 +161,9 @@ public class StatsUtils {
             metadata += metadataProvider.apply(entity) != null ? 1 : 0;
             tags += tagsProvider.apply(entity) != null ? tagsProvider.apply(entity).size() : 0;
             errorCount += errorProvider.apply(entity) != null ? 1 : 0;
+
+            llmSpanCount += llmSpanCountProvider != null &&
+                    llmSpanCountProvider.apply(entity) != null ? llmSpanCountProvider.apply(entity) : 0;
 
             BigDecimal cost = totalEstimatedCostProvider.apply(entity) != null
                     ? totalEstimatedCostProvider.apply(entity)
@@ -209,6 +216,12 @@ public class StatsUtils {
         stats.add(new CountValueStat(StatsMapper.OUTPUT, output));
         stats.add(new CountValueStat(StatsMapper.METADATA, metadata));
         stats.add(new AvgValueStat(StatsMapper.TAGS, (tags / expectedEntities.size())));
+
+        if (llmSpanCountProvider != null) {
+            var avgLlmSpanCount = llmSpanCount == 0 ? 0 : (double) llmSpanCount / expectedEntities.size();
+            stats.add(new AvgValueStat(StatsMapper.LLM_SPAN_COUNT, avgLlmSpanCount));
+        }
+
         stats.add(new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, totalEstimatedCostValue.doubleValue()));
         stats.add(new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST_SUM, totalEstimatedCost.doubleValue()));
 
