@@ -21,7 +21,7 @@ def executor(request):
 def app(executor):
     """Create Flask app with the given executor."""
     from opik_backend import create_app
-    app = create_app()
+    app = create_app(should_init_executor=False)
     app.executor = executor  # Override the executor with our parametrized one
     return app
 
