@@ -64,13 +64,16 @@ component:
             <your annotations>
         hosts:
             - host: opik.example.com
-            paths:
-                - path: /opik
+              paths:
+                - path: /
                   port: 5173
                   pathType: Prefix
-                - path: /opik/api
-                  port: 5173
-                  pathType: Prefix
+        # For TLS configuration (optional)
+        tls:
+            enabled: true
+            hosts:  # Optional - defaults to hosts from rules if not specified
+                - opik.example.com
+            secretName: <your-tls-secret>  # Optional - omit if using cert-manager or similar
 ```
 
 ### Configure LoadBalancer service for clickhouse
