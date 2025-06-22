@@ -2620,6 +2620,7 @@ class TracesResourceTest {
                         .flatMap(trace -> IntStream.range(0, trace.spanCount())
                                 .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
                                         .usage(null)
+                                        .totalEstimatedCost(null)
                                         .projectName(projectName)
                                         .traceId(trace.id())
                                         .type(i < trace.llmSpanCount() ? SpanType.llm : SpanType.general)
@@ -3000,6 +3001,9 @@ class TracesResourceTest {
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
                             .threadId(null)
+                            .guardrailsValidations(null)
+                            .llmSpanCount(0)
+                            .spanCount(0)
                             .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -3694,6 +3698,8 @@ class TracesResourceTest {
                             .totalEstimatedCost(null)
                             .threadId(null)
                             .guardrailsValidations(null)
+                            .spanCount(0)
+                            .llmSpanCount(0)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -5947,6 +5953,8 @@ class TracesResourceTest {
                 .comments(null)
                 .totalEstimatedCost(null)
                 .usage(null)
+                .llmSpanCount(0)
+                .spanCount(0)
                 .errorInfo(null)
                 .build();
     }
