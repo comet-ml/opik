@@ -10,7 +10,6 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.ErrorUtils;
-import com.fasterxml.uuid.Generators;
 import com.google.common.eventbus.EventBus;
 import io.r2dbc.spi.Connection;
 import jakarta.ws.rs.NotFoundException;
@@ -84,10 +83,11 @@ class TraceServiceImplTest {
                 attachmentService,
                 template,
                 projectService,
-                () -> Generators.timeBasedEpochGenerator().generate(),
+                new IdGeneratorImpl(),
                 DUMMY_LOCK_SERVICE,
                 eventBus,
-                traceThreadSortingFactory);
+                traceThreadSortingFactory,
+                traceSortingFactory);
     }
 
     @Nested
