@@ -7,6 +7,7 @@ import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -49,7 +50,18 @@ class DatasetsResourceIntegrationTest {
     private static final ResourceExtension EXT = ResourceExtension.builder()
             .addResource(new DatasetsResource(
                     service, itemService, () -> requestContext, new FiltersFactory(new FilterQueryBuilder()),
-                    timeBasedGenerator::generate, new Streamer(), sortingFactory))
+                    new IdGenerator() {
+
+                        @Override
+                        public UUID generateId() {
+                            return timeBasedGenerator.generate();
+                        }
+
+                        @Override
+                        public UUID getTimeOrderedEpoch(long rawTimestamp) {
+                            return timeBasedGenerator.construct(rawTimestamp);
+                        }
+                    }, new Streamer(), sortingFactory))
             .addProvider(JsonNodeMessageBodyWriter.class)
             .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
             .build();

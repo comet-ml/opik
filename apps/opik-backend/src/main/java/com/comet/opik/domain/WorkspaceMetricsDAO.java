@@ -6,7 +6,6 @@ import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.fasterxml.uuid.Generators;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
@@ -132,6 +131,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync template;
+    private final @NonNull IdGenerator idGenerator;
 
     @Override
     public Mono<List<WorkspaceMetricsSummaryResponse.Result>> getFeedbackScoresSummary(
@@ -162,8 +162,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 .bind("timestamp_start", request.intervalStart().toString())
                 .bind("timestamp_end", request.intervalEnd().toString())
                 .bind("id_start",
-                        Generators.timeBasedEpochGenerator().construct(request.intervalStart().toEpochMilli()))
-                .bind("id_end", Generators.timeBasedEpochGenerator().construct(request.intervalEnd().toEpochMilli()))
+                        idGenerator.getTimeOrderedEpoch(request.intervalStart().toEpochMilli()))
+                .bind("id_end", idGenerator.getTimeOrderedEpoch(request.intervalEnd().toEpochMilli()))
                 .bind("name", request.name());
 
         if (CollectionUtils.isNotEmpty(request.projectIds())) {
@@ -197,10 +197,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
         var statement = connection.createStatement(template.render())
                 .bind("id_start",
-                        Generators.timeBasedEpochGenerator().construct(request.intervalStart().toEpochMilli()))
-                .bind("id_end", Generators.timeBasedEpochGenerator().construct(request.intervalEnd().toEpochMilli()))
+                        idGenerator.getTimeOrderedEpoch(request.intervalStart().toEpochMilli()))
+                .bind("id_end", idGenerator.getTimeOrderedEpoch(request.intervalEnd().toEpochMilli()))
                 .bind("id_prior_start",
-                        Generators.timeBasedEpochGenerator().construct(
+                        idGenerator.getTimeOrderedEpoch(
                                 getPriorStart(request.intervalStart(), request.intervalEnd()).toEpochMilli()));
 
         if (CollectionUtils.isNotEmpty(request.projectIds())) {

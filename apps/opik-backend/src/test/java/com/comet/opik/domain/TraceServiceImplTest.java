@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.ErrorUtils;
 import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.common.eventbus.EventBus;
 import io.r2dbc.spi.Connection;
 import jakarta.ws.rs.NotFoundException;
@@ -42,6 +43,7 @@ import static org.mockito.Mockito.when;
 class TraceServiceImplTest {
 
     public static final LockService DUMMY_LOCK_SERVICE = new DummyLockService();
+    private static final TimeBasedEpochGenerator timeBasedGenerator = Generators.timeBasedEpochGenerator();
 
     private TraceServiceImpl traceService;
 
@@ -82,7 +84,18 @@ class TraceServiceImplTest {
                 attachmentService,
                 template,
                 projectService,
-                () -> Generators.timeBasedEpochGenerator().generate(),
+                new IdGenerator() {
+
+                    @Override
+                    public UUID generateId() {
+                        return timeBasedGenerator.generate();
+                    }
+
+                    @Override
+                    public UUID getTimeOrderedEpoch(long rawTimestamp) {
+                        return timeBasedGenerator.construct(rawTimestamp);
+                    }
+                },
                 DUMMY_LOCK_SERVICE,
                 eventBus);
     }

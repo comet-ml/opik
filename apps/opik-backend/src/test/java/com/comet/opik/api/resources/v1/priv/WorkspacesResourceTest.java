@@ -20,6 +20,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.resources.WorkspaceResourceClient;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -48,9 +49,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -103,14 +102,16 @@ class WorkspacesResourceTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private WorkspaceResourceClient workspaceResourceClient;
+    private IdGenerator idGenerator;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) throws SQLException {
+    void setUpAll(ClientSupport client, IdGenerator idGenerator) throws SQLException {
 
         this.baseURI = TestUtils.getBaseUrl(client);
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.workspaceResourceClient = new WorkspaceResourceClient(client, baseURI, factory);
+        this.idGenerator = idGenerator;
 
         ClientSupportUtils.config(client);
 
@@ -148,17 +149,14 @@ class WorkspacesResourceTest {
             var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
             List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
 
-            var previousScores = createFeedbackScores(projectName, names.subList(0, names.size() - 1), apiKey,
-                    workspaceName);
+            Instant startTime = Instant.now().minus(Duration.ofMinutes(10));
+            Instant endTime = Instant.now();
 
-            // Ensure a time gap for the next scores
-            Thread.sleep(1000); // Ensure a time gap for the next scores
-            Instant startTime = Instant.now();
-            Instant endTime = startTime.plus(Duration.ofMinutes(10));
-            Thread.sleep(1000);
+            var previousScores = createFeedbackScores(projectName, names.subList(0, names.size() - 1), apiKey,
+                    workspaceName, startTime.minus(Duration.ofMinutes(5)));
 
             var currentScores = createFeedbackScores(projectName, names.subList(1, names.size()), apiKey,
-                    workspaceName);
+                    workspaceName, startTime.plus(Duration.ofMinutes(5)));
 
             var traces = traceResourceClient.getByProjectName(projectName, apiKey, workspaceName);
 
@@ -277,10 +275,18 @@ class WorkspacesResourceTest {
 
         private Map<String, Double> createFeedbackScores(String projectName, List<String> scoreNames, String apiKey,
                 String workspaceName) {
+            return createFeedbackScores(projectName, scoreNames, apiKey, workspaceName, null);
+        }
+
+        private Map<String, Double> createFeedbackScores(String projectName, List<String> scoreNames, String apiKey,
+                String workspaceName, Instant time) {
             return IntStream.range(0, 5)
                     .mapToObj(i -> {
                         // create a trace
                         Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                                .id(time == null
+                                        ? idGenerator.generateId()
+                                        : idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
                                 .projectName(projectName)
                                 .build();
 
