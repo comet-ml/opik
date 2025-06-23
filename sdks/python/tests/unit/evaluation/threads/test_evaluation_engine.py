@@ -65,7 +65,7 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
 
         # Call the method
         thread = TraceThread(id="thread_1")
-        result = self.engine._get_conversation_tread(
+        result = self.engine._get_conversation_thread(
             thread=thread,
             trace_input_transform=input_transform,
             trace_output_transform=output_transform,
@@ -95,6 +95,10 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         results = evaluation_result.ThreadsEvaluationResult()
         score1 = score_result.ScoreResult(name="metric1", value=0.8, reason="Good")
         score2 = score_result.ScoreResult(name="metric2", value=0.6, reason="Average")
+        score3 = score_result.ScoreResult(
+            name="metric3", value=0.0, reason="Failed", scoring_failed=True
+        )
+        results.results["thread_1"] = [score1, score2, score3]
         expected_scores = [score1, score2]
         results.results["thread_1"] = expected_scores
 
@@ -311,9 +315,9 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         mock_conversation.add_user_message("Hello")
         mock_conversation.add_assistant_message("Hi there")
 
-        # Mock the _get_conversation_tread method
+        # Mock the _get_conversation_thread method
         with mock.patch.object(
-            self.engine, "_get_conversation_tread", return_value=mock_conversation
+            self.engine, "_get_conversation_thread", return_value=mock_conversation
         ):
             # Create mock metrics
             mock_metric1 = mock.MagicMock(
@@ -373,9 +377,9 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         mock_conversation.add_user_message("Hello")
         mock_conversation.add_assistant_message("Hi there")
 
-        # Mock the _get_conversation_tread method
+        # Mock the _get_conversation_thread method
         with mock.patch.object(
-            self.engine, "_get_conversation_tread", return_value=mock_conversation
+            self.engine, "_get_conversation_thread", return_value=mock_conversation
         ):
             # Create a metric that raises an exception
             mock_error_metric = mock.MagicMock(

@@ -78,7 +78,7 @@ class ThreadsEvaluationEngine:
         max_traces_per_thread: int,
     ) -> _types.ThreadTestResult:
         try:
-            conversation_dict = self._get_conversation_tread(
+            conversation_dict = self._get_conversation_thread(
                 thread=thread,
                 trace_input_transform=trace_input_transform,
                 trace_output_transform=trace_output_transform,
@@ -151,7 +151,7 @@ class ThreadsEvaluationEngine:
             filter_string=filter_string,
         )
 
-    def _get_conversation_tread(
+    def _get_conversation_thread(
         self,
         thread: TraceThread,
         trace_input_transform: Callable[[JsonListStringPublic], str],
@@ -182,6 +182,7 @@ class ThreadsEvaluationEngine:
                     reason=score.reason,
                 )
                 for score in scores
+                if not score.scoring_failed
             ]
             self._threads_client.log_threads_feedback_scores(
                 scores=feedback_scores,
