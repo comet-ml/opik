@@ -1,5 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.metrics.WorkspaceMetricRequest;
+import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -33,6 +35,21 @@ public class WorkspaceResourceClient {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
             return response.readEntity(WorkspaceMetricsSummaryResponse.class);
+        }
+    }
+
+    public WorkspaceMetricResponse getMetricsDaily(WorkspaceMetricRequest request, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("/metrics")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+            return response.readEntity(WorkspaceMetricResponse.class);
         }
     }
 }

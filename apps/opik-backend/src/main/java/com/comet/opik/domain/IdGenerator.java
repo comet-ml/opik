@@ -11,6 +11,8 @@ public interface IdGenerator {
 
     UUID generateId();
 
+    UUID getTimeOrderedEpoch(long epochMilli);
+
     static Mono<UUID> validateVersionAsync(UUID id, String resource) {
         if (id.version() != 7) {
             return Mono.error(

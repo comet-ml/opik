@@ -29,11 +29,9 @@ public interface ProjectMetricsService {
 class ProjectMetricsServiceImpl implements ProjectMetricsService {
     private final @NonNull Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> projectMetricHandler;
     private final @NonNull ProjectService projectService;
-    private final @NonNull WorkspaceMetricsDAO workspaceMetricsDAO;
 
     @Inject
     public ProjectMetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO,
-            @NonNull WorkspaceMetricsDAO workspaceMetricsDAO,
             @NonNull ProjectService projectService) {
         projectMetricHandler = Map.of(
                 MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
@@ -43,7 +41,6 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 MetricType.DURATION, projectMetricsDAO::getDuration,
                 MetricType.GUARDRAILS_FAILED_COUNT, projectMetricsDAO::getGuardrailsFailedCount);
         this.projectService = projectService;
-        this.workspaceMetricsDAO = workspaceMetricsDAO;
     }
 
     @Override

@@ -1,5 +1,7 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.metrics.WorkspaceMetricRequest;
+import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.google.inject.ImplementedBy;
@@ -13,6 +15,8 @@ import reactor.core.publisher.Mono;
 @ImplementedBy(WorkspaceMetricsServiceImpl.class)
 public interface WorkspaceMetricsService {
     Mono<WorkspaceMetricsSummaryResponse> getWorkspaceFeedbackScoresSummary(WorkspaceMetricsSummaryRequest request);
+
+    Mono<WorkspaceMetricResponse> getWorkspaceFeedbackScores(WorkspaceMetricRequest request);
 }
 
 @Slf4j
@@ -29,5 +33,13 @@ class WorkspaceMetricsServiceImpl implements WorkspaceMetricsService {
                         .results(metrics)
                         .build());
 
+    }
+
+    @Override
+    public Mono<WorkspaceMetricResponse> getWorkspaceFeedbackScores(@NonNull WorkspaceMetricRequest request) {
+        return workspaceMetricsDAO.getFeedbackScoresDaily(request)
+                .map(results -> WorkspaceMetricResponse.builder()
+                        .results(results)
+                        .build());
     }
 }
