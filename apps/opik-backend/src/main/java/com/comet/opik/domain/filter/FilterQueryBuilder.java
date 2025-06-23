@@ -61,6 +61,7 @@ public class FilterQueryBuilder {
     private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
     private static final String VISIBILITY_MODE_DB = "visibility_mode";
     private static final String ERROR_INFO_DB = "error_info";
+    private static final String STATUS_DB = "status";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -161,6 +162,8 @@ public class FilterQueryBuilder {
                     .put(TraceThreadField.DURATION, DURATION_ANALYTICS_DB)
                     .put(TraceThreadField.CREATED_AT, CREATED_AT_ANALYTICS_DB)
                     .put(TraceThreadField.LAST_UPDATED_AT, LAST_UPDATED_AT_ANALYTICS_DB)
+                    .put(TraceThreadField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
+                    .put(TraceThreadField.STATUS, STATUS_DB)
                     .build());
 
     private static final Map<SpanField, String> SPAN_FIELDS_MAP = new EnumMap<>(
@@ -239,6 +242,7 @@ public class FilterQueryBuilder {
                     .add(TraceField.FEEDBACK_SCORES)
                     .add(SpanField.FEEDBACK_SCORES)
                     .add(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES)
+                    .add(TraceThreadField.FEEDBACK_SCORES)
                     .build(),
             FilterStrategy.EXPERIMENT_ITEM, EnumSet.copyOf(ImmutableSet.<ExperimentsComparisonValidKnownField>builder()
                     .add(ExperimentsComparisonValidKnownField.OUTPUT)
@@ -254,6 +258,8 @@ public class FilterQueryBuilder {
                     .add(TraceThreadField.DURATION)
                     .add(TraceThreadField.CREATED_AT)
                     .add(TraceThreadField.LAST_UPDATED_AT)
+                    .add(TraceThreadField.FEEDBACK_SCORES)
+                    .add(TraceThreadField.STATUS)
                     .build())));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
@@ -309,7 +315,7 @@ public class FilterQueryBuilder {
     }
 
     private static boolean isFeedBackScore(Filter filter) {
-        return Set.of(TraceField.FEEDBACK_SCORES, SpanField.FEEDBACK_SCORES,
+        return Set.of(TraceField.FEEDBACK_SCORES, SpanField.FEEDBACK_SCORES, TraceThreadField.FEEDBACK_SCORES,
                 ExperimentsComparisonValidKnownField.FEEDBACK_SCORES).contains(filter.field());
     }
 

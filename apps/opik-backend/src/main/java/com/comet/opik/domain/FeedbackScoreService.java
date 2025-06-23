@@ -185,7 +185,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<Void> scoreBatchOfThreads(List<FeedbackScoreBatchItem> scores) {
+    public Mono<Void> scoreBatchOfThreads(@NonNull List<FeedbackScoreBatchItem> scores) {
         return processThreadsScoreBatch(scores);
     }
 

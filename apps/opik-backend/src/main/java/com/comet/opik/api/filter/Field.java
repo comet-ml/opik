@@ -30,6 +30,7 @@ public interface Field {
     String GUARDRAILS_QUERY_PARAM = "guardrails";
     String VISIBILITY_MODE_QUERY_PARAM = "visibility_mode";
     String ERROR_INFO_QUERY_PARAM = "error_info";
+    String STATUS_QUERY_PARAM = "status";
 
     @JsonValue
     String getQueryParamField();
