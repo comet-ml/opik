@@ -10,7 +10,7 @@ from opik.api_objects.conversation import conversation_thread
 from opik.api_objects.threads import threads_client
 from opik.evaluation.metrics import score_result
 from opik.evaluation.metrics.conversation import conversation_thread_metric
-from opik.evaluation.threads import evaluation_engine, evaluation_result, _types
+from opik.evaluation.threads import evaluation_engine, evaluation_result
 from opik.rest_api import TraceThread, TracePublic
 
 
@@ -93,15 +93,18 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
     def test__log_feedback_scores(self):
         """Test that _log_feedback_scores correctly logs feedback scores."""
         # Create mock results
-        results = evaluation_result.ThreadsEvaluationResult()
         score1 = score_result.ScoreResult(name="metric1", value=0.8, reason="Good")
         score2 = score_result.ScoreResult(name="metric2", value=0.6, reason="Average")
         score3 = score_result.ScoreResult(
             name="metric3", value=0.0, reason="Failed", scoring_failed=True
         )
-        results.results["thread_1"] = [score1, score2, score3]
+        results = [
+            evaluation_result.ThreadEvaluationResult(
+                thread_id="thread_1", scores=[score1, score2, score3]
+            )
+        ]
+
         expected_scores = [score1, score2]
-        results.results["thread_1"] = expected_scores
 
         # Call the method
         self.engine._log_feedback_scores(results)
@@ -132,7 +135,7 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         # Mock evaluate_thread to return test results
         def mock_evaluate_thread(*args, **kwargs):
             thread = kwargs.get("thread")
-            return _types.ThreadTestResult(
+            return evaluation_result.ThreadEvaluationResult(
                 thread_id=thread.id,
                 scores=[
                     score_result.ScoreResult(name="metric1", value=0.8, reason="Good"),
@@ -168,8 +171,9 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
 
         # Verify the result
         self.assertEqual(len(result.results), 2)
-        self.assertEqual(len(result.results["thread_1"]), 2)
-        self.assertEqual(len(result.results["thread_2"]), 2)
+        for result in result.results:
+            self.assertTrue(result.thread_id in ["thread_1", "thread_2"])
+            self.assertEqual(len(result.scores), 2)
 
         # Verify the log_feedback_scores was called
         self.mock_client.log_threads_feedback_scores.assert_called()
@@ -197,7 +201,7 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         with self.assertLogs(
             level="WARNING", logger="opik.evaluation.threads.evaluation_engine"
         ) as log_context:
-            result = self.engine.evaluate_threads(
+            results = self.engine.evaluate_threads(
                 filter_string="filter_string",
                 eval_project_name="eval_project",
                 metrics=[mock_metric1],
@@ -207,8 +211,11 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
             )
 
         # Verify the result
-        self.assertTrue("thread_1" in result.results)
-        self.assertEqual(len(result.results["thread_1"]), 0)  # No scores
+        self.assertEqual(len(results.results), 1)
+        result = results.results[0]
+
+        self.assertEqual(result.thread_id, "thread_1")
+        self.assertEqual(len(result.scores), 0)
 
         # Verify error was logged
         self.assertTrue(
@@ -263,15 +270,21 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
 
         # Mock the evaluation executor
         with mock.patch(
-            "opik.evaluation.threads.evaluation_executor.execute"
+            "opik.evaluation.threads.evaluation_engine.evaluation_tasks_executor.execute"
         ) as mock_execute:
             # Create a mock result
-            mock_evaluation_result = evaluation_result.ThreadsEvaluationResult()
-            for i in range(10):
-                mock_evaluation_result.results[f"thread_{i}"] = [
-                    score_result.ScoreResult(name="metric", value=0.8, reason="Good")
-                ]
-            mock_execute.return_value = mock_evaluation_result
+            results = [
+                evaluation_result.ThreadEvaluationResult(
+                    thread_id=f"thread_{i}",
+                    scores=[
+                        score_result.ScoreResult(
+                            name="metric", value=0.8, reason="Good"
+                        ),
+                    ],
+                )
+                for i in range(10)
+            ]
+            mock_execute.return_value = results
 
             # Create mock metric
             mock_metric = mock.MagicMock(

@@ -5,8 +5,10 @@ from typing import Optional, List, Callable, Dict
 from opik import exceptions, track, opik_context
 from opik.evaluation.metrics.conversation import conversation_thread_metric
 from opik.rest_api import JsonListStringPublic, TraceThread
-from . import _types, context_helper
-from . import evaluation_result, evaluation_executor
+from . import context_helper
+from . import evaluation_result
+from ..engine import evaluation_tasks_executor
+from ..engine import types as engine_types
 from ..metrics import score_result
 from ...api_objects import trace
 from ...api_objects.conversation import conversation_factory, conversation_thread
@@ -52,7 +54,9 @@ class ThreadsEvaluationEngine:
                 f"No threads found with filter_string: {filter_string}"
             )
 
-        evaluation_tasks: List[_types.EvaluationTask] = [
+        evaluation_tasks: List[
+            engine_types.EvaluationTask[evaluation_result.ThreadEvaluationResult]
+        ] = [
             functools.partial(
                 self.evaluate_thread,
                 thread=thread,
@@ -65,13 +69,13 @@ class ThreadsEvaluationEngine:
             for thread in threads
         ]
 
-        results = evaluation_executor.execute(
+        results = evaluation_tasks_executor.execute(
             evaluation_tasks, workers=self._number_of_workers, verbose=self._verbose
         )
 
         self._log_feedback_scores(results)
 
-        return results
+        return evaluation_result.ThreadsEvaluationResult(results=results)
 
     def evaluate_thread(
         self,
@@ -81,7 +85,7 @@ class ThreadsEvaluationEngine:
         trace_input_transform: Callable[[JsonListStringPublic], str],
         trace_output_transform: Callable[[JsonListStringPublic], str],
         max_traces_per_thread: int,
-    ) -> _types.ThreadTestResult:
+    ) -> evaluation_result.ThreadEvaluationResult:
         conversation_dict = self._get_conversation_thread(
             thread=thread,
             trace_input_transform=trace_input_transform,
@@ -94,7 +98,9 @@ class ThreadsEvaluationEngine:
             LOGGER.warning(
                 f"Thread '{thread.id}' has no conversation traces. Skipping evaluation."
             )
-            return _types.ThreadTestResult(thread_id=thread.id, scores=[])
+            return evaluation_result.ThreadEvaluationResult(
+                thread_id=thread.id, scores=[]
+            )
 
         if eval_project_name is None:
             eval_project_name = self._project_name
@@ -115,7 +121,7 @@ class ThreadsEvaluationEngine:
             outputs = [result.__dict__ for result in results]
             opik_context.update_current_trace(output={"evaluation_results": outputs})
 
-        return _types.ThreadTestResult(
+        return evaluation_result.ThreadEvaluationResult(
             thread_id=thread.id,
             scores=results,
         )
@@ -174,17 +180,17 @@ class ThreadsEvaluationEngine:
 
     def _log_feedback_scores(
         self,
-        results: evaluation_result.ThreadsEvaluationResult,
+        results: List[evaluation_result.ThreadEvaluationResult],
     ) -> None:
-        for thread_id, scores in results.results.items():
+        for result in results:
             feedback_scores = [
                 FeedbackScoreDict(
-                    id=thread_id,
+                    id=result.thread_id,
                     name=score.name,
                     value=score.value,
                     reason=score.reason,
                 )
-                for score in scores
+                for score in result.scores
                 if not score.scoring_failed
             ]
             self._threads_client.log_threads_feedback_scores(

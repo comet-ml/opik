@@ -1,12 +1,18 @@
-from collections import defaultdict
-from typing import Dict, List
+from typing import List
 
 import pydantic
 
 from ..metrics import score_result
 
 
-class ThreadsEvaluationResult(pydantic.BaseModel):
-    """Threads evaluation results with a key as thread id and value as a list of evaluation results per metric."""
+class ThreadEvaluationResult(pydantic.BaseModel):
+    """Evaluation result for a particular thread."""
 
-    results: Dict[str, List[score_result.ScoreResult]] = defaultdict(list)
+    thread_id: str
+    scores: List[score_result.ScoreResult] = pydantic.Field(default_factory=list)
+
+
+class ThreadsEvaluationResult(pydantic.BaseModel):
+    """Threads evaluation results"""
+
+    results: List[ThreadEvaluationResult] = pydantic.Field(default_factory=list)
