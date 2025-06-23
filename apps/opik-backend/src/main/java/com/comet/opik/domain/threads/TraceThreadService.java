@@ -35,8 +35,7 @@ public interface TraceThreadService {
     Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(Instant lastUpdatedUntil,
             int limit);
 
-    Mono<Void> processProjectWithTraceThreadsPendingClosure(UUID projectId, Instant lastUpdatedUntil,
-            int maxItemPerRun);
+    Mono<Void> processProjectWithTraceThreadsPendingClosure(UUID projectId, Instant lastUpdatedUntil);
 
     Mono<Boolean> addToPendingQueue(UUID projectId);
 
@@ -147,30 +146,27 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
     @Override
     public Mono<Void> processProjectWithTraceThreadsPendingClosure(@NonNull UUID projectId,
-            @NonNull Instant lastUpdatedUntil, int maxItemPerRun) {
+            @NonNull Instant lastUpdatedUntil) {
         return lockService.executeWithLockCustomExpire(
                 new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
                 Mono.deferContextual(
-                        contextView -> closeThreadWith(projectId, lastUpdatedUntil, maxItemPerRun, contextView)),
+                        contextView -> closeThreadWith(projectId, lastUpdatedUntil, contextView)),
                 LOCK_DURATION).then();
     }
 
-    private Mono<Long> closeThreadWith(UUID projectId, Instant lastUpdatedUntil, int maxItemPerRun,
-            ContextView contextView) {
-        return traceThreadDAO.closeThreadWith(projectId, lastUpdatedUntil, maxItemPerRun)
-                .repeatWhen(repeat -> repeat
-                        .doOnNext(count -> log.info("Closed {} threads, continuing...", count))
-                        .takeUntil(count -> count.equals(0L))
-                        .doOnComplete(() -> log.info(
-                                "All threads Closed trace threads for projectId: '{}' on workspaceId: '{}'",
-                                projectId, contextView.get(RequestContext.WORKSPACE_ID))))
-                .reduce(Long::sum)
+    private Mono<Long> closeThreadWith(UUID projectId, Instant lastUpdatedUntil, ContextView ctx) {
+        String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+        return traceThreadDAO.closeThreadWith(projectId, lastUpdatedUntil)
                 .flatMap(count -> {
                     var lock = new LockService.Lock(TraceThreadBufferConfig.BUFFER_SET_NAME, projectId.toString());
                     return lockService.unlockUsingToken(lock).thenReturn(count);
                 })
-                .doOnError(ex -> log.error("Error when processing closure of pending trace threads  for project: '%s'"
-                        .formatted(projectId), ex));
+                .doOnSuccess(count -> log.info("Closed '{}' trace threads for projectId: '{}' on workspaceId '{}'",
+                        count, projectId, workspaceId))
+                .doOnError(ex -> log.error(
+                        "Error when processing closure of pending trace threads  for project: '%s' workspaceId '{}'"
+                                .formatted(projectId, workspaceId),
+                        ex));
     }
 
     @Override
