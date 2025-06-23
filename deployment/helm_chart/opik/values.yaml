@@ -362,7 +362,7 @@ clickhouse:
     env:
       LOG_LEVEL: info
       ALLOW_EMPTY_BACKUPS: true
-      API_LISTEN: 0.0.0.0: 7171
+      API_LISTEN: 0.0.0.0:7171
       API_CREATE_INTEGRATION_TABLES: true
       BACKUPS_TO_KEEP_REMOTE: 3
       REMOTE_STORAGE: s3
