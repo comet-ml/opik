@@ -377,7 +377,7 @@ clickhouse:
       # S3_DISABLE_SSL: true
       # S3_DEBUG: true
     port: 7171
-    image: altinity/clickhouse-backup:latest
+    image: altinity/clickhouse-backup:2.6.23
     imagePullPolicy: Always
     successfulJobsHistoryLimit: 1
     serviceAccount:
