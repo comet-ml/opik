@@ -21,7 +21,7 @@ def test_metaprompt_optimizer() -> None:
         return metric.score(reference=dataset_item["label"], output=llm_output)
 
     prompt = chat_prompt.ChatPrompt(
-        system="Provide an answer to the question. The question is {text}"
+        system="Provide an answer to the question.", user="The question is {text}"
     )
 
     agent_config = AgentConfig(chat_prompt=prompt)
