@@ -7,7 +7,10 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum EntityType {
     TRACE("trace", "traces"),
-    SPAN("span", "spans");
+    SPAN("span", "spans"),
+    THREAD("thread", "threads"),
+
+    ;
 
     private final String type;
     private final String tableName;
