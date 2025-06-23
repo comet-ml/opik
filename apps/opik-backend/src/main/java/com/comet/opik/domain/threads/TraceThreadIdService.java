@@ -10,6 +10,7 @@ import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,7 +20,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.UUID;
-import javassist.NotFoundException;
 
 @ImplementedBy(TraceThreadIdServiceImpl.class)
 interface TraceThreadIdService {
@@ -61,7 +61,10 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
         return Mono.fromCallable(() -> projectService.get(projectId, workspaceId))
                 .flatMap(project -> getTraceThreadId(threadId, project.id())
                         .map(TraceThreadIdModel::id))
-                .onErrorResume(NotFoundException.class, throwable -> Mono.empty());
+                .onErrorResume(NotFoundException.class, throwable -> {
+                    log.warn("Thread ID not found for project '{}' and thread ID '{}'", projectId, threadId, throwable);
+                    return Mono.empty();
+                });
 
     }
 

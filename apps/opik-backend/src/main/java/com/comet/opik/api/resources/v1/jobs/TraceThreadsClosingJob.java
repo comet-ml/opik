@@ -101,5 +101,4 @@ public class TraceThreadsClosingJob extends Job {
     private void errorLog(Throwable throwable) {
         log.error("Error sending message", throwable);
     }
-
 }

@@ -100,7 +100,6 @@ class TraceThreadsClosingJobTest {
     private TraceResourceClient traceResourceClient;
 
     @BeforeAll
-
     void setUpAll(ClientSupport client) {
 
         this.baseURI = TestUtils.getBaseUrl(client);
