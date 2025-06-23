@@ -41,7 +41,7 @@ interface TraceThreadDAO {
     Flux<ProjectWithPendingClosureTraceThreads> findProjectsWithPendingClosureThreads(Instant lastUpdatedUntil,
             int limit);
 
-    Mono<Long> closeThreadWith(UUID projectId, Instant lastUpdatedUntil);
+    Mono<Long> closeThreadWith(UUID projectId, Instant lastUpdatedUntil, int maxItemPerRun);
 
     Mono<Long> openThread(UUID projectId, String threadId);
 
@@ -108,6 +108,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             AND project_id = :project_id
             <if(last_updated_at)>AND last_updated_at \\< parseDateTime64BestEffort(:last_updated_at, 6)<endif>
             <if(thread_id)>AND thread_id = :thread_id<endif>
+            <if(limit)>LIMIT :limit<endif>
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -194,14 +195,16 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     }
 
     @Override
-    public Mono<Long> closeThreadWith(@NonNull UUID projectId, @NonNull Instant lastUpdatedUntil) {
+    public Mono<Long> closeThreadWith(@NonNull UUID projectId, @NonNull Instant lastUpdatedUntil, int maxItemPerRun) {
         return asyncTemplate.nonTransaction(connection -> {
             ST closureThreadsSql = new ST(OPEN_CLOSURE_THREADS_SQL);
             closureThreadsSql.add("last_updated_at", lastUpdatedUntil.toString());
+            closureThreadsSql.add("limit", maxItemPerRun);
             var statement = connection.createStatement(closureThreadsSql.render())
                     .bind("project_id", projectId)
                     .bind("last_updated_at", lastUpdatedUntil.toString())
-                    .bind("status", TraceThreadStatus.INACTIVE.getValue());
+                    .bind("status", TraceThreadStatus.INACTIVE.getValue())
+                    .bind("limit", maxItemPerRun);
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));

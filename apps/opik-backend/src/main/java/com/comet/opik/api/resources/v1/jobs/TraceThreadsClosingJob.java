@@ -47,7 +47,7 @@ public class TraceThreadsClosingJob extends Job {
         var lock = new Lock("job", TraceThreadsClosingJob.class.getSimpleName());
         var timeoutToMarkThreadAsInactive = traceThreadConfig
                 .getTimeoutToMarkThreadAsInactive().toJavaDuration(); // This is the timeout to mark threads as inactive
-        int limit = 1000; // Limit to a process in each job execution
+        int limit = traceThreadConfig.getCloseTraceThreadMaxItemPerRun(); // Limit to a process in each job execution
 
         lockAndProcessJob(lock, timeoutToMarkThreadAsInactive, limit)
                 .subscribe(
@@ -68,8 +68,8 @@ public class TraceThreadsClosingJob extends Job {
                     log.info("Could not acquire lock for TraceThreadsClosingJob, skipping execution");
                     return null;
                 }),
-                Duration.ofSeconds(4), // Timeout to release the lock
-                Duration.ofMillis(300)); // Timeout to acquiring the lock
+                traceThreadConfig.getCloseTraceThreadJobLockTime().toJavaDuration(), // Timeout to release the lock
+                traceThreadConfig.getCloseTraceThreadJobLockWaitTime().toJavaDuration()); // Timeout to acquiring the lock
     }
 
     private Mono<Void> enqueueInRedis(Flux<ProjectWithPendingClosureTraceThreads> flux) {
