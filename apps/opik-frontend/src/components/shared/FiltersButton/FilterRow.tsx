@@ -39,6 +39,7 @@ export const FilterRow = <TColumnData,>({
 
     switch (filter.type) {
       case COLUMN_TYPE.string:
+      case COLUMN_TYPE.errors:
         return (
           <StringRow filter={filter} onChange={onChange} config={config} />
         );

@@ -11,6 +11,7 @@ import {
   Coins,
   Construction,
   LucideProps,
+  AlertTriangle,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
@@ -32,6 +33,7 @@ const COLUMN_TYPE_MAP: Record<
   [COLUMN_TYPE.numberDictionary]: PenLine,
   [COLUMN_TYPE.cost]: Coins,
   [COLUMN_TYPE.guardrails]: Construction,
+  [COLUMN_TYPE.errors]: AlertTriangle,
 };
 
 const TypeHeader = <TData,>(context: HeaderContext<TData, unknown>) => {

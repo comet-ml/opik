@@ -17,7 +17,6 @@ import InputOutputTab from "./InputOutputTab";
 import MetadataTab from "./MatadataTab";
 import FeedbackScoreTab from "./FeedbackScoreTab";
 import AgentGraphTab from "./AgentGraphTab";
-import ErrorTab from "./ErrorTab";
 import { formatDuration } from "@/lib/date";
 import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
@@ -55,16 +54,12 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     get(data, ["metadata", METADATA_AGENT_GRAPH_KEY], null) ||
     get(trace, ["metadata", METADATA_AGENT_GRAPH_KEY], null);
   const hasAgentGraph = Boolean(agentGraphData);
-  const hasError = Boolean(data.error_info);
 
   const [tab = "input", setTab] = useQueryParam("traceTab", StringParam, {
     updateType: "replaceIn",
   });
 
-  const selectedTab =
-    (tab === "graph" && !hasAgentGraph) || (tab === "error" && !hasError)
-      ? "input"
-      : tab;
+  const selectedTab = tab === "graph" && !hasAgentGraph ? "input" : tab;
 
   const isSpanInputOutputLoading =
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
@@ -169,11 +164,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 Agent graph
               </TabsTrigger>
             )}
-            {hasError && (
-              <TabsTrigger variant="underline" value="error">
-                Error
-              </TabsTrigger>
-            )}
           </TabsList>
           <TabsContent value="input">
             <InputOutputTab data={data} isLoading={isSpanInputOutputLoading} />
@@ -187,11 +177,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           {hasAgentGraph && (
             <TabsContent value="graph">
               <AgentGraphTab data={agentGraphData} />
-            </TabsContent>
-          )}
-          {hasError && (
-            <TabsContent value="error">
-              <ErrorTab data={data} />
             </TabsContent>
           )}
         </Tabs>

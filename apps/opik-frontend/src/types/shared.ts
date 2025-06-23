@@ -35,6 +35,7 @@ export enum COLUMN_TYPE {
   numberDictionary = "feedback_scores_number",
   cost = "cost",
   guardrails = "guardrails",
+  errors = "errors",
 }
 
 export enum DYNAMIC_COLUMN_TYPE {
