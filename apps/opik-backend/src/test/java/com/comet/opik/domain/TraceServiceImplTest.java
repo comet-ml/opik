@@ -84,18 +84,7 @@ class TraceServiceImplTest {
                 attachmentService,
                 template,
                 projectService,
-                new IdGenerator() {
-
-                    @Override
-                    public UUID generateId() {
-                        return timeBasedGenerator.generate();
-                    }
-
-                    @Override
-                    public UUID getTimeOrderedEpoch(long rawTimestamp) {
-                        return timeBasedGenerator.construct(rawTimestamp);
-                    }
-                },
+                new IdGeneratorImpl(),
                 DUMMY_LOCK_SERVICE,
                 eventBus);
     }
