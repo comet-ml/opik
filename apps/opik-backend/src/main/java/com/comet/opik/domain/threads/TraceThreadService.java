@@ -43,6 +43,10 @@ public interface TraceThreadService {
     Mono<Void> openThread(UUID projectId, String threadId);
 
     Mono<Void> closeThread(UUID projectId, String threadId);
+
+    Mono<UUID> getOrCreateThreadId(UUID projectId, String threadId);
+
+    Mono<UUID> getThreadModelId(UUID projectId, String threadId);
 }
 
 @Slf4j
@@ -78,6 +82,19 @@ class TraceThreadServiceImpl implements TraceThreadService {
                     return traceThreadIdService.getOrCreateTraceThreadId(workspaceId, projectId, threadId)
                             .map(traceThreadId -> mapToModel(traceThreadId, userName, lastUpdatedAt));
                 }));
+    }
+
+    @Override
+    public Mono<UUID> getOrCreateThreadId(@NonNull UUID projectId, @NonNull String threadId) {
+        return Mono.deferContextual(context -> traceThreadIdService
+                .getOrCreateTraceThreadId(context.get(RequestContext.WORKSPACE_ID), projectId, threadId)
+                .map(TraceThreadIdModel::id));
+    }
+
+    @Override
+    public Mono<UUID> getThreadModelId(@NonNull UUID projectId, @NonNull String threadId) {
+        return Mono.deferContextual(context -> traceThreadIdService
+                .getThreadModelId(context.get(RequestContext.WORKSPACE_ID), projectId, threadId));
     }
 
     private TraceThreadModel mapToModel(TraceThreadIdModel traceThread, String userName, Instant lastUpdatedAt) {
