@@ -265,6 +265,7 @@ from .provider_api_key_public import ProviderApiKeyPublic
 from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
 from .response_format import ResponseFormat
 from .response_format_type import ResponseFormatType
+from .result import Result
 from .results_number_public import ResultsNumberPublic
 from .score_name import ScoreName
 from .service_toggles_config import ServiceTogglesConfig
@@ -295,6 +296,7 @@ from .trace_page_public import TracePagePublic
 from .trace_public import TracePublic
 from .trace_public_visibility_mode import TracePublicVisibilityMode
 from .trace_thread import TraceThread
+from .trace_thread_identifier import TraceThreadIdentifier
 from .trace_thread_page import TraceThreadPage
 from .trace_visibility_mode import TraceVisibilityMode
 from .trace_write import TraceWrite
@@ -302,6 +304,7 @@ from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
+from .workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
 from .workspace_name_holder import WorkspaceNameHolder
 from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
@@ -556,6 +559,7 @@ __all__ = [
     "ProviderApiKeyPublicProvider",
     "ResponseFormat",
     "ResponseFormatType",
+    "Result",
     "ResultsNumberPublic",
     "ScoreName",
     "ServiceTogglesConfig",
@@ -586,6 +590,7 @@ __all__ = [
     "TracePublic",
     "TracePublicVisibilityMode",
     "TraceThread",
+    "TraceThreadIdentifier",
     "TraceThreadPage",
     "TraceVisibilityMode",
     "TraceWrite",
@@ -593,6 +598,7 @@ __all__ = [
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
+    "WorkspaceMetricsSummaryResponse",
     "WorkspaceNameHolder",
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",

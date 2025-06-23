@@ -4,6 +4,7 @@ from unittest import mock
 import logging
 import deepdiff
 
+from opik.evaluation.metrics import score_result
 
 LOGGER = logging.getLogger(__name__)
 
@@ -104,3 +105,14 @@ def assert_dict_keys_in_list(dic: Dict[str, Any], keys: List[str]) -> None:
     raise AssertionError(
         f"Dict contains keys that are not in the allowed list. Invalid keys: {invalid_keys}, allowed keys: {keys}"
     )
+
+
+def assert_score_result(
+    result: score_result.ScoreResult, include_reason: bool = True
+) -> None:
+    assert result.scoring_failed is False
+    assert isinstance(result.value, float)
+    assert 0.0 <= result.value <= 1.0
+    if include_reason:
+        assert isinstance(result.reason, str)
+        assert len(result.reason) > 0

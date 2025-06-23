@@ -29,6 +29,15 @@ database:
   #  Description: Any additional JDBC driver parameters
   properties:
     wrapperPlugins: ${STATE_DB_PLUGINS:-''}
+    useSSL: ${MYSQL_USE_SSL:-''}
+    requireSSL: ${MYSQL_REQUIRE_SSL:-''}
+    verifyServerCertificate: ${MYSQL_VERIFY_SSL:-''}
+    trustCertificateKeyStoreUrl: ${MYSQL_TRUSTSTORE_URL:-''}
+    trustCertificateKeyStorePassword: ${MYSQL_TRUSTSTORE_PASSWORD:-''}
+    trustCertificateKeyStoreType: ${MYSQL_TRUSTSTORE_TYPE:-''}
+    clientCertificateKeyStoreUrl: ${MYSQL_CLIENTSTORE_URL:-''}
+    clientCertificateKeyStorePassword: ${MYSQL_CLIENTSTORE_PASSWORD:-''}
+    clientCertificateKeyStoreType: ${MYSQL_CLIENTSTORE_TYPE:-''}
 
 # Description: analytics database configuration for migrations connection
 databaseAnalyticsMigrations:
@@ -372,3 +381,23 @@ serviceToggles:
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
 
+# Trace Thread configuration
+traceThreadConfig:
+  # Default: 10min
+  # Description: Inactive thread timeout in minutes. If a thread is inactive for this amount of time, it will be marked as inactive
+  timeoutToMarkThreadAsInactive: ${OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE_IN_MIN:-10m}
+  # Default: trace_thread_closing
+  # Description: A consumer group name so multiple instances can share the stream load
+  consumerGroupName: ${OPIK_REDIS_TRACE_THREAD_CONSUMER_GROUP_NAME:-'trace_thread_closing'}
+  # Default: 100
+  # Description: Maximum number of messages returned within a Redis Stream get
+  consumerBatchSize: ${OPIK_REDIS_TRACE_THREAD_CONSUMER_BATCH_SIZE:-100}
+  # Default: 200 milliseconds
+  # Description: How often the trace thread consumer will check Redis for new messages (in milliseconds)
+  poolingInterval: ${OPIK_REDIS_TRACE_THREAD_POOLING_INTERVAL:-200 milliseconds}
+  # Default: trace_thread_closing_stream
+  # Description: The name of the Redis Stream used for trace thread closing
+  streamName: ${OPIK_REDIS_TRACE_THREAD_STREAM_NAME:-'trace_thread_closing_stream'}
+  # Default: 5s
+  # Description: The interval at which the close trace thread job will run to inactive threads
+  closeTraceThreadJobInterval: ${OPIK_CLOSE_TRACE_THREAD_JOB_INTERVAL:-5s}
