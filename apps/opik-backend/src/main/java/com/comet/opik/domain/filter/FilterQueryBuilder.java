@@ -315,7 +315,7 @@ public class FilterQueryBuilder {
     }
 
     private static boolean isFeedBackScore(Filter filter) {
-        return Set.of(TraceField.FEEDBACK_SCORES, SpanField.FEEDBACK_SCORES,
+        return Set.of(TraceField.FEEDBACK_SCORES, SpanField.FEEDBACK_SCORES, TraceThreadField.FEEDBACK_SCORES,
                 ExperimentsComparisonValidKnownField.FEEDBACK_SCORES).contains(filter.field());
     }
 

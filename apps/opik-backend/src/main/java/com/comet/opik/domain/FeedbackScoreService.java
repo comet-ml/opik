@@ -5,7 +5,9 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.domain.threads.TraceThreadService;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.WorkspaceUtils;
+import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
@@ -13,6 +15,7 @@ import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -47,7 +50,7 @@ public interface FeedbackScoreService {
 
     Mono<Void> scoreBatchOfThreads(List<FeedbackScoreBatchItem> scores);
 
-    Mono<Void> deleteThreadScores(UUID projectId, String threadId, Set<String> names);
+    Mono<Void> deleteThreadScores(String projectName, String threadId, Set<String> names);
 }
 
 @Slf4j
@@ -182,30 +185,56 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<Void> scoreBatchOfThreads(List<FeedbackScoreBatchItem> scores) {
+    public Mono<Void> scoreBatchOfThreads(@NonNull List<FeedbackScoreBatchItem> scores) {
         return processThreadsScoreBatch(scores);
     }
 
     @Override
-    public Mono<Void> deleteThreadScores(UUID projectId, String threadId, Set<String> names) {
+    public Mono<Void> deleteThreadScores(@NonNull String projectName, @NonNull String threadId,
+            @NonNull Set<String> names) {
+        Preconditions.checkArgument(!StringUtils.isBlank(projectName), "Project name cannot be blank");
+        Preconditions.checkArgument(!StringUtils.isBlank(threadId), "Thread ID cannot be blank");
+
         if (names.isEmpty()) {
+            log.info("No names provided for deletion of scores for threadId '{}' in projectName '{}'", threadId,
+                    projectName);
             return Mono.empty();
         }
 
-        return traceThreadService.getThreadModelId(projectId, threadId)
-                .flatMap(threadModelId -> dao.deleteByEntityIdAndNames(EntityType.THREAD, threadModelId, names))
-                .switchIfEmpty(Mono.defer(() -> {
-                    log.info("ThreadId '{}' not found in project '{}'. No scores deleted.", threadId, projectId);
-                    return Mono.empty();
-                }))
-                .doOnNext(count -> log.info("Deleted '{}' scores for threadId '{}' in projectId '{}'", count, threadId,
-                        projectId))
+        return getProject(projectName)
+                .flatMap(projectId -> traceThreadService.getThreadModelId(projectId, threadId)
+                        .flatMap(threadModelId -> dao.deleteByEntityIdAndNames(EntityType.THREAD, threadModelId, names))
+                        .switchIfEmpty(Mono.defer(() -> {
+                            log.info("ThreadId '{}' not found in project '{}'. No scores deleted.", threadId,
+                                    projectId);
+                            return Mono.empty();
+                        }))
+                        .doOnNext(count -> log.info("Deleted '{}' scores for threadId '{}' in projectId '{}'", count,
+                                threadId,
+                                projectId)))
                 .then();
+    }
+
+    private Mono<UUID> getProject(String projectName) {
+        return Mono.deferContextual(context -> Mono.fromCallable(() -> {
+            String workspaceId = context.get(RequestContext.WORKSPACE_ID);
+
+            return projectService.findByNames(workspaceId, List.of(projectName)).stream().findFirst();
+        }).flatMap(project -> {
+            if (project.isEmpty()) {
+                log.info("Project '{}' not found in workspace '{}'", projectName,
+                        context.get(RequestContext.WORKSPACE_ID));
+                return Mono.empty();
+            }
+
+            return Mono.just(project.get().id());
+        }));
     }
 
     private Mono<Void> processThreadsScoreBatch(List<FeedbackScoreBatchItem> scores) {
 
         if (scores.isEmpty()) {
+            log.info("No scores provided for batch processing of threads");
             return Mono.empty();
         }
 
@@ -221,6 +250,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .map(ProjectService::groupByName)
                 .map(projectMap -> mergeProjectsAndScores(projectMap, scoresPerProject))
                 .flatMap(this::saveThreadScoreBatch) // save all scores
+                .doOnSuccess(count -> log.info("Saved '{}' thread scores in batch", count))
                 .then();
     }
 

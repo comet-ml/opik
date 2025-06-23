@@ -49,5 +49,4 @@ public class ClosingTraceThreadSubscriber extends BaseRedisSubscriber<ProjectWit
                 .contextWrite(context -> context.put(USER_NAME, DEFAULT_USER)
                         .put(WORKSPACE_ID, message.workspaceId()));
     }
-
 }
