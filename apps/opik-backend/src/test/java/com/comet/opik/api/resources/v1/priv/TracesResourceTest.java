@@ -55,8 +55,6 @@ import com.comet.opik.api.resources.utils.traces.TraceTestAssertion;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
-import com.comet.opik.domain.EntityType;
-import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
@@ -109,7 +107,6 @@ import org.testcontainers.shaded.org.apache.commons.lang3.tuple.Pair;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.util.context.Context;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -141,7 +138,6 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemBuilder;
 import static com.comet.opik.api.FeedbackScoreBatchItem.builder;
-import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -4511,7 +4507,10 @@ class TracesResourceTest {
                                         TraceThreadFilter.builder()
                                                 .field(filter.getKey())
                                                 .operator(operator)
-                                                .key(getKey(filter.getKey()))
+                                                // if no value is expected, create an invalid filter by an empty key
+                                                .key(Operator.NO_VALUE_OPERATORS.contains(operator)
+                                                        ? ""
+                                                        : getKey(filter.getKey()))
                                                 .value(getInvalidValue(filter.getKey()))
                                                 .build());
                                 default -> Stream.of(TraceThreadFilter.builder()
