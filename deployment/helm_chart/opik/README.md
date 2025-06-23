@@ -94,10 +94,13 @@ Call opik api on http://localhost:5173/api
 | clickhouse.adminUser.password | string | `"opik"` |  |
 | clickhouse.adminUser.useSecret.enabled | bool | `false` |  |
 | clickhouse.adminUser.username | string | `"opik"` |  |
-| clickhouse.backup.enabled | bool | `false` |  |
+| clickhouse.backup.command[0] | string | `"/bin/bash"` |  |
+| clickhouse.backup.command[1] | string | `"-cx"` |  |
+| clickhouse.backup.command[2] | string | `"if [ $(date +%j) -eq 1 ]; then\n  echo \"Running backup for the first day of the year\"\n  export BACKUP_PREFIX=yearly/\nelif [ $(date +%d) -eq 1 ]; then\n  echo \"Skipping backup, not the first day of the year\"\n  export BACKUP_PREFIX=monthly/\nelse\n  echo \"Running backup for the current day\"\n  export BACKUP_PREFIX=\"\"\nfi\nexport BACKUP_NAME=${BACKUP_PREFIX}backup$(date +'%Y%m%d%H%M')\nBACKUP_QUERY_FILE=$(mktemp --suffix .sql /tmp/clickhouse-backup-query.XXXXXX)\ncat << BACKUP_SQL | tee \"${BACKUP_QUERY_FILE}\"\n  BACKUP ALL EXCEPT DATABASE system \n    TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${BACKUP_NAME}/', '${ACCESS_KEY}', '${SECRET_KEY}');\nBACKUP_SQL\nclickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=\"${BACKUP_QUERY_FILE}\"\n    \n"` |  |
+| clickhouse.backup.enabled | bool | `true` |  |
 | clickhouse.backup.serviceAccount.annotations | object | `{}` |  |
-| clickhouse.backup.serviceAccount.create | bool | `true` |  |
-| clickhouse.backup.serviceAccount.enabled | bool | `false` |  |
+| clickhouse.backup.serviceAccount.create | bool | `false` |  |
+| clickhouse.backup.serviceAccount.name | string | `"clickhouse-backup"` |  |
 | clickhouse.backup.successfulJobsHistoryLimit | int | `1` |  |
 | clickhouse.enabled | bool | `true` |  |
 | clickhouse.image | string | `"altinity/clickhouse-server:24.3.5.47.altinitystable"` |  |
