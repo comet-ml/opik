@@ -1,8 +1,10 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.metrics.WorkspaceMetricRequest;
+import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -18,6 +20,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.resources.WorkspaceResourceClient;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -45,6 +48,9 @@ import java.math.RoundingMode;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -96,14 +102,16 @@ class WorkspacesResourceTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private WorkspaceResourceClient workspaceResourceClient;
+    private IdGenerator idGenerator;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) throws SQLException {
+    void setUpAll(ClientSupport client, IdGenerator idGenerator) throws SQLException {
 
         this.baseURI = TestUtils.getBaseUrl(client);
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.workspaceResourceClient = new WorkspaceResourceClient(client, baseURI, factory);
+        this.idGenerator = idGenerator;
 
         ClientSupportUtils.config(client);
 
@@ -130,7 +138,7 @@ class WorkspacesResourceTest {
 
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
-        void happyPath(boolean withProjectIds) {
+        void metricsSummary_happyPath(boolean withProjectIds) throws InterruptedException {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -141,18 +149,16 @@ class WorkspacesResourceTest {
             var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
             List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
 
+            Instant startTime = Instant.now().minus(Duration.ofMinutes(10));
+            Instant endTime = Instant.now();
+
             var previousScores = createFeedbackScores(projectName, names.subList(0, names.size() - 1), apiKey,
-                    workspaceName);
+                    workspaceName, startTime.minus(Duration.ofMinutes(5)));
+
             var currentScores = createFeedbackScores(projectName, names.subList(1, names.size()), apiKey,
-                    workspaceName);
+                    workspaceName, startTime.plus(Duration.ofMinutes(5)));
 
             var traces = traceResourceClient.getByProjectName(projectName, apiKey, workspaceName);
-            var startTime = traces.stream()
-                    .flatMap(trace -> trace.feedbackScores().stream())
-                    .filter(score -> score.name().equals(names.getLast()))
-                    .map(FeedbackScore::createdAt)
-                    .min(Instant::compareTo).get();
-            Instant endTime = startTime.plus(Duration.ofMinutes(10));
 
             // Get metrics summary
             var actualMetricsSummary = workspaceResourceClient.getMetricsSummary(
@@ -174,7 +180,7 @@ class WorkspacesResourceTest {
 
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
-        void emptyData(boolean withProjectIds) {
+        void metricsSummary_emptyData(boolean withProjectIds) {
             var projectId = UUID.randomUUID();
 
             var startTime = Instant.now();
@@ -192,12 +198,95 @@ class WorkspacesResourceTest {
             assertThat(actualMetricsSummary.results()).isEmpty();
         }
 
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void metricsDaily_happyPath(boolean withProjectIds) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName2 = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            var projectId2 = projectResourceClient.createProject(projectName2, apiKey, workspaceName);
+
+            String name = UUID.randomUUID().toString();
+
+            var project1Scores = createFeedbackScores(projectName, List.of(name), apiKey,
+                    workspaceName);
+            var project2Scores = createFeedbackScores(projectName2, List.of(name), apiKey,
+                    workspaceName);
+
+            var endTime = Instant.now();
+            var startTime = endTime.minus(Duration.ofDays(1));
+
+            // Get metrics summary
+            var actualMetrics = workspaceResourceClient.getMetricsDaily(
+                    WorkspaceMetricRequest.builder()
+                            .intervalStart(startTime)
+                            .intervalEnd(endTime)
+                            .projectIds(withProjectIds ? Set.of(projectId, projectId2) : null)
+                            .name(name)
+                            .build(),
+                    apiKey, workspaceName);
+
+            var expectedMetricsSummary = withProjectIds
+                    ? prepareMetricsDailyPerProjects(project1Scores, project2Scores, name, projectId, projectId2)
+                    : prepareMetricsDailyPerWorkspace(project1Scores, project2Scores, name);
+
+            assertThat(actualMetrics.results())
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
+                    .isEqualTo(expectedMetricsSummary);
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void metricsDaily_emptyData(boolean withProjectIds) {
+            var projectId = UUID.randomUUID();
+            String name = UUID.randomUUID().toString();
+
+            var endTime = Instant.now();
+            var startTime = endTime.minus(Duration.ofDays(1));
+
+            var actualMetrics = workspaceResourceClient.getMetricsDaily(
+                    WorkspaceMetricRequest.builder()
+                            .intervalStart(startTime)
+                            .intervalEnd(endTime)
+                            .projectIds(withProjectIds ? Set.of(projectId) : null)
+                            .name(name)
+                            .build(),
+                    API_KEY, WORKSPACE_NAME);
+
+            if (withProjectIds) {
+                assertThat(actualMetrics.results()).isEmpty();
+            } else {
+                var expectedMetricsSummary = prepareMetricsDailyPerWorkspace(Map.of(), Map.of(), name);
+
+                assertThat(actualMetrics.results())
+                        .usingRecursiveComparison()
+                        .ignoringCollectionOrder()
+                        .isEqualTo(expectedMetricsSummary);
+            }
+        }
+
         private Map<String, Double> createFeedbackScores(String projectName, List<String> scoreNames, String apiKey,
                 String workspaceName) {
+            return createFeedbackScores(projectName, scoreNames, apiKey, workspaceName, null);
+        }
+
+        private Map<String, Double> createFeedbackScores(String projectName, List<String> scoreNames, String apiKey,
+                String workspaceName, Instant time) {
             return IntStream.range(0, 5)
                     .mapToObj(i -> {
                         // create a trace
                         Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                                .id(time == null
+                                        ? idGenerator.generateId()
+                                        : idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
                                 .projectName(projectName)
                                 .build();
 
@@ -237,10 +326,68 @@ class WorkspacesResourceTest {
                     .distinct()
                     .map(name -> WorkspaceMetricsSummaryResponse.Result.builder()
                             .name(name)
-                            .current(currentScores.getOrDefault(name, 0D))
-                            .previous(previousScores.getOrDefault(name, 0D))
+                            .current(currentScores.get(name))
+                            .previous(previousScores.get(name))
                             .build())
+                    .filter(result -> result.current() != null)
                     .toList();
+        }
+
+        private List<WorkspaceMetricResponse.Result> prepareMetricsDailyPerProjects(Map<String, Double> project1Scores,
+                Map<String, Double> project2Scores,
+                String name, UUID projectId1, UUID projectId2) {
+            return List.of(WorkspaceMetricResponse.Result.builder()
+                    .projectId(projectId1)
+                    .name(name)
+                    .data(prepareMetricsDailyData(project1Scores.values()))
+                    .build(),
+                    WorkspaceMetricResponse.Result.builder()
+                            .projectId(projectId2)
+                            .name(name)
+                            .data(prepareMetricsDailyData(project2Scores.values()))
+                            .build());
+        }
+
+        private List<WorkspaceMetricResponse.Result> prepareMetricsDailyPerWorkspace(Map<String, Double> project1Scores,
+                Map<String, Double> project2Scores,
+                String name) {
+            Collection<Double> allValues = Stream.concat(
+                    project1Scores.values().stream(),
+                    project2Scores.values().stream()).toList();
+
+            return List.of(WorkspaceMetricResponse.Result.builder()
+                    .projectId(null)
+                    .name(name)
+                    .data(prepareMetricsDailyData(allValues))
+                    .build());
+        }
+
+        private List<DataPoint<Double>> prepareMetricsDailyData(Collection<Double> scores) {
+
+            Instant todayTime = LocalDate
+                    .now(ZoneOffset.UTC)
+                    .atStartOfDay(ZoneOffset.UTC)
+                    .toInstant();
+
+            Instant yesterdayTime = LocalDate
+                    .now(ZoneOffset.UTC)
+                    .minusDays(1)
+                    .atStartOfDay(ZoneOffset.UTC)
+                    .toInstant();
+
+            var avgValue = scores.stream()
+                    .mapToDouble(Double::doubleValue)
+                    .average()
+                    .orElse(0.0);
+
+            return List.of(DataPoint.<Double>builder()
+                    .time(yesterdayTime)
+                    .value(null)
+                    .build(),
+                    DataPoint.<Double>builder()
+                            .time(todayTime)
+                            .value(scores.isEmpty() ? null : avgValue)
+                            .build());
         }
     }
 }
