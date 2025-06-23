@@ -1,6 +1,6 @@
 import functools
 import logging
-from typing import Optional, List, Callable, Dict
+from typing import Optional, List, Callable, Dict, Literal
 
 from opik import exceptions, track, opik_context
 from opik.evaluation.metrics.conversation import conversation_thread_metric
@@ -105,6 +105,7 @@ class ThreadsEvaluationEngine:
         if eval_project_name is None:
             eval_project_name = self._project_name
 
+        # Create a new trace for the evaluation
         trace_data = trace.TraceData(
             input={"conversation": conversation, "metrics": metrics},
             name="evaluation_task",
@@ -118,6 +119,7 @@ class ThreadsEvaluationEngine:
         ):
             results = self._evaluate_conversation(conversation, metrics)
 
+            # Update the current trace with the evaluation results
             outputs = [result.__dict__ for result in results]
             opik_context.update_current_trace(output={"evaluation_results": outputs})
 
@@ -129,7 +131,7 @@ class ThreadsEvaluationEngine:
     @track(name="metrics_calculation")
     def _evaluate_conversation(
         self,
-        conversation: List[Dict[str, str]],
+        conversation: List[Dict[Literal["role", "content"], str]],
         metrics: List[conversation_thread_metric.ConversationThreadMetric],
     ) -> List[score_result.ScoreResult]:
         score_results: List[score_result.ScoreResult] = []
