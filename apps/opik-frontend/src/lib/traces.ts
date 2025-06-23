@@ -243,7 +243,7 @@ const prettifyGenericLogic = (
   config: PrettifyMessageConfig,
 ): string | undefined => {
   const PREDEFINED_KEYS_MAP = {
-    input: ["question", "messages", "user_input", "query", "input_prompt"],
+    input: ["question", "messages", "user_input", "query", "input_prompt", "prompt"],
     output: ["answer", "output", "response"],
   };
 
