@@ -1,12 +1,14 @@
 import functools
 import logging
-from typing import Optional, List, Callable
+from typing import Optional, List, Callable, Dict
 
-from opik import exceptions
+from opik import exceptions, track, opik_context
 from opik.evaluation.metrics.conversation import conversation_thread_metric
 from opik.rest_api import JsonListStringPublic, TraceThread
-from . import _types
+from . import _types, context_helper
 from . import evaluation_result, evaluation_executor
+from ..metrics import score_result
+from ...api_objects import trace
 from ...api_objects.conversation import conversation_factory, conversation_thread
 from ...api_objects.threads import threads_client
 from ...types import FeedbackScoreDict
@@ -41,7 +43,10 @@ class ThreadsEvaluationEngine:
         if len(metrics) == 0:
             raise ValueError("No metrics provided")
 
-        threads = self._get_threads(filter_string)
+        threads = self._threads_client.search_threads(
+            project_name=self._project_name,
+            filter_string=filter_string,
+        )
         if len(threads) == 0:
             raise exceptions.EvaluationError(
                 f"No threads found with filter_string: {filter_string}"
@@ -49,7 +54,7 @@ class ThreadsEvaluationEngine:
 
         evaluation_tasks: List[_types.EvaluationTask] = [
             functools.partial(
-                self._evaluate_thread,
+                self.evaluate_thread,
                 thread=thread,
                 eval_project_name=eval_project_name,
                 metrics=metrics,
@@ -68,7 +73,7 @@ class ThreadsEvaluationEngine:
 
         return results
 
-    def _evaluate_thread(
+    def evaluate_thread(
         self,
         thread: TraceThread,
         eval_project_name: Optional[str],
@@ -77,79 +82,77 @@ class ThreadsEvaluationEngine:
         trace_output_transform: Callable[[JsonListStringPublic], str],
         max_traces_per_thread: int,
     ) -> _types.ThreadTestResult:
-        try:
-            conversation_dict = self._get_conversation_thread(
-                thread=thread,
-                trace_input_transform=trace_input_transform,
-                trace_output_transform=trace_output_transform,
-                max_results=max_traces_per_thread,
-            ).model_dump()
+        conversation_dict = self._get_conversation_thread(
+            thread=thread,
+            trace_input_transform=trace_input_transform,
+            trace_output_transform=trace_output_transform,
+            max_results=max_traces_per_thread,
+        ).model_dump()
 
-            # start trace for a thread
-            if eval_project_name is None:
-                eval_project_name = self._project_name
-
-            trace = self._client.opik_client.trace(
-                name=f"thread_id: {thread.id} evaluation",
-                project_name=eval_project_name,
-                input=conversation_dict,
+        conversation = conversation_dict["discussion"]
+        if len(conversation) == 0:
+            LOGGER.warning(
+                f"Thread '{thread.id}' has no conversation traces. Skipping evaluation."
             )
+            return _types.ThreadTestResult(thread_id=thread.id, scores=[])
 
-            conversation = conversation_dict["discussion"]
-            if len(conversation) == 0:
-                LOGGER.warning(
-                    f"Thread '{thread.id}' has no conversation traces. Skipping evaluation."
-                )
-                return _types.ThreadTestResult(thread_id=thread.id, scores=[])
+        if eval_project_name is None:
+            eval_project_name = self._project_name
 
-            results = []
-            input_dict = thread.model_dump()
-            for metric in metrics:
-                # start span
-                span = trace.span(
-                    name=metric.name,
-                    input=input_dict,
-                )
-
-                result = metric.score(conversation)
-                if isinstance(result, list):
-                    results.extend(result)
-                    # end span
-                    self._client.opik_client.span(
-                        trace_id=trace.id,
-                        id=span.id,
-                        output={"evaluation_results": [r.__dict__ for r in result]},
-                    )
-                else:
-                    results.append(result)
-                    # end span
-                    self._client.opik_client.span(
-                        trace_id=trace.id,
-                        id=span.id,
-                        output={"evaluation_results": result.__dict__},
-                    )
-
-            # end trace
-            outputs = [result.__dict__ for result in results]
-            self._client.opik_client.trace(
-                id=trace.id,
-                output={"evaluation_results": outputs},
-            )
-
-            return _types.ThreadTestResult(thread_id=thread.id, scores=results)
-        except Exception as e:
-            LOGGER.error(
-                f"Failed to evaluate thread '{thread.id}', reason: {e}", exc_info=True
-            )
-            raise exceptions.MetricComputationError(
-                f"Failed to evaluate thread {thread.id}"
-            ) from e
-
-    def _get_threads(self, filter_string: Optional[str]) -> List[TraceThread]:
-        return self._threads_client.search_threads(
-            project_name=self._project_name,
-            filter_string=filter_string,
+        trace_data = trace.TraceData(
+            input={"conversation": conversation, "metrics": metrics},
+            name="evaluation_task",
+            created_by="evaluation",
+            project_name=eval_project_name,
         )
+
+        with context_helper.evaluate_llm_conversation_context(
+            trace_data=trace_data,
+            client=self._client.opik_client,
+        ):
+            results = self._evaluate_conversation(conversation, metrics)
+
+            outputs = [result.__dict__ for result in results]
+            opik_context.update_current_trace(output={"evaluation_results": outputs})
+
+        return _types.ThreadTestResult(
+            thread_id=thread.id,
+            scores=results,
+        )
+
+    @track(name="metrics_calculation")
+    def _evaluate_conversation(
+        self,
+        conversation: List[Dict[str, str]],
+        metrics: List[conversation_thread_metric.ConversationThreadMetric],
+    ) -> List[score_result.ScoreResult]:
+        score_results: List[score_result.ScoreResult] = []
+        for metric in metrics:
+            try:
+                LOGGER.debug("Metric %s score started", metric.name)
+                result = metric.score(conversation)
+                LOGGER.debug("Metric %s score ended", metric.name)
+
+                if isinstance(result, list):
+                    score_results.extend(result)
+                else:
+                    score_results.append(result)
+            except Exception as e:
+                LOGGER.error(
+                    "Failed to compute metric %s. Score result will be marked as failed.",
+                    metric.name,
+                    exc_info=True,
+                )
+                score_results.append(
+                    score_result.ScoreResult(
+                        name=metric.name,
+                        value=0.0,
+                        reason=str(e),
+                        scoring_failed=True,
+                    )
+                )
+
+        return score_results
 
     def _get_conversation_thread(
         self,

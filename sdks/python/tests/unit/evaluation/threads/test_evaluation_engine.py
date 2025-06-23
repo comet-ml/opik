@@ -1,6 +1,7 @@
 import datetime
 import unittest
 from unittest import mock
+from unittest.mock import patch
 
 import pytest
 
@@ -153,7 +154,7 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         metrics = [mock_metric1, mock_metric2]
 
         # Patch the _evaluate_thread method
-        self.engine._evaluate_thread = mock_evaluate_thread
+        self.engine.evaluate_thread = mock_evaluate_thread
 
         # Call the method
         result = self.engine.evaluate_threads(
@@ -308,8 +309,12 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
                 max_traces_per_thread=10,
             )
 
-    def test__evaluate_thread(self):
-        """Test that _evaluate_thread correctly evaluates a thread with metrics."""
+    @patch("opik.decorator.base_track_decorator.opik_client")
+    def test_evaluate_thread(self, decorator_opik_client):
+        """Test that evaluate_thread correctly evaluates a thread with metrics."""
+        mocked_opik_client = mock.MagicMock()
+        decorator_opik_client.get_client_cached.return_value = mocked_opik_client
+
         # Create a mock conversation thread
         mock_conversation = conversation_thread.ConversationThread()
         mock_conversation.add_user_message("Hello")
@@ -341,7 +346,7 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
             metrics = [mock_metric1, mock_metric2]
 
             # Call the method
-            result = self.engine._evaluate_thread(
+            result = self.engine.evaluate_thread(
                 thread=TraceThread(id="thread_1"),
                 eval_project_name="eval_project",
                 metrics=metrics,
@@ -360,15 +365,19 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
 
             # Verify the trace and span calls
             self.mock_opik_client.trace.assert_called()
-            self.mock_opik_client.span.assert_called()
+            mocked_opik_client.span.assert_called()
 
             # Verify metrics were called with the right parameters
             conversation_list = mock_conversation.model_dump()["discussion"]
             mock_metric1.score.assert_called_once_with(conversation_list)
             mock_metric2.score.assert_called_once_with(conversation_list)
 
-    def test__evaluate_thread__error_in_metric_logged(self):
-        """Test that _evaluate_thread logs errors in metrics."""
+    @patch("opik.decorator.base_track_decorator.opik_client")
+    def test_evaluate_thread__error_in_metric_logged(self, decorator_opik_client):
+        """Test that evaluate_thread logs errors in metrics."""
+        mocked_opik_client = mock.MagicMock()
+        decorator_opik_client.get_client_cached.return_value = mocked_opik_client
+
         # Create a mock thread
         thread = TraceThread(id="thread_1")
 
@@ -394,20 +403,20 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
             with self.assertLogs(
                 level="ERROR", logger="opik.evaluation.threads.evaluation_engine"
             ) as log_context:
-                with self.assertRaises(exceptions.MetricComputationError):
-                    self.engine._evaluate_thread(
-                        thread=thread,
-                        eval_project_name="eval_project",
-                        metrics=metrics,
-                        trace_input_transform=lambda x: "",
-                        trace_output_transform=lambda x: "",
-                        max_traces_per_thread=10,
-                    )
+                self.engine.evaluate_thread(
+                    thread=thread,
+                    eval_project_name="eval_project",
+                    metrics=metrics,
+                    trace_input_transform=lambda x: "",
+                    trace_output_transform=lambda x: "",
+                    max_traces_per_thread=10,
+                )
 
                 # Verify error was logged
                 self.assertTrue(
                     any(
-                        "Failed to evaluate thread" in message
+                        f"Failed to compute metric {mock_error_metric.name}. Score result will be marked as failed."
+                        in message
                         for message in log_context.output
                     )
                 )
