@@ -1,5 +1,6 @@
 from typing import Optional, List, Callable
 
+from .. import asyncio_support
 from ...api_objects import opik_client
 from ...api_objects.threads import threads_client
 from ..metrics.conversation import conversation_thread_metric
@@ -53,17 +54,18 @@ def evaluate_threads(
     client = opik_client.get_client_cached()
     threads_client_ = threads_client.ThreadsClient(client)
 
-    engine = evaluation_engine.ThreadsEvaluationEngine(
-        client=threads_client_,
-        project_name=project_name,
-        number_of_workers=num_workers,
-        verbose=verbose,
-    )
-    return engine.evaluate_threads(
-        filter_string=filter_string,
-        eval_project_name=eval_project_name,
-        metrics=metrics,
-        trace_input_transform=trace_input_transform,
-        trace_output_transform=trace_output_transform,
-        max_traces_per_thread=max_traces_per_thread,
-    )
+    with asyncio_support.async_http_connections_expire_immediately():
+        engine = evaluation_engine.ThreadsEvaluationEngine(
+            client=threads_client_,
+            project_name=project_name,
+            number_of_workers=num_workers,
+            verbose=verbose,
+        )
+        return engine.evaluate_threads(
+            filter_string=filter_string,
+            eval_project_name=eval_project_name,
+            metrics=metrics,
+            trace_input_transform=trace_input_transform,
+            trace_output_transform=trace_output_transform,
+            max_traces_per_thread=max_traces_per_thread,
+        )
