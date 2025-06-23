@@ -209,9 +209,9 @@ const prettifyLangGraphLogic = (
         m.type === "human" &&
         "content" in m &&
         isString(m.content) &&
-        m.content !== ""
+        m.content !== "",
     );
-    
+
     if (humanMessages.length > 0) {
       return humanMessages[0].content;
     }
@@ -229,9 +229,9 @@ const prettifyLangGraphLogic = (
         m.type === "ai" &&
         "content" in m &&
         isString(m.content) &&
-        m.content !== ""
+        m.content !== "",
     );
-    
+
     if (aiMessages.length > 0) {
       return last(aiMessages).content;
     }
@@ -243,7 +243,14 @@ const prettifyGenericLogic = (
   config: PrettifyMessageConfig,
 ): string | undefined => {
   const PREDEFINED_KEYS_MAP = {
-    input: ["question", "messages", "user_input", "query", "input_prompt", "prompt"],
+    input: [
+      "question",
+      "messages",
+      "user_input",
+      "query",
+      "input_prompt",
+      "prompt",
+    ],
     output: ["answer", "output", "response"],
   };
 
