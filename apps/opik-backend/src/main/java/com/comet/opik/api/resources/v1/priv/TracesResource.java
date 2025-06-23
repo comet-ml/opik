@@ -726,18 +726,10 @@ public class TracesResource {
         var workspaceId = requestContext.get().getWorkspaceId();
         String projectName = scores.projectName();
 
-        Optional<Project> project = projectService.findByNames(workspaceId, List.of(projectName)).stream().findFirst();
-
-        if (project.isEmpty()) {
-            log.info("Project '{}' not found on workspaceId '{}', cannot delete feedback scores", projectName,
-                    workspaceId);
-            return Response.noContent().build();
-        }
-
         log.info("Deleting feedback scores for threadId '{}', projectName '{}' on workspaceId '{}'", scores.threadId(),
                 projectName, workspaceId);
 
-        feedbackScoreService.deleteThreadScores(project.get().id(), scores.threadId(), scores.names())
+        feedbackScoreService.deleteThreadScores(scores.projectName(), scores.threadId(), scores.names())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 

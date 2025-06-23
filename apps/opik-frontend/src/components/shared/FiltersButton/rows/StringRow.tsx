@@ -1,8 +1,12 @@
 import React from "react";
-import { Filter, FilterRowConfig } from "@/types/filters";
+import { Filter, FilterOperator, FilterRowConfig } from "@/types/filters";
 import OperatorSelector from "@/components/shared/FiltersButton/OperatorSelector";
 import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
-import { DEFAULT_OPERATORS, OPERATORS_MAP } from "@/constants/filters";
+import {
+  DEFAULT_OPERATORS,
+  OPERATORS_MAP,
+  NO_VALUE_OPERATORS,
+} from "@/constants/filters";
 import { COLUMN_TYPE } from "@/types/shared";
 
 type StringRowProps = {
@@ -32,17 +36,19 @@ export const StringRow: React.FunctionComponent<StringRowProps> = ({
         />
       </td>
       <td className="p-1">
-        <KeyComponent
-          className="w-full min-w-40"
-          placeholder="value"
-          value={filter.value}
-          onValueChange={(value) =>
-            onChange({ ...filter, value: value as string })
-          }
-          disabled={filter.operator === ""}
-          data-testid="filter-string-input"
-          {...(config?.keyComponentProps ?? {})}
-        />
+        {!NO_VALUE_OPERATORS.includes(filter.operator as FilterOperator) ? (
+          <KeyComponent
+            className="w-full min-w-40"
+            placeholder="value"
+            value={filter.value}
+            onValueChange={(value) =>
+              onChange({ ...filter, value: value as string })
+            }
+            disabled={filter.operator === ""}
+            data-testid="filter-string-input"
+            {...(config?.keyComponentProps ?? {})}
+          />
+        ) : null}
       </td>
     </>
   );

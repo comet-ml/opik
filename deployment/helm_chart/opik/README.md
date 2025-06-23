@@ -94,10 +94,13 @@ Call opik api on http://localhost:5173/api
 | clickhouse.adminUser.password | string | `"opik"` |  |
 | clickhouse.adminUser.useSecret.enabled | bool | `false` |  |
 | clickhouse.adminUser.username | string | `"opik"` |  |
-| clickhouse.backup.enabled | bool | `false` |  |
+| clickhouse.backup.command[0] | string | `"/bin/bash"` |  |
+| clickhouse.backup.command[1] | string | `"-cx"` |  |
+| clickhouse.backup.command[2] | string | `"if [ $(date +%j) -eq 1 ]; then\n  echo \"Running backup for the first day of the year\"\n  export BACKUP_PREFIX=yearly/\nelif [ $(date +%d) -eq 1 ]; then\n  echo \"Skipping backup, not the first day of the year\"\n  export BACKUP_PREFIX=monthly/\nelse\n  echo \"Running backup for the current day\"\n  export BACKUP_PREFIX=\"\"\nfi\nexport BACKUP_NAME=${BACKUP_PREFIX}backup$(date +'%Y%m%d%H%M')\nBACKUP_QUERY_FILE=$(mktemp --suffix .sql /tmp/clickhouse-backup-query.XXXXXX)\ncat << BACKUP_SQL | tee \"${BACKUP_QUERY_FILE}\"\n  BACKUP ALL EXCEPT DATABASE system \n    TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${BACKUP_NAME}/', '${ACCESS_KEY}', '${SECRET_KEY}');\nBACKUP_SQL\nclickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=\"${BACKUP_QUERY_FILE}\"\n    \n"` |  |
+| clickhouse.backup.enabled | bool | `true` |  |
 | clickhouse.backup.serviceAccount.annotations | object | `{}` |  |
-| clickhouse.backup.serviceAccount.create | bool | `true` |  |
-| clickhouse.backup.serviceAccount.enabled | bool | `false` |  |
+| clickhouse.backup.serviceAccount.create | bool | `false` |  |
+| clickhouse.backup.serviceAccount.name | string | `"clickhouse-backup"` |  |
 | clickhouse.backup.successfulJobsHistoryLimit | int | `1` |  |
 | clickhouse.enabled | bool | `true` |  |
 | clickhouse.image | string | `"altinity/clickhouse-server:24.3.5.47.altinitystable"` |  |
@@ -141,7 +144,13 @@ Call opik api on http://localhost:5173/api
 | component.backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.backend.image.repository | string | `"opik-backend"` |  |
 | component.backend.image.tag | string | `"latest"` |  |
+| component.backend.ingress.annotations | object | `{}` |  |
 | component.backend.ingress.enabled | bool | `false` |  |
+| component.backend.ingress.hosts | list | `[]` |  |
+| component.backend.ingress.ingressClassName | string | `""` |  |
+| component.backend.ingress.tls.enabled | bool | `false` |  |
+| component.backend.ingress.tls.hosts | list | `[]` |  |
+| component.backend.ingress.tls.secretName | string | `""` |  |
 | component.backend.livenessProbe.path | string | `"/health-check?name=all&type=alive"` |  |
 | component.backend.livenessProbe.port | int | `8080` |  |
 | component.backend.metrics.enabled | bool | `false` |  |
@@ -175,7 +184,13 @@ Call opik api on http://localhost:5173/api
 | component.frontend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.frontend.image.repository | string | `"opik-frontend"` |  |
 | component.frontend.image.tag | string | `"latest"` |  |
+| component.frontend.ingress.annotations | object | `{}` |  |
 | component.frontend.ingress.enabled | bool | `false` |  |
+| component.frontend.ingress.hosts | list | `[]` |  |
+| component.frontend.ingress.ingressClassName | string | `""` |  |
+| component.frontend.ingress.tls.enabled | bool | `false` |  |
+| component.frontend.ingress.tls.hosts | list | `[]` |  |
+| component.frontend.ingress.tls.secretName | string | `""` |  |
 | component.frontend.logFormat | string | `"logger-json"` |  |
 | component.frontend.logFormats.logger-json | string | `"escape=json '{ \"body_bytes_sent\": $body_bytes_sent, \"http_referer\": \"$http_referer\", \"http_user_agent\": \"$http_user_agent\", \"remote_addr\": \"$remote_addr\", \"remote_user\": \"$remote_user\", \"request\": \"$request\", \"status\": $status, \"time_local\": \"$time_local\", \"x_forwarded_for\": \"$http_x_forwarded_for\" }'"` |  |
 | component.frontend.maps | list | `[]` |  |
@@ -206,6 +221,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.OTEL_METRIC_EXPORT_INTERVAL | string | `"60000"` |  |
 | component.python-backend.env.OTEL_PROPAGATORS | string | `"tracecontext,baggage"` |  |
 | component.python-backend.env.OTEL_SERVICE_NAME | string | `"opik-python-backend"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_ALLOW_NETWORK | string | `"false"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS | string | `"3"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY | string | `"ghcr.io/comet-ml/opik"` |  |
@@ -216,7 +232,13 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.python-backend.image.repository | string | `"opik-python-backend"` |  |
 | component.python-backend.image.tag | string | `"latest"` |  |
+| component.python-backend.ingress.annotations | object | `{}` |  |
 | component.python-backend.ingress.enabled | bool | `false` |  |
+| component.python-backend.ingress.hosts | list | `[]` |  |
+| component.python-backend.ingress.ingressClassName | string | `""` |  |
+| component.python-backend.ingress.tls.enabled | bool | `false` |  |
+| component.python-backend.ingress.tls.hosts | list | `[]` |  |
+| component.python-backend.ingress.tls.secretName | string | `""` |  |
 | component.python-backend.metrics.enabled | bool | `false` |  |
 | component.python-backend.networkPolicy.enabled | bool | `true` |  |
 | component.python-backend.networkPolicy.engineEgress.except[0] | string | `"10.0.0.0/8"` |  |
