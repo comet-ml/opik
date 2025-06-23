@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -48,7 +49,6 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
-import static com.comet.opik.domain.threads.TraceThreadModel.Status;
 import static com.comet.opik.domain.threads.TraceThreadModel.builder;
 
 @DisplayName("Trace Threads Closing Job Test")
@@ -100,6 +100,7 @@ class TraceThreadsClosingJobTest {
     private TraceResourceClient traceResourceClient;
 
     @BeforeAll
+
     void setUpAll(ClientSupport client) {
 
         this.baseURI = TestUtils.getBaseUrl(client);
@@ -145,7 +146,7 @@ class TraceThreadsClosingJobTest {
             Instant expectedLastUpdatedAt = getExpectedLastUpdatedAt(traces);
 
             var expectedTraceThreadModel = createTraceThreadModel(threadId, projectId, expectedCreatedAt,
-                    expectedLastUpdatedAt, DEFAULT_USER, Status.INACTIVE);
+                    expectedLastUpdatedAt, DEFAULT_USER, TraceThreadStatus.INACTIVE);
 
             var expectedLastUpdateAt = Instant.now();
 
@@ -156,7 +157,7 @@ class TraceThreadsClosingJobTest {
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
                 var criteria = TraceThreadCriteria.builder()
                         .projectId(projectId)
-                        .status(Status.INACTIVE)
+                        .status(TraceThreadStatus.INACTIVE)
                         .build();
 
                 List<TraceThreadModel> actualTraceThreadModels = traceThreadService.getThreadsByProject(1, 10, criteria)
@@ -205,9 +206,9 @@ class TraceThreadsClosingJobTest {
 
             List<TraceThreadModel> expectedOpenedTraceThreadModels = List.of(
                     createTraceThreadModel(threadId1, projectId, expectedCreatedAt, expectedLastUpdatedAt1, USER,
-                            Status.ACTIVE),
+                            TraceThreadStatus.ACTIVE),
                     createTraceThreadModel(threadId2, projectId, expectedCreatedAt, expectedLastUpdatedAt2, USER,
-                            Status.ACTIVE));
+                            TraceThreadStatus.ACTIVE));
 
             // Then: Check if the threads are opened
             Awaitility.await().pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> {
@@ -217,9 +218,9 @@ class TraceThreadsClosingJobTest {
 
             List<TraceThreadModel> expectedClosedTraceThreadModels = List.of(
                     createTraceThreadModel(threadId1, projectId, expectedCreatedAt, expectedLastUpdatedAt1,
-                            DEFAULT_USER, Status.INACTIVE),
+                            DEFAULT_USER, TraceThreadStatus.INACTIVE),
                     createTraceThreadModel(threadId2, projectId, expectedCreatedAt, expectedLastUpdatedAt2,
-                            DEFAULT_USER, Status.INACTIVE));
+                            DEFAULT_USER, TraceThreadStatus.INACTIVE));
 
             // Then: Check if the threads are closed
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
@@ -245,9 +246,9 @@ class TraceThreadsClosingJobTest {
             // Update expected models for reopened threads
             List<TraceThreadModel> expectedReopenedTraceThreadModels = List.of(
                     createTraceThreadModel(threadId1, projectId, expectedCreatedAt, expectedLastUpdatedAtForReopened1,
-                            USER, Status.ACTIVE),
+                            USER, TraceThreadStatus.ACTIVE),
                     createTraceThreadModel(threadId2, projectId, expectedCreatedAt, expectedLastUpdatedAtForReopened2,
-                            USER, Status.ACTIVE));
+                            USER, TraceThreadStatus.ACTIVE));
 
             // Then: Check if the thread is reopened
             Awaitility.await().pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> {
@@ -257,9 +258,9 @@ class TraceThreadsClosingJobTest {
 
             List<TraceThreadModel> expectedClosedTraceThreadModels2 = List.of(
                     createTraceThreadModel(threadId1, projectId, expectedCreatedAt, expectedLastUpdatedAtForReopened1,
-                            DEFAULT_USER, Status.INACTIVE),
+                            DEFAULT_USER, TraceThreadStatus.INACTIVE),
                     createTraceThreadModel(threadId2, projectId, expectedCreatedAt, expectedLastUpdatedAtForReopened2,
-                            DEFAULT_USER, Status.INACTIVE));
+                            DEFAULT_USER, TraceThreadStatus.INACTIVE));
 
             // Finally: Check if the threads are closed again after the job runs
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
@@ -274,7 +275,7 @@ class TraceThreadsClosingJobTest {
                 Instant expectedLastUpdatedAt2) {
             var criteria = TraceThreadCriteria.builder()
                     .projectId(projectId)
-                    .status(Status.INACTIVE)
+                    .status(TraceThreadStatus.INACTIVE)
                     .build();
 
             List<TraceThreadModel> closedThreadsAfterReopen = traceThreadService.getThreadsByProject(1, 10, criteria)
@@ -290,7 +291,7 @@ class TraceThreadsClosingJobTest {
                 List<TraceThreadModel> expectedReopenedTraceThreadModels, Instant expectedCreatedAt) {
             var criteria = TraceThreadCriteria.builder()
                     .projectId(projectId)
-                    .status(Status.ACTIVE)
+                    .status(TraceThreadStatus.ACTIVE)
                     .build();
 
             List<TraceThreadModel> reopenedThreads = traceThreadService.getThreadsByProject(1, 10, criteria)
@@ -325,7 +326,7 @@ class TraceThreadsClosingJobTest {
         }
 
         private TraceThreadModel createTraceThreadModel(String threadId, UUID projectId, Instant createdAt,
-                Instant expectedLastUpdatedAt, String lastUpdatedBy, Status status) {
+                Instant expectedLastUpdatedAt, String lastUpdatedBy, TraceThreadStatus status) {
             return builder()
                     .threadId(threadId)
                     .projectId(projectId)
