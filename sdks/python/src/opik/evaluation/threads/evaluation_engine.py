@@ -43,7 +43,7 @@ class ThreadsEvaluationEngine:
 
         threads = self._get_threads(filter_string)
         if len(threads) == 0:
-            raise exceptions.MetricComputationError(
+            raise exceptions.EvaluationError(
                 f"No threads found with filter_string: {filter_string}"
             )
 

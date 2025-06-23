@@ -226,7 +226,7 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         metrics = [mock_metric]
 
         # Call the method
-        with pytest.raises(exceptions.MetricComputationError):
+        with pytest.raises(exceptions.EvaluationError):
             self.engine.evaluate_threads(
                 filter_string="test_filter",
                 eval_project_name="eval_project",
