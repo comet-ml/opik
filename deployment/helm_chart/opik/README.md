@@ -106,7 +106,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backup.env.S3_FORCE_PATH_STYLE | bool | `true` |  |
 | clickhouse.backup.env.S3_PATH | string | `"backup/shard-{shard}"` |  |
 | clickhouse.backup.env.S3_SECRET_KEY | string | `""` |  |
-| clickhouse.backup.image | string | `"altinity/clickhouse-backup:latest"` |  |
+| clickhouse.backup.image | string | `"altinity/clickhouse-backup:2.6.23"` |  |
 | clickhouse.backup.imagePullPolicy | string | `"Always"` |  |
 | clickhouse.backup.port | int | `7171` |  |
 | clickhouse.backup.serviceAccount.annotations | object | `{}` |  |
