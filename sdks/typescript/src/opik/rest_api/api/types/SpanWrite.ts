@@ -8,7 +8,7 @@ export interface SpanWrite {
     id?: string;
     /** If null, the default project is used */
     projectName?: string;
-    traceId: string;
+    traceId?: string;
     parentSpanId?: string;
     name?: string;
     type?: OpikApi.SpanWriteType;

@@ -1,3 +1,4 @@
+import pytest
 import logging
 import allure
 from page_objects.PlaygroundPage import PlaygroundPage
@@ -14,6 +15,8 @@ logger.addHandler(console_handler)
 logger.setLevel(logging.INFO)
 
 
+@pytest.mark.regression
+@pytest.mark.playground
 @allure.title("Test Opik Playground Basic Functionality")
 @allure.description(
     "Verify that the Playground can successfully generate a response to a user prompt"
