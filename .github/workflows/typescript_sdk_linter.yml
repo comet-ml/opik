@@ -32,4 +32,4 @@ jobs:
         run: npm run lint
 
       - name: Type check
-        run: npm run typecheck -- --ignore-path ./src/opik/rest_api
+        run: npm run typecheck
