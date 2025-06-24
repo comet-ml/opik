@@ -6,6 +6,7 @@ from opik.evaluation.models import base_model
 
 from opik.evaluation.models.langchain import message_converters
 import pydantic
+from . import opik_monitoring
 
 LOGGER = logging.getLogger(__name__)
 
@@ -14,20 +15,20 @@ class LangchainChatModel(base_model.OpikBaseModel):
     def __init__(
         self,
         langchain_model: chat_models.BaseChatModel,
-        model_name: Optional[str] = None,
+        track: bool = True,
     ) -> None:
         """
         Initializes the model with a given Langchain chat model instance.
 
         Args:
             langchain_model: A Langchain chat model instance to wrap
-            model_name: The name of the LLM to be used.
-                Can be omitted, in that case the model name from the Langchain model will be used.
+            track: Whether to track the model calls.
         """
-        model_name = model_name or langchain_model.model_name
+        model_name = _try_extract_model_name(langchain_model)
         super().__init__(model_name=model_name)
 
         self._engine = langchain_model
+        self._track = track
 
     def generate_string(
         self,
@@ -76,6 +77,7 @@ class LangchainChatModel(base_model.OpikBaseModel):
         """
         langchain_messages = message_converters.convert_to_langchain_messages(messages)
 
+        opik_monitoring.add_opik_tracer_to_params(kwargs)
         response = self._engine.invoke(langchain_messages, **kwargs)
 
         return response
@@ -126,6 +128,21 @@ class LangchainChatModel(base_model.OpikBaseModel):
         """
         langchain_messages = message_converters.convert_to_langchain_messages(messages)
 
+        opik_monitoring.add_opik_tracer_to_params(kwargs)
         response = await self._engine.ainvoke(langchain_messages, **kwargs)
 
         return response
+
+
+def _try_extract_model_name(
+    langchain_model: chat_models.BaseChatModel,
+) -> Optional[str]:
+    if hasattr(langchain_model, "model") and isinstance(langchain_model.model, str):
+        return langchain_model.model
+
+    if hasattr(langchain_model, "model_name") and isinstance(
+        langchain_model.model_name, str
+    ):
+        return langchain_model.model_name
+
+    return None

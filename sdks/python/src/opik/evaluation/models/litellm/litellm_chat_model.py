@@ -19,7 +19,7 @@ LOGGER = logging.getLogger(__name__)
 class LiteLLMChatModel(base_model.OpikBaseModel):
     def __init__(
         self,
-        model_name: str = "gpt-3.5-turbo",
+        model_name: str = "gpt-4o",
         must_support_arguments: Optional[List[str]] = None,
         **completion_kwargs: Any,
     ) -> None:
