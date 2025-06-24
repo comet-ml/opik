@@ -1,3 +1,6 @@
+import isNumber from "lodash/isNumber";
+import isUndefined from "lodash/isUndefined";
+
 import { Project } from "@/types/projects";
 import { WorkspaceCost, WorkspaceMetric } from "@/types/workspaces";
 
@@ -10,7 +13,7 @@ export const ALL_PROJECTS_PROJECT = {
 
 export type DataRecord = {
   date: string;
-  map: Record<string, number>;
+  map: Record<string, number | null>;
 };
 
 export type ChartData = {
@@ -22,8 +25,9 @@ export type ChartData = {
 export const getChartData = (
   rowData: WorkspaceMetric[] | WorkspaceCost[] | undefined,
   projects: Project[],
+  noValue?: number,
 ) => {
-  const data: ChartData = {
+  const retVal: ChartData = {
     data: [],
     values: [],
     projects: projects.length === 0 ? [ALL_PROJECTS_PROJECT] : projects,
@@ -37,13 +41,13 @@ export const getChartData = (
         datesMap[d.time] = { date: d.time, map: {} };
       }
       datesMap[d.time].map[dataObject.project_id || ALL_PROJECTS_PROJECT.id] =
-        d.value;
-      data.values.push(d.value);
+        isNumber(d.value) ? d.value : isUndefined(noValue) ? d.value : noValue;
+      retVal.values.push(d.value);
     });
   });
-  data.data = Object.values(datesMap).sort(
+  retVal.data = Object.values(datesMap).sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
   );
 
-  return data;
+  return retVal;
 };
