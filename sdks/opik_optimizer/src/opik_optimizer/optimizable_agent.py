@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING
 import json
 import os
 
@@ -10,10 +10,12 @@ import litellm
 from litellm.integrations.opik.opik import OpikLogger
 
 from . import _throttle
-from .optimization_config.chat_prompt import ChatPrompt
 from .integrations.litellm_utils import function_to_litellm_definition
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
+
+if TYPE_CHECKING:
+    from .optimization_config.chat_prompt import ChatPrompt
 
 
 def tools_to_dict(tools: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
@@ -43,10 +45,10 @@ class OptimizableAgent:
     model_kwargs: Dict[str, Any] = {}
     project_name: Optional[str] = "Default Project"
     input_dataset_field: Optional[str] = None
-    prompts: Dict[str, ChatPrompt]
-    prompt: ChatPrompt
+    prompts: Dict[str, "ChatPrompt"]
+    prompt: "ChatPrompt"
 
-    def __init__(self, prompts: Dict[str, ChatPrompt]) -> None:
+    def __init__(self, prompts: Dict[str, "ChatPrompt"]) -> None:
         """
         Initialize the OptimizableAgent.
 
@@ -65,12 +67,12 @@ class OptimizableAgent:
         self.opik_logger = OpikLogger()
         litellm.callbacks = [self.opik_logger]
 
-    def init_agent(self, prompts: Dict[str, ChatPrompt]) -> None:
+    def init_agent(self, prompts: Dict[str, "ChatPrompt"]) -> None:
         """Initialize the agent with the provided configuration."""
         # Register the tools, if any, for default LiteLLM Agent use:
         self.tool_definitions.clear()
         self.tool_map.clear()
-        chat_prompts: List[ChatPrompt] = list(prompts.values())
+        chat_prompts: List["ChatPrompt"] = list(prompts.values())
         if len(chat_prompts) == 1:
             self.prompt = chat_prompts[0]
             if self.prompt.tools:

@@ -5,7 +5,7 @@ from opik_optimizer import EvolutionaryOptimizer
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics import LevenshteinRatio
 
-from opik_optimizer import OptimizableAgent, ChatPrompt, AgentConfig
+from opik_optimizer import ChatPrompt
 from opik_optimizer.datasets import hotpot_300
 
 # For wikipedia tool:
@@ -31,21 +31,15 @@ def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreRes
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 
 
-class LiteLLMAgent(OptimizableAgent):
-    """Agent using LiteLLM for optimization."""
-
-    model = "openai/gpt-4o-mini"
-    project_name = "litellm-agent"
-
-
 system_prompt = """
 Answer the question with a direct phrase. Use the tool `search_wikipedia`
 if you need it. Make sure you consider the results before answering the
 question.
 """
 
-agent_config = AgentConfig(
-    chat_prompt=ChatPrompt(system=system_prompt, user="{question}"),
+prompt = ChatPrompt(
+    system=system_prompt,
+    user="{question}",
     tools={
         "Search Wikipedia": {
             "function": search_wikipedia,
@@ -53,14 +47,8 @@ agent_config = AgentConfig(
             "name": search_wikipedia.__name__,
         }
     },
+    model="openai/gpt-4o-mini",
 )
-
-# Test it:
-agent = LiteLLMAgent(agent_config)
-result = agent.invoke_dataset_item(
-    {"question": "Which is heavier: a baby whale or a baby elephant?"}
-)
-print(result)
 
 # Initialize the optimizer with custom parameters
 optimizer = EvolutionaryOptimizer(
@@ -76,9 +64,8 @@ optimizer = EvolutionaryOptimizer(
 # Create the optimization configuration
 
 # Optimize the prompt using the optimization config
-optimization_result = optimizer.optimize_agent(
-    agent_class=LiteLLMAgent,
-    agent_config=agent_config,
+optimization_result = optimizer.optimize_prompt(
+    prompt=prompt,
     dataset=dataset,
     metric=levenshtein_ratio,
     n_samples=10,

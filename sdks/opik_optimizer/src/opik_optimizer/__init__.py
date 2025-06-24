@@ -8,15 +8,15 @@ from opik_optimizer.evolutionary_optimizer.evolutionary_optimizer import (
 )
 
 from . import datasets
+from .optimizable_agent import OptimizableAgent
+from .optimization_config.chat_prompt import ChatPrompt
 from .base_optimizer import BaseOptimizer
 from .few_shot_bayesian_optimizer import FewShotBayesianOptimizer
 from .logging_config import setup_logging
 from .meta_prompt_optimizer import MetaPromptOptimizer
 from .mipro_optimizer import MiproOptimizer
-from .optimization_config.chat_prompt import ChatPrompt
 from .optimization_config.configs import TaskConfig
 from .optimization_result import OptimizationResult
-from .optimizable_agent import OptimizableAgent
 
 __version__ = importlib.metadata.version("opik_optimizer")
 
