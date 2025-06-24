@@ -16,6 +16,7 @@ import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @EagerSingleton
@@ -51,12 +52,16 @@ public class TraceThreadListener {
 
                 // Keeps the most recent lastUpdatedAt for each threadId
                 threadIdAndLastUpdatedAt.computeIfPresent(threadId,
-                        (id, existingTime) -> trace.lastUpdatedAt().isAfter(existingTime)
-                                ? trace.lastUpdatedAt()
-                                : existingTime);
+                        (id, currentTime) -> {
+                            Instant newTime = Optional.ofNullable(trace.lastUpdatedAt())
+                                    .orElseGet(Instant::now);
+                            return newTime.isAfter(currentTime) ? newTime : currentTime;
+                        });
 
                 // If the threadId is not present, add it with the lastUpdatedAt
-                threadIdAndLastUpdatedAt.computeIfAbsent(threadId, id -> trace.lastUpdatedAt());
+                threadIdAndLastUpdatedAt.computeIfAbsent(threadId, id -> Optional.ofNullable(trace.lastUpdatedAt())
+                        .orElseGet(Instant::now));
+
             }
         });
 

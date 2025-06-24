@@ -43,7 +43,8 @@ public class ClosingTraceThreadSubscriber extends BaseRedisSubscriber<ProjectWit
     protected Mono<Void> processEvent(ProjectWithPendingClosureTraceThreads message) {
         var lastUpdatedUntil = Instant.now().minus(config.getTimeoutToMarkThreadAsInactive().toJavaDuration());
 
-        return traceThreadService.processProjectWithTraceThreadsPendingClosure(message.projectId(), lastUpdatedUntil)
+        return traceThreadService
+                .processProjectWithTraceThreadsPendingClosure(message.projectId(), lastUpdatedUntil)
                 .contextWrite(context -> context.put(USER_NAME, DEFAULT_USER)
                         .put(WORKSPACE_ID, message.workspaceId()));
     }

@@ -149,20 +149,24 @@ class TraceThreadServiceImpl implements TraceThreadService {
             @NonNull Instant lastUpdatedUntil) {
         return lockService.executeWithLockCustomExpire(
                 new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
-                Mono.deferContextual(contextView -> closeThreadWith(projectId, lastUpdatedUntil, contextView)),
+                Mono.deferContextual(
+                        contextView -> closeThreadWith(projectId, lastUpdatedUntil, contextView)),
                 LOCK_DURATION).then();
     }
 
-    private Mono<Long> closeThreadWith(UUID projectId, Instant lastUpdatedUntil, ContextView contextView) {
+    private Mono<Long> closeThreadWith(UUID projectId, Instant lastUpdatedUntil, ContextView ctx) {
+        String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
         return traceThreadDAO.closeThreadWith(projectId, lastUpdatedUntil)
                 .flatMap(count -> {
                     var lock = new LockService.Lock(TraceThreadBufferConfig.BUFFER_SET_NAME, projectId.toString());
                     return lockService.unlockUsingToken(lock).thenReturn(count);
                 })
-                .doOnSuccess(count -> log.info("Closed '{}' trace threads for projectId: '{}' on workspaceId: '{}'",
-                        count, projectId, contextView.get(RequestContext.WORKSPACE_ID)))
-                .doOnError(ex -> log.error("Error when processing closure of pending trace threads  for project: '%s'"
-                        .formatted(projectId), ex));
+                .doOnSuccess(count -> log.info("Closed '{}' trace threads for projectId: '{}' on workspaceId '{}'",
+                        count, projectId, workspaceId))
+                .doOnError(ex -> log.error(
+                        "Error when processing closure of pending trace threads  for project: '%s' workspaceId '{}'"
+                                .formatted(projectId, workspaceId),
+                        ex));
     }
 
     @Override

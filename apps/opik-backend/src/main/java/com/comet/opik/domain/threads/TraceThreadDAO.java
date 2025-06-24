@@ -102,10 +102,11 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     private static final String OPEN_CLOSURE_THREADS_SQL = """
             INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at)
             SELECT
-                workspace_id, project_id, thread_id, id, :status AS status, created_by, :user_name, created_at, now64(6)
+                workspace_id, project_id, thread_id, id, :status AS new_status, created_by, :user_name, created_at, now64(6)
             FROM trace_threads final
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
+            AND status != :status
             <if(last_updated_at)>AND last_updated_at \\< parseDateTime64BestEffort(:last_updated_at, 6)<endif>
             <if(thread_id)>AND thread_id = :thread_id<endif>
             """;
