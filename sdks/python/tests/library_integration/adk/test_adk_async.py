@@ -217,8 +217,6 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
         description="Runs translator to english then summarizer, in order.",
         before_agent_callback=opik_tracer.before_agent_callback,
         after_agent_callback=opik_tracer.after_agent_callback,
-        # before_model_callback=opik_tracer.before_model_callback,
-        # after_model_callback=opik_tracer.after_model_callback,
     )
 
     runner = await _async_build_runner(root_agent)
@@ -279,7 +277,7 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
                 last_updated_at=ANY_BUT_NONE,
                 metadata=ANY_DICT,
                 type="general",
-                input=None,
+                input=ANY_DICT,
                 output=ANY_DICT,
                 spans=[
                     SpanModel(
@@ -306,7 +304,7 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
                 last_updated_at=ANY_BUT_NONE,
                 metadata=ANY_DICT,
                 type="general",
-                input=None,
+                input=ANY_DICT,
                 output=ANY_DICT,
                 spans=[
                     SpanModel(

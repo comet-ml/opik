@@ -47,8 +47,10 @@ class OpikTracer:
         self.metadata["created_from"] = "google-adk"
         self.project_name = project_name
         self.distributed_headers = distributed_headers
-        self._client = opik_client.get_client_cached()
 
+        self._init_internal_attributes()
+
+    def _init_internal_attributes(self) -> None:
         self._last_model_output: Optional[Dict[str, Any]] = None
 
         # Use OpikContextStorage instance instead of global context storage module
@@ -66,6 +68,9 @@ class OpikTracer:
         self._opik_client = opik_client.get_client_cached()
 
         _patch_adk()
+
+    def flush(self) -> None:
+        self._opik_client.flush()
 
     def _end_current_trace(self) -> None:
         trace_data = self._context_storage.pop_trace_data()
@@ -139,6 +144,7 @@ class OpikTracer:
                     project_name=self.project_name,
                     metadata=trace_metadata,
                     tags=self.tags,
+                    input=user_input,
                     type="general",
                 )
                 _, opik_span_data = (
@@ -319,6 +325,21 @@ class OpikTracer:
                 self._opik_created_spans.discard(current_span_data.id)
         except Exception as e:
             LOGGER.error(f"Failed during after_tool_callback(): {e}", exc_info=True)
+
+    def __getstate__(self) -> Dict[str, Any]:
+        state = self.__dict__.copy()
+
+        state.pop("_last_model_output", None)
+        state.pop("_opik_client", None)
+        state.pop("_context_storage", None)
+        state.pop("_current_trace_created_by_opik_tracer", None)
+        state.pop("_opik_created_spans", None)
+
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        self.__dict__.update(state)
+        self._init_internal_attributes()
 
 
 @functools.lru_cache()
