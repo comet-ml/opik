@@ -1,3 +1,4 @@
+import pytest
 import re
 from playwright.sync_api import Page
 from page_objects.FeedbackDefinitionsPage import FeedbackDefinitionsPage
@@ -10,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 class TestFeedbacksCrud:
     @allure.title("Basic feedback definition creation")
+    @pytest.mark.regression
     def test_feedback_definition_visibility(
         self,
         page: Page,
@@ -68,6 +70,7 @@ class TestFeedbacksCrud:
                 f"Note: This could be due to definition not found in table"
             ) from e
 
+    @pytest.mark.regression
     @allure.title("Feedback definition edit")
     def test_feedback_definition_edit(
         self,
@@ -196,6 +199,7 @@ class TestFeedbacksCrud:
                 f"Error: {str(e)}"
             ) from e
 
+    @pytest.mark.regression
     @allure.title("Feedback definition deletion")
     def test_feedback_definition_deletion(
         self,
