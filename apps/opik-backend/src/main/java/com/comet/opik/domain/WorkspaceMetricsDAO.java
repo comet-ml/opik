@@ -6,6 +6,7 @@ import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
@@ -16,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
@@ -226,6 +228,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
     private Mono<List<WorkspaceMetricResponse.Result>> getMetricsDaily(WorkspaceMetricRequest request,
             String query) {
+        Preconditions.checkArgument(StringUtils.isNotEmpty(request.name()),
+                "For metrics request, name must be provided");
         return template.nonTransaction(connection -> getMetricsDaily(connection, request, query)
                 .flatMapMany(this::rowToDataPoint)
                 .collectList());

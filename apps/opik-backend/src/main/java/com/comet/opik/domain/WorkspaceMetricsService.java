@@ -49,12 +49,12 @@ class WorkspaceMetricsServiceImpl implements WorkspaceMetricsService {
 
     @Override
     public Mono<WorkspaceMetricsSummaryResponse.Result> getWorkspaceCostsSummary(
-            WorkspaceMetricsSummaryRequest request) {
+            @NonNull WorkspaceMetricsSummaryRequest request) {
         return workspaceMetricsDAO.getCostsSummary(request);
     }
 
     @Override
-    public Mono<WorkspaceMetricResponse> getWorkspaceCosts(WorkspaceMetricRequest request) {
+    public Mono<WorkspaceMetricResponse> getWorkspaceCosts(@NonNull WorkspaceMetricRequest request) {
         return workspaceMetricsDAO.getCostsDaily(request)
                 .map(results -> WorkspaceMetricResponse.builder()
                         .results(results)
