@@ -4,7 +4,6 @@ from typing import Dict, Any
 def add_opik_tracer_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
     from opik.integrations.langchain import OpikTracer
 
-    # Ideally OpikTracer should be cached and re-used,
     opik_tracer = OpikTracer()
 
     if "config" not in params:

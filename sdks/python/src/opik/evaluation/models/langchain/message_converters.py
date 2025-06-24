@@ -1,11 +1,11 @@
-from typing import Any, Dict, List, TYPE_CHECKING
+from typing import Dict, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from langchain import schema
 
 
 def convert_to_langchain_messages(
-    messages: List[Dict[str, Any]],
+    messages: List[Dict[str, str]],
 ) -> List["schema.BaseMessage"]:
     from langchain import schema
 
