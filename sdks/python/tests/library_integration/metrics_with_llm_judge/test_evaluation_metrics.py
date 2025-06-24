@@ -20,6 +20,7 @@ model_parametrizer = pytest.mark.parametrize(
     ],
 )
 
+
 @model_parametrizer
 def test__answer_relevance__context_provided_happyflow(model):
     answer_relevance_metric = metrics.AnswerRelevance(model=model, track=False)
@@ -59,7 +60,9 @@ def test__answer_relevance__no_context_provided__error_raised(model):
 
 
 @model_parametrizer
-def test__answer_relevance__no_context_provided__no_context_mode_is_enabled__happyflow(model):
+def test__answer_relevance__no_context_provided__no_context_mode_is_enabled__happyflow(
+    model,
+):
     answer_relevance_metric = metrics.AnswerRelevance(
         model=model, require_context=False, track=False
     )
@@ -71,10 +74,9 @@ def test__answer_relevance__no_context_provided__no_context_mode_is_enabled__hap
 
     assert_helpers.assert_score_result(result)
 
+
 @model_parametrizer
-def test__no_opik_configured__answer_relevance(
-    configure_opik_not_configured, model
-):
+def test__no_opik_configured__answer_relevance(configure_opik_not_configured, model):
     answer_relevance_metric = metrics.AnswerRelevance(model=model, track=False)
 
     result = answer_relevance_metric.score(
@@ -93,7 +95,6 @@ def test__no_opik_configured__answer_relevance(
         ["France is a country in Europe."],
     ],
 )
-
 @model_parametrizer
 def test__context_precision(context, model):
     context_precision_metric = metrics.ContextPrecision(model=model, track=False)
@@ -148,6 +149,7 @@ def test__hallucination(context, model):
 
     assert_helpers.assert_score_result(result)
 
+
 @model_parametrizer
 def test__moderation(model):
     moderation_metric = metrics.Moderation(model=model, track=False)
@@ -157,6 +159,7 @@ def test__moderation(model):
     )
 
     assert_helpers.assert_score_result(result)
+
 
 @model_parametrizer
 def test__g_eval(model):
