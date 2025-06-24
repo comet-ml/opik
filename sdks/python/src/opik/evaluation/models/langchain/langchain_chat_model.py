@@ -1,12 +1,13 @@
 import logging
-from typing import Any, Optional, Type, List, Dict
-from langchain import schema
-from langchain_core.language_models import chat_models
-from opik.evaluation.models import base_model
-
-from opik.evaluation.models.langchain import message_converters
+from typing import Any, Optional, Type, List, Dict, TYPE_CHECKING
 import pydantic
-from . import opik_monitoring
+
+from . import opik_monitoring, message_converters
+from ...models import base_model
+
+if TYPE_CHECKING:
+    import langchain_core.language_models
+    from langchain import schema
 
 LOGGER = logging.getLogger(__name__)
 
@@ -14,20 +15,22 @@ LOGGER = logging.getLogger(__name__)
 class LangchainChatModel(base_model.OpikBaseModel):
     def __init__(
         self,
-        langchain_model: chat_models.BaseChatModel,
+        langchain_chat_model: "langchain_core.language_models.BaseChatModel",
         track: bool = True,
     ) -> None:
         """
         Initializes the model with a given Langchain chat model instance.
 
         Args:
-            langchain_model: A Langchain chat model instance to wrap
+            langchain_chat_model: A Langchain chat model instance to wrap.
+                It is assumed that the BaseChatModel is already configured and
+                all the requirement dependencies are installed.
             track: Whether to track the model calls.
         """
-        model_name = _try_extract_model_name(langchain_model)
+        model_name = _try_extract_model_name(langchain_chat_model)
         super().__init__(model_name=model_name)
 
-        self._engine = langchain_model
+        self._langchain_chat_model = langchain_chat_model
         self._track = track
 
     def generate_string(
@@ -63,7 +66,7 @@ class LangchainChatModel(base_model.OpikBaseModel):
         self,
         messages: List[Dict[str, Any]],
         **kwargs: Any,
-    ) -> schema.AIMessage:
+    ) -> "schema.AIMessage":
         """
         Generate a provider-specific response using the Langchain model.
 
@@ -78,7 +81,7 @@ class LangchainChatModel(base_model.OpikBaseModel):
         langchain_messages = message_converters.convert_to_langchain_messages(messages)
 
         opik_monitoring.add_opik_tracer_to_params(kwargs)
-        response = self._engine.invoke(langchain_messages, **kwargs)
+        response = self._langchain_chat_model.invoke(langchain_messages, **kwargs)
 
         return response
 
@@ -114,7 +117,7 @@ class LangchainChatModel(base_model.OpikBaseModel):
 
     async def agenerate_provider_response(
         self, messages: List[Dict[str, Any]], **kwargs: Any
-    ) -> schema.AIMessage:
+    ) -> "schema.AIMessage":
         """
         Generate a provider-specific response using the Langchain model. Async version.
 
@@ -129,20 +132,24 @@ class LangchainChatModel(base_model.OpikBaseModel):
         langchain_messages = message_converters.convert_to_langchain_messages(messages)
 
         opik_monitoring.add_opik_tracer_to_params(kwargs)
-        response = await self._engine.ainvoke(langchain_messages, **kwargs)
+        response = await self._langchain_chat_model.ainvoke(
+            langchain_messages, **kwargs
+        )
 
         return response
 
 
 def _try_extract_model_name(
-    langchain_model: chat_models.BaseChatModel,
+    langchain_chat_model: "langchain_core.language_models.BaseChatModel",
 ) -> Optional[str]:
-    if hasattr(langchain_model, "model") and isinstance(langchain_model.model, str):
-        return langchain_model.model
-
-    if hasattr(langchain_model, "model_name") and isinstance(
-        langchain_model.model_name, str
+    if hasattr(langchain_chat_model, "model") and isinstance(
+        langchain_chat_model.model, str
     ):
-        return langchain_model.model_name
+        return langchain_chat_model.model
+
+    if hasattr(langchain_chat_model, "model_name") and isinstance(
+        langchain_chat_model.model_name, str
+    ):
+        return langchain_chat_model.model_name
 
     return None

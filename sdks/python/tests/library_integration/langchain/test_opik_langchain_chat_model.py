@@ -16,7 +16,7 @@ from ...testlib import (
 
 def test__langchain_chat_model__happyflow():
     tested = langchain_chat_model.LangchainChatModel(
-        langchain_model=langchain_openai.ChatOpenAI(
+        langchain_chat_model=langchain_openai.ChatOpenAI(
             model_name="gpt-4o",
         ),
         track=False,
@@ -37,7 +37,7 @@ def test__langchain_chat_model__happyflow():
 
 def test__langchain_chat_model__response_format_is_used():
     tested = langchain_chat_model.LangchainChatModel(
-        langchain_model=langchain_openai.ChatOpenAI(
+        langchain_chat_model=langchain_openai.ChatOpenAI(
             model_name="gpt-4o",
         ),
         track=False,
@@ -58,7 +58,7 @@ def test__langchain_chat_model__track_enabled__span_and_trace_created_by_OpikTra
     fake_backend,
 ):
     tested = langchain_chat_model.LangchainChatModel(
-        langchain_model=langchain_openai.ChatOpenAI(
+        langchain_chat_model=langchain_openai.ChatOpenAI(
             model_name="gpt-4o",
         ),
         track=True,

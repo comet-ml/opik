@@ -13,7 +13,7 @@ model_parametrizer = pytest.mark.parametrize(
     argvalues=[
         "gpt-4o",
         langchain_chat_model.LangchainChatModel(
-            langchain_model=langchain_openai.ChatOpenAI(
+            langchain_chat_model=langchain_openai.ChatOpenAI(
                 model_name="gpt-4o",
             )
         ),

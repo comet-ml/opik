@@ -1,11 +1,12 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, TYPE_CHECKING
 
-from langchain import schema
+if TYPE_CHECKING:
+    from langchain import schema
 
 
 def convert_to_langchain_messages(
     messages: List[Dict[str, Any]],
-) -> List[schema.BaseMessage]:
+) -> List["schema.BaseMessage"]:
     langchain_messages = []
     for message in messages:
         role = message["role"]
@@ -22,7 +23,7 @@ def convert_to_langchain_messages(
     return langchain_messages
 
 
-def convert_from_langchain_message(message: schema.BaseMessage) -> Dict[str, str]:
+def convert_from_langchain_message(message: "schema.BaseMessage") -> Dict[str, str]:
     """
     Convert a Langchain message to standard format.
 
