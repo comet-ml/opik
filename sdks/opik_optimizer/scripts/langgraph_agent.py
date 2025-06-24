@@ -5,7 +5,7 @@ from opik.integrations.langchain import OpikTracer
 
 from opik_optimizer import (
     OptimizableAgent,
-    AgentConfig,
+    ChatPrompt,
 )
 
 from langgraph.graph import StateGraph
@@ -91,17 +91,15 @@ def create_graph(project_name: str, prompt_template: str) -> Any:
 class LangGraphAgent(OptimizableAgent):
     project_name = "langgraph-agent"
 
-    def init_agent(self, agent_config: AgentConfig) -> None:
-        self.agent_config = agent_config
+    def init_agent(self, prompts: Dict[str, ChatPrompt]) -> None:
+        self.prompt = prompts["chat-prompt"]
         self.graph = create_graph(
             self.project_name,
-            self.agent_config.chat_prompt.get_messages()[0][
-                "content"
-            ],  # FIXME: better way?
+            self.prompt.get_messages()[0]["content"],
         )
 
     def invoke(self, messages: List[Dict[str, str]], seed: int | None = None) -> str:
-        if len(messages) > 1:  # FIXME: better way?
+        if len(messages) > 1:
             # Skip the system prompt
             messages = messages[1:]
         for message in messages:

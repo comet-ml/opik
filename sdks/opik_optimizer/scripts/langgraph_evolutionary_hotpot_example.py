@@ -3,7 +3,6 @@ from typing import Any, Dict
 from opik_optimizer import (
     ChatPrompt,
     EvolutionaryOptimizer,
-    AgentConfig,
 )
 from opik_optimizer.datasets import hotpot_300
 
@@ -40,16 +39,11 @@ Begin!
 Question: {input}
 Thought: {agent_scratchpad}"""
 
-agent_config = AgentConfig(
-    chat_prompt=ChatPrompt(system=prompt_template, user="{question}")
+prompt = ChatPrompt(
+    system=prompt_template,
+    user="{question}",
+    agent_class=LangGraphAgent,
 )
-
-# Test it:
-agent = LangGraphAgent(agent_config)
-result = agent.invoke_dataset_item(
-    {"question": "Which is heavier: a newborn elephant, or a motor boat?"}
-)
-print(result)
 
 # Optimize it:
 optimizer = EvolutionaryOptimizer(
@@ -62,9 +56,9 @@ optimizer = EvolutionaryOptimizer(
     verbose=1,
     num_threads=1,
 )
-optimization_result = optimizer.optimize_agent(
-    agent_class=LangGraphAgent,
-    agent_config=agent_config,
+
+optimization_result = optimizer.optimize_prompt(
+    prompt=prompt,
     dataset=dataset,
     metric=levenshtein_ratio,
     n_samples=10,

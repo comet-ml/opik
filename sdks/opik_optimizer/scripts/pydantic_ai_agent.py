@@ -2,7 +2,7 @@ from typing import Optional, List, Dict
 
 from opik_optimizer import (
     OptimizableAgent,
-    AgentConfig,
+    ChatPrompt,
 )
 
 from pydantic_ai import Agent
@@ -33,10 +33,9 @@ class PydanticAIAgent(OptimizableAgent):
 
     project_name: str = "pydantic-ai-agent"
 
-    def init_agent(self, agent_config: AgentConfig) -> None:
+    def init_agent(self, prompts: Dict[str, ChatPrompt]) -> None:
         """Initialize the agent with the provided configuration."""
-        # Save so that we can get messages:
-        self.agent_config = agent_config
+        # This agent doesn't actually change the agent, so we just initialize it:
         self.agent = Agent(
             "openai:gpt-4o",
             output_type=str,

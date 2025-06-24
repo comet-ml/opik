@@ -2,7 +2,7 @@ from typing import Optional, Any, List, Dict
 
 from opik_optimizer import (
     OptimizableAgent,
-    AgentConfig,
+    ChatPrompt,
 )
 
 from opik.integrations.adk import OpikTracer
@@ -59,12 +59,12 @@ def create_agent(project_name: str) -> Any:
 class ADKAgent(OptimizableAgent):
     project_name = "adk-agent"
 
-    def init_agent(self, agent_config: AgentConfig) -> None:
-        self.agent_config = agent_config
+    def init_agent(self, prompts: Dict[str, ChatPrompt]) -> None:
+        self.prompt = prompts["chat-prompt"]
         self.agent = create_agent(self.project_name)
 
     def invoke_dataset_item(self, dataset_item: Dict[str, str]) -> str:
-        messages = self.agent_config.chat_prompt.get_messages(dataset_item)
+        messages = self.prompt.get_messages(dataset_item)
         return self.invoke(messages)
 
     def invoke(self, messages: List[Dict[str, str]], seed: Optional[int] = None) -> str:

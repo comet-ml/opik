@@ -7,7 +7,6 @@ from opik.evaluation.metrics import LevenshteinRatio
 from opik_optimizer import (
     ChatPrompt,
     EvolutionaryOptimizer,
-    AgentConfig,
 )
 from opik_optimizer.datasets import hotpot_300
 from pydantic_ai_agent import PydanticAIAgent
@@ -25,16 +24,11 @@ on a topic. Respond with a short, concise answer without
 explanation."""
 
 
-agent_config = AgentConfig(
-    chat_prompt=ChatPrompt(system=system_prompt, user="{question}")
+prompt = ChatPrompt(
+    system=system_prompt,
+    user="{question}",
+    agent_class=PydanticAIAgent,
 )
-
-# Test it:
-agent = PydanticAIAgent(agent_config)
-result = agent.invoke_dataset_item(
-    {"question": "Which is heavier: a newborn elephant, or a motor boat?"}
-)
-print(result)
 
 # Optimize it:
 optimizer = EvolutionaryOptimizer(
@@ -48,8 +42,7 @@ optimizer = EvolutionaryOptimizer(
 )
 
 optimization_result = optimizer.optimize_agent(
-    agent_class=PydanticAIAgent,
-    agent_config=agent_config,
+    prompt=prompt,
     dataset=dataset,
     metric=levenshtein_ratio,
     n_samples=10,

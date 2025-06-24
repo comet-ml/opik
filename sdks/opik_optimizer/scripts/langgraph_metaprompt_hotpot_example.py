@@ -8,7 +8,6 @@ from opik_optimizer.datasets import hotpot_300
 from opik_optimizer import (
     ChatPrompt,
     MetaPromptOptimizer,
-    AgentConfig,
 )
 
 from langgraph_agent import LangGraphAgent
@@ -46,18 +45,11 @@ Begin!
 Question: {input}
 Thought: {agent_scratchpad}"""
 
-agent_config = AgentConfig(
-    chat_prompt=ChatPrompt(system=prompt_template, user="{question}"),
+prompt = ChatPrompt(
+    system=prompt_template,
+    user="{question}",
+    agent_class=LangGraphAgent,
 )
-
-# Test it:
-agent = LangGraphAgent(agent_config)
-result = agent.invoke_dataset_item(
-    {"question": "Which is heavier: a newborn elephant, or a motor boat?"}
-)
-print(result)
-
-# Optimize it:
 
 # Optimize it:
 optimizer = MetaPromptOptimizer(
@@ -70,9 +62,9 @@ optimizer = MetaPromptOptimizer(
     num_threads=12,  # Number of threads for parallel evaluation
     subsample_size=10,  # Fixed subsample size of 10 items
 )
-optimization_result = optimizer.optimize_agent(
-    agent_class=LangGraphAgent,
-    agent_config=agent_config,
+
+optimization_result = optimizer.optimize_prompt(
+    prompt=prompt,
     dataset=dataset,
     metric=levenshtein_ratio,
     n_samples=10,

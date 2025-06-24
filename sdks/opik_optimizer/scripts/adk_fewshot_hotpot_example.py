@@ -3,7 +3,6 @@ from typing import Any, Dict
 from opik_optimizer import (
     ChatPrompt,
     FewShotBayesianOptimizer,
-    AgentConfig,
 )
 from opik_optimizer.datasets import hotpot_300
 
@@ -28,17 +27,7 @@ The user will provide a question string like "Who is Barack Obama?".
 3. Respond clearly to the user, stating the answer found by the tool.
 """
 
-agent_config = AgentConfig(
-    chat_prompt=ChatPrompt(system=system_prompt, user="{question}")
-)
-
-# Test it:
-agent = ADKAgent(agent_config)
-# "question" is the dataset input field that matches above prompt
-result = agent.invoke_dataset_item(
-    {"question": "Which is heavier: a newborn elephant, or a motor boat?"}
-)
-print(result)
+prompt = ChatPrompt(system=system_prompt, user="{question}", agent_class=ADKAgent)
 
 # Optimize it:
 optimizer = FewShotBayesianOptimizer(
@@ -48,9 +37,8 @@ optimizer = FewShotBayesianOptimizer(
     n_threads=16,
     seed=42,
 )
-optimization_result = optimizer.optimize_agent(
-    agent_class=ADKAgent,
-    agent_config=agent_config,
+optimization_result = optimizer.optimize_prompt(
+    prompt=prompt,
     dataset=dataset,
     metric=levenshtein_ratio,
     n_trials=10,
