@@ -10,6 +10,7 @@ from ..core.http_response import AsyncHttpResponse, HttpResponse
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..errors.bad_request_error import BadRequestError
+from ..types.workspace_metric_response import WorkspaceMetricResponse
 from ..types.workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
 
 # this is used as the default value for optional parameters
@@ -20,12 +21,84 @@ class RawWorkspacesClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
 
+    def get_metric(
+        self,
+        *,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[WorkspaceMetricResponse]:
+        """
+        Get metric daily data
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        start_before_end : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[WorkspaceMetricResponse]
+            Workspace metric data by days
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/workspaces/metrics",
+            method="POST",
+            json={
+                "project_ids": project_ids,
+                "interval_start": interval_start,
+                "interval_end": interval_end,
+                "start_before_end": start_before_end,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    WorkspaceMetricResponse,
+                    parse_obj_as(
+                        type_=WorkspaceMetricResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def metrics_summary(
         self,
         *,
         interval_start: dt.datetime,
         interval_end: dt.datetime,
         project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[WorkspaceMetricsSummaryResponse]:
         """
@@ -38,6 +111,8 @@ class RawWorkspacesClient:
         interval_end : dt.datetime
 
         project_ids : typing.Optional[typing.Sequence[str]]
+
+        start_before_end : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -54,6 +129,7 @@ class RawWorkspacesClient:
                 "project_ids": project_ids,
                 "interval_start": interval_start,
                 "interval_end": interval_end,
+                "start_before_end": start_before_end,
             },
             headers={
                 "content-type": "application/json",
@@ -92,12 +168,84 @@ class AsyncRawWorkspacesClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
 
+    async def get_metric(
+        self,
+        *,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[WorkspaceMetricResponse]:
+        """
+        Get metric daily data
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        start_before_end : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[WorkspaceMetricResponse]
+            Workspace metric data by days
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/workspaces/metrics",
+            method="POST",
+            json={
+                "project_ids": project_ids,
+                "interval_start": interval_start,
+                "interval_end": interval_end,
+                "start_before_end": start_before_end,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    WorkspaceMetricResponse,
+                    parse_obj_as(
+                        type_=WorkspaceMetricResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def metrics_summary(
         self,
         *,
         interval_start: dt.datetime,
         interval_end: dt.datetime,
         project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[WorkspaceMetricsSummaryResponse]:
         """
@@ -110,6 +258,8 @@ class AsyncRawWorkspacesClient:
         interval_end : dt.datetime
 
         project_ids : typing.Optional[typing.Sequence[str]]
+
+        start_before_end : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -126,6 +276,7 @@ class AsyncRawWorkspacesClient:
                 "project_ids": project_ids,
                 "interval_start": interval_start,
                 "interval_end": interval_end,
+                "start_before_end": start_before_end,
             },
             headers={
                 "content-type": "application/json",

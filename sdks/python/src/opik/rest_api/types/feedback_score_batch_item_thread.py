@@ -4,11 +4,10 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .feedback_score_batch_item_source import FeedbackScoreBatchItemSource
+from .feedback_score_batch_item_thread_source import FeedbackScoreBatchItemThreadSource
 
 
-class FeedbackScoreBatchItem(UniversalBaseModel):
-    id: typing.Optional[str] = None
+class FeedbackScoreBatchItemThread(UniversalBaseModel):
     thread_id: typing.Optional[str] = None
     project_name: typing.Optional[str] = pydantic.Field(default=None)
     """
@@ -19,7 +18,7 @@ class FeedbackScoreBatchItem(UniversalBaseModel):
     category_name: typing.Optional[str] = None
     value: float
     reason: typing.Optional[str] = None
-    source: FeedbackScoreBatchItemSource
+    source: FeedbackScoreBatchItemThreadSource
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
