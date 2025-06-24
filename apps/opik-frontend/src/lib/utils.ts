@@ -196,9 +196,9 @@ export const formatNumericData = (value: number, precision = 3) =>
 
 export const formatNumberInK = (value: number, precision = 1): string => {
   const ranges = [
-    { threshold: 1000000000, suffix: "b", divider: 1000000000 },
-    { threshold: 1000000, suffix: "m", divider: 1000000 },
-    { threshold: 1000, suffix: "k", divider: 1000 },
+    { threshold: 1000000000, suffix: "B", divider: 1000000000 },
+    { threshold: 1000000, suffix: "M", divider: 1000000 },
+    { threshold: 1000, suffix: "K", divider: 1000 },
   ];
 
   const range = ranges.find((r) => value >= r.threshold);

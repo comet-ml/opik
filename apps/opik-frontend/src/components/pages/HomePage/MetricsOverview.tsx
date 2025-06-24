@@ -238,7 +238,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
 
     return (
       <>
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 pb-4">
           <div className="comet-body-accented truncate">{selectedMetric}</div>
           {!noChartData && <ViewDetailsButton projectsIds={projectIds} />}
         </div>

@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import isNumber from "lodash/isNumber";
 
 import noDataCostsImageUrl from "/images/no-data-workspace-costs.png";
 import { Card } from "@/components/ui/card";
@@ -76,23 +77,27 @@ export const CostOverview: React.FC<CostOverviewProps> = ({
   const renderChartContainer = () => {
     return (
       <>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 truncate">
-            <div className="comet-body-accented text-foreground">
-              Total estimated spend:
-            </div>
-            {!isPending && (
-              <div className="comet-title-l text-foreground-secondary">
-                {formatCost(data?.current, { modifier: "kFormat" })}
-              </div>
-            )}
-            <PercentageTrend
-              percentage={calculatePercentageChange(
-                data?.previous,
-                data?.current,
+        <div className="flex items-center justify-between gap-2 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              {!isPending && (
+                <div className="comet-title-l text-foreground-secondary">
+                  {isNumber(data?.current)
+                    ? formatCost(data?.current, { modifier: "kFormat" })
+                    : "$ -"}
+                </div>
               )}
-              trend="inverted"
-            />
+              <PercentageTrend
+                percentage={calculatePercentageChange(
+                  data?.previous,
+                  data?.current,
+                )}
+                trend="inverted"
+              />
+            </div>
+            <div className="comet-body-s text-muted-foreground">
+              Total estimated spend
+            </div>
           </div>
           {!noChartData && <ViewDetailsButton projectsIds={projectIds} />}
         </div>
@@ -145,8 +150,8 @@ export const CostOverview: React.FC<CostOverviewProps> = ({
   };
 
   return (
-    <div className="pb-4 pt-6">
-      <h2 className="comet-title-s truncate break-words pb-4 pt-2">
+    <div className="pt-6">
+      <h2 className="comet-title-s truncate break-words pb-3 pt-2 text-base">
         Cost overview
       </h2>
       <Card className="flex h-[426px]">
