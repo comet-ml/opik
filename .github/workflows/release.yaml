@@ -4,6 +4,11 @@ run-name: "Release from ${{github.ref_name}} by @${{ github.actor }}"
 
 on:
   workflow_dispatch:
+  workflow_call: #  in order to make this action been called from outside
+    outputs:
+      version:
+        description: 'The release version'
+        value: ${{ jobs.set-version.outputs.version }}
 
 jobs:
   set-version:
