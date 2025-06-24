@@ -80,7 +80,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             WITH feedback_scores_daily AS (
                 SELECT fs.project_id AS project_id,
                        toStartOfInterval(t.start_time, toIntervalDay(1)) AS bucket,
-                       nullIf(avg(fs.value), 0) AS value
+                       if(COUNT(1) = 0, NULL, avg(fs.value)) AS value
                 FROM feedback_scores fs final
                 JOIN (
                     SELECT
@@ -114,7 +114,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     private static final String GET_FEEDBACK_SCORES_DAILY = """
             WITH feedback_scores_daily AS (
                 SELECT toStartOfInterval(t.start_time, toIntervalDay(1)) AS bucket,
-                       nullIf(avg(fs.value), 0) AS value
+                       if(COUNT(1) = 0, NULL, avg(fs.value)) AS value
                 FROM feedback_scores fs final
                 JOIN (
                     SELECT
