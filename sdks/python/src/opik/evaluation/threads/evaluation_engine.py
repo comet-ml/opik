@@ -5,15 +5,12 @@ from typing import Optional, List, Callable, Dict, Literal
 from opik import exceptions, track, opik_context
 from opik.evaluation.metrics.conversation import conversation_thread_metric
 from opik.rest_api import JsonListStringPublic, TraceThread
-from . import context_helper
-from . import evaluation_result
+from . import context_helper, evaluation_result, helpers
 from ..engine import evaluation_tasks_executor
 from ..engine import types as engine_types
 from ..metrics import score_result
 from ...api_objects import trace
-from ...api_objects.conversation import conversation_factory, conversation_thread
 from ...api_objects.threads import threads_client
-from ...types import FeedbackScoreDict
 
 LOGGER = logging.getLogger(__name__)
 
@@ -73,7 +70,9 @@ class ThreadsEvaluationEngine:
             evaluation_tasks, workers=self._number_of_workers, verbose=self._verbose
         )
 
-        self._log_feedback_scores(results)
+        helpers.log_feedback_scores(
+            results, project_name=self._project_name, client=self._threads_client
+        )
 
         return evaluation_result.ThreadsEvaluationResult(results=results)
 
@@ -86,11 +85,13 @@ class ThreadsEvaluationEngine:
         trace_output_transform: Callable[[JsonListStringPublic], str],
         max_traces_per_thread: int,
     ) -> evaluation_result.ThreadEvaluationResult:
-        conversation_dict = self._get_conversation_thread(
+        conversation_dict = helpers.load_conversation_thread(
             thread=thread,
             trace_input_transform=trace_input_transform,
             trace_output_transform=trace_output_transform,
             max_results=max_traces_per_thread,
+            project_name=self._project_name,
+            client=self._client.opik_client,
         ).model_dump()
 
         conversation = conversation_dict["discussion"]
@@ -161,41 +162,3 @@ class ThreadsEvaluationEngine:
                 )
 
         return score_results
-
-    def _get_conversation_thread(
-        self,
-        thread: TraceThread,
-        trace_input_transform: Callable[[JsonListStringPublic], str],
-        trace_output_transform: Callable[[JsonListStringPublic], str],
-        max_results: int,
-    ) -> conversation_thread.ConversationThread:
-        traces = self._client.opik_client.search_traces(
-            project_name=self._project_name,
-            filter_string=f"thread_id = {thread.id}",
-            max_results=max_results,
-        )
-        return conversation_factory.create_conversation_from_traces(
-            traces=traces,
-            input_transform=trace_input_transform,
-            output_transform=trace_output_transform,
-        )
-
-    def _log_feedback_scores(
-        self,
-        results: List[evaluation_result.ThreadEvaluationResult],
-    ) -> None:
-        for result in results:
-            feedback_scores = [
-                FeedbackScoreDict(
-                    id=result.thread_id,
-                    name=score.name,
-                    value=score.value,
-                    reason=score.reason,
-                )
-                for score in result.scores
-                if not score.scoring_failed
-            ]
-            self._threads_client.log_threads_feedback_scores(
-                scores=feedback_scores,
-                project_name=self._project_name,
-            )
