@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
@@ -14,6 +15,7 @@ import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.utils.JsonUtils;
@@ -35,6 +37,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
@@ -86,6 +90,42 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
+    }
+
+    public Response callFeedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("feedback-scores")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(new FeedbackScoreBatch(score)));
+    }
+
+    public void threadFeedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("feedback-scores")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(FeedbackScoreBatch.builder()
+                        .scores(score)
+                        .build()))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public Response callThreadFeedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("feedback-scores")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(FeedbackScoreBatch.builder()
+                        .scores(score)
+                        .build()));
     }
 
     public void feedbackScore(UUID entityId, FeedbackScore score, String workspaceName, String apiKey) {
@@ -230,13 +270,72 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
     }
 
-    public TraceThreadPage getTraceThreads(UUID projectId, String apiKey, String workspaceName,
-            List<SortingField> sortingFields) {
+    public void deleteThreadFeedbackScores(String projectName, String threadId, Set<String> scoreNames, String apiKey,
+            String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
-                .queryParam("project_id", projectId)
-                .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields),
-                        StandardCharsets.UTF_8))
+                .path("feedback-scores")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(DeleteThreadFeedbackScores.builder()
+                        .projectName(projectName)
+                        .threadId(threadId)
+                        .names(scoreNames)
+                        .build()))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public Response callDeleteThreadFeedbackScores(String projectName, String threadId, Set<String> scoreNames,
+            String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("feedback-scores")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(DeleteThreadFeedbackScores.builder()
+                        .projectName(projectName)
+                        .threadId(threadId)
+                        .names(scoreNames)
+                        .build()));
+    }
+
+    public TraceThreadPage getTraceThreads(UUID projectId, String projectName, String apiKey, String workspaceName,
+            List<TraceThreadFilter> filters, List<SortingField> sortingFields, Map<String, String> queryParams) {
+
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads");
+
+        target = Optional.ofNullable(queryParams)
+                .orElseGet(Map::of)
+                .entrySet()
+                .stream()
+                .reduce(target, (acc, entry) -> acc.queryParam(entry.getKey(), entry.getValue()), (a, b) -> b);
+
+        if (projectId != null) {
+            target = target.queryParam("project_id", projectId);
+        }
+
+        if (projectName != null) {
+            target = target.queryParam("project_name", projectName);
+        }
+
+        if (CollectionUtils.isNotEmpty(filters)) {
+            target = target.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
+        if (CollectionUtils.isNotEmpty(sortingFields)) {
+            target = target.queryParam("sorting",
+                    URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8));
+        }
+
+        try (var response = target
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -249,6 +348,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public TraceThread getTraceThread(String threadId, UUID projectId, String apiKey, String workspaceName) {
+
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
                 .path("retrieve")

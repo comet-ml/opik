@@ -766,7 +766,7 @@ def create_moderation_rule_fixture(
     sampling_value.fill("1")
 
     traces_page.page.get_by_role("combobox").filter(
-        has_text="Select a LLM model"
+        has_text="Select an LLM model"
     ).click()
     traces_page.page.get_by_text("OpenAI").hover()
     traces_page.page.get_by_label("GPT 4o Mini", exact=True).click()
