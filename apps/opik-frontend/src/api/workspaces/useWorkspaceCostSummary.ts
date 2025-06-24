@@ -23,19 +23,8 @@ const getWorkspaceCostSummary = async (
     },
     {
       signal,
-      validateStatus: (status) => status === 200 || status === 404, // TODO lala delete this line when backend is ready
     },
   );
-
-  // Simulate network delay for demo purposes
-  await new Promise((resolve) =>
-    setTimeout(resolve, Math.floor(Math.random() * (3000 - 200 + 1)) + 200),
-  );
-
-  return {
-    current: Math.random() < 0.9 ? Math.random() * 100000000 : null,
-    previous: Math.random() < 0.9 ? Math.random() * 100000000 : null,
-  } as WorkspaceCostSummary;
 
   return data;
 };
