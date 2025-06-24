@@ -87,4 +87,26 @@ public class WorkspacesResource {
 
         return Response.ok().entity(response).build();
     }
+
+    @POST
+    @Path("/costs/summaries")
+    @Operation(operationId = "costsSummary", summary = "Get costs summary", description = "Get costs summary", responses = {
+            @ApiResponse(responseCode = "200", description = "Workspace Metrics", content = @Content(schema = @Schema(implementation = WorkspaceMetricsSummaryResponse.Result.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response costsSummary(
+            @RequestBody(content = @Content(schema = @Schema(implementation = WorkspaceMetricsSummaryRequest.class))) @NotNull @Valid WorkspaceMetricsSummaryRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Retrieve workspace costs summary for projectIds '{}', on workspace_id '{}'", request.projectIds(),
+                workspaceId);
+        var response = workspaceMetricsService.getWorkspaceCostsSummary(request)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Retrieved workspace costs summary for projectIds '{}', on workspace_id '{}'", request.projectIds(),
+                workspaceId);
+
+        return Response.ok().entity(response).build();
+    }
 }

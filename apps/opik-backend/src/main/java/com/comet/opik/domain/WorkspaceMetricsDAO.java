@@ -37,6 +37,8 @@ public interface WorkspaceMetricsDAO {
     Mono<List<WorkspaceMetricsSummaryResponse.Result>> getFeedbackScoresSummary(WorkspaceMetricsSummaryRequest request);
 
     Mono<List<WorkspaceMetricResponse.Result>> getFeedbackScoresDaily(WorkspaceMetricRequest request);
+
+    Mono<WorkspaceMetricsSummaryResponse.Result> getCostsSummary(WorkspaceMetricsSummaryRequest request);
 }
 
 @Slf4j
@@ -62,6 +64,16 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 <if(project_ids)> AND project_id IN :project_ids <endif>
                 AND entity_type = 'trace'
             GROUP BY fs.name;
+            """;
+
+    private static final String GET_COSTS_SUMMARY = """
+            SELECT
+                SUMIf(total_estimated_cost, id >= :id_start AND id \\<= :id_end) AS current,
+                SUMIf(total_estimated_cost, id >= :id_prior_start AND id \\< :id_start) AS previous,
+                'cost' AS name
+            FROM spans final
+            WHERE workspace_id = :workspace_id
+                <if(project_ids)> AND project_id IN :project_ids <endif>;
             """;
 
     private static final String GET_FEEDBACK_SCORES_DAILY_BY_PROJECT = """
@@ -137,6 +149,12 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     public Mono<List<WorkspaceMetricsSummaryResponse.Result>> getFeedbackScoresSummary(
             @NonNull WorkspaceMetricsSummaryRequest request) {
         return getFeedbackScoresSummary(request, GET_FEEDBACK_SCORES_SUMMARY);
+    }
+
+    @Override
+    public Mono<WorkspaceMetricsSummaryResponse.Result> getCostsSummary(WorkspaceMetricsSummaryRequest request) {
+        return getFeedbackScoresSummary(request, GET_COSTS_SUMMARY)
+                .map(List::getFirst);
     }
 
     @Override
