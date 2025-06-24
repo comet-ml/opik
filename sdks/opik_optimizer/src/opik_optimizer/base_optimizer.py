@@ -1,7 +1,10 @@
+from typing import Any, Callable, Dict, List, Optional
+
 import logging
 import time
 from abc import abstractmethod
-from typing import Any, Callable, Dict, List, Optional, Type
+import random
+
 
 import litellm
 from opik.rest_api.core import ApiError
@@ -11,8 +14,8 @@ from pydantic import BaseModel
 
 from . import _throttle, optimization_result
 from .cache_config import initialize_cache
-from .optimization_config import chat_prompt
-from .optimizable_agent import OptimizableAgent, AgentConfig
+from .optimization_config import chat_prompt, mappers
+from . import task_evaluator
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -62,10 +65,9 @@ class BaseOptimizer:
         initialize_cache()
 
     @abstractmethod
-    def optimize_agent(
+    def optimize_prompt(
         self,
-        agent_class: Type[OptimizableAgent],
-        agent_config: AgentConfig,
+        prompt: "chat_prompt.ChatPrompt",
         dataset: Dataset,
         metric: Callable,
         experiment_config: Optional[Dict] = None,
@@ -121,3 +123,61 @@ class BaseOptimizer:
                 time.sleep(5)
         if count == 3:
             logger.warning("Unable to update optimization status; continuing...")
+
+    def evaluate_prompt(
+        self,
+        prompt: chat_prompt.ChatPrompt,
+        dataset: Dataset,
+        metric: Callable,
+        n_threads: int,
+        verbose: int = 1,
+        dataset_item_ids: Optional[List[str]] = None,
+        experiment_config: Optional[Dict] = None,
+        n_samples: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> float:
+        random.seed(seed)
+
+        agent = prompt.agent_class({"chat-prompt": prompt})
+
+        def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
+            messages = prompt.get_messages(dataset_item)
+            raw_model_output = agent.invoke(messages)
+            cleaned_model_output = raw_model_output.strip()
+            result = {
+                mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
+            }
+            return result
+
+        experiment_config = experiment_config or {}
+        experiment_config["project_name"] = self.__class__.__name__
+        experiment_config = {
+            **experiment_config,
+            **{
+                "agent_class": self.__class__.__name__,
+                "agent_config": prompt.to_dict(),
+                "metric": metric.__name__,
+                "dataset": dataset.name,
+                "configuration": {"prompt": (prompt.get_messages() if prompt else [])},
+            },
+        }
+
+        if n_samples is not None:
+            if dataset_item_ids is not None:
+                raise Exception("Can't use n_samples and dataset_item_ids")
+
+            all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
+            dataset_item_ids = random.sample(all_ids, n_samples)
+
+        score = task_evaluator.evaluate(
+            dataset=dataset,
+            dataset_item_ids=dataset_item_ids,
+            metric=metric,
+            evaluated_task=llm_task,
+            num_threads=n_threads,
+            project_name=prompt.agent_class.project_name,
+            experiment_config=experiment_config,
+            optimization_id=None,
+            verbose=verbose,
+        )
+        return score

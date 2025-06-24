@@ -1,8 +1,10 @@
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Type
 
 import copy
 
 from pydantic import BaseModel, Field
+
+from ..optimizable_agent import OptimizableAgent
 
 
 class Tool(BaseModel):
@@ -31,14 +33,19 @@ class ChatPrompt:
     system: Optional[str]
     user: Optional[str]
     messages: Optional[List[Dict[str, str]]]
+    tools: Optional[Dict[str, Any]]
+    agent_class: Type[OptimizableAgent]
 
     def __init__(
         self,
         system: Optional[str] = None,
         user: Optional[str] = None,
         messages: Optional[List[Dict[str, str]]] = None,
-        tools: Optional[List[Tool]] = None,
-    ):
+        tools: Optional[Dict[str, Any]] = None,
+        agent_class: Optional[Type[OptimizableAgent]] = None,
+        model: Optional[str] = None,
+        **model_kwargs: Any,
+    ) -> None:
         if system is None and user is None and messages is None:
             raise ValueError(
                 "At least one of `system`, `user`, or `messages` must be provided"
@@ -67,10 +74,22 @@ class ChatPrompt:
                         raise ValueError(
                             "`message` must have 'role' and 'content' keys."
                         )
+        if agent_class is None:
+            self.model = model
+            self.model_kwargs = model_kwargs
+
+            class LiteLLMAgent(OptimizableAgent):
+                model = self.model
+                model_kwargs = self.model_kwargs
+
+            self.agent_class = LiteLLMAgent
+        else:
+            self.agent_class = agent_class
 
         self.system = system
         self.user = user
         self.messages = messages
+        self.tools = tools
 
     def get_messages(
         self,
@@ -120,29 +139,19 @@ class ChatPrompt:
             retval["messages"] = self.messages
         return retval
 
-    @classmethod
-    def model_validate(
-        cls,
-        obj: Any,
-        *,
-        strict: Optional[bool] = None,
-        from_attributes: Optional[bool] = None,
-        context: Optional[Any] = None,
-        by_alias: Optional[bool] = None,
-        by_name: Optional[bool] = None,
-    ) -> "ChatPrompt":
-        """Custom validation method to handle nested objects during deserialization."""
-        return ChatPrompt(
-            system=obj.get("system", None),
-            user=obj.get("user", None),
-            messages=obj.get("messages", None),
-        )
-
     def copy(self) -> "ChatPrompt":
         # Deep copy the messages list and its contents
         messages = copy.deepcopy(self.messages) if self.messages else None
+        tools = copy.deepcopy(self.tools)
         return ChatPrompt(
             system=self.system,
             user=self.user,
             messages=messages,
+            tools=tools,
+            agent_class=self.agent_class,
         )
+
+    def set_messages(self, messages: List[Dict[str, Any]]) -> None:
+        self.system = None
+        self.user = None
+        self.messages = copy.deepcopy(messages)
