@@ -64,7 +64,8 @@ def test__langchain_chat_model__track_enabled__span_and_trace_created_by_OpikTra
         track=True,
     )
 
-    tested.generate_string("Say hi")
+    generated_string = tested.generate_string("Say hi")
+    assert isinstance(generated_string, str)
     opik.flush_tracker()
 
     EXPECTED_TRACE_TREE = TraceModel(
