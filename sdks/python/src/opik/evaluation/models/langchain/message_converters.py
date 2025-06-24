@@ -7,6 +7,8 @@ if TYPE_CHECKING:
 def convert_to_langchain_messages(
     messages: List[Dict[str, Any]],
 ) -> List["schema.BaseMessage"]:
+    from langchain import schema
+
     langchain_messages = []
     for message in messages:
         role = message["role"]
