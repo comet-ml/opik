@@ -70,7 +70,7 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         mock_metric2.name = "metric2"
         metrics = [mock_metric1, mock_metric2]
 
-        # Patch the _evaluate_thread method
+        # Patch the evaluate_thread method
         self.engine.evaluate_thread = mock_evaluate_thread
 
         # Call the method
