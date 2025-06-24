@@ -39,6 +39,8 @@ public interface WorkspaceMetricsDAO {
     Mono<List<WorkspaceMetricResponse.Result>> getFeedbackScoresDaily(WorkspaceMetricRequest request);
 
     Mono<WorkspaceMetricsSummaryResponse.Result> getCostsSummary(WorkspaceMetricsSummaryRequest request);
+
+    Mono<List<WorkspaceMetricResponse.Result>> getCostsDaily(WorkspaceMetricRequest request);
 }
 
 @Slf4j
@@ -142,6 +144,53 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             ;
             """;
 
+    private static final String GET_COSTS_DAILY_BY_PROJECT = """
+            WITH costs_daily AS (
+                SELECT toStartOfInterval(start_time, toIntervalDay(1)) AS bucket,
+                       if(COUNT(1) = 0, NULL, sum(total_estimated_cost)) AS value,
+                       project_id
+                FROM spans final
+                WHERE workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+                  AND id BETWEEN :id_start AND :id_end
+                GROUP BY project_id, bucket
+                ORDER BY project_id, bucket
+                WITH FILL
+                FROM toStartOfInterval(parseDateTimeBestEffort(:timestamp_start), toIntervalDay(1))
+                    TO parseDateTimeBestEffort(:timestamp_end)
+                    STEP toIntervalDay(1)
+            )
+            SELECT
+                project_id,
+                :name AS name,
+                groupArray(tuple(bucket, value)) AS data
+            FROM costs_daily
+            GROUP BY project_id
+            ;
+            """;
+
+    private static final String GET_COSTS_DAILY = """
+            WITH costs_daily AS (
+                SELECT toStartOfInterval(start_time, toIntervalDay(1)) AS bucket,
+                       if(COUNT(1) = 0, NULL, sum(total_estimated_cost)) AS value
+                FROM spans final
+                WHERE workspace_id = :workspace_id
+                  AND id BETWEEN :id_start AND :id_end
+                GROUP BY bucket
+                ORDER BY bucket
+                WITH FILL
+                FROM toStartOfInterval(parseDateTimeBestEffort(:timestamp_start), toIntervalDay(1))
+                    TO parseDateTimeBestEffort(:timestamp_end)
+                    STEP toIntervalDay(1)
+            )
+            SELECT
+                NULL AS project_id,
+                :name AS name,
+                groupArray(tuple(bucket, value)) AS data
+            FROM costs_daily
+            ;
+            """;
+
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull IdGenerator idGenerator;
 
@@ -152,28 +201,37 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     }
 
     @Override
+    public Mono<List<WorkspaceMetricResponse.Result>> getFeedbackScoresDaily(WorkspaceMetricRequest request) {
+        var query = CollectionUtils
+                .isEmpty(request.projectIds())
+                        ? GET_FEEDBACK_SCORES_DAILY
+                        : GET_FEEDBACK_SCORES_DAILY_BY_PROJECT;
+        return getMetricsDaily(request, query);
+    }
+
+    @Override
     public Mono<WorkspaceMetricsSummaryResponse.Result> getCostsSummary(WorkspaceMetricsSummaryRequest request) {
         return getFeedbackScoresSummary(request, GET_COSTS_SUMMARY)
                 .map(List::getFirst);
     }
 
     @Override
-    public Mono<List<WorkspaceMetricResponse.Result>> getFeedbackScoresDaily(WorkspaceMetricRequest request) {
+    public Mono<List<WorkspaceMetricResponse.Result>> getCostsDaily(WorkspaceMetricRequest request) {
         var query = CollectionUtils
                 .isEmpty(request.projectIds())
-                        ? GET_FEEDBACK_SCORES_DAILY
-                        : GET_FEEDBACK_SCORES_DAILY_BY_PROJECT;
-        return getFeedbackScoresDaily(request, query);
+                        ? GET_COSTS_DAILY
+                        : GET_COSTS_DAILY_BY_PROJECT;
+        return getMetricsDaily(request, query);
     }
 
-    private Mono<List<WorkspaceMetricResponse.Result>> getFeedbackScoresDaily(WorkspaceMetricRequest request,
+    private Mono<List<WorkspaceMetricResponse.Result>> getMetricsDaily(WorkspaceMetricRequest request,
             String query) {
-        return template.nonTransaction(connection -> getFeedbackScoresDaily(connection, request, query)
+        return template.nonTransaction(connection -> getMetricsDaily(connection, request, query)
                 .flatMapMany(this::rowToDataPoint)
                 .collectList());
     }
 
-    private Mono<? extends Result> getFeedbackScoresDaily(Connection connection, WorkspaceMetricRequest request,
+    private Mono<? extends Result> getMetricsDaily(Connection connection, WorkspaceMetricRequest request,
             String query) {
 
         var statement = connection.createStatement(query)

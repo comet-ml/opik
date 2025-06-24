@@ -109,4 +109,29 @@ public class WorkspacesResource {
 
         return Response.ok().entity(response).build();
     }
+
+    @POST
+    @Path("/costs")
+    @Operation(operationId = "getCost", summary = "Get cost daily data", description = "Get cost daily data", responses = {
+            @ApiResponse(responseCode = "200", description = "Workspace cost data by days", content = @Content(schema = @Schema(implementation = WorkspaceMetricResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response getCost(
+            @RequestBody(content = @Content(schema = @Schema(implementation = WorkspaceMetricsSummaryRequest.class))) @NotNull @Valid WorkspaceMetricRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Retrieve workspace cost data by days for projectIds '{}', on workspace_id '{}'",
+                request.projectIds(),
+                workspaceId);
+        request = request.toBuilder().name("cost").build();
+        WorkspaceMetricResponse response = workspaceMetricsService.getWorkspaceCosts(request)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Retrieved workspace cost data by days for projectIds '{}', on workspace_id '{}'",
+                request.projectIds(),
+                workspaceId);
+
+        return Response.ok().entity(response).build();
+    }
 }

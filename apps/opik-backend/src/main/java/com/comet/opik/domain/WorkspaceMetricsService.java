@@ -19,6 +19,8 @@ public interface WorkspaceMetricsService {
     Mono<WorkspaceMetricResponse> getWorkspaceFeedbackScores(WorkspaceMetricRequest request);
 
     Mono<WorkspaceMetricsSummaryResponse.Result> getWorkspaceCostsSummary(WorkspaceMetricsSummaryRequest request);
+
+    Mono<WorkspaceMetricResponse> getWorkspaceCosts(WorkspaceMetricRequest request);
 }
 
 @Slf4j
@@ -49,5 +51,13 @@ class WorkspaceMetricsServiceImpl implements WorkspaceMetricsService {
     public Mono<WorkspaceMetricsSummaryResponse.Result> getWorkspaceCostsSummary(
             WorkspaceMetricsSummaryRequest request) {
         return workspaceMetricsDAO.getCostsSummary(request);
+    }
+
+    @Override
+    public Mono<WorkspaceMetricResponse> getWorkspaceCosts(WorkspaceMetricRequest request) {
+        return workspaceMetricsDAO.getCostsDaily(request)
+                .map(results -> WorkspaceMetricResponse.builder()
+                        .results(results)
+                        .build());
     }
 }

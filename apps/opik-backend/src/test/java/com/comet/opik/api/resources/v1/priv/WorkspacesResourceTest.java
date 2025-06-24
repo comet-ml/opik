@@ -57,6 +57,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -234,15 +235,17 @@ class WorkspacesResourceTest {
                             .build(),
                     apiKey, workspaceName);
 
-            var expectedMetricsSummary = withProjectIds
-                    ? prepareMetricsDailyPerProjects(project1Scores, project2Scores, name, projectId, projectId2)
-                    : prepareMetricsDailyPerWorkspace(project1Scores, project2Scores, name);
+            var expectedMetricsDaily = withProjectIds
+                    ? prepareMetricsDailyPerProjects(project1Scores.values(), project2Scores.values(), name, projectId,
+                            projectId2, WorkspacesResourceTest.this::getAvg)
+                    : prepareMetricsDailyPerWorkspace(project1Scores.values(), project2Scores.values(), name,
+                            WorkspacesResourceTest.this::getAvg);
 
             assertThat(actualMetrics.results())
                     .usingRecursiveComparison()
                     .ignoringCollectionOrder()
                     .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
-                    .isEqualTo(expectedMetricsSummary);
+                    .isEqualTo(expectedMetricsDaily);
         }
 
         @ParameterizedTest
@@ -266,7 +269,8 @@ class WorkspacesResourceTest {
             if (withProjectIds) {
                 assertThat(actualMetrics.results()).isEmpty();
             } else {
-                var expectedMetricsSummary = prepareMetricsDailyPerWorkspace(Map.of(), Map.of(), name);
+                var expectedMetricsSummary = prepareMetricsDailyPerWorkspace(List.of(), List.of(), name,
+                        WorkspacesResourceTest.this::getAvg);
 
                 assertThat(actualMetrics.results())
                         .usingRecursiveComparison()
@@ -339,6 +343,79 @@ class WorkspacesResourceTest {
                     .build();
 
             assertThat(actualCostsSummary).isEqualTo(expectedCostsSummary);
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void costsDaily_happyPath(boolean withProjectIds) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName2 = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            var projectId2 = projectResourceClient.createProject(projectName2, apiKey, workspaceName);
+
+            var project1Spans = createSpans(projectName, apiKey, workspaceName, Instant.now());
+            var project2Spans = createSpans(projectName2, apiKey, workspaceName, Instant.now());
+
+            var endTime = Instant.now();
+            var startTime = endTime.minus(Duration.ofDays(1));
+
+            // Get metrics summary
+            var actualMetrics = workspaceResourceClient.getCostsDaily(
+                    WorkspaceMetricRequest.builder()
+                            .intervalStart(startTime)
+                            .intervalEnd(endTime)
+                            .projectIds(withProjectIds ? Set.of(projectId, projectId2) : null)
+                            .build(),
+                    apiKey, workspaceName);
+
+            var expectedCostDaily = withProjectIds
+                    ? prepareMetricsDailyPerProjects(mapToCost(project1Spans), mapToCost(project2Spans), "cost",
+                            projectId, projectId2, WorkspacesResourceTest.this::getSum)
+                    : prepareMetricsDailyPerWorkspace(mapToCost(project1Spans), mapToCost(project2Spans), "cost",
+                            WorkspacesResourceTest.this::getSum);
+
+            assertThat(actualMetrics.results())
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
+                    .isEqualTo(expectedCostDaily);
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void costsDaily_emptyData(boolean withProjectIds) {
+            var projectId = UUID.randomUUID();
+            String name = "cost";
+
+            var endTime = Instant.now();
+            var startTime = endTime.minus(Duration.ofDays(1));
+
+            var actualMetrics = workspaceResourceClient.getCostsDaily(
+                    WorkspaceMetricRequest.builder()
+                            .intervalStart(startTime)
+                            .intervalEnd(endTime)
+                            .projectIds(withProjectIds ? Set.of(projectId) : null)
+                            .name(name)
+                            .build(),
+                    API_KEY, WORKSPACE_NAME);
+
+            if (withProjectIds) {
+                assertThat(actualMetrics.results()).isEmpty();
+            } else {
+                var expectedMetricsSummary = prepareMetricsDailyPerWorkspace(List.of(), List.of(), name,
+                        WorkspacesResourceTest.this::getSum);
+
+                assertThat(actualMetrics.results())
+                        .usingRecursiveComparison()
+                        .ignoringCollectionOrder()
+                        .isEqualTo(expectedMetricsSummary);
+            }
         }
     }
 
@@ -435,36 +512,38 @@ class WorkspacesResourceTest {
                 .toList();
     }
 
-    private List<WorkspaceMetricResponse.Result> prepareMetricsDailyPerProjects(Map<String, Double> project1Scores,
-            Map<String, Double> project2Scores,
-            String name, UUID projectId1, UUID projectId2) {
+    private List<WorkspaceMetricResponse.Result> prepareMetricsDailyPerProjects(Collection<Double> project1Scores,
+            Collection<Double> project2Scores,
+            String name, UUID projectId1, UUID projectId2, Function<Collection<Double>, Double> aggregator) {
         return List.of(WorkspaceMetricResponse.Result.builder()
                 .projectId(projectId1)
                 .name(name)
-                .data(prepareMetricsDailyData(project1Scores.values()))
+                .data(prepareMetricsAverageDailyData(project1Scores, aggregator))
                 .build(),
                 WorkspaceMetricResponse.Result.builder()
                         .projectId(projectId2)
                         .name(name)
-                        .data(prepareMetricsDailyData(project2Scores.values()))
+                        .data(prepareMetricsAverageDailyData(project2Scores, aggregator))
                         .build());
     }
 
-    private List<WorkspaceMetricResponse.Result> prepareMetricsDailyPerWorkspace(Map<String, Double> project1Scores,
-            Map<String, Double> project2Scores,
-            String name) {
+    private List<WorkspaceMetricResponse.Result> prepareMetricsDailyPerWorkspace(Collection<Double> project1Scores,
+            Collection<Double> project2Scores,
+            String name,
+            Function<Collection<Double>, Double> aggregator) {
         Collection<Double> allValues = Stream.concat(
-                project1Scores.values().stream(),
-                project2Scores.values().stream()).toList();
+                project1Scores.stream(),
+                project2Scores.stream()).toList();
 
         return List.of(WorkspaceMetricResponse.Result.builder()
                 .projectId(null)
                 .name(name)
-                .data(prepareMetricsDailyData(allValues))
+                .data(prepareMetricsAverageDailyData(allValues, aggregator))
                 .build());
     }
 
-    private List<DataPoint<Double>> prepareMetricsDailyData(Collection<Double> scores) {
+    private List<DataPoint<Double>> prepareMetricsAverageDailyData(Collection<Double> scores,
+            Function<Collection<Double>, Double> aggregator) {
 
         Instant todayTime = LocalDate
                 .now(ZoneOffset.UTC)
@@ -488,7 +567,27 @@ class WorkspacesResourceTest {
                 .build(),
                 DataPoint.<Double>builder()
                         .time(todayTime)
-                        .value(scores.isEmpty() ? null : avgValue)
+                        .value(scores.isEmpty() ? null : aggregator.apply(scores))
                         .build());
+    }
+
+    private Double getAvg(Collection<Double> values) {
+        return values.stream()
+                .mapToDouble(Double::doubleValue)
+                .average()
+                .orElse(0.0);
+    }
+
+    private Double getSum(Collection<Double> values) {
+        return values.stream()
+                .mapToDouble(Double::doubleValue)
+                .sum();
+    }
+
+    private List<Double> mapToCost(List<Span> spans) {
+        return spans.stream()
+                .map(Span::totalEstimatedCost)
+                .map(BigDecimal::doubleValue)
+                .collect(Collectors.toList());
     }
 }
