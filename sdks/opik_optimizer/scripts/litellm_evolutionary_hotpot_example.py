@@ -44,10 +44,8 @@ prompt = ChatPrompt(
         "Search Wikipedia": {
             "function": search_wikipedia,
             "description": "Use this tool to search wikipedia",
-            "name": search_wikipedia.__name__,
         }
     },
-    model="openai/gpt-4o-mini",
 )
 
 # Initialize the optimizer with custom parameters

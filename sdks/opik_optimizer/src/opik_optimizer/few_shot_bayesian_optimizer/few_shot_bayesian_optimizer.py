@@ -507,6 +507,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
             )
 
+        if prompt.agent_class.model is None:
+            prompt.agent_class.model = self.model
+        if prompt.agent_class.model_kwargs is None:
+            prompt.agent_class.model_kwargs = self.model_kwargs
+
         optimization = None
         try:
             optimization = self._opik_client.create_optimization(

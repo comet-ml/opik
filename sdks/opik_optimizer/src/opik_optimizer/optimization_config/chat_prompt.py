@@ -90,6 +90,13 @@ class ChatPrompt:
         self.user = user
         self.messages = messages
         self.tools = tools
+        # Add defaults to tools:
+        if self.tools:
+            for tool_key in self.tools:
+                if "name" not in self.tools[tool_key]:
+                    self.tools[tool_key]["name"] = self.tools[tool_key][
+                        "function"
+                    ].__name__
 
     def get_messages(
         self,

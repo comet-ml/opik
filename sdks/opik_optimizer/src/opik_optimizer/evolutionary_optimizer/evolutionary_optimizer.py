@@ -1509,6 +1509,11 @@ Return only the new prompt list object.
         Returns:
             float: The metric value
         """
+        if prompt.agent_class.model is None:
+            prompt.agent_class.model = self.model
+        if prompt.agent_class.model_kwargs is None:
+            prompt.agent_class.model_kwargs = self.model_kwargs
+
         total_items = len(dataset.get_items())
 
         experiment_config = experiment_config or {}
