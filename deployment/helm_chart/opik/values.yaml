@@ -355,7 +355,7 @@ clickhouse:
     successfulJobsHistoryLimit: 1
     serviceAccount:
       annotations: {}
-      create: true
+      create: false
       name: ""
     # bucketURL: ""
     # secretName: ""
