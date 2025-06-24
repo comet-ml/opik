@@ -75,6 +75,10 @@ spec:
     podTemplates:
       - name: clickhouse-cluster-pod-template
         spec:
+          securityContext:
+            runAsUser: 101
+            runAsGroup: 101
+            fsGroup: 101
           containers:
           - name: clickhouse
             image: {{ .Values.clickhouse.image }}
