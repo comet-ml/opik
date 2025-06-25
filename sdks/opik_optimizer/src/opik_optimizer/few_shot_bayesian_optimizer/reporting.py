@@ -90,18 +90,20 @@ def creation_few_shot_prompt_template(verbose: int = 1) -> Any:
                     width=PANEL_WIDTH,
                     border_style="dim",
                 )
-            # Use a temporary buffer to render the panel
-            buffer = StringIO()
-            temp_console = get_console(file=buffer, width=console.width)
-            temp_console.print(panel)
+                # Use a temporary buffer to render the panel
+                buffer = StringIO()
+                temp_console = get_console(file=buffer, width=console.width)
+                temp_console.print(panel)
 
-            # Add prefix to each line
-            panel_output = buffer.getvalue()
-            prefixed = "\n".join(f"│    {line}" for line in panel_output.splitlines())
+                # Add prefix to each line
+                panel_output = buffer.getvalue()
+                prefixed = "\n".join(
+                    f"│    {line}" for line in panel_output.splitlines()
+                )
 
-            # Print the final result
-            console.print(prefixed)
-            console.print()
+                # Print the final result
+                console.print(prefixed)
+                console.print()
 
 
 def start_optimization_run(verbose: int = 1) -> None:
