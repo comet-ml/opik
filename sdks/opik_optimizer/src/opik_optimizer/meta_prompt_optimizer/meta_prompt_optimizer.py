@@ -101,6 +101,12 @@ class MetaPromptOptimizer(BaseOptimizer):
             enable_context: Whether to include task-specific context (metrics, examples) in the reasoning prompt.
             **model_kwargs: Additional model parameters
         """
+        if "project_name" in model_kwargs:
+            print(
+                "Removing `project_name` from constructor; it now belongs in the ChatPrompt()"
+            )
+            del model_kwargs["project_name"]
+
         super().__init__(model=model, verbose=verbose, **model_kwargs)
         self.reasoning_model = reasoning_model if reasoning_model is not None else model
         self.rounds = rounds

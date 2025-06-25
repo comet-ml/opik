@@ -93,6 +93,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             verbose: Controls internal logging/progress bars (0=off, 1=on).
             **model_kwargs: Additional model parameters
         """
+        if "project_name" in model_kwargs:
+            print(
+                "Removing `project_name` from constructor; it now belongs in the ChatPrompt()"
+            )
+            del model_kwargs["project_name"]
+
         super().__init__(model, verbose, **model_kwargs)
         self.min_examples = min_examples
         self.max_examples = max_examples
