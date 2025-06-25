@@ -135,6 +135,9 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
         conversation: conversation_types.Conversation,
     ) -> score_result.ScoreResult:
         try:
+            if len(conversation) == 0:
+                raise ValueError("Conversation is empty")
+
             user_goals = self._extract_user_goals(conversation)
             verdicts = [
                 self._evaluate_user_goal(conversation=conversation, user_goal=user_goal)
@@ -150,7 +153,7 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
         except Exception as e:
             LOGGER.error(f"Failed to calculate session completeness quality: {e}")
             raise exceptions.MetricComputationError(
-                "Failed to calculate session completeness quality: {e}"
+                f"Failed to calculate session completeness quality: {e}"
             ) from e
 
     async def _a_extract_user_goals(
@@ -198,6 +201,9 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
         conversation: conversation_types.Conversation,
     ) -> score_result.ScoreResult:
         try:
+            if len(conversation) == 0:
+                raise ValueError("Conversation is empty")
+
             user_goals = await self._a_extract_user_goals(conversation)
             verdicts = await asyncio.gather(
                 *[
@@ -219,7 +225,7 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
                 f"Failed to calculate session completeness quality: {e}", exc_info=True
             )
             raise exceptions.MetricComputationError(
-                "Failed to calculate session completeness quality: {e}"
+                f"Failed to calculate session completeness quality: {e}"
             ) from e
 
 

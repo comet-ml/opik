@@ -3,9 +3,15 @@ from typing import Optional, Union, Any, List, Dict
 
 import pydantic
 
+from opik import exceptions
 from . import schema, templates
 from ... import score_result
-from .. import types as conversation_types, conversation_thread_metric, helpers
+from .. import (
+    types as conversation_types,
+    conversation_thread_metric,
+    helpers,
+    conversation_turns_factory,
+)
 from opik.evaluation.models import base_model, models_factory
 from ...llm_judges import parsing_helpers
 
@@ -52,27 +58,42 @@ class ConversationalCoherenceMetric(
         self,
         conversation: conversation_types.Conversation,
     ) -> score_result.ScoreResult:
-        turns_windows: List[conversation_types.Conversation] = [
-            window
-            for window in helpers.get_turns_in_sliding_window(
-                conversation, self._window_size
+        try:
+            if len(conversation) == 0:
+                raise ValueError("Conversation is empty")
+
+            turns = conversation_turns_factory.build_conversation_turns(
+                conversation=conversation
             )
-        ]
-        verdicts = [
-            self._evaluate_conversation(conversation_sliding_window=window)
-            for window in turns_windows
-        ]
-        score = _score_from_verdicts(verdicts=verdicts)
-        reason = (
-            self._reason_from_verdicts(score=score, verdicts=verdicts)
-            if self._include_reason
-            else None
-        )
-        return score_result.ScoreResult(
-            name=self.name,
-            value=score,
-            reason=reason,
-        )
+            if len(turns) == 0:
+                raise ValueError("Conversation has no turns")
+
+            turns_windows: List[conversation_types.Conversation] = [
+                helpers.merge_turns(turns_window)
+                for turns_window in helpers.get_turns_in_sliding_window(
+                    turns, self._window_size
+                )
+            ]
+            verdicts = [
+                self._evaluate_conversation(conversation_sliding_window=window)
+                for window in turns_windows
+            ]
+            score = _score_from_verdicts(verdicts=verdicts)
+            reason = (
+                self._reason_from_verdicts(score=score, verdicts=verdicts)
+                if self._include_reason
+                else None
+            )
+            return score_result.ScoreResult(
+                name=self.name,
+                value=score,
+                reason=reason,
+            )
+        except Exception as e:
+            LOGGER.error(f"Failed to calculate conversational coherence score: {e}")
+            raise exceptions.MetricComputationError(
+                f"Failed to calculate conversational coherence score: {e}"
+            ) from e
 
     def _reason_from_verdicts(
         self, score: float, verdicts: List[schema.EvaluateConversationCoherenceResponse]
