@@ -83,7 +83,6 @@
     "patch-package": "^8.0.0",
     "re-resizable": "^6.10.3",
     "react": "^18.3.1",
-    "react-complex-tree": "^2.4.4",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.54.2",

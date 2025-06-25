@@ -8,16 +8,16 @@ import React from "react";
 import ColoredTagNew from "../ColoredTag/ColoredTagNew";
 
 type FeedbackScoreHoverCardProps = {
-  name: string;
+  title?: string;
   isAverageScores?: boolean;
-  tagList: TraceFeedbackScore[];
+  scores: TraceFeedbackScore[];
   children: React.ReactNode;
   hidden?: boolean;
 };
 const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
-  name,
+  title,
   isAverageScores,
-  tagList,
+  scores,
   children,
   hidden,
 }) => {
@@ -25,9 +25,7 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
 
   return (
     <HoverCard openDelay={500}>
-      <HoverCardTrigger asChild>
-        <div className="flex min-w-0 flex-1">{children}</div>
-      </HoverCardTrigger>
+      <HoverCardTrigger asChild>{children}</HoverCardTrigger>
       <HoverCardContent
         side="top"
         align="start"
@@ -36,18 +34,20 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="relative size-full max-h-[40vh] max-w-[320px] overflow-auto p-1 pb-0">
-          <div className="flex flex-col gap-1.5 border-b border-border px-2 pb-2">
-            <div className="comet-body-xs-accented truncate leading-none text-foreground">
-              {name}
-            </div>
-            {isAverageScores && (
-              <div className="comet-body-xs leading-none text-slate-400">
-                Average scores
+          {title && (
+            <div className="flex flex-col gap-1.5 border-b border-border px-2 pb-2">
+              <div className="comet-body-xs-accented truncate leading-none text-foreground">
+                {title}
               </div>
-            )}
-          </div>
+              {isAverageScores && (
+                <div className="comet-body-xs leading-none text-slate-400">
+                  Average scores
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex flex-col gap-1.5 pb-1 pt-1.5">
-            {tagList.map((tag) => {
+            {scores.map((tag) => {
               return (
                 <div
                   key={tag.name}

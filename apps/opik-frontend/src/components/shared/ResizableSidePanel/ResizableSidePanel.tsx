@@ -15,7 +15,7 @@ const MAX_LEFT_POSITION = 0.8;
 type ArrowNavigationConfig = {
   hasPrevious: boolean;
   hasNext: boolean;
-  onChange: (shift: number) => void;
+  onChange: (shift: 1 | -1) => void;
   previousTooltip?: string;
   nextTooltip?: string;
 };
@@ -84,6 +84,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
     (keyboardEvent: KeyboardEvent) => {
       if (!open) return;
       keyboardEvent.stopPropagation();
+      keyboardEvent.preventDefault();
       switch (keyboardEvent.code) {
         case "ArrowLeft":
           isFunction(horizontalNavigation?.onChange) &&
