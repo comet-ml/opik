@@ -12,7 +12,7 @@ fi
 
 # Generate openapi.yaml
 cd apps/opik-backend
-mvn clean compile swagger:resolve
+mvn clean package -DskipTests
 cd -
 
 # Copy openapi.yaml for Fern generation

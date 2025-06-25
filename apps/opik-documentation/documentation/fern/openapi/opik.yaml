@@ -29,54 +29,54 @@ info:
     url: http://www.apache.org/licenses/LICENSE-2.0.html
   version: 1.0.0
 servers:
-- url: http://localhost:5173/api
-  description: Local server
-- url: https://www.comet.com/opik/api
-  description: Opik Cloud
+  - url: http://localhost:5173/api
+    description: Local server
+  - url: https://www.comet.com/opik/api
+    description: Opik Cloud
 tags:
-- name: System usage
-  description: System usage related resource
-- name: Attachments
-  description: Attachments related resources
-- name: Check
-  description: Access check resources
-- name: Automation rule evaluators
-  description: Automation rule evaluators resource
-- name: Chat Completions
-  description: Chat Completions related resources
-- name: Datasets
-  description: Dataset resources
-- name: Experiments
-  description: Experiment resources
-- name: Feedback-definitions
-  description: Feedback definitions related resources
-- name: Guardrails
-  description: Guardrails related resources
-- name: LlmProviderKey
-  description: LLM Provider Key
-- name: OpenTelemetry Ingestion
-  description: Resource to ingest Traces and Spans via OpenTelemetry
-- name: Optimizations
-  description: Optimization resources
-- name: Projects
-  description: Project related resources
-- name: Prompts
-  description: Prompt resources
-- name: Service Toggles
-  description: Service Toggles resources
-- name: Spans
-  description: Span related resources
-- name: Traces
-  description: Trace related resources
-- name: Workspaces
-  description: Workspace related resources
-- name: Redirect
-  description: Redirects for SDK generated links
+  - name: System usage
+    description: System usage related resource
+  - name: Attachments
+    description: Attachments related resources
+  - name: Check
+    description: Access check resources
+  - name: Automation rule evaluators
+    description: Automation rule evaluators resource
+  - name: Chat Completions
+    description: Chat Completions related resources
+  - name: Datasets
+    description: Dataset resources
+  - name: Experiments
+    description: Experiment resources
+  - name: Feedback-definitions
+    description: Feedback definitions related resources
+  - name: Guardrails
+    description: Guardrails related resources
+  - name: LlmProviderKey
+    description: LLM Provider Key
+  - name: OpenTelemetry Ingestion
+    description: Resource to ingest Traces and Spans via OpenTelemetry
+  - name: Optimizations
+    description: Optimization resources
+  - name: Projects
+    description: Project related resources
+  - name: Prompts
+    description: Prompt resources
+  - name: Service Toggles
+    description: Service Toggles resources
+  - name: Spans
+    description: Span related resources
+  - name: Traces
+    description: Trace related resources
+  - name: Workspaces
+    description: Workspace related resources
+  - name: Redirect
+    description: Redirects for SDK generated links
 paths:
   /v1/internal/usage/bi-datasets:
     get:
       tags:
-      - System usage
+        - System usage
       summary: Get datasets information for BI events
       description: Get datasets information for BI events per user per workspace
       operationId: getDatasetBiInfo
@@ -90,7 +90,7 @@ paths:
   /v1/internal/usage/bi-experiments:
     get:
       tags:
-      - System usage
+        - System usage
       summary: Get experiments information for BI events
       description: Get experiments information for BI events per user per workspace
       operationId: getExperimentBiInfo
@@ -104,7 +104,7 @@ paths:
   /v1/internal/usage/bi-spans:
     get:
       tags:
-      - System usage
+        - System usage
       summary: Get spans information for BI events
       description: Get spans information for BI events per user per workspace
       operationId: getSpansBiInfo
@@ -118,7 +118,7 @@ paths:
   /v1/internal/usage/workspace-span-counts:
     get:
       tags:
-      - System usage
+        - System usage
       summary: Get spans count on previous day for all available workspaces
       description: Get spans count on previous day for all available workspaces
       operationId: getSpansCountForWorkspaces
@@ -132,7 +132,7 @@ paths:
   /v1/internal/usage/bi-traces:
     get:
       tags:
-      - System usage
+        - System usage
       summary: Get traces information for BI events
       description: Get traces information for BI events per user per workspace
       operationId: getTracesBiInfo
@@ -146,7 +146,7 @@ paths:
   /v1/internal/usage/workspace-trace-counts:
     get:
       tags:
-      - System usage
+        - System usage
       summary: Get traces count on previous day for all available workspaces
       description: Get traces count on previous day for all available workspaces
       operationId: getTracesCountForWorkspaces
@@ -160,51 +160,51 @@ paths:
   /v1/private/attachment/list:
     get:
       tags:
-      - Attachments
+        - Attachments
       summary: Attachments list for entity
       description: Attachments list for entity
       operationId: attachmentList
       parameters:
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 100
-      - name: project_id
-        in: query
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: entity_type
-        in: query
-        required: true
-        schema:
-          type: string
-          enum:
-          - trace
-          - span
-      - name: entity_id
-        in: query
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: path
-        in: query
-        required: true
-        schema:
-          minLength: 1
-          type: string
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 100
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: entity_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - trace
+              - span
+        - name: entity_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: path
+          in: query
+          required: true
+          schema:
+            minLength: 1
+            type: string
       responses:
         "200":
           description: Attachment Resource
@@ -227,7 +227,7 @@ paths:
   /v1/private/attachment/upload-complete:
     post:
       tags:
-      - Attachments
+        - Attachments
       summary: Complete multipart attachment upload
       description: Complete multipart attachment upload
       operationId: completeMultiPartUpload
@@ -254,7 +254,7 @@ paths:
   /v1/private/attachment/delete:
     post:
       tags:
-      - Attachments
+        - Attachments
       summary: Delete attachments
       description: Delete attachments
       operationId: deleteAttachments
@@ -281,47 +281,47 @@ paths:
   /v1/private/attachment/download:
     get:
       tags:
-      - Attachments
+        - Attachments
       summary: Download attachment from MinIO
       description: Download attachment from MinIO
       operationId: downloadAttachment
       parameters:
-      - name: workspace_name
-        in: query
-        schema:
-          type: string
-      - name: container_id
-        in: query
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: entity_type
-        in: query
-        required: true
-        schema:
-          type: string
-          enum:
-          - trace
-          - span
-      - name: entity_id
-        in: query
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: file_name
-        in: query
-        required: true
-        schema:
-          minLength: 1
-          type: string
-      - name: mime_type
-        in: query
-        required: true
-        schema:
-          minLength: 1
-          type: string
+        - name: workspace_name
+          in: query
+          schema:
+            type: string
+        - name: container_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: entity_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - trace
+              - span
+        - name: entity_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: file_name
+          in: query
+          required: true
+          schema:
+            minLength: 1
+            type: string
+        - name: mime_type
+          in: query
+          required: true
+          schema:
+            minLength: 1
+            type: string
       responses:
         "200":
           description: Attachment Resource
@@ -345,7 +345,7 @@ paths:
   /v1/private/attachment/upload-start:
     post:
       tags:
-      - Attachments
+        - Attachments
       summary: Start multipart attachment upload
       description: Start multipart attachment upload
       operationId: startMultiPartUpload
@@ -376,40 +376,40 @@ paths:
   /v1/private/attachment/upload:
     put:
       tags:
-      - Attachments
+        - Attachments
       summary: Upload attachment to MinIO
       description: Upload attachment to MinIO
       operationId: uploadAttachment
       parameters:
-      - name: file_name
-        in: query
-        required: true
-        schema:
-          type: string
-      - name: project_name
-        in: query
-        schema:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-          description: "If null, the default project is used"
-      - name: mime_type
-        in: query
-        schema:
-          type: string
-      - name: entity_type
-        in: query
-        required: true
-        schema:
-          type: string
-          enum:
-          - trace
-          - span
-      - name: entity_id
-        in: query
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: file_name
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: project_name
+          in: query
+          schema:
+            pattern: (?s)^\s*(\S.*\S|\S)\s*$
+            type: string
+            description: "If null, the default project is used"
+        - name: mime_type
+          in: query
+          schema:
+            type: string
+        - name: entity_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - trace
+              - span
+        - name: entity_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           '*/*':
@@ -433,7 +433,7 @@ paths:
   /v1/private/auth:
     post:
       tags:
-      - Check
+        - Check
       summary: Check user access to workspace
       description: Check user access to workspace
       operationId: checkAccess
@@ -460,7 +460,7 @@ paths:
   /v1/private/auth/workspace:
     get:
       tags:
-      - Check
+        - Check
       summary: User's default workspace name
       description: User's default workspace name
       operationId: getWorkspaceName
@@ -486,34 +486,34 @@ paths:
   /v1/private/automations/evaluators:
     get:
       tags:
-      - Automation rule evaluators
+        - Automation rule evaluators
       summary: Find project Evaluators
       description: Find project Evaluators
       operationId: findEvaluators
       parameters:
-      - name: project_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: name
-        in: query
-        schema:
-          type: string
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: name
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
       responses:
         "200":
           description: Evaluators resource
@@ -523,7 +523,7 @@ paths:
                 $ref: "#/components/schemas/AutomationRuleEvaluatorPage_Public"
     post:
       tags:
-      - Automation rule evaluators
+        - Automation rule evaluators
       summary: Create automation rule evaluator
       description: Create automation rule evaluator
       operationId: createAutomationRuleEvaluator
@@ -545,16 +545,16 @@ paths:
   /v1/private/automations/evaluators/delete:
     post:
       tags:
-      - Automation rule evaluators
+        - Automation rule evaluators
       summary: Delete automation rule evaluators
       description: Delete automation rule evaluators batch
       operationId: deleteAutomationRuleEvaluatorBatch
       parameters:
-      - name: project_id
-        in: query
-        schema:
-          type: string
-          format: uuid
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -566,22 +566,22 @@ paths:
   /v1/private/automations/evaluators/{id}:
     get:
       tags:
-      - Automation rule evaluators
+        - Automation rule evaluators
       summary: Get automation rule evaluator by id
       description: Get automation rule by id
       operationId: getEvaluatorById
       parameters:
-      - name: project_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Automation Rule resource
@@ -591,17 +591,17 @@ paths:
                 $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
     patch:
       tags:
-      - Automation rule evaluators
+        - Automation rule evaluators
       summary: Update Automation Rule Evaluator by id
       description: Update Automation Rule Evaluator by id
       operationId: updateAutomationRuleEvaluator
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -613,24 +613,24 @@ paths:
   /v1/private/automations/evaluators/{id}/logs:
     get:
       tags:
-      - Automation rule evaluators
+        - Automation rule evaluators
       summary: Get automation rule evaluator logs by id
       description: Get automation rule evaluator logs by id
       operationId: getEvaluatorLogsById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1000
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1000
       responses:
         "200":
           description: Automation rule evaluator logs resource
@@ -641,7 +641,7 @@ paths:
   /v1/private/chat/completions:
     post:
       tags:
-      - Chat Completions
+        - Chat Completions
       summary: Create chat completions
       description: Create chat completions
       operationId: createChatCompletions
@@ -660,54 +660,54 @@ paths:
                 items:
                   type: object
                   anyOf:
-                  - $ref: "#/components/schemas/ChatCompletionResponse"
-                  - $ref: "#/components/schemas/ErrorMessage"
+                    - $ref: "#/components/schemas/ChatCompletionResponse"
+                    - $ref: "#/components/schemas/ErrorMessage"
             application/json:
               schema:
                 $ref: "#/components/schemas/ChatCompletionResponse"
   /v1/private/datasets:
     get:
       tags:
-      - Datasets
+        - Datasets
       summary: Find datasets
       description: Find datasets
       operationId: findDatasets
       parameters:
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
-      - name: with_experiments_only
-        in: query
-        schema:
-          type: boolean
-      - name: with_optimizations_only
-        in: query
-        schema:
-          type: boolean
-      - name: prompt_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: name
-        in: query
-        schema:
-          type: string
-      - name: sorting
-        in: query
-        schema:
-          type: string
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: with_experiments_only
+          in: query
+          schema:
+            type: boolean
+        - name: with_optimizations_only
+          in: query
+          schema:
+            type: boolean
+        - name: prompt_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: name
+          in: query
+          schema:
+            type: string
+        - name: sorting
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: Dataset resource
@@ -717,7 +717,7 @@ paths:
                 $ref: "#/components/schemas/DatasetPage_Public"
     post:
       tags:
-      - Datasets
+        - Datasets
       summary: Create dataset
       description: Create dataset
       operationId: createDataset
@@ -739,7 +739,7 @@ paths:
   /v1/private/datasets/items:
     put:
       tags:
-      - Datasets
+        - Datasets
       summary: Create/update dataset items
       description: Create/update dataset items based on dataset item id
       operationId: createOrUpdateDatasetItems
@@ -754,17 +754,17 @@ paths:
   /v1/private/datasets/{id}:
     get:
       tags:
-      - Datasets
+        - Datasets
       summary: Get dataset by id
       description: Get dataset by id
       operationId: getDatasetById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Dataset resource
@@ -774,17 +774,17 @@ paths:
                 $ref: "#/components/schemas/Dataset_Public"
     put:
       tags:
-      - Datasets
+        - Datasets
       summary: Update dataset by id
       description: Update dataset by id
       operationId: updateDataset
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -795,24 +795,24 @@ paths:
           description: No content
     delete:
       tags:
-      - Datasets
+        - Datasets
       summary: Delete dataset by id
       description: Delete dataset by id
       operationId: deleteDataset
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "204":
           description: No content
   /v1/private/datasets/delete:
     post:
       tags:
-      - Datasets
+        - Datasets
       summary: Delete dataset by name
       description: Delete dataset by name
       operationId: deleteDatasetByName
@@ -827,7 +827,7 @@ paths:
   /v1/private/datasets/items/delete:
     post:
       tags:
-      - Datasets
+        - Datasets
       summary: Delete dataset items
       description: Delete dataset items
       operationId: deleteDatasetItems
@@ -842,7 +842,7 @@ paths:
   /v1/private/datasets/delete-batch:
     post:
       tags:
-      - Datasets
+        - Datasets
       summary: Delete datasets
       description: Delete datasets batch
       operationId: deleteDatasetsBatch
@@ -857,46 +857,46 @@ paths:
   /v1/private/datasets/{id}/items/experiments/items:
     get:
       tags:
-      - Datasets
+        - Datasets
       summary: Find dataset items with experiment items
       description: Find dataset items with experiment items
       operationId: findDatasetItemsWithExperimentItems
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
-      - name: experiment_ids
-        in: query
-        required: true
-        schema:
-          minLength: 1
-          type: string
-      - name: filters
-        in: query
-        schema:
-          type: string
-      - name: truncate
-        in: query
-        schema:
-          type: boolean
-          description: "Truncate image included in either input, output or metadata"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: experiment_ids
+          in: query
+          required: true
+          schema:
+            minLength: 1
+            type: string
+        - name: filters
+          in: query
+          schema:
+            type: string
+        - name: truncate
+          in: query
+          schema:
+            type: boolean
+            description: "Truncate image included in either input, output or metadata"
       responses:
         "200":
           description: Dataset item resource
@@ -907,7 +907,7 @@ paths:
   /v1/private/datasets/retrieve:
     post:
       tags:
-      - Datasets
+        - Datasets
       summary: Get dataset by name
       description: Get dataset by name
       operationId: getDatasetByIdentifier
@@ -926,17 +926,17 @@ paths:
   /v1/private/datasets/items/{itemId}:
     get:
       tags:
-      - Datasets
+        - Datasets
       summary: Get dataset item by id
       description: Get dataset item by id
       operationId: getDatasetItemById
       parameters:
-      - name: itemId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Dataset item resource
@@ -947,36 +947,36 @@ paths:
   /v1/private/datasets/{id}/items:
     get:
       tags:
-      - Datasets
+        - Datasets
       summary: Get dataset items
       description: Get dataset items
       operationId: getDatasetItems
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
-      - name: truncate
-        in: query
-        schema:
-          type: boolean
-          description: "Truncate image included in either input, output or metadata"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: truncate
+          in: query
+          schema:
+            type: boolean
+            description: "Truncate image included in either input, output or metadata"
       responses:
         "200":
           description: Dataset items resource
@@ -987,21 +987,21 @@ paths:
   /v1/private/datasets/{id}/items/experiments/items/output/columns:
     get:
       tags:
-      - Datasets
+        - Datasets
       summary: Get dataset items output columns
       description: Get dataset items output columns
       operationId: getDatasetItemsOutputColumns
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: experiment_ids
-        in: query
-        schema:
-          type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: experiment_ids
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: Dataset item output columns
@@ -1012,7 +1012,7 @@ paths:
   /v1/private/datasets/items/stream:
     post:
       tags:
-      - Datasets
+        - Datasets
       summary: Stream dataset items
       description: Stream dataset items
       operationId: streamDatasetItems
@@ -1032,65 +1032,65 @@ paths:
                 items:
                   type: string
                   anyOf:
-                  - $ref: "#/components/schemas/DatasetItem"
-                  - $ref: "#/components/schemas/ErrorMessage"
+                    - $ref: "#/components/schemas/DatasetItem"
+                    - $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments:
     get:
       tags:
-      - Experiments
+        - Experiments
       summary: Find experiments
       description: Find experiments
       operationId: findExperiments
       parameters:
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
-      - name: datasetId
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: optimization_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: types
-        in: query
-        schema:
-          type: string
-      - name: name
-        in: query
-        schema:
-          type: string
-      - name: dataset_deleted
-        in: query
-        schema:
-          type: boolean
-      - name: prompt_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: sorting
-        in: query
-        schema:
-          type: string
-      - name: filters
-        in: query
-        schema:
-          type: string
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: datasetId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: optimization_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: types
+          in: query
+          schema:
+            type: string
+        - name: name
+          in: query
+          schema:
+            type: string
+        - name: dataset_deleted
+          in: query
+          schema:
+            type: boolean
+        - name: prompt_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: sorting
+          in: query
+          schema:
+            type: string
+        - name: filters
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: Experiments resource
@@ -1106,7 +1106,7 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage_Public"
     post:
       tags:
-      - Experiments
+        - Experiments
       summary: Create experiment
       description: Create experiment
       operationId: createExperiment
@@ -1128,7 +1128,7 @@ paths:
   /v1/private/experiments/items:
     post:
       tags:
-      - Experiments
+        - Experiments
       summary: Create experiment items
       description: Create experiment items
       operationId: createExperimentItems
@@ -1143,7 +1143,7 @@ paths:
   /v1/private/experiments/items/delete:
     post:
       tags:
-      - Experiments
+        - Experiments
       summary: Delete experiment items
       description: Delete experiment items
       operationId: deleteExperimentItems
@@ -1158,7 +1158,7 @@ paths:
   /v1/private/experiments/delete:
     post:
       tags:
-      - Experiments
+        - Experiments
       summary: Delete experiments by id
       description: Delete experiments by id
       operationId: deleteExperimentsById
@@ -1173,7 +1173,7 @@ paths:
   /v1/private/experiments/items/bulk:
     put:
       tags:
-      - Experiments
+        - Experiments
       summary: Record experiment items in bulk
       description: "Record experiment items in bulk with traces, spans, and feedback\
         \ scores. Maximum request size is 4MB."
@@ -1201,15 +1201,15 @@ paths:
   /v1/private/experiments/feedback-scores/names:
     get:
       tags:
-      - Experiments
+        - Experiments
       summary: Find Feedback Score names
       description: Find Feedback Score names
       operationId: findFeedbackScoreNames
       parameters:
-      - name: experiment_ids
-        in: query
-        schema:
-          type: string
+        - name: experiment_ids
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: Feedback Scores resource
@@ -1222,17 +1222,17 @@ paths:
   /v1/private/experiments/{id}:
     get:
       tags:
-      - Experiments
+        - Experiments
       summary: Get experiment by id
       description: Get experiment by id
       operationId: getExperimentById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Experiment resource
@@ -1249,17 +1249,17 @@ paths:
   /v1/private/experiments/items/{id}:
     get:
       tags:
-      - Experiments
+        - Experiments
       summary: Get experiment item by id
       description: Get experiment item by id
       operationId: getExperimentItemById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Experiment item resource
@@ -1276,7 +1276,7 @@ paths:
   /v1/private/experiments/items/stream:
     post:
       tags:
-      - Experiments
+        - Experiments
       summary: Stream experiment items
       description: Stream experiment items
       operationId: streamExperimentItems
@@ -1296,12 +1296,12 @@ paths:
                 items:
                   type: string
                   anyOf:
-                  - $ref: "#/components/schemas/ExperimentItem"
-                  - $ref: "#/components/schemas/ErrorMessage"
+                    - $ref: "#/components/schemas/ExperimentItem"
+                    - $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments/stream:
     post:
       tags:
-      - Experiments
+        - Experiments
       summary: Stream experiments
       description: Stream experiments
       operationId: streamExperiments
@@ -1321,41 +1321,41 @@ paths:
                 items:
                   type: string
                   anyOf:
-                  - $ref: "#/components/schemas/Experiment_Public"
-                  - $ref: "#/components/schemas/ErrorMessage_Public"
+                    - $ref: "#/components/schemas/Experiment_Public"
+                    - $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/feedback-definitions:
     get:
       tags:
-      - Feedback-definitions
+        - Feedback-definitions
       summary: Find Feedback definitions
       description: Find Feedback definitions
       operationId: findFeedbackDefinitions
       parameters:
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
-      - name: name
-        in: query
-        schema:
-          type: string
-      - name: type
-        in: query
-        schema:
-          type: string
-          enum:
-          - numerical
-          - categorical
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: name
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum:
+              - numerical
+              - categorical
       responses:
         "200":
           description: Feedback definitions resource
@@ -1365,7 +1365,7 @@ paths:
                 $ref: "#/components/schemas/FeedbackDefinitionPage_Public"
     post:
       tags:
-      - Feedback-definitions
+        - Feedback-definitions
       summary: Create feedback definition
       description: Get feedback definition
       operationId: createFeedbackDefinition
@@ -1387,17 +1387,17 @@ paths:
   /v1/private/feedback-definitions/{id}:
     get:
       tags:
-      - Feedback-definitions
+        - Feedback-definitions
       summary: Get feedback definition by id
       description: Get feedback definition by id
       operationId: getFeedbackDefinitionById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Feedback definition resource
@@ -1407,17 +1407,17 @@ paths:
                 $ref: "#/components/schemas/Feedback_Public"
     put:
       tags:
-      - Feedback-definitions
+        - Feedback-definitions
       summary: Update feedback definition by id
       description: Update feedback definition by id
       operationId: updateFeedbackDefinition
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -1428,17 +1428,17 @@ paths:
           description: No Content
     delete:
       tags:
-      - Feedback-definitions
+        - Feedback-definitions
       summary: Delete feedback definition by id
       description: Delete feedback definition by id
       operationId: deleteFeedbackDefinitionById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "204":
           description: No Content
@@ -1451,7 +1451,7 @@ paths:
   /v1/private/feedback-definitions/delete:
     post:
       tags:
-      - Feedback-definitions
+        - Feedback-definitions
       summary: Delete feedback definitions
       description: Delete feedback definitions batch
       operationId: deleteFeedbackDefinitionsBatch
@@ -1472,7 +1472,7 @@ paths:
   /v1/private/guardrails:
     post:
       tags:
-      - Guardrails
+        - Guardrails
       summary: Create guardrails for traces in a batch
       description: Batch guardrails for traces
       operationId: createGuardrails
@@ -1487,7 +1487,7 @@ paths:
   /v1/private/llm-provider-key/delete:
     post:
       tags:
-      - LlmProviderKey
+        - LlmProviderKey
       summary: Delete LLM Provider's ApiKeys
       description: Delete LLM Provider's ApiKeys batch
       operationId: deleteLlmProviderApiKeysBatch
@@ -1502,7 +1502,7 @@ paths:
   /v1/private/llm-provider-key:
     get:
       tags:
-      - LlmProviderKey
+        - LlmProviderKey
       summary: Find LLM Provider's ApiKeys
       description: Find LLM Provider's ApiKeys
       operationId: findLlmProviderKeys
@@ -1515,7 +1515,7 @@ paths:
                 $ref: "#/components/schemas/ProviderApiKeyPage_Public"
     post:
       tags:
-      - LlmProviderKey
+        - LlmProviderKey
       summary: Store LLM Provider's ApiKey
       description: Store LLM Provider's ApiKey
       operationId: storeLlmProviderApiKey
@@ -1549,17 +1549,17 @@ paths:
   /v1/private/llm-provider-key/{id}:
     get:
       tags:
-      - LlmProviderKey
+        - LlmProviderKey
       summary: Get LLM Provider's ApiKey by id
       description: Get LLM Provider's ApiKey by id
       operationId: getLlmProviderApiKeyById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: LLMProviderApiKey resource
@@ -1575,17 +1575,17 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage_Public"
     patch:
       tags:
-      - LlmProviderKey
+        - LlmProviderKey
       summary: Update LLM Provider's ApiKey
       description: Update LLM Provider's ApiKey
       operationId: updateLlmProviderApiKey
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -1615,7 +1615,7 @@ paths:
   /v1/private/otel/v1/traces:
     post:
       tags:
-      - OpenTelemetry Ingestion
+        - OpenTelemetry Ingestion
       operationId: receiveProtobufTraces
       requestBody:
         content:
@@ -1630,38 +1630,38 @@ paths:
   /v1/private/optimizations:
     get:
       tags:
-      - Optimizations
+        - Optimizations
       summary: Find optimizations
       description: Find optimizations
       operationId: findOptimizations
       parameters:
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
-      - name: dataset_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: name
-        in: query
-        schema:
-          type: string
-      - name: dataset_deleted
-        in: query
-        schema:
-          type: boolean
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: dataset_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: name
+          in: query
+          schema:
+            type: string
+        - name: dataset_deleted
+          in: query
+          schema:
+            type: boolean
       responses:
         "200":
           description: Optimizations resource
@@ -1677,7 +1677,7 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage_Public"
     put:
       tags:
-      - Optimizations
+        - Optimizations
       summary: Upsert optimization
       description: Upsert optimization
       operationId: upsertOptimization
@@ -1698,7 +1698,7 @@ paths:
               example: "${basePath}/v1/private/optimizations/{id}"
     post:
       tags:
-      - Optimizations
+        - Optimizations
       summary: Create optimization
       description: Create optimization
       operationId: createOptimization
@@ -1720,7 +1720,7 @@ paths:
   /v1/private/optimizations/delete:
     post:
       tags:
-      - Optimizations
+        - Optimizations
       summary: Delete optimizations by id
       description: Delete optimizations by id
       operationId: deleteOptimizationsById
@@ -1735,17 +1735,17 @@ paths:
   /v1/private/optimizations/{id}:
     get:
       tags:
-      - Optimizations
+        - Optimizations
       summary: Get optimization by id
       description: Get optimization by id
       operationId: getOptimizationById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Optimization resource
@@ -1761,17 +1761,17 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage_Public"
     put:
       tags:
-      - Optimizations
+        - Optimizations
       summary: Update optimization by id
       description: Update optimization by id
       operationId: updateOptimizationsById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -1783,33 +1783,33 @@ paths:
   /v1/private/projects:
     get:
       tags:
-      - Projects
+        - Projects
       summary: Find projects
       description: Find projects
       operationId: findProjects
       parameters:
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
-      - name: name
-        in: query
-        schema:
-          type: string
-      - name: sorting
-        in: query
-        schema:
-          type: string
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: name
+          in: query
+          schema:
+            type: string
+        - name: sorting
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: Project resource
@@ -1819,7 +1819,7 @@ paths:
                 $ref: "#/components/schemas/ProjectPage_Public"
     post:
       tags:
-      - Projects
+        - Projects
       summary: Create project
       description: Create project
       operationId: createProject
@@ -1853,17 +1853,17 @@ paths:
   /v1/private/projects/{id}:
     get:
       tags:
-      - Projects
+        - Projects
       summary: Get project by id
       description: Get project by id
       operationId: getProjectById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Project resource
@@ -1873,17 +1873,17 @@ paths:
                 $ref: "#/components/schemas/Project_Public"
     delete:
       tags:
-      - Projects
+        - Projects
       summary: Delete project by id
       description: Delete project by id
       operationId: deleteProjectById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "204":
           description: No Content
@@ -1895,17 +1895,17 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
     patch:
       tags:
-      - Projects
+        - Projects
       summary: Update project by id
       description: Update project by id
       operationId: updateProject
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -1929,7 +1929,7 @@ paths:
   /v1/private/projects/delete:
     post:
       tags:
-      - Projects
+        - Projects
       summary: Delete projects
       description: Delete projects batch
       operationId: deleteProjectsBatch
@@ -1944,15 +1944,15 @@ paths:
   /v1/private/projects/feedback-scores/names:
     get:
       tags:
-      - Projects
+        - Projects
       summary: Find Feedback Score names By Project Ids
       description: Find Feedback Score names By Project Ids
       operationId: findFeedbackScoreNamesByProjectIds
       parameters:
-      - name: project_ids
-        in: query
-        schema:
-          type: string
+        - name: project_ids
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: Feedback Scores resource
@@ -1963,17 +1963,17 @@ paths:
   /v1/private/projects/{id}/metrics:
     post:
       tags:
-      - Projects
+        - Projects
       summary: Get Project Metrics
       description: Gets specified metrics for a project
       operationId: getProjectMetrics
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -2001,33 +2001,33 @@ paths:
   /v1/private/projects/stats:
     get:
       tags:
-      - Projects
+        - Projects
       summary: Get Project Stats
       description: Get Project Stats
       operationId: getProjectStats
       parameters:
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
-      - name: name
-        in: query
-        schema:
-          type: string
-      - name: sorting
-        in: query
-        schema:
-          type: string
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: name
+          in: query
+          schema:
+            type: string
+        - name: sorting
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: Project Stats
@@ -2038,7 +2038,7 @@ paths:
   /v1/private/projects/retrieve:
     post:
       tags:
-      - Projects
+        - Projects
       summary: Retrieve project
       description: Retrieve project
       operationId: retrieveProject
@@ -2075,29 +2075,29 @@ paths:
   /v1/private/prompts:
     get:
       tags:
-      - Prompts
+        - Prompts
       summary: Get prompts
       description: Get prompts
       operationId: getPrompts
       parameters:
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
-      - name: name
-        in: query
-        schema:
-          type: string
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: name
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: OK
@@ -2107,7 +2107,7 @@ paths:
                 $ref: "#/components/schemas/PromptPage_Public"
     post:
       tags:
-      - Prompts
+        - Prompts
       summary: Create prompt
       description: Create prompt
       operationId: createPrompt
@@ -2147,7 +2147,7 @@ paths:
   /v1/private/prompts/versions:
     post:
       tags:
-      - Prompts
+        - Prompts
       summary: Create prompt version
       description: Create prompt version
       operationId: createPromptVersion
@@ -2184,17 +2184,17 @@ paths:
   /v1/private/prompts/{id}:
     get:
       tags:
-      - Prompts
+        - Prompts
       summary: Get prompt by id
       description: Get prompt by id
       operationId: getPromptById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Prompt resource
@@ -2210,17 +2210,17 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage_Detail"
     put:
       tags:
-      - Prompts
+        - Prompts
       summary: Update prompt
       description: Update prompt
       operationId: updatePrompt
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -2255,24 +2255,24 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
     delete:
       tags:
-      - Prompts
+        - Prompts
       summary: Delete prompt
       description: Delete prompt
       operationId: deletePrompt
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "204":
           description: No content
   /v1/private/prompts/delete:
     post:
       tags:
-      - Prompts
+        - Prompts
       summary: Delete prompts
       description: Delete prompts batch
       operationId: deletePromptsBatch
@@ -2287,17 +2287,17 @@ paths:
   /v1/private/prompts/versions/{versionId}:
     get:
       tags:
-      - Prompts
+        - Prompts
       summary: Get prompt version by id
       description: Get prompt version by id
       operationId: getPromptVersionById
       parameters:
-      - name: versionId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Prompt version resource
@@ -2314,31 +2314,31 @@ paths:
   /v1/private/prompts/{id}/versions:
     get:
       tags:
-      - Prompts
+        - Prompts
       summary: Get prompt versions
       description: Get prompt versions
       operationId: getPromptVersions
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
       responses:
         "200":
           description: OK
@@ -2349,7 +2349,7 @@ paths:
   /v1/private/prompts/versions/retrieve:
     post:
       tags:
-      - Prompts
+        - Prompts
       summary: Retrieve prompt version
       description: Retrieve prompt version
       operationId: retrievePromptVersion
@@ -2386,7 +2386,7 @@ paths:
   /v1/private/toggles:
     get:
       tags:
-      - Service Toggles
+        - Service Toggles
       summary: Get Service Toggles
       description: Get Service Toggles
       operationId: getServiceToggles
@@ -2400,17 +2400,17 @@ paths:
   /v1/private/spans/{id}/comments:
     post:
       tags:
-      - Spans
+        - Spans
       summary: Add span comment
       description: Add span comment
       operationId: addSpanComment
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -2429,17 +2429,17 @@ paths:
   /v1/private/spans/{id}/feedback-scores:
     put:
       tags:
-      - Spans
+        - Spans
       summary: Add span feedback score
       description: Add span feedback score
       operationId: addSpanFeedbackScore
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -2451,67 +2451,67 @@ paths:
   /v1/private/spans:
     get:
       tags:
-      - Spans
+        - Spans
       summary: Get spans by project_name or project_id and optionally by trace_id
         and/or type
       description: Get spans by project_name or project_id and optionally by trace_id
         and/or type
       operationId: getSpansByProject
       parameters:
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
-      - name: project_name
-        in: query
-        schema:
-          type: string
-      - name: project_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: trace_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: type
-        in: query
-        schema:
-          type: string
-          enum:
-          - general
-          - tool
-          - llm
-          - guardrail
-      - name: filters
-        in: query
-        schema:
-          type: string
-      - name: truncate
-        in: query
-        schema:
-          type: boolean
-          description: "Truncate image included in either input, output or metadata"
-      - name: sorting
-        in: query
-        schema:
-          type: string
-      - name: exclude
-        in: query
-        schema:
-          type: string
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: project_name
+          in: query
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: trace_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum:
+              - general
+              - tool
+              - llm
+              - guardrail
+        - name: filters
+          in: query
+          schema:
+            type: string
+        - name: truncate
+          in: query
+          schema:
+            type: boolean
+            description: "Truncate image included in either input, output or metadata"
+        - name: sorting
+          in: query
+          schema:
+            type: string
+        - name: exclude
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: Spans resource
@@ -2521,7 +2521,7 @@ paths:
                 $ref: "#/components/schemas/SpanPage_Public"
     post:
       tags:
-      - Spans
+        - Spans
       summary: Create span
       description: Create span
       operationId: createSpan
@@ -2549,7 +2549,7 @@ paths:
   /v1/private/spans/batch:
     post:
       tags:
-      - Spans
+        - Spans
       summary: Create spans
       description: Create spans
       operationId: createSpans
@@ -2564,17 +2564,17 @@ paths:
   /v1/private/spans/{id}:
     get:
       tags:
-      - Spans
+        - Spans
       summary: Get span by id
       description: Get span by id
       operationId: getSpanById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Span resource
@@ -2590,16 +2590,16 @@ paths:
                 $ref: "#/components/schemas/Span_Public"
     delete:
       tags:
-      - Spans
+        - Spans
       summary: Delete span by id
       description: Delete span by id
       operationId: deleteSpanById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         "501":
           description: Not implemented
@@ -2607,17 +2607,17 @@ paths:
           description: No Content
     patch:
       tags:
-      - Spans
+        - Spans
       summary: Update span by id
       description: Update span by id
       operationId: updateSpan
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -2631,7 +2631,7 @@ paths:
   /v1/private/spans/comments/delete:
     post:
       tags:
-      - Spans
+        - Spans
       summary: Delete span comments
       description: Delete span comments
       operationId: deleteSpanComments
@@ -2646,17 +2646,17 @@ paths:
   /v1/private/spans/{id}/feedback-scores/delete:
     post:
       tags:
-      - Spans
+        - Spans
       summary: Delete span feedback score
       description: Delete span feedback score
       operationId: deleteSpanFeedbackScore
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -2668,25 +2668,25 @@ paths:
   /v1/private/spans/feedback-scores/names:
     get:
       tags:
-      - Spans
+        - Spans
       summary: Find Feedback Score names
       description: Find Feedback Score names
       operationId: findFeedbackScoreNames_1
       parameters:
-      - name: project_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: type
-        in: query
-        schema:
-          type: string
-          enum:
-          - general
-          - tool
-          - llm
-          - guardrail
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum:
+              - general
+              - tool
+              - llm
+              - guardrail
       responses:
         "200":
           description: Feedback Scores resource
@@ -2699,23 +2699,23 @@ paths:
   /v1/private/spans/{spanId}/comments/{commentId}:
     get:
       tags:
-      - Spans
+        - Spans
       summary: Get span comment
       description: Get span comment
       operationId: getSpanComment
       parameters:
-      - name: commentId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: spanId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: commentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: spanId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Comment resource
@@ -2732,38 +2732,38 @@ paths:
   /v1/private/spans/stats:
     get:
       tags:
-      - Spans
+        - Spans
       summary: Get span stats
       description: Get span stats
       operationId: getSpanStats
       parameters:
-      - name: project_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: project_name
-        in: query
-        schema:
-          type: string
-      - name: trace_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: type
-        in: query
-        schema:
-          type: string
-          enum:
-          - general
-          - tool
-          - llm
-          - guardrail
-      - name: filters
-        in: query
-        schema:
-          type: string
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: project_name
+          in: query
+          schema:
+            type: string
+        - name: trace_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum:
+              - general
+              - tool
+              - llm
+              - guardrail
+        - name: filters
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: Span stats resource
@@ -2774,7 +2774,7 @@ paths:
   /v1/private/spans/feedback-scores:
     put:
       tags:
-      - Spans
+        - Spans
       summary: Batch feedback scoring for spans
       description: Batch feedback scoring for spans
       operationId: scoreBatchOfSpans
@@ -2789,7 +2789,7 @@ paths:
   /v1/private/spans/search:
     post:
       tags:
-      - Spans
+        - Spans
       summary: Search spans
       description: Search spans
       operationId: searchSpans
@@ -2809,8 +2809,8 @@ paths:
                 items:
                   type: string
                   anyOf:
-                  - $ref: "#/components/schemas/Span_Public"
-                  - $ref: "#/components/schemas/ErrorMessage_Public"
+                    - $ref: "#/components/schemas/Span_Public"
+                    - $ref: "#/components/schemas/ErrorMessage_Public"
         "400":
           description: Bad Request
           content:
@@ -2820,17 +2820,17 @@ paths:
   /v1/private/spans/comments/{commentId}:
     patch:
       tags:
-      - Spans
+        - Spans
       summary: Update span comment by id
       description: Update span comment by id
       operationId: updateSpanComment
       parameters:
-      - name: commentId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: commentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -2844,17 +2844,17 @@ paths:
   /v1/private/traces/{id}/comments:
     post:
       tags:
-      - Traces
+        - Traces
       summary: Add trace comment
       description: Add trace comment
       operationId: addTraceComment
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -2873,17 +2873,17 @@ paths:
   /v1/private/traces/{id}/feedback-scores:
     put:
       tags:
-      - Traces
+        - Traces
       summary: Add trace feedback score
       description: Add trace feedback score
       operationId: addTraceFeedbackScore
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -2895,7 +2895,7 @@ paths:
   /v1/private/traces/threads/close:
     put:
       tags:
-      - Traces
+        - Traces
       summary: Close trace thread
       description: Close trace thread
       operationId: closeTraceThread
@@ -2910,51 +2910,51 @@ paths:
   /v1/private/traces:
     get:
       tags:
-      - Traces
+        - Traces
       summary: Get traces by project_name or project_id
       description: Get traces by project_name or project_id
       operationId: getTracesByProject
       parameters:
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
-      - name: project_name
-        in: query
-        schema:
-          type: string
-      - name: project_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: filters
-        in: query
-        schema:
-          type: string
-      - name: truncate
-        in: query
-        schema:
-          type: boolean
-          description: "Truncate image included in either input, output or metadata"
-      - name: sorting
-        in: query
-        schema:
-          type: string
-      - name: exclude
-        in: query
-        schema:
-          type: string
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: project_name
+          in: query
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: filters
+          in: query
+          schema:
+            type: string
+        - name: truncate
+          in: query
+          schema:
+            type: boolean
+            description: "Truncate image included in either input, output or metadata"
+        - name: sorting
+          in: query
+          schema:
+            type: string
+        - name: exclude
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: Trace resource
@@ -2964,7 +2964,7 @@ paths:
                 $ref: "#/components/schemas/TracePage_Public"
     post:
       tags:
-      - Traces
+        - Traces
       summary: Create trace
       description: Get trace
       operationId: createTrace
@@ -2986,7 +2986,7 @@ paths:
   /v1/private/traces/batch:
     post:
       tags:
-      - Traces
+        - Traces
       summary: Create traces
       description: Create traces
       operationId: createTraces
@@ -3001,17 +3001,17 @@ paths:
   /v1/private/traces/{id}:
     get:
       tags:
-      - Traces
+        - Traces
       summary: Get trace by id
       description: Get trace by id
       operationId: getTraceById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Trace resource
@@ -3021,33 +3021,33 @@ paths:
                 $ref: "#/components/schemas/Trace_Public"
     delete:
       tags:
-      - Traces
+        - Traces
       summary: Delete trace by id
       description: Delete trace by id
       operationId: deleteTraceById
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "204":
           description: No Content
     patch:
       tags:
-      - Traces
+        - Traces
       summary: Update trace by id
       description: Update trace by id
       operationId: updateTrace
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -3059,7 +3059,7 @@ paths:
   /v1/private/traces/threads/feedback-scores/delete:
     post:
       tags:
-      - Traces
+        - Traces
       summary: Delete thread feedback scores
       description: Delete thread feedback scores
       operationId: deleteThreadFeedbackScores
@@ -3074,7 +3074,7 @@ paths:
   /v1/private/traces/comments/delete:
     post:
       tags:
-      - Traces
+        - Traces
       summary: Delete trace comments
       description: Delete trace comments
       operationId: deleteTraceComments
@@ -3089,17 +3089,17 @@ paths:
   /v1/private/traces/{id}/feedback-scores/delete:
     post:
       tags:
-      - Traces
+        - Traces
       summary: Delete trace feedback score
       description: Delete trace feedback score
       operationId: deleteTraceFeedbackScore
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -3111,7 +3111,7 @@ paths:
   /v1/private/traces/threads/delete:
     post:
       tags:
-      - Traces
+        - Traces
       summary: Delete trace threads
       description: Delete trace threads
       operationId: deleteTraceThreads
@@ -3126,7 +3126,7 @@ paths:
   /v1/private/traces/delete:
     post:
       tags:
-      - Traces
+        - Traces
       summary: Delete traces
       description: Delete traces
       operationId: deleteTraces
@@ -3141,16 +3141,16 @@ paths:
   /v1/private/traces/feedback-scores/names:
     get:
       tags:
-      - Traces
+        - Traces
       summary: Find Feedback Score names
       description: Find Feedback Score names
       operationId: findFeedbackScoreNames_2
       parameters:
-      - name: project_id
-        in: query
-        schema:
-          type: string
-          format: uuid
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Feedback Scores resource
@@ -3163,24 +3163,24 @@ paths:
   /v1/private/traces/stats:
     get:
       tags:
-      - Traces
+        - Traces
       summary: Get trace stats
       description: Get trace stats
       operationId: getTraceStats
       parameters:
-      - name: project_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: project_name
-        in: query
-        schema:
-          type: string
-      - name: filters
-        in: query
-        schema:
-          type: string
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: project_name
+          in: query
+          schema:
+            type: string
+        - name: filters
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: Trace stats resource
@@ -3191,23 +3191,23 @@ paths:
   /v1/private/traces/{traceId}/comments/{commentId}:
     get:
       tags:
-      - Traces
+        - Traces
       summary: Get trace comment
       description: Get trace comment
       operationId: getTraceComment
       parameters:
-      - name: commentId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: traceId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: commentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: traceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Comment resource
@@ -3224,7 +3224,7 @@ paths:
   /v1/private/traces/threads/retrieve:
     post:
       tags:
-      - Traces
+        - Traces
       summary: Get trace thread
       description: Get trace thread
       operationId: getTraceThread
@@ -3249,47 +3249,47 @@ paths:
   /v1/private/traces/threads:
     get:
       tags:
-      - Traces
+        - Traces
       summary: Get trace threads
       description: Get trace threads
       operationId: getTraceThreads
       parameters:
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 10
-      - name: project_name
-        in: query
-        schema:
-          type: string
-      - name: project_id
-        in: query
-        schema:
-          type: string
-          format: uuid
-      - name: truncate
-        in: query
-        schema:
-          type: boolean
-          description: Truncate image included in the messages
-      - name: filters
-        in: query
-        schema:
-          type: string
-      - name: sorting
-        in: query
-        schema:
-          type: string
+        - name: page
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 1
+        - name: size
+          in: query
+          schema:
+            minimum: 1
+            type: integer
+            format: int32
+            default: 10
+        - name: project_name
+          in: query
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: truncate
+          in: query
+          schema:
+            type: boolean
+            description: Truncate image included in the messages
+        - name: filters
+          in: query
+          schema:
+            type: string
+        - name: sorting
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: Trace threads resource
@@ -3300,7 +3300,7 @@ paths:
   /v1/private/traces/threads/open:
     put:
       tags:
-      - Traces
+        - Traces
       summary: Open trace thread
       description: Open trace thread
       operationId: openTraceThread
@@ -3315,7 +3315,7 @@ paths:
   /v1/private/traces/threads/feedback-scores:
     put:
       tags:
-      - Traces
+        - Traces
       summary: Batch feedback scoring for threads
       description: Batch feedback scoring for threads
       operationId: scoreBatchOfThreads
@@ -3330,7 +3330,7 @@ paths:
   /v1/private/traces/feedback-scores:
     put:
       tags:
-      - Traces
+        - Traces
       summary: Batch feedback scoring for traces
       description: Batch feedback scoring for traces
       operationId: scoreBatchOfTraces
@@ -3345,7 +3345,7 @@ paths:
   /v1/private/traces/search:
     post:
       tags:
-      - Traces
+        - Traces
       summary: Search traces
       description: Search traces
       operationId: searchTraces
@@ -3365,8 +3365,8 @@ paths:
                 items:
                   type: string
                   anyOf:
-                  - $ref: "#/components/schemas/Trace_Public"
-                  - $ref: "#/components/schemas/ErrorMessage_Public"
+                    - $ref: "#/components/schemas/Trace_Public"
+                    - $ref: "#/components/schemas/ErrorMessage_Public"
         "400":
           description: Bad Request
           content:
@@ -3382,17 +3382,17 @@ paths:
   /v1/private/traces/comments/{commentId}:
     patch:
       tags:
-      - Traces
+        - Traces
       summary: Update trace comment by id
       description: Update trace comment by id
       operationId: updateTraceComment
       parameters:
-      - name: commentId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+        - name: commentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         content:
           application/json:
@@ -3406,7 +3406,7 @@ paths:
   /v1/private/workspaces/metrics:
     post:
       tags:
-      - Workspaces
+        - Workspaces
       summary: Get metric daily data
       description: Get metric daily data
       operationId: getMetric
@@ -3431,7 +3431,7 @@ paths:
   /v1/private/workspaces/metrics/summaries:
     post:
       tags:
-      - Workspaces
+        - Workspaces
       summary: Get metrics summary
       description: Get metrics summary
       operationId: metricsSummary
@@ -3456,26 +3456,26 @@ paths:
   /v1/session/redirect/datasets:
     get:
       tags:
-      - Redirect
+        - Redirect
       summary: Create dataset redirect url
       description: Create dataset redirect url
       operationId: datasetsRedirect
       parameters:
-      - name: dataset_id
-        in: query
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: workspace_name
-        in: query
-        schema:
-          type: string
-      - name: path
-        in: query
-        required: true
-        schema:
-          type: string
+        - name: dataset_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: workspace_name
+          in: query
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
       responses:
         "303":
           description: Redirect
@@ -3494,32 +3494,32 @@ paths:
   /v1/session/redirect/experiments:
     get:
       tags:
-      - Redirect
+        - Redirect
       summary: Create experiment redirect url
       description: Create experiment redirect url
       operationId: experimentsRedirect
       parameters:
-      - name: dataset_id
-        in: query
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: experiment_id
-        in: query
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: workspace_name
-        in: query
-        schema:
-          type: string
-      - name: path
-        in: query
-        required: true
-        schema:
-          type: string
+        - name: dataset_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: experiment_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: workspace_name
+          in: query
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
       responses:
         "303":
           description: Redirect
@@ -3538,32 +3538,32 @@ paths:
   /v1/session/redirect/optimizations:
     get:
       tags:
-      - Redirect
+        - Redirect
       summary: Create optimization redirect url
       description: Create optimization redirect url
       operationId: optimizationsRedirect
       parameters:
-      - name: dataset_id
-        in: query
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: optimization_id
-        in: query
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: workspace_name
-        in: query
-        schema:
-          type: string
-      - name: path
-        in: query
-        required: true
-        schema:
-          type: string
+        - name: dataset_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: optimization_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: workspace_name
+          in: query
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
       responses:
         "303":
           description: Redirect
@@ -3582,26 +3582,26 @@ paths:
   /v1/session/redirect/projects:
     get:
       tags:
-      - Redirect
+        - Redirect
       summary: Create project redirect url
       description: Create project redirect url
       operationId: projectsRedirect
       parameters:
-      - name: trace_id
-        in: query
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: workspace_name
-        in: query
-        schema:
-          type: string
-      - name: path
-        in: query
-        required: true
-        schema:
-          type: string
+        - name: trace_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: workspace_name
+          in: query
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
       responses:
         "303":
           description: Redirect
@@ -3684,9 +3684,9 @@ components:
           format: int32
     Attachment:
       required:
-      - file_name
-      - file_size
-      - mime_type
+        - file_name
+        - file_size
+        - mime_type
       type: object
       properties:
         link:
@@ -3730,12 +3730,12 @@ components:
           type: string
     CompleteMultipartUploadRequest:
       required:
-      - entity_id
-      - entity_type
-      - file_name
-      - file_size
-      - upload_id
-      - uploaded_file_parts
+        - entity_id
+        - entity_type
+        - file_name
+        - file_size
+        - upload_id
+        - uploaded_file_parts
       type: object
       properties:
         file_name:
@@ -3748,8 +3748,8 @@ components:
         entity_type:
           type: string
           enum:
-          - trace
-          - span
+            - trace
+            - span
         entity_id:
           type: string
           format: uuid
@@ -3771,8 +3771,8 @@ components:
             $ref: "#/components/schemas/MultipartUploadPart"
     MultipartUploadPart:
       required:
-      - e_tag
-      - part_number
+        - e_tag
+        - part_number
       type: object
       properties:
         e_tag:
@@ -3781,34 +3781,10 @@ components:
         part_number:
           type: integer
           format: int32
-    DeleteAttachmentsRequest:
-      required:
-      - container_id
-      - entity_id
-      - entity_type
-      - file_names
-      type: object
-      properties:
-        file_names:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-        entity_type:
-          type: string
-          enum:
-          - trace
-          - span
-        entity_id:
-          type: string
-          format: uuid
-        container_id:
-          type: string
-          format: uuid
     StartMultipartUploadResponse:
       required:
-      - pre_sign_urls
-      - upload_id
+        - pre_sign_urls
+        - upload_id
       type: object
       properties:
         upload_id:
@@ -3820,11 +3796,11 @@ components:
             type: string
     StartMultipartUploadRequest:
       required:
-      - entity_id
-      - entity_type
-      - file_name
-      - num_of_file_parts
-      - path
+        - entity_id
+        - entity_type
+        - file_name
+        - num_of_file_parts
+        - path
       type: object
       properties:
         file_name:
@@ -3842,8 +3818,8 @@ components:
         entity_type:
           type: string
           enum:
-          - trace
-          - span
+            - trace
+            - span
         entity_id:
           type: string
           format: uuid
@@ -3863,8 +3839,8 @@ components:
           type: string
     AutomationRuleEvaluator:
       required:
-      - name
-      - type
+        - name
+        - type
       type: object
       properties:
         id:
@@ -3900,12 +3876,12 @@ components:
         action:
           type: string
           enum:
-          - evaluator
+            - evaluator
         type:
           type: string
           enum:
-          - llm_as_judge
-          - user_defined_metric_python
+            - llm_as_judge
+            - user_defined_metric_python
       discriminator:
         propertyName: type
         mapping:
@@ -3913,34 +3889,34 @@ components:
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython"
     AutomationRuleEvaluatorLlmAsJudge:
       required:
-      - code
-      - name
-      - type
+        - code
+        - name
+        - type
       type: object
       allOf:
-      - $ref: "#/components/schemas/AutomationRuleEvaluator"
-      - type: object
-        properties:
-          code:
-            $ref: "#/components/schemas/LlmAsJudgeCode"
+        - $ref: "#/components/schemas/AutomationRuleEvaluator"
+        - type: object
+          properties:
+            code:
+              $ref: "#/components/schemas/LlmAsJudgeCode"
     AutomationRuleEvaluatorUserDefinedMetricPython:
       required:
-      - code
-      - name
-      - type
+        - code
+        - name
+        - type
       type: object
       allOf:
-      - $ref: "#/components/schemas/AutomationRuleEvaluator"
-      - type: object
-        properties:
-          code:
-            $ref: "#/components/schemas/UserDefinedMetricPythonCode"
+        - $ref: "#/components/schemas/AutomationRuleEvaluator"
+        - type: object
+          properties:
+            code:
+              $ref: "#/components/schemas/UserDefinedMetricPythonCode"
     LlmAsJudgeCode:
       required:
-      - messages
-      - model
-      - schema
-      - variables
+        - messages
+        - model
+        - schema
+        - variables
       type: object
       properties:
         model:
@@ -3959,24 +3935,24 @@ components:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema"
     LlmAsJudgeMessage:
       required:
-      - content
-      - role
+        - content
+        - role
       type: object
       properties:
         role:
           type: string
           enum:
-          - SYSTEM
-          - USER
-          - AI
-          - TOOL_EXECUTION_RESULT
-          - CUSTOM
+            - SYSTEM
+            - USER
+            - AI
+            - TOOL_EXECUTION_RESULT
+            - CUSTOM
         content:
           type: string
     LlmAsJudgeModelParameters:
       required:
-      - name
-      - temperature
+        - name
+        - temperature
       type: object
       properties:
         name:
@@ -3986,9 +3962,9 @@ components:
           format: double
     LlmAsJudgeOutputSchema:
       required:
-      - description
-      - name
-      - type
+        - description
+        - name
+        - type
       type: object
       properties:
         name:
@@ -3996,15 +3972,15 @@ components:
         type:
           type: string
           enum:
-          - BOOLEAN
-          - INTEGER
-          - DOUBLE
+            - BOOLEAN
+            - INTEGER
+            - DOUBLE
         description:
           type: string
     UserDefinedMetricPythonCode:
       required:
-      - arguments
-      - metric
+        - arguments
+        - metric
       type: object
       properties:
         metric:
@@ -4016,32 +3992,32 @@ components:
             type: string
     AutomationRuleEvaluatorLlmAsJudge_Write:
       required:
-      - code
-      - name
-      - type
+        - code
+        - name
+        - type
       type: object
       allOf:
-      - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
-      - type: object
-        properties:
-          code:
-            $ref: "#/components/schemas/LlmAsJudgeCode_Write"
+        - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
+        - type: object
+          properties:
+            code:
+              $ref: "#/components/schemas/LlmAsJudgeCode_Write"
     AutomationRuleEvaluatorUserDefinedMetricPython_Write:
       required:
-      - code
-      - name
-      - type
+        - code
+        - name
+        - type
       type: object
       allOf:
-      - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
-      - type: object
-        properties:
-          code:
-            $ref: "#/components/schemas/UserDefinedMetricPythonCode_Write"
+        - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
+        - type: object
+          properties:
+            code:
+              $ref: "#/components/schemas/UserDefinedMetricPythonCode_Write"
     AutomationRuleEvaluator_Write:
       required:
-      - name
-      - type
+        - name
+        - type
       type: object
       properties:
         project_id:
@@ -4056,12 +4032,12 @@ components:
         action:
           type: string
           enum:
-          - evaluator
+            - evaluator
         type:
           type: string
           enum:
-          - llm_as_judge
-          - user_defined_metric_python
+            - llm_as_judge
+            - user_defined_metric_python
       discriminator:
         propertyName: type
         mapping:
@@ -4069,10 +4045,10 @@ components:
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython_Write"
     LlmAsJudgeCode_Write:
       required:
-      - messages
-      - model
-      - schema
-      - variables
+        - messages
+        - model
+        - schema
+        - variables
       type: object
       properties:
         model:
@@ -4091,24 +4067,24 @@ components:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Write"
     LlmAsJudgeMessage_Write:
       required:
-      - content
-      - role
+        - content
+        - role
       type: object
       properties:
         role:
           type: string
           enum:
-          - SYSTEM
-          - USER
-          - AI
-          - TOOL_EXECUTION_RESULT
-          - CUSTOM
+            - SYSTEM
+            - USER
+            - AI
+            - TOOL_EXECUTION_RESULT
+            - CUSTOM
         content:
           type: string
     LlmAsJudgeModelParameters_Write:
       required:
-      - name
-      - temperature
+        - name
+        - temperature
       type: object
       properties:
         name:
@@ -4118,9 +4094,9 @@ components:
           format: double
     LlmAsJudgeOutputSchema_Write:
       required:
-      - description
-      - name
-      - type
+        - description
+        - name
+        - type
       type: object
       properties:
         name:
@@ -4128,15 +4104,15 @@ components:
         type:
           type: string
           enum:
-          - BOOLEAN
-          - INTEGER
-          - DOUBLE
+            - BOOLEAN
+            - INTEGER
+            - DOUBLE
         description:
           type: string
     UserDefinedMetricPythonCode_Write:
       required:
-      - arguments
-      - metric
+        - arguments
+        - metric
       type: object
       properties:
         metric:
@@ -4148,7 +4124,7 @@ components:
             type: string
     BatchDelete:
       required:
-      - ids
+        - ids
       type: object
       properties:
         ids:
@@ -4161,20 +4137,20 @@ components:
             format: uuid
     AutomationRuleEvaluatorLlmAsJudge_Public:
       required:
-      - code
-      - name
-      - type
+        - code
+        - name
+        - type
       type: object
       allOf:
-      - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
-      - type: object
-        properties:
-          code:
-            $ref: "#/components/schemas/LlmAsJudgeCode_Public"
+        - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
+        - type: object
+          properties:
+            code:
+              $ref: "#/components/schemas/LlmAsJudgeCode_Public"
     AutomationRuleEvaluatorObject_Public:
       required:
-      - name
-      - type
+        - name
+        - type
       type: object
       properties:
         id:
@@ -4210,12 +4186,12 @@ components:
         action:
           type: string
           enum:
-          - evaluator
+            - evaluator
         type:
           type: string
           enum:
-          - llm_as_judge
-          - user_defined_metric_python
+            - llm_as_judge
+            - user_defined_metric_python
       discriminator:
         propertyName: type
         mapping:
@@ -4239,22 +4215,22 @@ components:
             $ref: "#/components/schemas/AutomationRuleEvaluatorObject_Public"
     AutomationRuleEvaluatorUserDefinedMetricPython_Public:
       required:
-      - code
-      - name
-      - type
+        - code
+        - name
+        - type
       type: object
       allOf:
-      - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
-      - type: object
-        properties:
-          code:
-            $ref: "#/components/schemas/UserDefinedMetricPythonCode_Public"
+        - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
+        - type: object
+          properties:
+            code:
+              $ref: "#/components/schemas/UserDefinedMetricPythonCode_Public"
     LlmAsJudgeCode_Public:
       required:
-      - messages
-      - model
-      - schema
-      - variables
+        - messages
+        - model
+        - schema
+        - variables
       type: object
       properties:
         model:
@@ -4273,24 +4249,24 @@ components:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Public"
     LlmAsJudgeMessage_Public:
       required:
-      - content
-      - role
+        - content
+        - role
       type: object
       properties:
         role:
           type: string
           enum:
-          - SYSTEM
-          - USER
-          - AI
-          - TOOL_EXECUTION_RESULT
-          - CUSTOM
+            - SYSTEM
+            - USER
+            - AI
+            - TOOL_EXECUTION_RESULT
+            - CUSTOM
         content:
           type: string
     LlmAsJudgeModelParameters_Public:
       required:
-      - name
-      - temperature
+        - name
+        - temperature
       type: object
       properties:
         name:
@@ -4300,9 +4276,9 @@ components:
           format: double
     LlmAsJudgeOutputSchema_Public:
       required:
-      - description
-      - name
-      - type
+        - description
+        - name
+        - type
       type: object
       properties:
         name:
@@ -4310,15 +4286,15 @@ components:
         type:
           type: string
           enum:
-          - BOOLEAN
-          - INTEGER
-          - DOUBLE
+            - BOOLEAN
+            - INTEGER
+            - DOUBLE
         description:
           type: string
     UserDefinedMetricPythonCode_Public:
       required:
-      - arguments
-      - metric
+        - arguments
+        - metric
       type: object
       properties:
         metric:
@@ -4330,8 +4306,8 @@ components:
             type: string
     AutomationRuleEvaluator_Public:
       required:
-      - name
-      - type
+        - name
+        - type
       type: object
       properties:
         id:
@@ -4367,12 +4343,12 @@ components:
         action:
           type: string
           enum:
-          - evaluator
+            - evaluator
         type:
           type: string
           enum:
-          - llm_as_judge
-          - user_defined_metric_python
+            - llm_as_judge
+            - user_defined_metric_python
       discriminator:
         propertyName: type
         mapping:
@@ -4393,11 +4369,11 @@ components:
           type: string
           readOnly: true
           enum:
-          - INFO
-          - WARN
-          - ERROR
-          - DEBUG
-          - TRACE
+            - INFO
+            - WARN
+            - ERROR
+            - DEBUG
+            - TRACE
         message:
           type: string
           readOnly: true
@@ -4425,7 +4401,7 @@ components:
           format: int64
     AutomationRuleEvaluatorUpdate:
       required:
-      - name
+        - name
       type: object
       properties:
         name:
@@ -4440,12 +4416,12 @@ components:
         action:
           type: string
           enum:
-          - evaluator
+            - evaluator
         type:
           type: string
           enum:
-          - llm_as_judge
-          - user_defined_metric_python
+            - llm_as_judge
+            - user_defined_metric_python
       discriminator:
         propertyName: type
         mapping:
@@ -4453,37 +4429,37 @@ components:
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUpdateUserDefinedMetricPython"
     AutomationRuleEvaluatorUpdateLlmAsJudge:
       required:
-      - code
-      - name
+        - code
+        - name
       type: object
       allOf:
-      - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
-      - type: object
-        properties:
-          code:
-            $ref: "#/components/schemas/LlmAsJudgeCode"
+        - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
+        - type: object
+          properties:
+            code:
+              $ref: "#/components/schemas/LlmAsJudgeCode"
     AutomationRuleEvaluatorUpdateUserDefinedMetricPython:
       required:
-      - code
-      - name
+        - code
+        - name
       type: object
       allOf:
-      - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
-      - type: object
-        properties:
-          code:
-            $ref: "#/components/schemas/UserDefinedMetricPythonCode"
+        - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
+        - type: object
+          properties:
+            code:
+              $ref: "#/components/schemas/UserDefinedMetricPythonCode"
     AssistantMessage:
       type: object
       properties:
         role:
           type: string
           enum:
-          - system
-          - user
-          - assistant
-          - tool
-          - function
+            - system
+            - user
+            - assistant
+            - tool
+            - function
         content:
           type: string
         name:
@@ -4571,7 +4547,7 @@ components:
         type:
           type: string
           enum:
-          - function
+            - function
         function:
           $ref: "#/components/schemas/FunctionCall"
     Usage:
@@ -4696,9 +4672,9 @@ components:
         type:
           type: string
           enum:
-          - text
-          - json_object
-          - json_schema
+            - text
+            - json_object
+            - json_schema
         json_schema:
           $ref: "#/components/schemas/JsonSchema"
     StreamOptions:
@@ -4712,73 +4688,12 @@ components:
         type:
           type: string
           enum:
-          - function
+            - function
         function:
           $ref: "#/components/schemas/Function"
-    Dataset:
-      required:
-      - name
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          minLength: 1
-          type: string
-        visibility:
-          type: string
-          enum:
-          - private
-          - public
-        description:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        created_by:
-          type: string
-          readOnly: true
-        last_updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        last_updated_by:
-          type: string
-          readOnly: true
-        experiment_count:
-          type: integer
-          format: int64
-          readOnly: true
-        dataset_items_count:
-          type: integer
-          format: int64
-          readOnly: true
-        optimization_count:
-          type: integer
-          format: int64
-          readOnly: true
-        most_recent_experiment_at:
-          type: string
-          format: date-time
-          readOnly: true
-        last_created_experiment_at:
-          type: string
-          format: date-time
-          readOnly: true
-        most_recent_optimization_at:
-          type: string
-          format: date-time
-          readOnly: true
-        last_created_optimization_at:
-          type: string
-          format: date-time
-          readOnly: true
     Dataset_Write:
       required:
-      - name
+        - name
       type: object
       properties:
         id:
@@ -4790,14 +4705,14 @@ components:
         visibility:
           type: string
           enum:
-          - private
-          - public
+            - private
+            - public
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
     Comment:
       required:
-      - text
+        - text
       type: object
       properties:
         id:
@@ -4823,8 +4738,8 @@ components:
           readOnly: true
     DatasetItem:
       required:
-      - data
-      - source
+        - data
+        - source
       type: object
       properties:
         id:
@@ -4839,10 +4754,10 @@ components:
         source:
           type: string
           enum:
-          - manual
-          - trace
-          - span
-          - sdk
+            - manual
+            - trace
+            - span
+            - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
         experiment_items:
@@ -4868,30 +4783,11 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-    DatasetItemBatch:
-      required:
-      - items
-      type: object
-      properties:
-        dataset_name:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-          description: "If null, dataset_id must be provided"
-        dataset_id:
-          type: string
-          description: "If null, dataset_name must be provided"
-          format: uuid
-        items:
-          maxItems: 1000
-          minItems: 1
-          type: array
-          items:
-            $ref: "#/components/schemas/DatasetItem"
     ExperimentItem:
       required:
-      - dataset_item_id
-      - experiment_id
-      - trace_id
+        - dataset_item_id
+        - experiment_id
+        - trace_id
       type: object
       properties:
         id:
@@ -4952,13 +4848,13 @@ components:
           type: string
           readOnly: true
           enum:
-          - default
-          - hidden
+            - default
+            - hidden
     FeedbackScore:
       required:
-      - name
-      - source
-      - value
+        - name
+        - source
+        - value
       type: object
       properties:
         name:
@@ -4967,9 +4863,9 @@ components:
         category_name:
           type: string
         value:
-          maximum: 999999999.999999999
+          maximum: 1.0E9
           exclusiveMaximum: false
-          minimum: -999999999.999999999
+          minimum: -1.0E9
           exclusiveMinimum: false
           type: number
         reason:
@@ -4977,9 +4873,9 @@ components:
         source:
           type: string
           enum:
-          - ui
-          - sdk
-          - online_scoring
+            - ui
+            - sdk
+            - online_scoring
         created_at:
           type: string
           format: date-time
@@ -4997,14 +4893,14 @@ components:
     JsonListString:
       type: object
       anyOf:
-      - type: object
-      - type: array
-        items:
-          type: object
-      - type: string
+        - type: object
+        - type: array
+          items:
+            type: object
+        - type: string
     DatasetItemBatch_Write:
       required:
-      - items
+        - items
       type: object
       properties:
         dataset_name:
@@ -5023,8 +4919,8 @@ components:
             $ref: "#/components/schemas/DatasetItem_Write"
     DatasetItem_Write:
       required:
-      - data
-      - source
+        - data
+        - source
       type: object
       properties:
         id:
@@ -5039,15 +4935,15 @@ components:
         source:
           type: string
           enum:
-          - manual
-          - trace
-          - span
-          - sdk
+            - manual
+            - trace
+            - span
+            - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
     DatasetIdentifier:
       required:
-      - dataset_name
+        - dataset_name
       type: object
       properties:
         dataset_name:
@@ -5055,7 +4951,7 @@ components:
           type: string
     DatasetItemsDelete:
       required:
-      - item_ids
+        - item_ids
       type: object
       properties:
         item_ids:
@@ -5076,12 +4972,12 @@ components:
           items:
             type: string
             enum:
-            - string
-            - number
-            - object
-            - boolean
-            - array
-            - "null"
+              - string
+              - number
+              - object
+              - boolean
+              - array
+              - "null"
         filter_field_prefix:
           type: string
         filterField:
@@ -5090,7 +4986,7 @@ components:
           readOnly: true
     Comment_Compare:
       required:
-      - text
+        - text
       type: object
       properties:
         id:
@@ -5138,8 +5034,8 @@ components:
             $ref: "#/components/schemas/Column_Compare"
     DatasetItem_Compare:
       required:
-      - data
-      - source
+        - data
+        - source
       type: object
       properties:
         id:
@@ -5154,10 +5050,10 @@ components:
         source:
           type: string
           enum:
-          - manual
-          - trace
-          - span
-          - sdk
+            - manual
+            - trace
+            - span
+            - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
         experiment_items:
@@ -5185,9 +5081,9 @@ components:
           readOnly: true
     ExperimentItem_Compare:
       required:
-      - dataset_item_id
-      - experiment_id
-      - trace_id
+        - dataset_item_id
+        - experiment_id
+        - trace_id
       type: object
       properties:
         id:
@@ -5248,14 +5144,14 @@ components:
           type: string
           readOnly: true
           enum:
-          - default
-          - hidden
+            - default
+            - hidden
       readOnly: true
     FeedbackScore_Compare:
       required:
-      - name
-      - source
-      - value
+        - name
+        - source
+        - value
       type: object
       properties:
         name:
@@ -5264,9 +5160,9 @@ components:
         category_name:
           type: string
         value:
-          maximum: 999999999.999999999
+          maximum: 1.0E9
           exclusiveMaximum: false
-          minimum: -999999999.999999999
+          minimum: -1.0E9
           exclusiveMinimum: false
           type: number
         reason:
@@ -5274,9 +5170,9 @@ components:
         source:
           type: string
           enum:
-          - ui
-          - sdk
-          - online_scoring
+            - ui
+            - sdk
+            - online_scoring
         created_at:
           type: string
           format: date-time
@@ -5296,11 +5192,11 @@ components:
       type: object
       readOnly: true
       anyOf:
-      - type: object
-      - type: array
-        items:
-          type: object
-      - type: string
+        - type: object
+        - type: array
+          items:
+            type: object
+        - type: string
     DatasetPage_Public:
       type: object
       properties:
@@ -5319,7 +5215,7 @@ components:
           format: int64
     Dataset_Public:
       required:
-      - name
+        - name
       type: object
       properties:
         id:
@@ -5331,8 +5227,8 @@ components:
         visibility:
           type: string
           enum:
-          - private
-          - public
+            - private
+            - public
         description:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -5380,7 +5276,7 @@ components:
           readOnly: true
     DatasetIdentifier_Public:
       required:
-      - dataset_name
+        - dataset_name
       type: object
       properties:
         dataset_name:
@@ -5388,8 +5284,8 @@ components:
           type: string
     DatasetItem_Public:
       required:
-      - data
-      - source
+        - data
+        - source
       type: object
       properties:
         id:
@@ -5404,10 +5300,10 @@ components:
         source:
           type: string
           enum:
-          - manual
-          - trace
-          - span
-          - sdk
+            - manual
+            - trace
+            - span
+            - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
         experiment_items:
@@ -5435,9 +5331,9 @@ components:
           readOnly: true
     ExperimentItem_Public:
       required:
-      - dataset_item_id
-      - experiment_id
-      - trace_id
+        - dataset_item_id
+        - experiment_id
+        - trace_id
       type: object
       properties:
         id:
@@ -5470,8 +5366,8 @@ components:
           type: string
           readOnly: true
           enum:
-          - default
-          - hidden
+            - default
+            - hidden
     Column_Public:
       type: object
       properties:
@@ -5483,12 +5379,12 @@ components:
           items:
             type: string
             enum:
-            - string
-            - number
-            - object
-            - boolean
-            - array
-            - "null"
+              - string
+              - number
+              - object
+              - boolean
+              - array
+              - "null"
         filter_field_prefix:
           type: string
         filterField:
@@ -5527,12 +5423,12 @@ components:
           items:
             type: string
             enum:
-            - string
-            - number
-            - object
-            - boolean
-            - array
-            - "null"
+              - string
+              - number
+              - object
+              - boolean
+              - array
+              - "null"
         filter_field_prefix:
           type: string
         filterField:
@@ -5546,19 +5442,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Column"
-    ChunkedOutputJsonNode:
-      type: object
-      properties:
-        type:
-          type: object
-          properties:
-            typeName:
-              type: string
-        closed:
-          type: boolean
     DatasetItemStreamRequest:
       required:
-      - dataset_name
+        - dataset_name
       type: object
       properties:
         dataset_name:
@@ -5574,7 +5460,7 @@ components:
           format: int32
     DatasetUpdate:
       required:
-      - name
+        - name
       type: object
       properties:
         name:
@@ -5586,89 +5472,12 @@ components:
         visibility:
           type: string
           enum:
-          - private
-          - public
-    Experiment:
-      required:
-      - dataset_name
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        dataset_name:
-          minLength: 1
-          type: string
-        dataset_id:
-          type: string
-          format: uuid
-          readOnly: true
-        name:
-          type: string
-        metadata:
-          $ref: "#/components/schemas/JsonNode"
-        type:
-          type: string
-          enum:
-          - regular
-          - trial
-          - mini-batch
-        optimization_id:
-          type: string
-          format: uuid
-        feedback_scores:
-          type: array
-          readOnly: true
-          items:
-            $ref: "#/components/schemas/FeedbackScoreAverage"
-        comments:
-          type: array
-          readOnly: true
-          items:
-            $ref: "#/components/schemas/Comment"
-        trace_count:
-          type: integer
-          format: int64
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        duration:
-          $ref: "#/components/schemas/PercentageValues"
-        total_estimated_cost:
-          type: number
-          readOnly: true
-        total_estimated_cost_avg:
-          type: number
-          readOnly: true
-        usage:
-          type: object
-          additionalProperties:
-            type: number
-            format: double
-            readOnly: true
-          readOnly: true
-        last_updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        created_by:
-          type: string
-          readOnly: true
-        last_updated_by:
-          type: string
-          readOnly: true
-        prompt_version:
-          $ref: "#/components/schemas/PromptVersionLink"
-        prompt_versions:
-          type: array
-          items:
-            $ref: "#/components/schemas/PromptVersionLink"
+            - private
+            - public
     FeedbackScoreAverage:
       required:
-      - name
-      - value
+        - name
+        - value
       type: object
       properties:
         name:
@@ -5687,24 +5496,9 @@ components:
           type: number
         p99:
           type: number
-    PromptVersionLink:
-      required:
-      - id
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        commit:
-          type: string
-          readOnly: true
-        prompt_id:
-          type: string
-          format: uuid
-          readOnly: true
     Experiment_Write:
       required:
-      - dataset_name
+        - dataset_name
       type: object
       properties:
         id:
@@ -5720,9 +5514,9 @@ components:
         type:
           type: string
           enum:
-          - regular
-          - trial
-          - mini-batch
+            - regular
+            - trial
+            - mini-batch
         optimization_id:
           type: string
           format: uuid
@@ -5736,7 +5530,7 @@ components:
       type: object
     PromptVersionLink_Write:
       required:
-      - id
+        - id
       type: object
       properties:
         id:
@@ -5744,7 +5538,7 @@ components:
           format: uuid
     ExperimentItemsBatch:
       required:
-      - experiment_items
+        - experiment_items
       type: object
       properties:
         experiment_items:
@@ -5756,7 +5550,7 @@ components:
             $ref: "#/components/schemas/ExperimentItem"
     ExperimentItemsDelete:
       required:
-      - ids
+        - ids
       type: object
       properties:
         ids:
@@ -5769,7 +5563,7 @@ components:
             format: uuid
     DeleteIdsHolder:
       required:
-      - ids
+        - ids
       type: object
       properties:
         ids:
@@ -5780,23 +5574,10 @@ components:
           items:
             type: string
             format: uuid
-    Check:
-      type: object
-      properties:
-        name:
-          type: string
-          enum:
-          - TOPIC
-          - PII
-        result:
-          type: string
-          enum:
-          - passed
-          - failed
     ErrorInfo:
       required:
-      - exception_type
-      - traceback
+        - exception_type
+        - traceback
       type: object
       properties:
         exception_type:
@@ -5807,255 +5588,10 @@ components:
         traceback:
           minLength: 1
           type: string
-    ExperimentItemBulkRecord:
-      required:
-      - dataset_item_id
-      type: object
-      properties:
-        dataset_item_id:
-          type: string
-          format: uuid
-        evaluate_task_result:
-          $ref: "#/components/schemas/JsonListString"
-        trace:
-          $ref: "#/components/schemas/Trace"
-        spans:
-          maxItems: 100
-          minItems: 0
-          type: array
-          items:
-            $ref: "#/components/schemas/Span"
-        feedback_scores:
-          maxItems: 100
-          minItems: 0
-          type: array
-          items:
-            $ref: "#/components/schemas/FeedbackScore"
-    ExperimentItemBulkUpload:
-      required:
-      - dataset_name
-      - experiment_name
-      - items
-      type: object
-      properties:
-        experiment_name:
-          minLength: 1
-          type: string
-        dataset_name:
-          minLength: 1
-          type: string
-        items:
-          maxItems: 250
-          minItems: 1
-          type: array
-          items:
-            $ref: "#/components/schemas/ExperimentItemBulkRecord"
-    GuardrailsValidation:
-      type: object
-      properties:
-        span_id:
-          type: string
-          format: uuid
-        checks:
-          type: array
-          items:
-            $ref: "#/components/schemas/Check"
-      readOnly: true
-    Span:
-      required:
-      - start_time
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        project_name:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-          description: "If null, the default project is used"
-        project_id:
-          type: string
-          format: uuid
-          readOnly: true
-        trace_id:
-          type: string
-          format: uuid
-        parent_span_id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        type:
-          type: string
-          enum:
-          - general
-          - tool
-          - llm
-          - guardrail
-        start_time:
-          type: string
-          format: date-time
-        end_time:
-          type: string
-          format: date-time
-        input:
-          $ref: "#/components/schemas/JsonListString"
-        output:
-          $ref: "#/components/schemas/JsonListString"
-        metadata:
-          $ref: "#/components/schemas/JsonNode"
-        model:
-          type: string
-        provider:
-          type: string
-        tags:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-        usage:
-          type: object
-          additionalProperties:
-            type: integer
-            format: int32
-        error_info:
-          $ref: "#/components/schemas/ErrorInfo"
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        last_updated_at:
-          type: string
-          format: date-time
-        created_by:
-          type: string
-          readOnly: true
-        last_updated_by:
-          type: string
-          readOnly: true
-        feedback_scores:
-          type: array
-          readOnly: true
-          items:
-            $ref: "#/components/schemas/FeedbackScore"
-        comments:
-          type: array
-          readOnly: true
-          items:
-            $ref: "#/components/schemas/Comment"
-        total_estimated_cost:
-          minimum: 0.0
-          exclusiveMinimum: false
-          type: number
-        total_estimated_cost_version:
-          type: string
-        duration:
-          type: number
-          description: Duration in milliseconds as a decimal number to support sub-millisecond
-            precision
-          format: double
-          readOnly: true
-    Trace:
-      required:
-      - start_time
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        project_name:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-          description: "If null, the default project is used"
-        project_id:
-          type: string
-          format: uuid
-          readOnly: true
-        name:
-          type: string
-        start_time:
-          type: string
-          format: date-time
-        end_time:
-          type: string
-          format: date-time
-        input:
-          $ref: "#/components/schemas/JsonListString"
-        output:
-          $ref: "#/components/schemas/JsonListString"
-        metadata:
-          $ref: "#/components/schemas/JsonNode"
-        tags:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-        error_info:
-          $ref: "#/components/schemas/ErrorInfo"
-        usage:
-          type: object
-          additionalProperties:
-            type: integer
-            format: int64
-            readOnly: true
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        last_updated_at:
-          type: string
-          format: date-time
-        created_by:
-          type: string
-          readOnly: true
-        last_updated_by:
-          type: string
-          readOnly: true
-        feedback_scores:
-          type: array
-          readOnly: true
-          items:
-            $ref: "#/components/schemas/FeedbackScore"
-        comments:
-          type: array
-          readOnly: true
-          items:
-            $ref: "#/components/schemas/Comment"
-        guardrails_validations:
-          type: array
-          readOnly: true
-          items:
-            $ref: "#/components/schemas/GuardrailsValidation"
-        total_estimated_cost:
-          type: number
-          readOnly: true
-        span_count:
-          type: integer
-          format: int32
-          readOnly: true
-        duration:
-          type: number
-          description: Duration in milliseconds as a decimal number to support sub-millisecond
-            precision
-          format: double
-          readOnly: true
-        thread_id:
-          type: string
-        visibility_mode:
-          type: string
-          readOnly: true
-          enum:
-          - default
-          - hidden
-        llm_span_count:
-          type: integer
-          format: int32
-          readOnly: true
     ErrorInfo_ExperimentItemBulkWriteView:
       required:
-      - exception_type
-      - traceback
+        - exception_type
+        - traceback
       type: object
       properties:
         exception_type:
@@ -6068,7 +5604,7 @@ components:
           type: string
     ExperimentItemBulkRecord_ExperimentItemBulkWriteView:
       required:
-      - dataset_item_id
+        - dataset_item_id
       type: object
       properties:
         dataset_item_id:
@@ -6092,9 +5628,9 @@ components:
             $ref: "#/components/schemas/FeedbackScore_ExperimentItemBulkWriteView"
     ExperimentItemBulkUpload_ExperimentItemBulkWriteView:
       required:
-      - dataset_name
-      - experiment_name
-      - items
+        - dataset_name
+        - experiment_name
+        - items
       type: object
       properties:
         experiment_name:
@@ -6111,9 +5647,9 @@ components:
             $ref: "#/components/schemas/ExperimentItemBulkRecord_ExperimentItemBulkWriteView"
     FeedbackScore_ExperimentItemBulkWriteView:
       required:
-      - name
-      - source
-      - value
+        - name
+        - source
+        - value
       type: object
       properties:
         name:
@@ -6122,9 +5658,9 @@ components:
         category_name:
           type: string
         value:
-          maximum: 999999999.999999999
+          maximum: 1.0E9
           exclusiveMaximum: false
-          minimum: -999999999.999999999
+          minimum: -1.0E9
           exclusiveMinimum: false
           type: number
         reason:
@@ -6132,9 +5668,9 @@ components:
         source:
           type: string
           enum:
-          - ui
-          - sdk
-          - online_scoring
+            - ui
+            - sdk
+            - online_scoring
         created_at:
           type: string
           format: date-time
@@ -6152,16 +5688,16 @@ components:
     JsonListString_ExperimentItemBulkWriteView:
       type: object
       anyOf:
-      - type: object
-      - type: array
-        items:
-          type: object
-      - type: string
+        - type: object
+        - type: array
+          items:
+            type: object
+        - type: string
     JsonNode_ExperimentItemBulkWriteView:
       type: object
     Span_ExperimentItemBulkWriteView:
       required:
-      - start_time
+        - start_time
       type: object
       properties:
         id:
@@ -6175,10 +5711,10 @@ components:
         type:
           type: string
           enum:
-          - general
-          - tool
-          - llm
-          - guardrail
+            - general
+            - tool
+            - llm
+            - guardrail
         start_time:
           type: string
           format: date-time
@@ -6218,7 +5754,7 @@ components:
           type: string
     Trace_ExperimentItemBulkWriteView:
       required:
-      - start_time
+        - start_time
       type: object
       properties:
         id:
@@ -6258,7 +5794,7 @@ components:
         \ trace, but never both"
     Comment_Public:
       required:
-      - text
+        - text
       type: object
       properties:
         id:
@@ -6305,7 +5841,7 @@ components:
             type: string
     Experiment_Public:
       required:
-      - dataset_name
+        - dataset_name
       type: object
       properties:
         id:
@@ -6325,9 +5861,9 @@ components:
         type:
           type: string
           enum:
-          - regular
-          - trial
-          - mini-batch
+            - regular
+            - trial
+            - mini-batch
         optimization_id:
           type: string
           format: uuid
@@ -6382,8 +5918,8 @@ components:
             $ref: "#/components/schemas/PromptVersionLink_Public"
     FeedbackScoreAverage_Public:
       required:
-      - name
-      - value
+        - name
+        - value
       type: object
       properties:
         name:
@@ -6405,7 +5941,7 @@ components:
           type: number
     PromptVersionLink_Public:
       required:
-      - id
+        - id
       type: object
       properties:
         id:
@@ -6430,7 +5966,7 @@ components:
           type: string
     ExperimentItemStreamRequest:
       required:
-      - experiment_name
+        - experiment_name
       type: object
       properties:
         experiment_name:
@@ -6448,19 +5984,9 @@ components:
           type: boolean
           description: "Truncate image included in either input, output or metadata"
           default: true
-    ChunkedOutputJsonNode_Public:
-      type: object
-      properties:
-        type:
-          type: object
-          properties:
-            typeName:
-              type: string
-        closed:
-          type: boolean
     ExperimentStreamRequest_Public:
       required:
-      - name
+        - name
       type: object
       properties:
         name:
@@ -6476,33 +6002,33 @@ components:
           format: uuid
     CategoricalFeedbackDefinition:
       required:
-      - details
-      - name
-      - type
+        - details
+        - name
+        - type
       type: object
       allOf:
-      - $ref: "#/components/schemas/Feedback"
-      - type: object
-        properties:
-          details:
-            $ref: "#/components/schemas/CategoricalFeedbackDetail"
-          created_at:
-            type: string
-            format: date-time
-            readOnly: true
-          created_by:
-            type: string
-            readOnly: true
-          last_updated_at:
-            type: string
-            format: date-time
-            readOnly: true
-          last_updated_by:
-            type: string
-            readOnly: true
+        - $ref: "#/components/schemas/Feedback"
+        - type: object
+          properties:
+            details:
+              $ref: "#/components/schemas/CategoricalFeedbackDetail"
+            created_at:
+              type: string
+              format: date-time
+              readOnly: true
+            created_by:
+              type: string
+              readOnly: true
+            last_updated_at:
+              type: string
+              format: date-time
+              readOnly: true
+            last_updated_by:
+              type: string
+              readOnly: true
     CategoricalFeedbackDetail:
       required:
-      - categories
+        - categories
       type: object
       properties:
         categories:
@@ -6512,8 +6038,8 @@ components:
             format: double
     Feedback:
       required:
-      - name
-      - type
+        - name
+        - type
       type: object
       properties:
         id:
@@ -6540,8 +6066,8 @@ components:
         type:
           type: string
           enum:
-          - numerical
-          - categorical
+            - numerical
+            - categorical
       discriminator:
         propertyName: type
         mapping:
@@ -6549,34 +6075,34 @@ components:
           categorical: "#/components/schemas/CategoricalFeedbackDefinition"
     NumericalFeedbackDefinition:
       required:
-      - details
-      - name
-      - type
+        - details
+        - name
+        - type
       type: object
       allOf:
-      - $ref: "#/components/schemas/Feedback"
-      - type: object
-        properties:
-          details:
-            $ref: "#/components/schemas/NumericalFeedbackDetail"
-          created_at:
-            type: string
-            format: date-time
-            readOnly: true
-          created_by:
-            type: string
-            readOnly: true
-          last_updated_at:
-            type: string
-            format: date-time
-            readOnly: true
-          last_updated_by:
-            type: string
-            readOnly: true
+        - $ref: "#/components/schemas/Feedback"
+        - type: object
+          properties:
+            details:
+              $ref: "#/components/schemas/NumericalFeedbackDetail"
+            created_at:
+              type: string
+              format: date-time
+              readOnly: true
+            created_by:
+              type: string
+              readOnly: true
+            last_updated_at:
+              type: string
+              format: date-time
+              readOnly: true
+            last_updated_by:
+              type: string
+              readOnly: true
     NumericalFeedbackDetail:
       required:
-      - max
-      - min
+        - max
+        - min
       type: object
       properties:
         max:
@@ -6585,19 +6111,19 @@ components:
           type: number
     CategoricalFeedbackDefinition_Create:
       required:
-      - details
-      - name
-      - type
+        - details
+        - name
+        - type
       type: object
       allOf:
-      - $ref: "#/components/schemas/Feedback_Create"
-      - type: object
-        properties:
-          details:
-            $ref: "#/components/schemas/CategoricalFeedbackDetail_Create"
+        - $ref: "#/components/schemas/Feedback_Create"
+        - type: object
+          properties:
+            details:
+              $ref: "#/components/schemas/CategoricalFeedbackDetail_Create"
     CategoricalFeedbackDetail_Create:
       required:
-      - categories
+        - categories
       type: object
       properties:
         categories:
@@ -6607,8 +6133,8 @@ components:
             format: double
     Feedback_Create:
       required:
-      - name
-      - type
+        - name
+        - type
       type: object
       properties:
         id:
@@ -6621,8 +6147,8 @@ components:
         type:
           type: string
           enum:
-          - numerical
-          - categorical
+            - numerical
+            - categorical
       discriminator:
         propertyName: type
         mapping:
@@ -6630,20 +6156,20 @@ components:
           categorical: "#/components/schemas/CategoricalFeedbackDefinition_Create"
     NumericalFeedbackDefinition_Create:
       required:
-      - details
-      - name
-      - type
+        - details
+        - name
+        - type
       type: object
       allOf:
-      - $ref: "#/components/schemas/Feedback_Create"
-      - type: object
-        properties:
-          details:
-            $ref: "#/components/schemas/NumericalFeedbackDetail_Create"
+        - $ref: "#/components/schemas/Feedback_Create"
+        - type: object
+          properties:
+            details:
+              $ref: "#/components/schemas/NumericalFeedbackDetail_Create"
     NumericalFeedbackDetail_Create:
       required:
-      - max
-      - min
+        - max
+        - min
       type: object
       properties:
         max:
@@ -6652,33 +6178,33 @@ components:
           type: number
     CategoricalFeedbackDefinition_Public:
       required:
-      - details
-      - name
-      - type
+        - details
+        - name
+        - type
       type: object
       allOf:
-      - $ref: "#/components/schemas/Feedback_Public"
-      - type: object
-        properties:
-          details:
-            $ref: "#/components/schemas/CategoricalFeedbackDetail_Public"
-          created_at:
-            type: string
-            format: date-time
-            readOnly: true
-          created_by:
-            type: string
-            readOnly: true
-          last_updated_at:
-            type: string
-            format: date-time
-            readOnly: true
-          last_updated_by:
-            type: string
-            readOnly: true
+        - $ref: "#/components/schemas/Feedback_Public"
+        - type: object
+          properties:
+            details:
+              $ref: "#/components/schemas/CategoricalFeedbackDetail_Public"
+            created_at:
+              type: string
+              format: date-time
+              readOnly: true
+            created_by:
+              type: string
+              readOnly: true
+            last_updated_at:
+              type: string
+              format: date-time
+              readOnly: true
+            last_updated_by:
+              type: string
+              readOnly: true
     CategoricalFeedbackDetail_Public:
       required:
-      - categories
+        - categories
       type: object
       properties:
         categories:
@@ -6704,8 +6230,8 @@ components:
             $ref: "#/components/schemas/FeedbackObject_Public"
     FeedbackObject_Public:
       required:
-      - name
-      - type
+        - name
+        - type
       type: object
       properties:
         id:
@@ -6732,8 +6258,8 @@ components:
         type:
           type: string
           enum:
-          - numerical
-          - categorical
+            - numerical
+            - categorical
       discriminator:
         propertyName: type
         mapping:
@@ -6741,34 +6267,34 @@ components:
           categorical: "#/components/schemas/CategoricalFeedbackDefinition_Public"
     NumericalFeedbackDefinition_Public:
       required:
-      - details
-      - name
-      - type
+        - details
+        - name
+        - type
       type: object
       allOf:
-      - $ref: "#/components/schemas/Feedback_Public"
-      - type: object
-        properties:
-          details:
-            $ref: "#/components/schemas/NumericalFeedbackDetail_Public"
-          created_at:
-            type: string
-            format: date-time
-            readOnly: true
-          created_by:
-            type: string
-            readOnly: true
-          last_updated_at:
-            type: string
-            format: date-time
-            readOnly: true
-          last_updated_by:
-            type: string
-            readOnly: true
+        - $ref: "#/components/schemas/Feedback_Public"
+        - type: object
+          properties:
+            details:
+              $ref: "#/components/schemas/NumericalFeedbackDetail_Public"
+            created_at:
+              type: string
+              format: date-time
+              readOnly: true
+            created_by:
+              type: string
+              readOnly: true
+            last_updated_at:
+              type: string
+              format: date-time
+              readOnly: true
+            last_updated_by:
+              type: string
+              readOnly: true
     NumericalFeedbackDetail_Public:
       required:
-      - max
-      - min
+        - max
+        - min
       type: object
       properties:
         max:
@@ -6777,8 +6303,8 @@ components:
           type: number
     Feedback_Public:
       required:
-      - name
-      - type
+        - name
+        - type
       type: object
       properties:
         id:
@@ -6805,8 +6331,8 @@ components:
         type:
           type: string
           enum:
-          - numerical
-          - categorical
+            - numerical
+            - categorical
       discriminator:
         propertyName: type
         mapping:
@@ -6814,19 +6340,19 @@ components:
           categorical: "#/components/schemas/CategoricalFeedbackDefinition_Public"
     CategoricalFeedbackDefinition_Update:
       required:
-      - details
-      - name
-      - type
+        - details
+        - name
+        - type
       type: object
       allOf:
-      - $ref: "#/components/schemas/Feedback_Update"
-      - type: object
-        properties:
-          details:
-            $ref: "#/components/schemas/CategoricalFeedbackDetail_Update"
+        - $ref: "#/components/schemas/Feedback_Update"
+        - type: object
+          properties:
+            details:
+              $ref: "#/components/schemas/CategoricalFeedbackDetail_Update"
     CategoricalFeedbackDetail_Update:
       required:
-      - categories
+        - categories
       type: object
       properties:
         categories:
@@ -6836,8 +6362,8 @@ components:
             format: double
     Feedback_Update:
       required:
-      - name
-      - type
+        - name
+        - type
       type: object
       properties:
         id:
@@ -6850,8 +6376,8 @@ components:
         type:
           type: string
           enum:
-          - numerical
-          - categorical
+            - numerical
+            - categorical
       discriminator:
         propertyName: type
         mapping:
@@ -6859,78 +6385,29 @@ components:
           categorical: "#/components/schemas/CategoricalFeedbackDefinition_Update"
     NumericalFeedbackDefinition_Update:
       required:
-      - details
-      - name
-      - type
+        - details
+        - name
+        - type
       type: object
       allOf:
-      - $ref: "#/components/schemas/Feedback_Update"
-      - type: object
-        properties:
-          details:
-            $ref: "#/components/schemas/NumericalFeedbackDetail_Update"
+        - $ref: "#/components/schemas/Feedback_Update"
+        - type: object
+          properties:
+            details:
+              $ref: "#/components/schemas/NumericalFeedbackDetail_Update"
     NumericalFeedbackDetail_Update:
       required:
-      - max
-      - min
+        - max
+        - min
       type: object
       properties:
         max:
           type: number
         min:
           type: number
-    Guardrail:
-      required:
-      - config
-      - details
-      - entity_id
-      - name
-      - result
-      - secondary_id
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        entity_id:
-          type: string
-          format: uuid
-        secondary_id:
-          type: string
-          format: uuid
-        project_name:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-          description: "If null, the default project is used"
-        name:
-          type: string
-          enum:
-          - TOPIC
-          - PII
-        result:
-          type: string
-          enum:
-          - passed
-          - failed
-        config:
-          $ref: "#/components/schemas/JsonNode"
-        details:
-          $ref: "#/components/schemas/JsonNode"
-    GuardrailBatch:
-      required:
-      - guardrails
-      type: object
-      properties:
-        guardrails:
-          maxItems: 1000
-          minItems: 1
-          type: array
-          items:
-            $ref: "#/components/schemas/Guardrail"
     GuardrailBatch_Write:
       required:
-      - guardrails
+        - guardrails
       type: object
       properties:
         guardrails:
@@ -6941,12 +6418,12 @@ components:
             $ref: "#/components/schemas/Guardrail_Write"
     Guardrail_Write:
       required:
-      - config
-      - details
-      - entity_id
-      - name
-      - result
-      - secondary_id
+        - config
+        - details
+        - entity_id
+        - name
+        - result
+        - secondary_id
       type: object
       properties:
         entity_id:
@@ -6962,13 +6439,13 @@ components:
         name:
           type: string
           enum:
-          - TOPIC
-          - PII
+            - TOPIC
+            - PII
         result:
           type: string
           enum:
-          - passed
-          - failed
+            - passed
+            - failed
         config:
           $ref: "#/components/schemas/JsonNode"
         details:
@@ -6992,8 +6469,8 @@ components:
             type: string
     ProviderApiKey_Public:
       required:
-      - api_key
-      - provider
+        - api_key
+        - provider
       type: object
       properties:
         id:
@@ -7003,61 +6480,11 @@ components:
         provider:
           type: string
           enum:
-          - openai
-          - anthropic
-          - gemini
-          - openrouter
-          - vertex-ai
-        api_key:
-          minLength: 1
-          type: string
-        name:
-          maxLength: 150
-          minLength: 0
-          type: string
-        headers:
-          type: object
-          additionalProperties:
-            type: string
-        configuration:
-          type: object
-          additionalProperties:
-            type: string
-        base_url:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        created_by:
-          type: string
-          readOnly: true
-        last_updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        last_updated_by:
-          type: string
-          readOnly: true
-    ProviderApiKey:
-      required:
-      - api_key
-      - provider
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        provider:
-          type: string
-          enum:
-          - openai
-          - anthropic
-          - gemini
-          - openrouter
-          - vertex-ai
+            - openai
+            - anthropic
+            - gemini
+            - openrouter
+            - vertex-ai
         api_key:
           minLength: 1
           type: string
@@ -7092,18 +6519,18 @@ components:
           readOnly: true
     ProviderApiKey_Write:
       required:
-      - api_key
-      - provider
+        - api_key
+        - provider
       type: object
       properties:
         provider:
           type: string
           enum:
-          - openai
-          - anthropic
-          - gemini
-          - openrouter
-          - vertex-ai
+            - openai
+            - anthropic
+            - gemini
+            - openrouter
+            - vertex-ai
         api_key:
           minLength: 1
           type: string
@@ -7124,7 +6551,7 @@ components:
           type: string
     ProviderApiKeyUpdate:
       required:
-      - api_key
+        - api_key
       type: object
       properties:
         api_key:
@@ -7134,65 +6561,11 @@ components:
           maxLength: 150
           minLength: 0
           type: string
-    ExportTraceServiceRequest:
-      $ref: "#/components/schemas/JsonNode"
-    Optimization:
-      required:
-      - dataset_name
-      - objective_name
-      - status
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        dataset_name:
-          minLength: 1
-          type: string
-        objective_name:
-          minLength: 1
-          type: string
-        status:
-          type: string
-          enum:
-          - running
-          - completed
-          - cancelled
-        metadata:
-          $ref: "#/components/schemas/JsonNode"
-        dataset_id:
-          type: string
-          format: uuid
-          readOnly: true
-        num_trials:
-          type: integer
-          format: int64
-          readOnly: true
-        feedback_scores:
-          type: array
-          readOnly: true
-          items:
-            $ref: "#/components/schemas/FeedbackScoreAverage"
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        created_by:
-          type: string
-          readOnly: true
-        last_updated_at:
-          type: string
-          format: date-time
-        last_updated_by:
-          type: string
-          readOnly: true
     Optimization_Write:
       required:
-      - dataset_name
-      - objective_name
-      - status
+        - dataset_name
+        - objective_name
+        - status
       type: object
       properties:
         id:
@@ -7209,9 +6582,9 @@ components:
         status:
           type: string
           enum:
-          - running
-          - completed
-          - cancelled
+            - running
+            - completed
+            - cancelled
         metadata:
           $ref: "#/components/schemas/JsonNode_Write"
         last_updated_at:
@@ -7239,9 +6612,9 @@ components:
             type: string
     Optimization_Public:
       required:
-      - dataset_name
-      - objective_name
-      - status
+        - dataset_name
+        - objective_name
+        - status
       type: object
       properties:
         id:
@@ -7258,9 +6631,9 @@ components:
         status:
           type: string
           enum:
-          - running
-          - completed
-          - cancelled
+            - running
+            - completed
+            - cancelled
         metadata:
           $ref: "#/components/schemas/JsonNode_Public"
         dataset_id:
@@ -7297,9 +6670,9 @@ components:
         status:
           type: string
           enum:
-          - running
-          - completed
-          - cancelled
+            - running
+            - completed
+            - cancelled
     ErrorCountWithDeviation:
       type: object
       properties:
@@ -7312,78 +6685,9 @@ components:
         deviation_percentage:
           type: integer
           format: int64
-    Project:
-      required:
-      - name
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        name:
-          minLength: 1
-          type: string
-        visibility:
-          type: string
-          enum:
-          - private
-          - public
-        description:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        created_by:
-          type: string
-          readOnly: true
-        last_updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        last_updated_by:
-          type: string
-          readOnly: true
-        last_updated_trace_at:
-          type: string
-          format: date-time
-          readOnly: true
-        feedback_scores:
-          type: array
-          readOnly: true
-          items:
-            $ref: "#/components/schemas/FeedbackScoreAverage"
-        duration:
-          $ref: "#/components/schemas/PercentageValues"
-        total_estimated_cost:
-          type: number
-          format: double
-          readOnly: true
-        total_estimated_cost_sum:
-          type: number
-          format: double
-          readOnly: true
-        usage:
-          type: object
-          additionalProperties:
-            type: number
-            format: double
-            readOnly: true
-          readOnly: true
-        trace_count:
-          type: integer
-          format: int64
-          readOnly: true
-        guardrails_failed_count:
-          type: integer
-          format: int64
-          readOnly: true
-        error_count:
-          $ref: "#/components/schemas/ErrorCountWithDeviation"
     Project_Write:
       required:
-      - name
+        - name
       type: object
       properties:
         name:
@@ -7392,8 +6696,8 @@ components:
         visibility:
           type: string
           enum:
-          - private
-          - public
+            - private
+            - public
         description:
           type: string
     ProjectPage_Public:
@@ -7418,7 +6722,7 @@ components:
             type: string
     Project_Public:
       required:
-      - name
+        - name
       type: object
       properties:
         id:
@@ -7431,8 +6735,8 @@ components:
         visibility:
           type: string
           enum:
-          - private
-          - public
+            - private
+            - public
         description:
           type: string
         created_at:
@@ -7467,7 +6771,7 @@ components:
           type: string
     DataPointNumber_Public:
       required:
-      - time
+        - time
       type: object
       properties:
         time:
@@ -7484,18 +6788,18 @@ components:
         metric_type:
           type: string
           enum:
-          - FEEDBACK_SCORES
-          - TRACE_COUNT
-          - TOKEN_USAGE
-          - DURATION
-          - COST
-          - GUARDRAILS_FAILED_COUNT
+            - FEEDBACK_SCORES
+            - TRACE_COUNT
+            - TOKEN_USAGE
+            - DURATION
+            - COST
+            - GUARDRAILS_FAILED_COUNT
         interval:
           type: string
           enum:
-          - HOURLY
-          - DAILY
-          - WEEKLY
+            - HOURLY
+            - DAILY
+            - WEEKLY
         results:
           type: array
           items:
@@ -7515,18 +6819,18 @@ components:
         metric_type:
           type: string
           enum:
-          - FEEDBACK_SCORES
-          - TRACE_COUNT
-          - TOKEN_USAGE
-          - DURATION
-          - COST
-          - GUARDRAILS_FAILED_COUNT
+            - FEEDBACK_SCORES
+            - TRACE_COUNT
+            - TOKEN_USAGE
+            - DURATION
+            - COST
+            - GUARDRAILS_FAILED_COUNT
         interval:
           type: string
           enum:
-          - HOURLY
-          - DAILY
-          - WEEKLY
+            - HOURLY
+            - DAILY
+            - WEEKLY
         interval_start:
           type: string
           format: date-time
@@ -7586,8 +6890,8 @@ components:
       readOnly: true
     FeedbackScoreAverage_Detailed:
       required:
-      - name
-      - value
+        - name
+        - value
       type: object
       properties:
         name:
@@ -7608,7 +6912,7 @@ components:
       readOnly: true
     Project_Detailed:
       required:
-      - name
+        - name
       type: object
       properties:
         id:
@@ -7621,8 +6925,8 @@ components:
         visibility:
           type: string
           enum:
-          - private
-          - public
+            - private
+            - public
         description:
           type: string
         created_at:
@@ -7684,7 +6988,7 @@ components:
             type: string
     ProjectRetrieve_Detailed:
       required:
-      - name
+        - name
       type: object
       properties:
         name:
@@ -7701,102 +7005,11 @@ components:
         visibility:
           type: string
           enum:
-          - private
-          - public
-    Prompt:
-      required:
-      - name
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          minLength: 1
-          type: string
-        description:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-        template:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-        metadata:
-          $ref: "#/components/schemas/JsonNode"
-        change_description:
-          type: string
-        type:
-          type: string
-          enum:
-          - mustache
-          - jinja2
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        created_by:
-          type: string
-          readOnly: true
-        last_updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        last_updated_by:
-          type: string
-          readOnly: true
-        version_count:
-          type: integer
-          format: int64
-          readOnly: true
-        latest_version:
-          $ref: "#/components/schemas/PromptVersion"
-    PromptVersion:
-      required:
-      - template
-      type: object
-      properties:
-        id:
-          type: string
-          description: "version unique identifier, generated if absent"
-          format: uuid
-        prompt_id:
-          type: string
-          format: uuid
-          readOnly: true
-        commit:
-          pattern: "^[a-zA-Z0-9]{8}$"
-          type: string
-          description: "version short unique identifier, generated if absent. it must\
-            \ be 8 characters long"
-        template:
-          minLength: 1
-          type: string
-        metadata:
-          $ref: "#/components/schemas/JsonNode"
-        type:
-          type: string
-          enum:
-          - mustache
-          - jinja2
-        change_description:
-          type: string
-        variables:
-          uniqueItems: true
-          type: array
-          readOnly: true
-          items:
-            type: string
-            readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        created_by:
-          type: string
-          readOnly: true
-      readOnly: true
+            - private
+            - public
     Prompt_Write:
       required:
-      - name
+        - name
       type: object
       properties:
         id:
@@ -7818,13 +7031,13 @@ components:
         type:
           type: string
           enum:
-          - mustache
-          - jinja2
+            - mustache
+            - jinja2
     JsonNode_Detail:
       type: object
     PromptVersion_Detail:
       required:
-      - template
+        - template
       type: object
       properties:
         id:
@@ -7848,8 +7061,8 @@ components:
         type:
           type: string
           enum:
-          - mustache
-          - jinja2
+            - mustache
+            - jinja2
         change_description:
           type: string
         variables:
@@ -7878,8 +7091,8 @@ components:
           type: string
     CreatePromptVersion_Detail:
       required:
-      - name
-      - version
+        - name
+        - version
       type: object
       properties:
         name:
@@ -7889,7 +7102,7 @@ components:
           $ref: "#/components/schemas/PromptVersion_Detail"
     Prompt_Detail:
       required:
-      - name
+        - name
       type: object
       properties:
         id:
@@ -7939,7 +7152,7 @@ components:
             $ref: "#/components/schemas/PromptVersion_Public"
     PromptVersion_Public:
       required:
-      - template
+        - template
       type: object
       properties:
         id:
@@ -7963,8 +7176,8 @@ components:
         type:
           type: string
           enum:
-          - mustache
-          - jinja2
+            - mustache
+            - jinja2
         change_description:
           type: string
         created_at:
@@ -7992,7 +7205,7 @@ components:
             $ref: "#/components/schemas/Prompt_Public"
     Prompt_Public:
       required:
-      - name
+        - name
       type: object
       properties:
         id:
@@ -8024,7 +7237,7 @@ components:
           readOnly: true
     PromptVersionRetrieve_Detail:
       required:
-      - name
+        - name
       type: object
       properties:
         name:
@@ -8034,7 +7247,7 @@ components:
           type: string
     Prompt_Updatable:
       required:
-      - name
+        - name
       type: object
       properties:
         name:
@@ -8045,8 +7258,8 @@ components:
           type: string
     ServiceTogglesConfig:
       required:
-      - guardrailsEnabled
-      - pythonEvaluatorEnabled
+        - guardrailsEnabled
+        - pythonEvaluatorEnabled
       type: object
       properties:
         pythonEvaluatorEnabled:
@@ -8055,8 +7268,8 @@ components:
           type: boolean
     ErrorInfo_Write:
       required:
-      - exception_type
-      - traceback
+        - exception_type
+        - traceback
       type: object
       properties:
         exception_type:
@@ -8070,14 +7283,14 @@ components:
     JsonListString_Write:
       type: object
       anyOf:
-      - type: object
-      - type: array
-        items:
-          type: object
-      - type: string
+        - type: object
+        - type: array
+          items:
+            type: object
+        - type: string
     Span_Write:
       required:
-      - start_time
+        - start_time
       type: object
       properties:
         id:
@@ -8098,10 +7311,10 @@ components:
         type:
           type: string
           enum:
-          - general
-          - tool
-          - llm
-          - guardrail
+            - general
+            - tool
+            - llm
+            - guardrail
         start_time:
           type: string
           format: date-time
@@ -8139,20 +7352,9 @@ components:
           type: number
         total_estimated_cost_version:
           type: string
-    SpanBatch:
-      required:
-      - spans
-      type: object
-      properties:
-        spans:
-          maxItems: 1000
-          minItems: 1
-          type: array
-          items:
-            $ref: "#/components/schemas/Span"
     SpanBatch_Write:
       required:
-      - spans
+        - spans
       type: object
       properties:
         spans:
@@ -8163,7 +7365,7 @@ components:
             $ref: "#/components/schemas/Span_Write"
     DeleteFeedbackScore:
       required:
-      - name
+        - name
       type: object
       properties:
         name:
@@ -8171,8 +7373,8 @@ components:
           type: string
     ErrorInfo_Public:
       required:
-      - exception_type
-      - traceback
+        - exception_type
+        - traceback
       type: object
       properties:
         exception_type:
@@ -8185,9 +7387,9 @@ components:
           type: string
     FeedbackScore_Public:
       required:
-      - name
-      - source
-      - value
+        - name
+        - source
+        - value
       type: object
       properties:
         name:
@@ -8196,9 +7398,9 @@ components:
         category_name:
           type: string
         value:
-          maximum: 999999999.999999999
+          maximum: 1.0E9
           exclusiveMaximum: false
-          minimum: -999999999.999999999
+          minimum: -1.0E9
           exclusiveMinimum: false
           type: number
         reason:
@@ -8206,9 +7408,9 @@ components:
         source:
           type: string
           enum:
-          - ui
-          - sdk
-          - online_scoring
+            - ui
+            - sdk
+            - online_scoring
         created_at:
           type: string
           format: date-time
@@ -8227,14 +7429,14 @@ components:
     JsonListString_Public:
       type: object
       anyOf:
-      - type: object
-      - type: array
-        items:
-          type: object
-      - type: string
+        - type: object
+        - type: array
+          items:
+            type: object
+        - type: string
     Span_Public:
       required:
-      - start_time
+        - start_time
       type: object
       properties:
         id:
@@ -8259,10 +7461,10 @@ components:
         type:
           type: string
           enum:
-          - general
-          - tool
-          - llm
-          - guardrail
+            - general
+            - tool
+            - llm
+            - guardrail
         start_time:
           type: string
           format: date-time
@@ -8349,29 +7551,29 @@ components:
     AvgValueStat_Public:
       type: object
       allOf:
-      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
-      - type: object
-        properties:
-          value:
-            type: number
-            format: double
+        - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+        - type: object
+          properties:
+            value:
+              type: number
+              format: double
     CountValueStat_Public:
       type: object
       allOf:
-      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
-      - type: object
-        properties:
-          value:
-            type: integer
-            format: int64
+        - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+        - type: object
+          properties:
+            value:
+              type: integer
+              format: int64
     PercentageValueStat_Public:
       type: object
       allOf:
-      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
-      - type: object
-        properties:
-          value:
-            $ref: "#/components/schemas/PercentageValues_Public"
+        - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+        - type: object
+          properties:
+            value:
+              $ref: "#/components/schemas/PercentageValues_Public"
     ProjectStatItemObject_Public:
       type: object
       properties:
@@ -8380,9 +7582,9 @@ components:
         type:
           type: string
           enum:
-          - COUNT
-          - PERCENTAGE
-          - AVG
+            - COUNT
+            - PERCENTAGE
+            - AVG
       discriminator:
         propertyName: type
         mapping:
@@ -8396,60 +7598,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ProjectStatItemObject_Public"
-    FeedbackScoreBatch:
-      required:
-      - scores
-      type: object
-      properties:
-        scores:
-          maxItems: 1000
-          minItems: 1
-          type: array
-          items:
-            $ref: "#/components/schemas/FeedbackScoreBatchItem"
-    FeedbackScoreBatchItem:
-      required:
-      - id
-      - name
-      - source
-      - thread_id
-      - value
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        thread_id:
-          type: string
-        project_name:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-          description: "If null, the default project is used"
-        name:
-          minLength: 1
-          type: string
-        category_name:
-          type: string
-        value:
-          maximum: 999999999.999999999
-          exclusiveMaximum: false
-          minimum: -999999999.999999999
-          exclusiveMinimum: false
-          type: number
-        reason:
-          type: string
-        source:
-          type: string
-          enum:
-          - ui
-          - sdk
-          - online_scoring
     FeedbackScoreBatchItem_Tracing:
       required:
-      - id
-      - name
-      - source
-      - value
+        - id
+        - name
+        - source
+        - value
       type: object
       properties:
         id:
@@ -8465,9 +7619,9 @@ components:
         category_name:
           type: string
         value:
-          maximum: 999999999.999999999
+          maximum: 1.0E9
           exclusiveMaximum: false
-          minimum: -999999999.999999999
+          minimum: -1.0E9
           exclusiveMinimum: false
           type: number
         reason:
@@ -8475,12 +7629,12 @@ components:
         source:
           type: string
           enum:
-          - ui
-          - sdk
-          - online_scoring
+            - ui
+            - sdk
+            - online_scoring
     FeedbackScoreBatch_Tracing:
       required:
-      - scores
+        - scores
       type: object
       properties:
         scores:
@@ -8497,18 +7651,18 @@ components:
         operator:
           type: string
           enum:
-          - contains
-          - not_contains
-          - starts_with
-          - ends_with
-          - =
-          - '!='
-          - '>'
-          - '>='
-          - <
-          - <=
-          - is_empty
-          - is_not_empty
+            - contains
+            - not_contains
+            - starts_with
+            - ends_with
+            - =
+            - '!='
+            - '>'
+            - '>='
+            - <
+            - <=
+            - is_empty
+            - is_not_empty
         key:
           type: string
         value:
@@ -8527,10 +7681,10 @@ components:
         type:
           type: string
           enum:
-          - general
-          - tool
-          - llm
-          - guardrail
+            - general
+            - tool
+            - llm
+            - guardrail
         filters:
           type: array
           items:
@@ -8551,7 +7705,7 @@ components:
           default: true
     SpanUpdate:
       required:
-      - trace_id
+        - trace_id
       type: object
       properties:
         project_name:
@@ -8574,10 +7728,10 @@ components:
         type:
           type: string
           enum:
-          - general
-          - tool
-          - llm
-          - guardrail
+            - general
+            - tool
+            - llm
+            - guardrail
         end_time:
           type: string
           format: date-time
@@ -8609,7 +7763,7 @@ components:
           $ref: "#/components/schemas/ErrorInfo"
     TraceThreadIdentifier:
       required:
-      - thread_id
+        - thread_id
       type: object
       properties:
         project_name:
@@ -8622,7 +7776,7 @@ components:
           type: string
     Trace_Write:
       required:
-      - start_time
+        - start_time
       type: object
       properties:
         id:
@@ -8658,20 +7812,9 @@ components:
           format: date-time
         thread_id:
           type: string
-    TraceBatch:
-      required:
-      - traces
-      type: object
-      properties:
-        traces:
-          maxItems: 1000
-          minItems: 1
-          type: array
-          items:
-            $ref: "#/components/schemas/Trace"
     TraceBatch_Write:
       required:
-      - traces
+        - traces
       type: object
       properties:
         traces:
@@ -8682,9 +7825,9 @@ components:
             $ref: "#/components/schemas/Trace_Write"
     DeleteThreadFeedbackScores:
       required:
-      - names
-      - project_name
-      - thread_id
+        - names
+        - project_name
+        - thread_id
       type: object
       properties:
         project_name:
@@ -8703,7 +7846,7 @@ components:
             type: string
     DeleteTraceThreads:
       required:
-      - thread_ids
+        - thread_ids
       type: object
       properties:
         project_name:
@@ -8727,13 +7870,13 @@ components:
         name:
           type: string
           enum:
-          - TOPIC
-          - PII
+            - TOPIC
+            - PII
         result:
           type: string
           enum:
-          - passed
-          - failed
+            - passed
+            - failed
     GuardrailsValidation_Public:
       type: object
       properties:
@@ -8747,7 +7890,7 @@ components:
       readOnly: true
     Trace_Public:
       required:
-      - start_time
+        - start_time
       type: object
       properties:
         id:
@@ -8832,8 +7975,8 @@ components:
           type: string
           readOnly: true
           enum:
-          - default
-          - hidden
+            - default
+            - hidden
         llm_span_count:
           type: integer
           format: int32
@@ -8869,8 +8012,8 @@ components:
         status:
           type: string
           enum:
-          - active
-          - inactive
+            - active
+            - inactive
         number_of_messages:
           type: integer
           format: int64
@@ -8931,10 +8074,10 @@ components:
             type: string
     FeedbackScoreBatchItem_Thread:
       required:
-      - name
-      - source
-      - thread_id
-      - value
+        - name
+        - source
+        - thread_id
+        - value
       type: object
       properties:
         thread_id:
@@ -8949,9 +8092,9 @@ components:
         category_name:
           type: string
         value:
-          maximum: 999999999.999999999
+          maximum: 1.0E9
           exclusiveMaximum: false
-          minimum: -999999999.999999999
+          minimum: -1.0E9
           exclusiveMinimum: false
           type: number
         reason:
@@ -8959,12 +8102,12 @@ components:
         source:
           type: string
           enum:
-          - ui
-          - sdk
-          - online_scoring
+            - ui
+            - sdk
+            - online_scoring
     FeedbackScoreBatch_Thread:
       required:
-      - scores
+        - scores
       type: object
       properties:
         scores:
@@ -8981,18 +8124,18 @@ components:
         operator:
           type: string
           enum:
-          - contains
-          - not_contains
-          - starts_with
-          - ends_with
-          - =
-          - '!='
-          - '>'
-          - '>='
-          - <
-          - <=
-          - is_empty
-          - is_not_empty
+            - contains
+            - not_contains
+            - starts_with
+            - ends_with
+            - =
+            - '!='
+            - '>'
+            - '>='
+            - <
+            - <=
+            - is_empty
+            - is_not_empty
         key:
           type: string
         value:
@@ -9055,17 +8198,6 @@ components:
           $ref: "#/components/schemas/ErrorInfo"
         thread_id:
           type: string
-    DataPointDouble:
-      required:
-      - time
-      type: object
-      properties:
-        time:
-          type: string
-          format: date-time
-        value:
-          type: number
-          format: double
     Result:
       type: object
       properties:
@@ -9084,34 +8216,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Result"
-    WorkspaceMetricRequest:
-      required:
-      - interval_end
-      - interval_start
-      - name
-      type: object
-      properties:
-        project_ids:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-            format: uuid
-        name:
-          minLength: 1
-          type: string
-        interval_start:
-          type: string
-          format: date-time
-        interval_end:
-          type: string
-          format: date-time
-        start_before_end:
-          type: boolean
     WorkspaceMetricsSummaryRequest:
       required:
-      - interval_end
-      - interval_start
+        - interval_end
+        - interval_start
       type: object
       properties:
         project_ids:

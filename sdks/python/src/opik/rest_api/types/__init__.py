@@ -61,16 +61,9 @@ from .categorical_feedback_detail_public import CategoricalFeedbackDetailPublic
 from .categorical_feedback_detail_update import CategoricalFeedbackDetailUpdate
 from .chat_completion_choice import ChatCompletionChoice
 from .chat_completion_response import ChatCompletionResponse
-from .check import Check
-from .check_name import CheckName
 from .check_public import CheckPublic
 from .check_public_name import CheckPublicName
 from .check_public_result import CheckPublicResult
-from .check_result import CheckResult
-from .chunked_output_json_node import ChunkedOutputJsonNode
-from .chunked_output_json_node_public import ChunkedOutputJsonNodePublic
-from .chunked_output_json_node_public_type import ChunkedOutputJsonNodePublicType
-from .chunked_output_json_node_type import ChunkedOutputJsonNodeType
 from .column import Column
 from .column_compare import ColumnCompare
 from .column_compare_types_item import ColumnCompareTypesItem
@@ -84,11 +77,8 @@ from .complete_multipart_upload_request import CompleteMultipartUploadRequest
 from .complete_multipart_upload_request_entity_type import CompleteMultipartUploadRequestEntityType
 from .completion_tokens_details import CompletionTokensDetails
 from .count_value_stat_public import CountValueStatPublic
-from .data_point_double import DataPointDouble
 from .data_point_number_public import DataPointNumberPublic
-from .dataset import Dataset
 from .dataset_item import DatasetItem
-from .dataset_item_batch import DatasetItemBatch
 from .dataset_item_compare import DatasetItemCompare
 from .dataset_item_compare_source import DatasetItemCompareSource
 from .dataset_item_page_compare import DatasetItemPageCompare
@@ -101,9 +91,6 @@ from .dataset_item_write_source import DatasetItemWriteSource
 from .dataset_page_public import DatasetPagePublic
 from .dataset_public import DatasetPublic
 from .dataset_public_visibility import DatasetPublicVisibility
-from .dataset_visibility import DatasetVisibility
-from .delete_attachments_request import DeleteAttachmentsRequest
-from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEntityType
 from .delete_feedback_score import DeleteFeedbackScore
 from .delete_ids_holder import DeleteIdsHolder
 from .delta import Delta
@@ -117,13 +104,10 @@ from .error_message import ErrorMessage
 from .error_message_detail import ErrorMessageDetail
 from .error_message_detailed import ErrorMessageDetailed
 from .error_message_public import ErrorMessagePublic
-from .experiment import Experiment
 from .experiment_item import ExperimentItem
-from .experiment_item_bulk_record import ExperimentItemBulkRecord
 from .experiment_item_bulk_record_experiment_item_bulk_write_view import (
     ExperimentItemBulkRecordExperimentItemBulkWriteView,
 )
-from .experiment_item_bulk_upload import ExperimentItemBulkUpload
 from .experiment_item_compare import ExperimentItemCompare
 from .experiment_item_compare_trace_visibility_mode import ExperimentItemCompareTraceVisibilityMode
 from .experiment_item_public import ExperimentItemPublic
@@ -132,8 +116,6 @@ from .experiment_item_trace_visibility_mode import ExperimentItemTraceVisibility
 from .experiment_page_public import ExperimentPagePublic
 from .experiment_public import ExperimentPublic
 from .experiment_public_type import ExperimentPublicType
-from .experiment_type import ExperimentType
-from .export_trace_service_request import ExportTraceServiceRequest
 from .feedback import Feedback, Feedback_Categorical, Feedback_Numerical
 from .feedback_create import FeedbackCreate, FeedbackCreate_Categorical, FeedbackCreate_Numerical
 from .feedback_definition_page_public import FeedbackDefinitionPagePublic
@@ -147,9 +129,6 @@ from .feedback_score import FeedbackScore
 from .feedback_score_average import FeedbackScoreAverage
 from .feedback_score_average_detailed import FeedbackScoreAverageDetailed
 from .feedback_score_average_public import FeedbackScoreAveragePublic
-from .feedback_score_batch import FeedbackScoreBatch
-from .feedback_score_batch_item import FeedbackScoreBatchItem
-from .feedback_score_batch_item_source import FeedbackScoreBatchItemSource
 from .feedback_score_batch_item_thread import FeedbackScoreBatchItemThread
 from .feedback_score_batch_item_thread_source import FeedbackScoreBatchItemThreadSource
 from .feedback_score_batch_item_tracing import FeedbackScoreBatchItemTracing
@@ -166,14 +145,9 @@ from .feedback_score_source import FeedbackScoreSource
 from .feedback_update import FeedbackUpdate, FeedbackUpdate_Categorical, FeedbackUpdate_Numerical
 from .function import Function
 from .function_call import FunctionCall
-from .guardrail import Guardrail
-from .guardrail_batch import GuardrailBatch
-from .guardrail_name import GuardrailName
-from .guardrail_result import GuardrailResult
 from .guardrail_write import GuardrailWrite
 from .guardrail_write_name import GuardrailWriteName
 from .guardrail_write_result import GuardrailWriteResult
-from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
 from .json_list_string import JsonListString
 from .json_list_string_compare import JsonListStringCompare
@@ -217,11 +191,9 @@ from .numerical_feedback_detail import NumericalFeedbackDetail
 from .numerical_feedback_detail_create import NumericalFeedbackDetailCreate
 from .numerical_feedback_detail_public import NumericalFeedbackDetailPublic
 from .numerical_feedback_detail_update import NumericalFeedbackDetailUpdate
-from .optimization import Optimization
 from .optimization_page_public import OptimizationPagePublic
 from .optimization_public import OptimizationPublic
 from .optimization_public_status import OptimizationPublicStatus
-from .optimization_status import OptimizationStatus
 from .optimization_write import OptimizationWrite
 from .optimization_write_status import OptimizationWriteStatus
 from .page_columns import PageColumns
@@ -229,7 +201,6 @@ from .percentage_value_stat_public import PercentageValueStatPublic
 from .percentage_values import PercentageValues
 from .percentage_values_detailed import PercentageValuesDetailed
 from .percentage_values_public import PercentageValuesPublic
-from .project import Project
 from .project_detailed import ProjectDetailed
 from .project_detailed_visibility import ProjectDetailedVisibility
 from .project_metric_response_public import ProjectMetricResponsePublic
@@ -247,26 +218,18 @@ from .project_stat_item_object_public import (
 from .project_stats_public import ProjectStatsPublic
 from .project_stats_summary import ProjectStatsSummary
 from .project_stats_summary_item import ProjectStatsSummaryItem
-from .project_visibility import ProjectVisibility
-from .prompt import Prompt
 from .prompt_detail import PromptDetail
 from .prompt_page_public import PromptPagePublic
 from .prompt_public import PromptPublic
 from .prompt_tokens_details import PromptTokensDetails
-from .prompt_type import PromptType
-from .prompt_version import PromptVersion
 from .prompt_version_detail import PromptVersionDetail
 from .prompt_version_detail_type import PromptVersionDetailType
-from .prompt_version_link import PromptVersionLink
 from .prompt_version_link_public import PromptVersionLinkPublic
 from .prompt_version_link_write import PromptVersionLinkWrite
 from .prompt_version_page_public import PromptVersionPagePublic
 from .prompt_version_public import PromptVersionPublic
 from .prompt_version_public_type import PromptVersionPublicType
-from .prompt_version_type import PromptVersionType
-from .provider_api_key import ProviderApiKey
 from .provider_api_key_page_public import ProviderApiKeyPagePublic
-from .provider_api_key_provider import ProviderApiKeyProvider
 from .provider_api_key_public import ProviderApiKeyPublic
 from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
 from .response_format import ResponseFormat
@@ -275,8 +238,6 @@ from .result import Result
 from .results_number_public import ResultsNumberPublic
 from .score_name import ScoreName
 from .service_toggles_config import ServiceTogglesConfig
-from .span import Span
-from .span_batch import SpanBatch
 from .span_experiment_item_bulk_write_view import SpanExperimentItemBulkWriteView
 from .span_experiment_item_bulk_write_view_type import SpanExperimentItemBulkWriteViewType
 from .span_filter_public import SpanFilterPublic
@@ -284,7 +245,6 @@ from .span_filter_public_operator import SpanFilterPublicOperator
 from .span_page_public import SpanPagePublic
 from .span_public import SpanPublic
 from .span_public_type import SpanPublicType
-from .span_type import SpanType
 from .span_write import SpanWrite
 from .span_write_type import SpanWriteType
 from .spans_count_response import SpansCountResponse
@@ -292,8 +252,6 @@ from .start_multipart_upload_response import StartMultipartUploadResponse
 from .stream_options import StreamOptions
 from .tool import Tool
 from .tool_call import ToolCall
-from .trace import Trace
-from .trace_batch import TraceBatch
 from .trace_count_response import TraceCountResponse
 from .trace_experiment_item_bulk_write_view import TraceExperimentItemBulkWriteView
 from .trace_filter_public import TraceFilterPublic
@@ -305,13 +263,11 @@ from .trace_thread import TraceThread
 from .trace_thread_identifier import TraceThreadIdentifier
 from .trace_thread_page import TraceThreadPage
 from .trace_thread_status import TraceThreadStatus
-from .trace_visibility_mode import TraceVisibilityMode
 from .trace_write import TraceWrite
 from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
-from .workspace_metric_request import WorkspaceMetricRequest
 from .workspace_metric_response import WorkspaceMetricResponse
 from .workspace_metrics_summary_request import WorkspaceMetricsSummaryRequest
 from .workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
@@ -363,16 +319,9 @@ __all__ = [
     "CategoricalFeedbackDetailUpdate",
     "ChatCompletionChoice",
     "ChatCompletionResponse",
-    "Check",
-    "CheckName",
     "CheckPublic",
     "CheckPublicName",
     "CheckPublicResult",
-    "CheckResult",
-    "ChunkedOutputJsonNode",
-    "ChunkedOutputJsonNodePublic",
-    "ChunkedOutputJsonNodePublicType",
-    "ChunkedOutputJsonNodeType",
     "Column",
     "ColumnCompare",
     "ColumnCompareTypesItem",
@@ -386,11 +335,8 @@ __all__ = [
     "CompleteMultipartUploadRequestEntityType",
     "CompletionTokensDetails",
     "CountValueStatPublic",
-    "DataPointDouble",
     "DataPointNumberPublic",
-    "Dataset",
     "DatasetItem",
-    "DatasetItemBatch",
     "DatasetItemCompare",
     "DatasetItemCompareSource",
     "DatasetItemPageCompare",
@@ -403,9 +349,6 @@ __all__ = [
     "DatasetPagePublic",
     "DatasetPublic",
     "DatasetPublicVisibility",
-    "DatasetVisibility",
-    "DeleteAttachmentsRequest",
-    "DeleteAttachmentsRequestEntityType",
     "DeleteFeedbackScore",
     "DeleteIdsHolder",
     "Delta",
@@ -419,11 +362,8 @@ __all__ = [
     "ErrorMessageDetail",
     "ErrorMessageDetailed",
     "ErrorMessagePublic",
-    "Experiment",
     "ExperimentItem",
-    "ExperimentItemBulkRecord",
     "ExperimentItemBulkRecordExperimentItemBulkWriteView",
-    "ExperimentItemBulkUpload",
     "ExperimentItemCompare",
     "ExperimentItemCompareTraceVisibilityMode",
     "ExperimentItemPublic",
@@ -432,8 +372,6 @@ __all__ = [
     "ExperimentPagePublic",
     "ExperimentPublic",
     "ExperimentPublicType",
-    "ExperimentType",
-    "ExportTraceServiceRequest",
     "Feedback",
     "FeedbackCreate",
     "FeedbackCreate_Categorical",
@@ -449,9 +387,6 @@ __all__ = [
     "FeedbackScoreAverage",
     "FeedbackScoreAverageDetailed",
     "FeedbackScoreAveragePublic",
-    "FeedbackScoreBatch",
-    "FeedbackScoreBatchItem",
-    "FeedbackScoreBatchItemSource",
     "FeedbackScoreBatchItemThread",
     "FeedbackScoreBatchItemThreadSource",
     "FeedbackScoreBatchItemTracing",
@@ -472,14 +407,9 @@ __all__ = [
     "Feedback_Numerical",
     "Function",
     "FunctionCall",
-    "Guardrail",
-    "GuardrailBatch",
-    "GuardrailName",
-    "GuardrailResult",
     "GuardrailWrite",
     "GuardrailWriteName",
     "GuardrailWriteResult",
-    "GuardrailsValidation",
     "GuardrailsValidationPublic",
     "JsonListString",
     "JsonListStringCompare",
@@ -523,11 +453,9 @@ __all__ = [
     "NumericalFeedbackDetailCreate",
     "NumericalFeedbackDetailPublic",
     "NumericalFeedbackDetailUpdate",
-    "Optimization",
     "OptimizationPagePublic",
     "OptimizationPublic",
     "OptimizationPublicStatus",
-    "OptimizationStatus",
     "OptimizationWrite",
     "OptimizationWriteStatus",
     "PageColumns",
@@ -535,7 +463,6 @@ __all__ = [
     "PercentageValues",
     "PercentageValuesDetailed",
     "PercentageValuesPublic",
-    "Project",
     "ProjectDetailed",
     "ProjectDetailedVisibility",
     "ProjectMetricResponsePublic",
@@ -551,26 +478,18 @@ __all__ = [
     "ProjectStatsPublic",
     "ProjectStatsSummary",
     "ProjectStatsSummaryItem",
-    "ProjectVisibility",
-    "Prompt",
     "PromptDetail",
     "PromptPagePublic",
     "PromptPublic",
     "PromptTokensDetails",
-    "PromptType",
-    "PromptVersion",
     "PromptVersionDetail",
     "PromptVersionDetailType",
-    "PromptVersionLink",
     "PromptVersionLinkPublic",
     "PromptVersionLinkWrite",
     "PromptVersionPagePublic",
     "PromptVersionPublic",
     "PromptVersionPublicType",
-    "PromptVersionType",
-    "ProviderApiKey",
     "ProviderApiKeyPagePublic",
-    "ProviderApiKeyProvider",
     "ProviderApiKeyPublic",
     "ProviderApiKeyPublicProvider",
     "ResponseFormat",
@@ -579,8 +498,6 @@ __all__ = [
     "ResultsNumberPublic",
     "ScoreName",
     "ServiceTogglesConfig",
-    "Span",
-    "SpanBatch",
     "SpanExperimentItemBulkWriteView",
     "SpanExperimentItemBulkWriteViewType",
     "SpanFilterPublic",
@@ -588,7 +505,6 @@ __all__ = [
     "SpanPagePublic",
     "SpanPublic",
     "SpanPublicType",
-    "SpanType",
     "SpanWrite",
     "SpanWriteType",
     "SpansCountResponse",
@@ -596,8 +512,6 @@ __all__ = [
     "StreamOptions",
     "Tool",
     "ToolCall",
-    "Trace",
-    "TraceBatch",
     "TraceCountResponse",
     "TraceExperimentItemBulkWriteView",
     "TraceFilterPublic",
@@ -609,13 +523,11 @@ __all__ = [
     "TraceThreadIdentifier",
     "TraceThreadPage",
     "TraceThreadStatus",
-    "TraceVisibilityMode",
     "TraceWrite",
     "Usage",
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
-    "WorkspaceMetricRequest",
     "WorkspaceMetricResponse",
     "WorkspaceMetricsSummaryRequest",
     "WorkspaceMetricsSummaryResponse",

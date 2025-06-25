@@ -5,7 +5,7 @@ REDOC_RELATIVE_PATH="apps/opik-backend/redoc"
 
 # Generate openapi.yaml
 cd apps/opik-backend
-mvn clean compile swagger:resolve
+mvn clean package -DskipTests
 cd -
 
 # Copy openapi.yaml for Redoc

@@ -475,6 +475,7 @@
                                 <exclude>META-INF/*.SF</exclude>
                                 <exclude>META-INF/*.DSA</exclude>
                                 <exclude>META-INF/*.RSA</exclude>
+                                <exclude>com/comet/opik/utils/OpenAPISchemaCleanup.class</exclude>
                             </excludes>
                         </filter>
                     </filters>
@@ -559,6 +560,7 @@
                     <outputFileName>openapi</outputFileName>
                     <outputPath>${project.build.directory}</outputPath>
                     <outputFormat>YAML</outputFormat>
+                    <openAPIVersion>3.1.0</openAPIVersion>
                     <openapiFilePath>${project.basedir}/src/main/resources/openapi_template.yml</openapiFilePath>
                     <ignoredRoutes>/application.wadl</ignoredRoutes>
                 </configuration>
@@ -568,6 +570,27 @@
                         <goals>
                             <goal>resolve</goal>
                         </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>cleanup-unused-schemas</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                        <configuration>
+                            <mainClass>com.comet.opik.utils.OpenAPISchemaCleanup</mainClass>
+                            <arguments>
+                                <argument>${project.build.directory}/openapi.yaml</argument>
+                                <argument>${project.build.directory}/openapi.yaml</argument>
+                            </arguments>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

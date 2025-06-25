@@ -394,7 +394,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     public Response scoreBatchOfTraces(
-            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @JsonView(FeedbackScoreBatch.View.Tracing.class) @NotNull @Valid FeedbackScoreBatch feedbackScoreBatch) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @JsonView(FeedbackScoreBatch.View.Tracing.class) @Validated(FeedbackScoreBatch.View.Tracing.class) @NotNull @Valid FeedbackScoreBatch feedbackScoreBatch) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
