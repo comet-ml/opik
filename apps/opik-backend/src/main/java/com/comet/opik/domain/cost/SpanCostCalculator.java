@@ -7,8 +7,8 @@ import java.util.Map;
 
 @UtilityClass
 class SpanCostCalculator {
-    public static BigDecimal textGenerationCost(ModelPrice modelPrice, Map<String, Integer> usage) {
-        return modelPrice.inputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("prompt_tokens", 0)))
+    public static BigDecimal textCost(ModelPrice modelPrice, Map<String, Integer> usage) {
+        return modelPrice.inputTextPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("prompt_tokens", 0)))
                 .add(modelPrice.outputPrice()
                         .multiply(BigDecimal.valueOf(usage.getOrDefault("completion_tokens", 0))));
     }
@@ -33,7 +33,7 @@ class SpanCostCalculator {
         int outputTokens = usage.getOrDefault("original_usage.completion_tokens",
                 usage.getOrDefault("completion_tokens", 0));
 
-        return modelPrice.inputPrice().multiply(BigDecimal.valueOf(inputTokens))
+        return modelPrice.inputTextPrice().multiply(BigDecimal.valueOf(inputTokens))
                 .add(modelPrice.outputPrice().multiply(BigDecimal.valueOf(outputTokens)))
                 .add(modelPrice.cacheReadInputTokenPrice().multiply(BigDecimal.valueOf(cachedReadInputTokens)));
     }
@@ -62,7 +62,7 @@ class SpanCostCalculator {
             String inputTokensKey, String outputTokensKey, String cacheReadInputTokensKey,
             String cacheCreationInputTokensKey) {
 
-        return modelPrice.inputPrice()
+        return modelPrice.inputTextPrice()
                 .multiply(
                         BigDecimal.valueOf(usage.getOrDefault(inputTokensKey, usage.getOrDefault("prompt_tokens", 0))))
                 .add(modelPrice.outputPrice()
@@ -76,5 +76,22 @@ class SpanCostCalculator {
 
     public static BigDecimal defaultCost(ModelPrice modelPrice, Map<String, Integer> usage) {
         return BigDecimal.ZERO;
+    }
+
+    public static BigDecimal imageCost(ModelPrice modelPrice, Map<String, Integer> usage) {
+        return modelPrice.inputImagePrice().multiply(BigDecimal.valueOf(usage.getOrDefault("image_count", 0)));
+    }
+
+    public static BigDecimal audioCost(ModelPrice modelPrice, Map<String, Integer> usage) {
+        return modelPrice.inputAudioPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("audio_seconds", 0)));
+    }
+
+    public static BigDecimal videoCost(ModelPrice modelPrice, Map<String, Integer> usage) {
+        return modelPrice.inputVideoPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("video_seconds", 0)));
+    }
+
+    public static BigDecimal cacheCost(ModelPrice modelPrice, Map<String, Integer> usage) {
+        return modelPrice.cacheCreationInputTokenPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("cache_creation_input_tokens", 0)))
+            .add(modelPrice.cacheReadInputTokenPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("cache_read_input_tokens", 0))));
     }
 }
