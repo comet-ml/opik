@@ -1,5 +1,6 @@
 import allure
 import logging
+import pytest
 
 from page_objects.ProjectsPage import ProjectsPage
 from page_objects.TracesPage import TracesPage
@@ -9,6 +10,9 @@ logger = logging.getLogger(__name__)
 
 
 class TestTraceSpans:
+    @pytest.mark.regression
+    @pytest.mark.tracing
+    @pytest.mark.attachments
     @allure.title("Attachments in traces - log_trace_attachment_low_level")
     def test_attachments_low_level(
         self, page, create_project_api, log_trace_attachment_low_level
@@ -72,6 +76,9 @@ class TestTraceSpans:
                     f"Error: {str(e)}"
                 ) from e
 
+    @pytest.mark.regression
+    @pytest.mark.tracing
+    @pytest.mark.attachments
     @allure.title("Attachments in traces - log_trace_attachment_decorator")
     def test_attachments_decorator(
         self, page, create_project_api, log_trace_attachment_decorator
@@ -135,6 +142,9 @@ class TestTraceSpans:
                     f"Error: {str(e)}"
                 ) from e
 
+    @pytest.mark.regression
+    @pytest.mark.tracing
+    @pytest.mark.attachments
     @allure.title("Attachments in traces - log_trace_attachment_in_span")
     def test_attachments_span(
         self, page, create_project_api, log_trace_attachment_in_span

@@ -94,10 +94,13 @@ Call opik api on http://localhost:5173/api
 | clickhouse.adminUser.password | string | `"opik"` |  |
 | clickhouse.adminUser.useSecret.enabled | bool | `false` |  |
 | clickhouse.adminUser.username | string | `"opik"` |  |
+| clickhouse.backup.command[0] | string | `"/bin/bash"` |  |
+| clickhouse.backup.command[1] | string | `"-cx"` |  |
+| clickhouse.backup.command[2] | string | `"export backupname=backup$(date +'%Y%m%d%H%M')\necho \"BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');\" > /tmp/backQuery.sql\nclickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql"` |  |
 | clickhouse.backup.enabled | bool | `false` |  |
 | clickhouse.backup.serviceAccount.annotations | object | `{}` |  |
-| clickhouse.backup.serviceAccount.create | bool | `true` |  |
-| clickhouse.backup.serviceAccount.enabled | bool | `false` |  |
+| clickhouse.backup.serviceAccount.create | bool | `false` |  |
+| clickhouse.backup.serviceAccount.name | string | `""` |  |
 | clickhouse.backup.successfulJobsHistoryLimit | int | `1` |  |
 | clickhouse.enabled | bool | `true` |  |
 | clickhouse.image | string | `"altinity/clickhouse-server:24.3.5.47.altinitystable"` |  |

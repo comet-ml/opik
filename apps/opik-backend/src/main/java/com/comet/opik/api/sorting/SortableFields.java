@@ -35,4 +35,5 @@ public class SortableFields {
     public static final String TRACE_COUNT = "trace_count";
     public static final String FEEDBACK_SCORES = "feedback_scores.*";
     public static final String NUMBER_OF_MESSAGES = "number_of_messages";
+    public static final String STATUS = "status";
 }

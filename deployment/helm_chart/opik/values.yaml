@@ -354,13 +354,20 @@ clickhouse:
     enabled: false
     successfulJobsHistoryLimit: 1
     serviceAccount:
-        enabled: false
-        create: true
-        annotations: {}
+      annotations: {}
+      create: false
+      name: ""
     # bucketURL: ""
     # secretName: ""
     # schedule: ""
     # baseBackup: ""
+    command:
+      - /bin/bash
+      - '-cx'
+      - |-
+        export backupname=backup$(date +'%Y%m%d%H%M')
+        echo "BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');" > /tmp/backQuery.sql
+        clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql
   monitoring:
     enabled: false
     username: opikmon # readonly user
