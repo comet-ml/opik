@@ -27,17 +27,25 @@ We ran the scripts for 2 different configurations:
 **Logging 1000 traces**:
 ```
 ---------------- Performance results ----------------
-Time to log traces and spans           : 1.60 seconds
-Time before traces are available in UI : 0.03 seconds
-Total time                             : 1.63 seconds
+Time to log traces and spans           : 3.04 seconds
+Time before traces are available in UI : 0.12 seconds
+Total time                             : 3.16 seconds
 ```
 
 **Logging 10,000 traces**:
 ```
 ---------------- Performance results ----------------
-Time to log traces and spans           : 16.05 seconds
-Time before traces are available in UI : 0.03 seconds
-Total time                             : 16.08 seconds
+Time to log traces and spans           : 14.08 seconds
+Time before traces are available in UI : 0.27 seconds
+Total time                             : 14.35 seconds
+```
+
+**Logging 25,000 traces**:
+```
+---------------- Performance results ----------------
+Time to log traces and spans           : 34.24 seconds
+Time before traces are available in UI : 0.06 seconds
+Total time                             : 34.29 seconds
 ```
 
 *Note:* These tests were run on a M3 Macbook Pro using version 1.3.0 of the Opik platform.

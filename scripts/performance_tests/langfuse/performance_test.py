@@ -1,12 +1,12 @@
 import os
 
-os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-ddbe31ce-2197-4de7-bba2-62c63fc8eb9f"
-os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-f7b051f9-7f5c-4aee-b345-7cee669c2afd"
+os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-003bef85-f339-48e2-a94c-712da273c9bd"
+os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-a8795e6f-ed22-475c-ae48-6761a3967f93"
 os.environ["LANGFUSE_HOST"] = "http://localhost:3000"
 
 import uuid
 import langfuse
-from langfuse.decorators import observe, langfuse_context
+from langfuse import observe, get_client
 import time
 import random
 import string
@@ -19,41 +19,46 @@ logging.basicConfig(
 
 LOGGER = logging.getLogger(__name__)
 
+langfuse_client = get_client()
 
 def create_random_string(length: int) -> str:
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
-@observe
+@observe()
 def create_span(input: str) -> str:
     output = create_random_string(100)
     return output
 
-@observe
+@observe()
 def create_trace(input: str) -> str:
-
+    trace_id = None
+    
     for i in range(3):
         input = create_random_string(100)
         create_span(input)
     
-    return create_random_string(100), langfuse_context.get_current_trace_id()
+    # Get trace ID from the client
+    trace_id = langfuse_client.get_current_trace_id()
+    
+    return create_random_string(100), trace_id
 
 def log_traces_and_spans(nb_traces: int) -> str:
     for i in range(nb_traces):
         _, trace_id = create_trace(create_random_string(100))
     
-    langfuse_context.flush()
+    # Flush using the client
+    langfuse_client.flush()
     return trace_id
 
 def check_output(trace_id: str):
-    langfuse_client = langfuse.Langfuse()
     print("Start checking output")
 
     start_time = time.time()
     while True:
         try:
-            langfuse_client.fetch_trace(trace_id)
+            langfuse_client.api.trace.get(trace_id)
             break
-        except Exception as e:
+        except Exception:
             time.sleep(0.5)
         
         if time.time() - start_time > 600:

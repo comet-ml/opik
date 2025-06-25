@@ -27,17 +27,27 @@ We ran the scripts for 2 different configurations:
 **Logging 1000 traces**:
 ```
 ---------------- Performance results ----------------
-Time to log traces and spans           : 14.71 seconds
-Time before traces are available in UI : 6.79 seconds
-Total time                             : 21.51 seconds
+Time to log traces and spans           : 7.47 seconds
+Time before traces are available in UI : 2.15 seconds
+Total time                             : 9.61 seconds
 ```
 
 **Logging 10,000 traces**:
 ```
 ---------------- Performance results ----------------
-Time to log traces and spans           : 136.05 seconds
-Time before traces are available in UI : 24.31 seconds
-Total time                             : 160.36 seconds
+Time to log traces and spans           : 12.90 seconds
+Time before traces are available in UI : 2.13 seconds
+Total time                             : 15.03 seconds
 ```
 
 *Note:* These tests were run on a M3 Macbook Pro using version 3.2.0 of the Langfuse platform.
+
+**Logging 25,000 traces**:
+```
+---------------- Performance results ----------------
+Time to log traces and spans           : 24.59 seconds
+Time before traces are available in UI : 3.81 seconds
+Total time                             : 28.40 seconds
+```
+
+*Note:* These tests were run on a M3 Macbook Pro using version 3.75.1 OSS of the Langfuse platform.

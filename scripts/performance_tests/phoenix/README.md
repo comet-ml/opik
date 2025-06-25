@@ -27,17 +27,17 @@ We ran the scripts for 2 different configurations:
 **Logging 1000 traces**:
 ```
 ---------------- Performance results ----------------
-Time to log traces and spans           : 4.30 seconds
-Time before traces are available in UI : 7.90 seconds
-Total time                             : 12.21 seconds
+Time to log traces and spans           : 0.28 seconds
+Time before traces are available in UI : 13.35 seconds
+Total time                             : 13.63 seconds
 ```
 
 **Logging 10,000 traces**:
 ```
 ---------------- Performance results ----------------
-Time to log traces and spans           : 45.73 seconds
-Time before traces are available in UI : 85.30 seconds
-Total time                             : 131.03 seconds
+Time to log traces and spans           : 2.45 seconds
+Time before traces are available in UI : 124.04 seconds
+Total time                             : 126.49 seconds
 ```
 
 *Note:* These tests were run on a M3 Macbook Pro with version v7.2.0 of the Phoenix platform.

@@ -7,6 +7,8 @@ import logging
 import phoenix
 from phoenix.trace.dsl import SpanQuery
 from opentelemetry import trace as trace_api
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from phoenix.otel import register
 
 logging.basicConfig(
@@ -16,9 +18,10 @@ logging.basicConfig(
 
 LOGGER = logging.getLogger(__name__)
 
-# Setup up the Phoenix tracer
 tracer_provider = register(
     project_name="performance_test",
+    endpoint="http://localhost:4317",
+    batch=True
 )
 
 tracer = trace_api.get_tracer(__name__)
