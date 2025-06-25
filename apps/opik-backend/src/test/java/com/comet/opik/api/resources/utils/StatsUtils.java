@@ -34,6 +34,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
 import static com.comet.opik.api.ProjectStats.AvgValueStat;
 import static com.comet.opik.api.ProjectStats.CountValueStat;
 import static com.comet.opik.api.ProjectStats.PercentageValueStat;
@@ -422,7 +423,7 @@ public class StatsUtils {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    public static Map<String, Double> calculateFeedbackBatchAverage(List<FeedbackScoreBatchItem> data) {
+    public static Map<String, Double> calculateFeedbackBatchAverage(List<FeedbackScoreBatchItemTracing> data) {
         return data
                 .stream()
                 .filter(Objects::nonNull)

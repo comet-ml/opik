@@ -1245,10 +1245,10 @@ export class Spans {
      * @example
      *     await client.spans.scoreBatchOfSpans({
      *         scores: [{
-     *                 id: "id",
      *                 name: "name",
      *                 value: 1.1,
-     *                 source: "ui"
+     *                 source: "ui",
+     *                 id: "id"
      *             }]
      *     })
      */

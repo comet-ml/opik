@@ -31,6 +31,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
+
 /**
  * This is the base online scorer, for all particular implementations to extend. It listens to a Redis stream for
  * Traces to be scored. Extending classes must provide a particular implementation for the score method.
@@ -216,7 +218,7 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
     protected abstract void score(M message);
 
     protected Map<String, List<BigDecimal>> storeScores(
-            List<FeedbackScoreBatchItem> scores, Trace trace, String userName, String workspaceId) {
+            List<FeedbackScoreBatchItemTracing> scores, Trace trace, String userName, String workspaceId) {
         log.info("Received '{}' scores for traceId '{}' in workspace '{}'. Storing them",
                 scores.size(), trace.id(), workspaceId);
         feedbackScoreService.scoreBatchOfTraces(scores)

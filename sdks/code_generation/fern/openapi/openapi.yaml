@@ -2782,7 +2782,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/FeedbackScoreBatch_Tracing"
+              $ref: "#/components/schemas/FeedbackScoreBatchTracing"
       responses:
         "204":
           description: No Content
@@ -3323,7 +3323,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/FeedbackScoreBatch_Thread"
+              $ref: "#/components/schemas/FeedbackScoreBatchThread"
       responses:
         "204":
           description: No Content
@@ -3338,7 +3338,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/FeedbackScoreBatch_Tracing"
+              $ref: "#/components/schemas/FeedbackScoreBatchTracing"
       responses:
         "204":
           description: No Content
@@ -8396,31 +8396,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ProjectStatItemObject_Public"
-    FeedbackScoreBatch:
-      required:
-      - scores
-      type: object
-      properties:
-        scores:
-          maxItems: 1000
-          minItems: 1
-          type: array
-          items:
-            $ref: "#/components/schemas/FeedbackScoreBatchItem"
-    FeedbackScoreBatchItem:
+    FeedbackScoreBatchItemTracing:
       required:
       - id
       - name
       - source
-      - thread_id
       - value
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
-        thread_id:
-          type: string
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -8444,41 +8427,10 @@ components:
           - ui
           - sdk
           - online_scoring
-    FeedbackScoreBatchItem_Tracing:
-      required:
-      - id
-      - name
-      - source
-      - value
-      type: object
-      properties:
         id:
           type: string
           format: uuid
-        project_name:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-          description: "If null, the default project is used"
-        name:
-          minLength: 1
-          type: string
-        category_name:
-          type: string
-        value:
-          maximum: 999999999.999999999
-          exclusiveMaximum: false
-          minimum: -999999999.999999999
-          exclusiveMinimum: false
-          type: number
-        reason:
-          type: string
-        source:
-          type: string
-          enum:
-          - ui
-          - sdk
-          - online_scoring
-    FeedbackScoreBatch_Tracing:
+    FeedbackScoreBatchTracing:
       required:
       - scores
       type: object
@@ -8488,7 +8440,7 @@ components:
           minItems: 1
           type: array
           items:
-            $ref: "#/components/schemas/FeedbackScoreBatchItem_Tracing"
+            $ref: "#/components/schemas/FeedbackScoreBatchItemTracing"
     SpanFilter_Public:
       type: object
       properties:
@@ -8929,7 +8881,7 @@ components:
           type: array
           items:
             type: string
-    FeedbackScoreBatchItem_Thread:
+    FeedbackScoreBatchItemThread:
       required:
       - name
       - source
@@ -8937,8 +8889,6 @@ components:
       - value
       type: object
       properties:
-        thread_id:
-          type: string
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -8962,7 +8912,10 @@ components:
           - ui
           - sdk
           - online_scoring
-    FeedbackScoreBatch_Thread:
+        thread_id:
+          minLength: 1
+          type: string
+    FeedbackScoreBatchThread:
       required:
       - scores
       type: object
@@ -8972,7 +8925,7 @@ components:
           minItems: 1
           type: array
           items:
-            $ref: "#/components/schemas/FeedbackScoreBatchItem_Thread"
+            $ref: "#/components/schemas/FeedbackScoreBatchItemThread"
     TraceFilter_Public:
       type: object
       properties:

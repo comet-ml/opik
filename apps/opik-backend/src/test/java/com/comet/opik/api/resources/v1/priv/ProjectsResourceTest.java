@@ -6,7 +6,6 @@ import com.comet.opik.api.ErrorCountWithDeviation;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
-import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.Project;
@@ -101,6 +100,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
 import static com.comet.opik.api.ProjectStatsSummary.ProjectStatsSummaryItem;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
@@ -1490,8 +1490,8 @@ class ProjectsResourceTest {
 
         traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-        List<FeedbackScoreBatchItem> scores = PodamFactoryUtils.manufacturePojoList(factory,
-                FeedbackScoreBatchItem.class);
+        List<FeedbackScoreBatchItemTracing> scores = PodamFactoryUtils.manufacturePojoList(factory,
+                FeedbackScoreBatchItemTracing.class);
 
         var guardrailsByTraceId = traces.stream()
                 .collect(Collectors.toMap(Trace::id, trace -> guardrailsGenerator.generateGuardrailsForTrace(
@@ -1513,13 +1513,13 @@ class ProjectsResourceTest {
 
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
 
-            List<FeedbackScoreBatchItem> feedbackScores = scores.stream()
+            List<FeedbackScoreBatchItemTracing> feedbackScores = scores.stream()
                     .map(feedbackScore -> feedbackScore.toBuilder()
                             .projectId(project.id())
                             .projectName(project.name())
                             .id(trace.id())
                             .build())
-                    .toList();
+                    .collect(Collectors.toList());
 
             traceResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
 

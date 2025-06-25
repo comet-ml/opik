@@ -5,7 +5,6 @@
 import * as OpikApi from "../index";
 
 export interface FeedbackScoreBatchItemTracing {
-    id: string;
     /** If null, the default project is used */
     projectName?: string;
     name: string;
@@ -13,4 +12,5 @@ export interface FeedbackScoreBatchItemTracing {
     value: number;
     reason?: string;
     source: OpikApi.FeedbackScoreBatchItemTracingSource;
+    id: string;
 }

@@ -11,23 +11,23 @@ export const FeedbackScoreBatchItemTracing: core.serialization.ObjectSchema<
     serializers.FeedbackScoreBatchItemTracing.Raw,
     OpikApi.FeedbackScoreBatchItemTracing
 > = core.serialization.object({
-    id: core.serialization.string(),
     projectName: core.serialization.property("project_name", core.serialization.string().optional()),
     name: core.serialization.string(),
     categoryName: core.serialization.property("category_name", core.serialization.string().optional()),
     value: core.serialization.number(),
     reason: core.serialization.string().optional(),
     source: FeedbackScoreBatchItemTracingSource,
+    id: core.serialization.string(),
 });
 
 export declare namespace FeedbackScoreBatchItemTracing {
     export interface Raw {
-        id: string;
         project_name?: string | null;
         name: string;
         category_name?: string | null;
         value: number;
         reason?: string | null;
         source: FeedbackScoreBatchItemTracingSource.Raw;
+        id: string;
     }
 }

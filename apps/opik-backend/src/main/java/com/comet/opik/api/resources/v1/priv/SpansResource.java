@@ -6,7 +6,6 @@ import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
@@ -70,6 +69,7 @@ import org.glassfish.jersey.server.ChunkedOutput;
 import java.util.List;
 import java.util.UUID;
 
+import static com.comet.opik.api.FeedbackScoreBatch.FeedbackScoreBatchTracing;
 import static com.comet.opik.api.Span.SpanField;
 import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.api.Span.View;
@@ -284,7 +284,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     public Response scoreBatchOfSpans(
-            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @JsonView(FeedbackScoreBatch.View.Tracing.class) @NotNull @Valid FeedbackScoreBatch batch) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatchTracing.class))) @NotNull @Valid FeedbackScoreBatchTracing batch) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 

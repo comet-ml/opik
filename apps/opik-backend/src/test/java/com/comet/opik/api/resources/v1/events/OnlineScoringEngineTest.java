@@ -72,6 +72,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeOutputSchema;
+import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
 import static com.comet.opik.api.LogItem.LogLevel;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
@@ -258,7 +259,7 @@ class OnlineScoringEngineTest {
         // mocked response from AI, reused from dev tests
         var aiResponse = ChatResponse.builder().aiMessage(AiMessage.aiMessage(aiMessage)).build();
 
-        ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<List<FeedbackScoreBatchItemTracing>> captor = ArgumentCaptor.forClass(List.class);
         Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
         Mockito.doReturn(aiResponse).when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
 
@@ -269,7 +270,7 @@ class OnlineScoringEngineTest {
         Mockito.verify(feedbackScoreService, Mockito.times(1)).scoreBatchOfTraces(captor.capture());
 
         // check which feedback scores would be stored in Clickhouse by our process
-        List<FeedbackScoreBatchItem> processed = captor.getValue();
+        List<FeedbackScoreBatchItemTracing> processed = captor.getValue();
 
         assertThat(processed).hasSize(event.traces().size() * 3);
 

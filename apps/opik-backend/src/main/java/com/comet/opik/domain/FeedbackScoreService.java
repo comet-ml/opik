@@ -25,6 +25,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemThread;
+import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 import static java.util.stream.Collectors.groupingBy;
 
@@ -34,8 +36,8 @@ public interface FeedbackScoreService {
     Mono<Void> scoreTrace(UUID traceId, FeedbackScore score);
     Mono<Void> scoreSpan(UUID spanId, FeedbackScore score);
 
-    Mono<Void> scoreBatchOfSpans(List<FeedbackScoreBatchItem> scores);
-    Mono<Void> scoreBatchOfTraces(List<FeedbackScoreBatchItem> scores);
+    Mono<Void> scoreBatchOfSpans(List<FeedbackScoreBatchItemTracing> scores);
+    Mono<Void> scoreBatchOfTraces(List<FeedbackScoreBatchItemTracing> scores);
 
     Mono<Void> deleteSpanScore(UUID id, String tag);
     Mono<Void> deleteTraceScore(UUID id, String tag);
@@ -48,7 +50,7 @@ public interface FeedbackScoreService {
 
     Mono<FeedbackScoreNames> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
 
-    Mono<Void> scoreBatchOfThreads(List<FeedbackScoreBatchItem> scores);
+    Mono<Void> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores);
 
     Mono<Void> deleteThreadScores(String projectName, String threadId, Set<String> names);
 }
@@ -65,7 +67,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private final @NonNull TraceThreadService traceThreadService;
 
     @Builder(toBuilder = true)
-    record ProjectDto(Project project, List<FeedbackScoreBatchItem> scores) {
+    record ProjectDto<T extends FeedbackScoreBatchItem>(Project project, List<T> scores) {
     }
 
     @Override
@@ -86,16 +88,16 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<Void> scoreBatchOfSpans(@NonNull List<FeedbackScoreBatchItem> scores) {
+    public Mono<Void> scoreBatchOfSpans(@NonNull List<FeedbackScoreBatchItemTracing> scores) {
         return processScoreBatch(EntityType.SPAN, scores);
     }
 
     @Override
-    public Mono<Void> scoreBatchOfTraces(@NonNull List<FeedbackScoreBatchItem> scores) {
+    public Mono<Void> scoreBatchOfTraces(@NonNull List<FeedbackScoreBatchItemTracing> scores) {
         return processScoreBatch(EntityType.TRACE, scores);
     }
 
-    private Mono<Void> processScoreBatch(EntityType entityType, List<FeedbackScoreBatchItem> scores) {
+    private Mono<Void> processScoreBatch(EntityType entityType, List<FeedbackScoreBatchItemTracing> scores) {
 
         if (scores.isEmpty()) {
             return Mono.empty();
@@ -120,23 +122,33 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .then();
     }
 
-    private Mono<Long> saveScoreBatch(EntityType entityType, List<ProjectDto> projects) {
+    private <T extends FeedbackScoreBatchItem> Mono<Long> saveScoreBatch(EntityType entityType,
+            List<ProjectDto<T>> projects) {
         return Flux.fromIterable(projects)
                 .flatMap(projectDto -> dao.scoreBatchOf(entityType, projectDto.scores()))
                 .reduce(0L, Long::sum);
     }
 
-    private List<ProjectDto> mergeProjectsAndScores(Map<String, Project> projectMap,
-            Map<String, List<FeedbackScoreBatchItem>> scoresPerProject) {
+    private <T extends FeedbackScoreBatchItem> List<ProjectDto<T>> mergeProjectsAndScores(
+            Map<String, Project> projectMap,
+            Map<String, List<T>> scoresPerProject) {
         return scoresPerProject.keySet()
                 .stream()
                 .map(projectName -> {
                     Project project = projectMap.get(projectName);
-                    return new ProjectDto(
+                    return new ProjectDto<>(
                             project,
                             scoresPerProject.get(projectName)
                                     .stream()
-                                    .map(item -> item.toBuilder().projectId(project.id()).build()) // set projectId
+                                    .map(item -> switch (item) {
+                                        case FeedbackScoreBatchItemTracing tracingItem -> tracingItem.toBuilder()
+                                                .projectId(project.id()) // set projectId
+                                                .build();
+                                        case FeedbackScoreBatchItemThread threadItem -> threadItem.toBuilder()
+                                                .projectId(project.id()) // set projectId
+                                                .build();
+                                    }) // set projectId
+                                    .map(item -> (T) item)
                                     .toList());
                 })
                 .toList();
@@ -185,7 +197,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<Void> scoreBatchOfThreads(@NonNull List<FeedbackScoreBatchItem> scores) {
+    public Mono<Void> scoreBatchOfThreads(@NonNull List<FeedbackScoreBatchItemThread> scores) {
         return processThreadsScoreBatch(scores);
     }
 
@@ -231,7 +243,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
         }));
     }
 
-    private Mono<Void> processThreadsScoreBatch(List<FeedbackScoreBatchItem> scores) {
+    private Mono<Void> processThreadsScoreBatch(List<FeedbackScoreBatchItemThread> scores) {
 
         if (scores.isEmpty()) {
             log.info("No scores provided for batch processing of threads");
@@ -239,7 +251,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
         }
 
         // group scores by project name to resolve project itemIds
-        Map<String, List<FeedbackScoreBatchItem>> scoresPerProject = scores
+        Map<String, List<FeedbackScoreBatchItemThread>> scoresPerProject = scores
                 .stream()
                 .map(score -> score.toBuilder()
                         .projectName(WorkspaceUtils.getProjectName(score.projectName()))
@@ -254,7 +266,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .then();
     }
 
-    private Mono<Long> saveThreadScoreBatch(List<ProjectDto> projects) {
+    private Mono<Long> saveThreadScoreBatch(List<ProjectDto<FeedbackScoreBatchItemThread>> projects) {
         return Flux.fromIterable(projects)
                 .flatMap(projectDto -> {
                     // Collect unique thread IDs from the scores
@@ -275,12 +287,14 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .reduce(0L, Long::sum);
     }
 
-    private Mono<Map.Entry<String, UUID>> getOrCreateThread(ProjectDto projectDto, String threadId) {
+    private Mono<Map.Entry<String, UUID>> getOrCreateThread(ProjectDto<FeedbackScoreBatchItemThread> projectDto,
+            String threadId) {
         return traceThreadService.getOrCreateThreadId(projectDto.project().id(), threadId)
                 .map(threadModelId -> Map.entry(threadId, threadModelId));
     }
 
-    private ProjectDto bindThreadModelId(ProjectDto projectDto, Map<String, UUID> threadIdMap) {
+    private ProjectDto<FeedbackScoreBatchItemThread> bindThreadModelId(
+            ProjectDto<FeedbackScoreBatchItemThread> projectDto, Map<String, UUID> threadIdMap) {
         return projectDto.toBuilder()
                 .project(projectDto.project())
                 .scores(projectDto.scores()
@@ -288,7 +302,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                         .map(score -> score.toBuilder()
                                 .id(threadIdMap.get(score.threadId())) // set thread model id
                                 .build())
-                        .toList())
+                        .collect(Collectors.toList()))
                 .build();
     }
 }

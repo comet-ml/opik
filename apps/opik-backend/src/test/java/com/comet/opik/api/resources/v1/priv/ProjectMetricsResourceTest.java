@@ -87,6 +87,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -526,13 +527,13 @@ class ProjectMetricsResourceTest {
                         traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
                         // create several feedback scores for that trace
-                        List<FeedbackScoreBatchItem> scores = scoreNames.stream()
-                                .map(name -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                        List<FeedbackScoreBatchItemTracing> scores = scoreNames.stream()
+                                .map(name -> factory.manufacturePojo(FeedbackScoreBatchItemTracing.class).toBuilder()
                                         .name(name)
                                         .projectName(projectName)
                                         .id(trace.id())
                                         .build())
-                                .toList();
+                                .collect(Collectors.toList());
 
                         traceResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
 
