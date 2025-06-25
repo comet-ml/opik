@@ -203,7 +203,9 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     }
 
     @Override
-    public Mono<List<WorkspaceMetricResponse.Result>> getFeedbackScoresDaily(WorkspaceMetricRequest request) {
+    public Mono<List<WorkspaceMetricResponse.Result>> getFeedbackScoresDaily(@NonNull WorkspaceMetricRequest request) {
+        Preconditions.checkArgument(StringUtils.isNotEmpty(request.name()),
+                "For metrics request, name must be provided");
         var query = CollectionUtils
                 .isEmpty(request.projectIds())
                         ? GET_FEEDBACK_SCORES_DAILY
@@ -212,13 +214,16 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     }
 
     @Override
-    public Mono<WorkspaceMetricsSummaryResponse.Result> getCostsSummary(WorkspaceMetricsSummaryRequest request) {
+    public Mono<WorkspaceMetricsSummaryResponse.Result> getCostsSummary(
+            @NonNull WorkspaceMetricsSummaryRequest request) {
         return getFeedbackScoresSummary(request, GET_COSTS_SUMMARY)
                 .map(List::getFirst);
     }
 
     @Override
-    public Mono<List<WorkspaceMetricResponse.Result>> getCostsDaily(WorkspaceMetricRequest request) {
+    public Mono<List<WorkspaceMetricResponse.Result>> getCostsDaily(@NonNull WorkspaceMetricRequest request) {
+        Preconditions.checkArgument(StringUtils.isNotEmpty(request.name()),
+                "For metrics request, name must be provided");
         var query = CollectionUtils
                 .isEmpty(request.projectIds())
                         ? GET_COSTS_DAILY
@@ -228,8 +233,6 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
     private Mono<List<WorkspaceMetricResponse.Result>> getMetricsDaily(WorkspaceMetricRequest request,
             String query) {
-        Preconditions.checkArgument(StringUtils.isNotEmpty(request.name()),
-                "For metrics request, name must be provided");
         return template.nonTransaction(connection -> getMetricsDaily(connection, request, query)
                 .flatMapMany(this::rowToDataPoint)
                 .collectList());
