@@ -133,6 +133,12 @@ Return ONLY this descriptive string, with no preamble or extra formatting.
             **model_kwargs: Additional model parameters
         """
         # Initialize base class first
+        if "project_name" in model_kwargs:
+            print(
+                "Removing `project_name` from constructor; it now belongs in the ChatPrompt()"
+            )
+            del model_kwargs["project_name"]
+
         super().__init__(model=model, verbose=verbose, **model_kwargs)
         self.population_size = population_size
         self.num_generations = num_generations
