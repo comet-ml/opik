@@ -964,3 +964,50 @@ def test_tracked_function__update_current_span__with_attachments(
         attachments=attachments,
         data_sizes=data_sizes,
     )
+
+
+def test_low_level_client__update_span__with_attachments(
+    opik_client: opik.Opik, data_file
+):
+    span_client = opik_client.span(
+        name="original-span-name",
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        input={"input": "original-span-input"},
+    )
+    opik.flush_tracker()
+
+    file_name = os.path.basename(data_file.name)
+    attachments = {
+        file_name: Attachment(
+            data=data_file.name,
+            file_name=file_name,
+            content_type="application/octet-stream",
+        )
+    }
+    data_sizes = {
+        file_name: FILE_SIZE,
+    }
+
+    opik_client.update_span(
+        id=span_client.id,
+        trace_id=span_client.trace_id,
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        input={"input": "new-span-input"},
+        attachments=attachments.values(),
+    )
+    opik.flush_tracker()
+
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=span_client.id,
+        parent_span_id=None,
+        trace_id=span_client.trace_id,
+        input={"input": "new-span-input"},
+    )
+    verifiers.verify_attachments(
+        opik_client=opik_client,
+        entity_type="span",
+        entity_id=span_client.id,
+        attachments=attachments,
+        data_sizes=data_sizes,
+    )

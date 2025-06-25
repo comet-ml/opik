@@ -463,6 +463,70 @@ class Opik:
             attachments=attachments,
         )
 
+    def update_span(
+        self,
+        id: str,
+        trace_id: str,
+        project_name: str,
+        end_time: Optional[datetime.datetime] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        input: Optional[Dict[str, Any]] = None,
+        output: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
+        model: Optional[str] = None,
+        provider: Optional[Union[LLMProvider, str]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
+        total_cost: Optional[float] = None,
+        attachments: Optional[List[Attachment]] = None,
+    ) -> None:
+        """
+        Update the span attributes. It's only safe to use this method if spans are already
+        stored in the backend, otherwise the update will fail.
+        Don't use this method while the spans are created or shortly after.
+
+        Args:
+            id: The unique identifier for the span to update.
+            trace_id: The unique identifier for the trace to which the span belongs.
+            project_name: The name of the project in which the span is stored.
+            end_time: The end time of the span.
+            metadata: Additional metadata to be associated with the span.
+            input: The input data for the span.
+            output: The output data for the span.
+            tags: A list of tags to be associated with the span.
+            usage: Usage data for the span. In order for input, output and total tokens to be visible in the UI,
+                the usage must contain OpenAI-formatted keys (they can be passed additionaly to original usage on the top level of the dict):  prompt_tokens, completion_tokens and total_tokens.
+                If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
+                format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
+            model: The name of LLM.
+            provider: The provider of LLM. You can find providers officially supported by Opik for cost tracking
+                in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
+                If your provider not in the list, you can still specify it but the cost tracking will not be available
+            error_info: The dictionary with error information (typically used when the span function has failed).
+            total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
+
+        Returns:
+            None
+        """
+        span.span_client.update_span(
+            id=id,
+            trace_id=trace_id,
+            project_name=project_name,
+            url_override=self._config.url_override,
+            message_streamer=self._streamer,
+            end_time=end_time,
+            metadata=metadata,
+            input=input,
+            output=output,
+            tags=tags,
+            usage=usage,
+            model=model,
+            provider=provider,
+            error_info=error_info,
+            total_cost=total_cost,
+            attachments=attachments,
+        )
+
     def log_spans_feedback_scores(
         self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
     ) -> None:
