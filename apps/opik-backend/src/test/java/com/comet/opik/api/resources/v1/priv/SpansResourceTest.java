@@ -1327,7 +1327,43 @@ class SpansResourceTest {
                             SpanField.PROVIDER,
                             Operator.EQUAL,
                             null,
-                            spansTestAssertion));
+                            spansTestAssertion),
+                    Arguments.of(
+                            "",
+                            SpanField.TYPE,
+                            Operator.EQUAL,
+                            "general",
+                            spansTestAssertion),
+                    Arguments.of(
+                            "",
+                            SpanField.TYPE,
+                            Operator.EQUAL,
+                            "general",
+                            statsTestAssertion),
+                    Arguments.of(
+                            "",
+                            SpanField.TYPE,
+                            Operator.EQUAL,
+                            "general",
+                            spanStreamTestAssertion),
+                    Arguments.of(
+                            "",
+                            SpanField.TYPE,
+                            Operator.NOT_EQUAL,
+                            "llm",
+                            spansTestAssertion),
+                    Arguments.of(
+                            "",
+                            SpanField.TYPE,
+                            Operator.NOT_EQUAL,
+                            "llm",
+                            statsTestAssertion),
+                    Arguments.of(
+                            "",
+                            SpanField.TYPE,
+                            Operator.NOT_EQUAL,
+                            "llm",
+                            spanStreamTestAssertion));
         }
 
         @Test
@@ -1834,6 +1870,7 @@ class SpansResourceTest {
             String apiKey = UUID.randomUUID().toString();
             String model = "gpt-3.5-turbo-1106";
             String provider = "openai";
+            SpanType spanType = SpanType.general;
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
@@ -1842,6 +1879,7 @@ class SpansResourceTest {
                     .stream()
                     .map(span -> span.toBuilder()
                             .projectId(null)
+                            .type(SpanType.llm)
                             .projectName(projectName)
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
@@ -1852,6 +1890,7 @@ class SpansResourceTest {
 
             var expectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
                     .projectId(null)
+                    .type(spanType)
                     .projectName(projectName)
                     .endTime(Instant.now().plusMillis(randomNumber()))
                     .provider(provider)

@@ -23,6 +23,7 @@ public enum SpanField implements Field {
     FEEDBACK_SCORES(FEEDBACK_SCORES_QUERY_PARAM, FieldType.FEEDBACK_SCORES_NUMBER),
     DURATION(DURATION_QUERY_PARAM, FieldType.NUMBER),
     ERROR_INFO(ERROR_INFO_QUERY_PARAM, FieldType.ERROR_CONTAINER),
+    TYPE(TYPE_QUERY_PARAM, FieldType.ENUM),
     ;
 
     private final String queryParamField;
