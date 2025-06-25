@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowDown, ArrowUp, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, X } from "lucide-react";
 import isFunction from "lodash/isFunction";
 import { useHotkeys } from "react-hotkeys-hook";
 
@@ -12,6 +12,14 @@ const INITIAL_WIDTH = 0.75;
 const MIN_LEFT_POSITION = 0.1;
 const MAX_LEFT_POSITION = 0.8;
 
+type ArrowNavigationConfig = {
+  hasPrevious: boolean;
+  hasNext: boolean;
+  onChange: (shift: number) => void;
+  previousTooltip?: string;
+  nextTooltip?: string;
+};
+
 type ResizableSidePanelProps = {
   panelId: string;
   children: React.ReactNode;
@@ -19,17 +27,18 @@ type ResizableSidePanelProps = {
   headerContent?: React.ReactNode;
   navigationContent?: React.ReactNode;
   open?: boolean;
-  hasPreviousRow?: boolean;
-  hasNextRow?: boolean;
   onClose: () => void;
-  onRowChange?: (shift: number) => void;
   initialWidth?: number;
   ignoreHotkeys?: boolean;
   closeOnClickOutside?: boolean;
+  horizontalNavigation?: ArrowNavigationConfig;
+  verticalNavigation?: ArrowNavigationConfig;
 };
 
 const UP_HOTKEYS = ["↑"];
 const DOWN_HOTKEYS = ["↓"];
+const LEFT_HOTKEYS = ["←"];
+const RIGHT_HOTKEYS = ["→"];
 const ESC_HOTKEYS = ["Esc"];
 
 const calculateLeftPosition = (percentage: number) => {
@@ -43,13 +52,12 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   headerContent,
   navigationContent,
   open = false,
-  hasPreviousRow,
-  hasNextRow,
   onClose,
-  onRowChange,
   initialWidth = INITIAL_WIDTH,
   ignoreHotkeys = false,
   closeOnClickOutside = true,
+  horizontalNavigation,
+  verticalNavigation,
 }) => {
   const localStorageKey = `${panelId}-side-panel-width`;
 
@@ -72,16 +80,30 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   }, []);
 
   useHotkeys(
-    "ArrowUp,ArrowDown,Escape",
+    "ArrowUp,ArrowDown,ArrowLeft,ArrowRight,Escape",
     (keyboardEvent: KeyboardEvent) => {
       if (!open) return;
       keyboardEvent.stopPropagation();
       switch (keyboardEvent.code) {
+        case "ArrowLeft":
+          isFunction(horizontalNavigation?.onChange) &&
+            horizontalNavigation?.hasPrevious &&
+            horizontalNavigation.onChange(-1);
+          break;
+        case "ArrowRight":
+          isFunction(horizontalNavigation?.onChange) &&
+            horizontalNavigation?.hasNext &&
+            horizontalNavigation?.onChange(1);
+          break;
         case "ArrowUp":
-          isFunction(onRowChange) && hasPreviousRow && onRowChange(-1);
+          isFunction(verticalNavigation?.onChange) &&
+            verticalNavigation?.hasPrevious &&
+            verticalNavigation.onChange(-1);
           break;
         case "ArrowDown":
-          isFunction(onRowChange) && hasNextRow && onRowChange(1);
+          isFunction(verticalNavigation?.onChange) &&
+            verticalNavigation?.hasNext &&
+            verticalNavigation.onChange(1);
           break;
         case "Escape":
           onClose();
@@ -89,7 +111,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
       }
     },
     { ignoreEventWhen: () => ignoreHotkeys },
-    [onRowChange, onClose, open, ignoreHotkeys],
+    [verticalNavigation, horizontalNavigation, onClose, open, ignoreHotkeys],
   );
 
   useEffect(() => {
@@ -134,33 +156,81 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   }, [localStorageKey]);
 
   const renderNavigation = () => {
-    if (!isFunction(onRowChange)) return null;
+    if (!horizontalNavigation && !verticalNavigation) return null;
 
     return (
       <>
         <Separator orientation="vertical" className="mx-2 h-8" />
-        <TooltipWrapper content={`Previous ${entity}`} hotkeys={UP_HOTKEYS}>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            disabled={!hasPreviousRow}
-            onClick={() => onRowChange(-1)}
-            data-testid="side-panel-previous"
-          >
-            <ArrowUp />
-          </Button>
-        </TooltipWrapper>
-        <TooltipWrapper content={`Next ${entity}`} hotkeys={DOWN_HOTKEYS}>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            disabled={!hasNextRow}
-            onClick={() => onRowChange(1)}
-            data-testid="side-panel-next"
-          >
-            <ArrowDown />
-          </Button>
-        </TooltipWrapper>
+        {horizontalNavigation && (
+          <div className="flex shrink-0 items-center">
+            <TooltipWrapper
+              content={
+                horizontalNavigation.previousTooltip ?? `Previous ${entity}`
+              }
+              hotkeys={LEFT_HOTKEYS}
+            >
+              <Button
+                variant="outline"
+                size="icon-sm"
+                disabled={!horizontalNavigation.hasPrevious}
+                onClick={() => horizontalNavigation.onChange(-1)}
+                data-testid="side-panel-previous"
+                className="rounded-r-none"
+              >
+                <ArrowLeft />
+              </Button>
+            </TooltipWrapper>
+            <TooltipWrapper
+              content={horizontalNavigation.nextTooltip ?? `Next ${entity}`}
+              hotkeys={RIGHT_HOTKEYS}
+            >
+              <Button
+                variant="outline"
+                size="icon-sm"
+                disabled={!horizontalNavigation.hasNext}
+                onClick={() => horizontalNavigation.onChange(1)}
+                data-testid="side-panel-next"
+                className="-ml-px rounded-l-none"
+              >
+                <ArrowRight />
+              </Button>
+            </TooltipWrapper>
+          </div>
+        )}
+        {verticalNavigation && (
+          <div className="flex shrink-0 items-center">
+            <TooltipWrapper
+              content={verticalNavigation.previousTooltip ?? `Up ${entity}`}
+              hotkeys={UP_HOTKEYS}
+            >
+              <Button
+                variant="outline"
+                size="icon-sm"
+                disabled={!verticalNavigation.hasPrevious}
+                onClick={() => verticalNavigation.onChange(-1)}
+                data-testid="side-panel-up"
+                className="rounded-r-none"
+              >
+                <ArrowUp />
+              </Button>
+            </TooltipWrapper>
+            <TooltipWrapper
+              content={verticalNavigation.nextTooltip ?? `Down ${entity}`}
+              hotkeys={DOWN_HOTKEYS}
+            >
+              <Button
+                variant="outline"
+                size="icon-sm"
+                disabled={!verticalNavigation.hasNext}
+                onClick={() => verticalNavigation.onChange(1)}
+                data-testid="side-panel-down"
+                className="-ml-px rounded-l-none"
+              >
+                <ArrowDown />
+              </Button>
+            </TooltipWrapper>
+          </div>
+        )}
       </>
     );
   };

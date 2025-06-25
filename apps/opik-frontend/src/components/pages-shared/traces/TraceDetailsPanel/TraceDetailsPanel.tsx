@@ -1,8 +1,9 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import find from "lodash/find";
 import { createEnumParam, useQueryParam } from "use-query-params";
-
+import find from "lodash/find";
+import isBoolean from "lodash/isBoolean";
+import isFunction from "lodash/isFunction";
 import { Trash } from "lucide-react";
 
 import { OnChangeFn } from "@/types/shared";
@@ -122,6 +123,20 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       : trace;
   }, [spanId, spansData?.content, trace]);
 
+  const horizontalNavigation = useMemo(
+    () =>
+      isBoolean(hasNextRow) &&
+      isBoolean(hasPreviousRow) &&
+      isFunction(onRowChange)
+        ? {
+            onChange: onRowChange,
+            hasNext: hasNextRow,
+            hasPrevious: hasPreviousRow,
+          }
+        : undefined,
+    [hasNextRow, hasPreviousRow, onRowChange],
+  );
+
   const renderContent = () => {
     if (isTracePending || isSpansPending) {
       return <Loader />;
@@ -237,10 +252,8 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       open={open}
       navigationContent={renderNavigationContent()}
       headerContent={renderHeaderContent()}
-      hasPreviousRow={hasPreviousRow}
-      hasNextRow={hasNextRow}
       onClose={onClose}
-      onRowChange={onRowChange}
+      horizontalNavigation={horizontalNavigation}
     >
       {renderContent()}
     </ResizableSidePanel>

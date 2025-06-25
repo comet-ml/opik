@@ -2,6 +2,8 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
 import findIndex from "lodash/findIndex";
 import get from "lodash/get";
+import isBoolean from "lodash/isBoolean";
+import isFunction from "lodash/isFunction";
 import { NumberParam, StringParam, useQueryParam } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -244,6 +246,20 @@ const DatasetItemsPage = () => {
 
   const handleClose = useCallback(() => setActiveRowId(""), [setActiveRowId]);
 
+  const horizontalNavigation = useMemo(
+    () =>
+      isBoolean(hasNext) &&
+      isBoolean(hasPrevious) &&
+      isFunction(handleRowChange)
+        ? {
+            onChange: handleRowChange,
+            hasNext,
+            hasPrevious,
+          }
+        : undefined,
+    [handleRowChange, hasNext, hasPrevious],
+  );
+
   const resizeConfig = useMemo(
     () => ({
       enabled: true,
@@ -330,10 +346,8 @@ const DatasetItemsPage = () => {
         panelId="dataset-items"
         entity="item"
         open={Boolean(activeRowId)}
-        hasPreviousRow={hasPrevious}
-        hasNextRow={hasNext}
         onClose={handleClose}
-        onRowChange={handleRowChange}
+        horizontalNavigation={horizontalNavigation}
       >
         <DatasetItemPanelContent datasetItemId={activeRowId as string} />
       </ResizableSidePanel>
