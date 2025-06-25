@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="opik_optimizer",
-    version="1.0.1",
+    version="1.0.2",
     description="Agent optimization with Opik",
     author="Comet ML",
     author_email="support@comet.com",
