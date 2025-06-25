@@ -201,24 +201,10 @@ const prettifyLangGraphLogic = (
     "messages" in message &&
     isArray(message.messages)
   ) {
-    const lastMessage = last(message.messages);
-    if (
-      lastMessage &&
-      isArray(lastMessage) &&
-      lastMessage.length === 2 &&
-      isString(lastMessage[1])
-    ) {
-      return lastMessage[1];
-    }
-  } else if (
-    config.type === "output" &&
-    isObject(message) &&
-    "messages" in message &&
-    isArray(message.messages) &&
-    message.messages.every((m) => isObject(m))
-  ) {
+    // Find the first human message
     const humanMessages = message.messages.filter(
       (m) =>
+        isObject(m) &&
         "type" in m &&
         m.type === "human" &&
         "content" in m &&
@@ -227,7 +213,27 @@ const prettifyLangGraphLogic = (
     );
 
     if (humanMessages.length > 0) {
-      return humanMessages.map((m) => m.content).join(MESSAGES_DIVIDER);
+      return humanMessages[0].content;
+    }
+  } else if (
+    config.type === "output" &&
+    isObject(message) &&
+    "messages" in message &&
+    isArray(message.messages)
+  ) {
+    // Get the last AI message
+    const aiMessages = message.messages.filter(
+      (m) =>
+        isObject(m) &&
+        "type" in m &&
+        m.type === "ai" &&
+        "content" in m &&
+        isString(m.content) &&
+        m.content !== "",
+    );
+
+    if (aiMessages.length > 0) {
+      return last(aiMessages).content;
     }
   }
 };
@@ -237,7 +243,15 @@ const prettifyGenericLogic = (
   config: PrettifyMessageConfig,
 ): string | undefined => {
   const PREDEFINED_KEYS_MAP = {
-    input: ["question", "messages", "user_input", "query", "input_prompt"],
+    input: [
+      "question",
+      "messages",
+      "user_input",
+      "query",
+      "input_prompt",
+      "prompt",
+      "sys.query", // Dify
+    ],
     output: ["answer", "output", "response"],
   };
 
