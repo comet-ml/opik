@@ -79,7 +79,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       traceId,
       projectId,
       page: 1,
-      size: 1000,
+      size: 10000,
     },
     {
       placeholderData: keepPreviousData,
