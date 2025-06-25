@@ -25,12 +25,14 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record FeedbackScoreBatchItem(
         // entity (trace or span) id
-        @JsonView( {
+
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) @JsonView( {
                 FeedbackScoreBatch.View.Tracing.class}) @NotNull(groups = {
                         FeedbackScoreBatch.View.Tracing.class}) UUID id,
         // thread id
-        @JsonView({FeedbackScoreBatch.View.Thread.class}) @NotBlank(groups = {
-                FeedbackScoreBatch.View.Thread.class}) String threadId,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) @JsonView({
+                FeedbackScoreBatch.View.Thread.class}) @NotBlank(groups = {
+                        FeedbackScoreBatch.View.Thread.class}) String threadId,
         @JsonView({FeedbackScoreBatch.View.Tracing.class,
                 FeedbackScoreBatch.View.Thread.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used") String projectName,
         @JsonIgnore UUID projectId,

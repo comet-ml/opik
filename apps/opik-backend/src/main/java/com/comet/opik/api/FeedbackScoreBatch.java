@@ -20,7 +20,7 @@ import java.util.List;
 
     public static class View {
 
-        public interface Tracing {
+        public interface Tracing extends Default {
         }
 
         public interface Thread extends Default {
