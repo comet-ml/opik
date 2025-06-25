@@ -373,7 +373,7 @@ class BenchmarkLogger:
         # Display final prompt
         if task_detail_data.optimized_prompt:
             prompt_elements = []
-            for msg in task_detail_data.optimized_prompt.formatted_messages:
+            for msg in task_detail_data.optimized_prompt.get_messages():
                 style = Style()
                 if msg.get("role") == "system":
                     style = Style(color="blue", bold=True)

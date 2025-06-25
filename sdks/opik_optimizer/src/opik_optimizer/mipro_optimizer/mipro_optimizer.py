@@ -41,8 +41,9 @@ class MiproOptimizer(BaseOptimizer):
         verbose: int = 1,
         **model_kwargs,
     ):
-        super().__init__(model, project_name, verbose=verbose, **model_kwargs)
+        super().__init__(model=model, verbose=verbose, **model_kwargs)
         self.tools = []
+        self.project_name = project_name
         self.num_threads = self.model_kwargs.pop("num_threads", 6)
         self.model_kwargs["model"] = self.model
         # FIXME: add mipro_optimizer=True - It does not count the LLM calls made internally by DSPy during MiproOptimizer.optimizer.compile().
