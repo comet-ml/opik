@@ -129,7 +129,6 @@ class BaseOptimizer:
     def evaluate_prompt(
         self,
         prompt: chat_prompt.ChatPrompt,
-        agent_class: Type[OptimizableAgent],
         dataset: Dataset,
         metric: Callable,
         n_threads: int,
@@ -138,6 +137,7 @@ class BaseOptimizer:
         experiment_config: Optional[Dict] = None,
         n_samples: Optional[int] = None,
         seed: Optional[int] = None,
+        agent_class: Optional[Type[OptimizableAgent]] = None,
     ) -> float:
         random.seed(seed)
 
@@ -153,7 +153,7 @@ class BaseOptimizer:
         else:
             self.agent_class = agent_class
 
-        agent = agent_class(prompt)
+        agent = self.agent_class(prompt)
 
         def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
             messages = prompt.get_messages(dataset_item)
