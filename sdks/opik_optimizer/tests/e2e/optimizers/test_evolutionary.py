@@ -3,7 +3,7 @@ from opik.evaluation.metrics.score_result import ScoreResult
 from typing import Any, Dict
 
 from opik_optimizer import EvolutionaryOptimizer, datasets
-from opik_optimizer import AgentConfig, ChatPrompt, OptimizableAgent
+from opik_optimizer.optimization_config import chat_prompt
 
 
 def test_evolutionary_optimizer() -> None:
@@ -16,14 +16,9 @@ def test_evolutionary_optimizer() -> None:
             reference=dataset_item["label"], output=llm_output
         )
 
-    agent_config = AgentConfig(
-        chat_prompt=ChatPrompt(
-            system="Provide an answer to the question.", user="{text}"
-        )
+    prompt = chat_prompt.ChatPrompt(
+        system="Provide an answer to the question.", prompt="{text}"
     )
-
-    class LiteLLMAgent(OptimizableAgent):
-        model = "openai/gpt-4o"
 
     # Initialize optimizer with reduced parameters for faster testing
     optimizer = EvolutionaryOptimizer(
@@ -36,11 +31,10 @@ def test_evolutionary_optimizer() -> None:
     )
 
     # Run optimization with reduced sample size
-    results = optimizer.optimize_agent(
-        agent_class=LiteLLMAgent,
-        agent_config=agent_config,
+    results = optimizer.optimize_prompt(
         dataset=dataset,
         metric=levenshtein_ratio,
+        prompt=prompt,
         n_samples=3,  # Reduced from 10
     )
 

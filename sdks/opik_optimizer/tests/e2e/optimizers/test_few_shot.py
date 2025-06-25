@@ -3,7 +3,7 @@ from opik.evaluation.metrics.score_result import ScoreResult
 from typing import Any, Dict
 
 from opik_optimizer import FewShotBayesianOptimizer, datasets
-from opik_optimizer import ChatPrompt, AgentConfig, OptimizableAgent
+from opik_optimizer.optimization_config import chat_prompt
 
 
 def test_few_shot_optimizer() -> None:
@@ -26,24 +26,18 @@ def test_few_shot_optimizer() -> None:
         )
 
     # Updated ChatPrompt for tiny_test dataset field names
-    agent_config = AgentConfig(
-        chat_prompt=ChatPrompt(
-            messages=[
-                {"role": "system", "content": "Provide an answer to the question."},
-                {"role": "user", "content": "{text}"},  # Changed from "{question}"
-            ],
-        )
+    prompt = chat_prompt.ChatPrompt(
+        messages=[
+            {"role": "system", "content": "Provide an answer to the question."},
+            {"role": "user", "content": "{text}"},  # Changed from "{question}"
+        ],
     )
 
-    class LiteLLMAgent(OptimizableAgent):
-        model = "openai/gpt-4"
-
     # Run optimization with reduced parameters for faster testing
-    results = optimizer.optimize_agent(
-        agent_class=LiteLLMAgent,
-        agent_config=agent_config,
+    results = optimizer.optimize_prompt(
         dataset=dataset,
         metric=levenshtein_ratio,
+        prompt=prompt,
         n_trials=1,  # Reduced from 2
     )
 
