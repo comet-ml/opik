@@ -40,7 +40,7 @@ optimizer = EvolutionaryOptimizer(
     verbose=1,
 )
 
-optimization_result = optimizer.optimize_agent(
+optimization_result = optimizer.optimize_prompt(
     prompt=prompt,
     agent_class=PydanticAIAgent,
     dataset=dataset,

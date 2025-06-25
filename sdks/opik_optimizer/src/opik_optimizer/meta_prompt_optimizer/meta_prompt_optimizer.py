@@ -288,7 +288,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             new_prompt = prompt.copy()
             messages = new_prompt.get_messages(dataset_item)
             new_prompt.set_messages(messages)
-            agent = self.agent_class({"chat-prompt": new_prompt})
+            agent = self.agent_class(new_prompt)
 
             # --- Step 2: Call the model ---
             try:

@@ -154,3 +154,21 @@ class ChatPrompt:
         self.system = None
         self.user = None
         self.messages = copy.deepcopy(messages)
+
+    @classmethod
+    def model_validate(
+        cls,
+        obj: Any,
+        *,
+        strict: Optional[bool] = None,
+        from_attributes: Optional[bool] = None,
+        context: Optional[Any] = None,
+        by_alias: Optional[bool] = None,
+        by_name: Optional[bool] = None,
+    ) -> "ChatPrompt":
+        """Custom validation method to handle nested objects during deserialization."""
+        return ChatPrompt(
+            system=obj.get("system", None),
+            prompt=obj.get("prompt", None),
+            messages=obj.get("messages", None),
+        )
