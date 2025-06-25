@@ -22,7 +22,7 @@ interface TraceThreadMapper {
                 .id(row.get("id", UUID.class))
                 .threadId(row.get("thread_id", String.class))
                 .projectId(row.get("project_id", UUID.class))
-                .status(TraceThreadStatus.fromValue(row.get("status", String.class)))
+                .status(TraceThreadStatus.fromValue(row.get("status", String.class)).orElse(TraceThreadStatus.ACTIVE))
                 .createdBy(row.get("created_by", String.class))
                 .lastUpdatedBy(row.get("last_updated_by", String.class))
                 .createdAt(row.get("created_at", Instant.class))

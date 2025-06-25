@@ -27,6 +27,13 @@ public class AsyncUtils {
                         Optional.ofNullable(requestContext.get().getVisibility()).orElse(Visibility.PRIVATE));
     }
 
+    public static Context setRequestContext(Context ctx, String workspaceId, String userName, Visibility visibility) {
+        return ctx.put(RequestContext.USER_NAME, userName)
+                .put(RequestContext.WORKSPACE_ID, workspaceId)
+                .put(RequestContext.VISIBILITY, Optional.ofNullable(visibility).orElse(Visibility.PRIVATE));
+
+    }
+
     public static Context setRequestContext(Context ctx, String userName, String workspaceId) {
         return ctx.put(RequestContext.USER_NAME, userName)
                 .put(RequestContext.WORKSPACE_ID, workspaceId);

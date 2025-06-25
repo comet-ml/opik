@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Arrays;
+import java.util.Optional;
 
 @Getter
 @RequiredArgsConstructor
@@ -16,8 +17,7 @@ public enum TraceThreadStatus {
     @JsonValue
     private final String value;
 
-    public static TraceThreadStatus fromValue(String value) {
-        return Arrays.stream(values()).filter(v -> v.value.equals(value)).findFirst()
-                .orElse(null);
+    public static Optional<TraceThreadStatus> fromValue(String value) {
+        return Arrays.stream(values()).filter(v -> v.value.equals(value)).findFirst();
     }
 }

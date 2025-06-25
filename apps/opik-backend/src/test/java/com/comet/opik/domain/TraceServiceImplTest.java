@@ -4,13 +4,12 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.error.InvalidUUIDVersionException;
 import com.comet.opik.api.sorting.TraceSortingFactory;
+import com.comet.opik.api.sorting.TraceThreadSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.ErrorUtils;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.common.eventbus.EventBus;
 import io.r2dbc.spi.Connection;
 import jakarta.ws.rs.NotFoundException;
@@ -43,7 +42,6 @@ import static org.mockito.Mockito.when;
 class TraceServiceImplTest {
 
     public static final LockService DUMMY_LOCK_SERVICE = new DummyLockService();
-    private static final TimeBasedEpochGenerator timeBasedGenerator = Generators.timeBasedEpochGenerator();
 
     private TraceServiceImpl traceService;
 
@@ -72,6 +70,7 @@ class TraceServiceImplTest {
     private EventBus eventBus;
 
     private final PodamFactory factory = new PodamFactoryImpl();
+    private final TraceThreadSortingFactory traceThreadSortingFactory = new TraceThreadSortingFactory();
     private final TraceSortingFactory traceSortingFactory = new TraceSortingFactory();
 
     @BeforeEach
@@ -86,7 +85,9 @@ class TraceServiceImplTest {
                 projectService,
                 new IdGeneratorImpl(),
                 DUMMY_LOCK_SERVICE,
-                eventBus);
+                eventBus,
+                traceThreadSortingFactory,
+                traceSortingFactory);
     }
 
     @Nested
@@ -127,7 +128,7 @@ class TraceServiceImplTest {
             String workspaceId = UUID.randomUUID().toString();
 
             when(projectService.resolveProjectIdAndVerifyVisibility(null, projectName))
-                    .thenThrow(ErrorUtils.failWithNotFoundName("Project", projectName));
+                    .thenReturn(Mono.error(ErrorUtils.failWithNotFoundName("Project", projectName)));
 
             Exception exception = assertThrows(NotFoundException.class, () -> traceService
                     .find(page, size, TraceSearchCriteria.builder()
@@ -169,7 +170,7 @@ class TraceServiceImplTest {
                     });
 
             when(projectService.resolveProjectIdAndVerifyVisibility(projectId, null))
-                    .thenReturn(projectId);
+                    .thenReturn(Mono.just(projectId));
 
             var actualResult = traceService
                     .find(page, size, TraceSearchCriteria.builder().projectId(projectId).build())
