@@ -13,6 +13,7 @@ from opik.environment import get_tqdm_for_current_environment
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
 from opik_optimizer import task_evaluator
+from opik_optimizer import utils
 
 from .. import _throttle
 from ..base_optimizer import BaseOptimizer, OptimizationRound
@@ -20,7 +21,6 @@ from ..optimization_config import chat_prompt, mappers
 from ..optimization_result import OptimizationResult
 from ..optimizable_agent import OptimizableAgent
 from . import reporting
-from . import utils
 
 tqdm = get_tqdm_for_current_environment()
 
