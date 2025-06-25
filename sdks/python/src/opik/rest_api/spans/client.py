@@ -8,7 +8,7 @@ from ..core.request_options import RequestOptions
 from ..types.comment import Comment
 from ..types.error_info import ErrorInfo
 from ..types.error_info_write import ErrorInfoWrite
-from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
+from ..types.feedback_score_batch_item_tracing import FeedbackScoreBatchItemTracing
 from ..types.feedback_score_source import FeedbackScoreSource
 from ..types.json_list_string import JsonListString
 from ..types.json_list_string_write import JsonListStringWrite
@@ -690,7 +690,7 @@ class SpansClient:
     def score_batch_of_spans(
         self,
         *,
-        scores: typing.Sequence[FeedbackScoreBatchItem],
+        scores: typing.Sequence[FeedbackScoreBatchItemTracing],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -698,7 +698,7 @@ class SpansClient:
 
         Parameters
         ----------
-        scores : typing.Sequence[FeedbackScoreBatchItem]
+        scores : typing.Sequence[FeedbackScoreBatchItemTracing]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -710,9 +710,9 @@ class SpansClient:
         Examples
         --------
         from Opik import OpikApi
-        from Opik import FeedbackScoreBatchItem
+        from Opik import FeedbackScoreBatchItemTracing
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.spans.score_batch_of_spans(scores=[FeedbackScoreBatchItem(id='id', name='name', value=1.1, source="ui", )], )
+        client.spans.score_batch_of_spans(scores=[FeedbackScoreBatchItemTracing(name='name', value=1.1, source="ui", )], )
         """
         _response = self._raw_client.score_batch_of_spans(scores=scores, request_options=request_options)
         return _response.data
@@ -1529,7 +1529,7 @@ class AsyncSpansClient:
     async def score_batch_of_spans(
         self,
         *,
-        scores: typing.Sequence[FeedbackScoreBatchItem],
+        scores: typing.Sequence[FeedbackScoreBatchItemTracing],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1537,7 +1537,7 @@ class AsyncSpansClient:
 
         Parameters
         ----------
-        scores : typing.Sequence[FeedbackScoreBatchItem]
+        scores : typing.Sequence[FeedbackScoreBatchItemTracing]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1549,11 +1549,11 @@ class AsyncSpansClient:
         Examples
         --------
         from Opik import AsyncOpikApi
-        from Opik import FeedbackScoreBatchItem
+        from Opik import FeedbackScoreBatchItemTracing
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.spans.score_batch_of_spans(scores=[FeedbackScoreBatchItem(id='id', name='name', value=1.1, source="ui", )], )
+            await client.spans.score_batch_of_spans(scores=[FeedbackScoreBatchItemTracing(name='name', value=1.1, source="ui", )], )
         asyncio.run(main())
         """
         _response = await self._raw_client.score_batch_of_spans(scores=scores, request_options=request_options)

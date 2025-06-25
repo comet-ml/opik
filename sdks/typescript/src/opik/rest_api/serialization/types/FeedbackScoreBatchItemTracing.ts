@@ -5,31 +5,29 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
-import { FeedbackScoreBatchItemSource } from "./FeedbackScoreBatchItemSource";
+import { FeedbackScoreBatchItemTracingSource } from "./FeedbackScoreBatchItemTracingSource";
 
-export const FeedbackScoreBatchItem: core.serialization.ObjectSchema<
-    serializers.FeedbackScoreBatchItem.Raw,
-    OpikApi.FeedbackScoreBatchItem
+export const FeedbackScoreBatchItemTracing: core.serialization.ObjectSchema<
+    serializers.FeedbackScoreBatchItemTracing.Raw,
+    OpikApi.FeedbackScoreBatchItemTracing
 > = core.serialization.object({
     id: core.serialization.string().optional(),
-    threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
     projectName: core.serialization.property("project_name", core.serialization.string().optional()),
     name: core.serialization.string(),
     categoryName: core.serialization.property("category_name", core.serialization.string().optional()),
     value: core.serialization.number(),
     reason: core.serialization.string().optional(),
-    source: FeedbackScoreBatchItemSource,
+    source: FeedbackScoreBatchItemTracingSource,
 });
 
-export declare namespace FeedbackScoreBatchItem {
+export declare namespace FeedbackScoreBatchItemTracing {
     export interface Raw {
         id?: string | null;
-        thread_id?: string | null;
         project_name?: string | null;
         name: string;
         category_name?: string | null;
         value: number;
         reason?: string | null;
-        source: FeedbackScoreBatchItemSource.Raw;
+        source: FeedbackScoreBatchItemTracingSource.Raw;
     }
 }

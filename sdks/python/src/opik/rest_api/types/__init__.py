@@ -84,6 +84,7 @@ from .complete_multipart_upload_request import CompleteMultipartUploadRequest
 from .complete_multipart_upload_request_entity_type import CompleteMultipartUploadRequestEntityType
 from .completion_tokens_details import CompletionTokensDetails
 from .count_value_stat_public import CountValueStatPublic
+from .data_point_double import DataPointDouble
 from .data_point_number_public import DataPointNumberPublic
 from .dataset import Dataset
 from .dataset_item import DatasetItem
@@ -146,9 +147,12 @@ from .feedback_score import FeedbackScore
 from .feedback_score_average import FeedbackScoreAverage
 from .feedback_score_average_detailed import FeedbackScoreAverageDetailed
 from .feedback_score_average_public import FeedbackScoreAveragePublic
-from .feedback_score_batch import FeedbackScoreBatch
 from .feedback_score_batch_item import FeedbackScoreBatchItem
 from .feedback_score_batch_item_source import FeedbackScoreBatchItemSource
+from .feedback_score_batch_item_thread import FeedbackScoreBatchItemThread
+from .feedback_score_batch_item_thread_source import FeedbackScoreBatchItemThreadSource
+from .feedback_score_batch_item_tracing import FeedbackScoreBatchItemTracing
+from .feedback_score_batch_item_tracing_source import FeedbackScoreBatchItemTracingSource
 from .feedback_score_compare import FeedbackScoreCompare
 from .feedback_score_compare_source import FeedbackScoreCompareSource
 from .feedback_score_experiment_item_bulk_write_view import FeedbackScoreExperimentItemBulkWriteView
@@ -298,12 +302,16 @@ from .trace_public_visibility_mode import TracePublicVisibilityMode
 from .trace_thread import TraceThread
 from .trace_thread_identifier import TraceThreadIdentifier
 from .trace_thread_page import TraceThreadPage
+from .trace_thread_status import TraceThreadStatus
 from .trace_visibility_mode import TraceVisibilityMode
 from .trace_write import TraceWrite
 from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
+from .workspace_metric_request import WorkspaceMetricRequest
+from .workspace_metric_response import WorkspaceMetricResponse
+from .workspace_metrics_summary_request import WorkspaceMetricsSummaryRequest
 from .workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
 from .workspace_name_holder import WorkspaceNameHolder
 from .workspace_spans_count import WorkspaceSpansCount
@@ -376,6 +384,7 @@ __all__ = [
     "CompleteMultipartUploadRequestEntityType",
     "CompletionTokensDetails",
     "CountValueStatPublic",
+    "DataPointDouble",
     "DataPointNumberPublic",
     "Dataset",
     "DatasetItem",
@@ -438,9 +447,12 @@ __all__ = [
     "FeedbackScoreAverage",
     "FeedbackScoreAverageDetailed",
     "FeedbackScoreAveragePublic",
-    "FeedbackScoreBatch",
     "FeedbackScoreBatchItem",
     "FeedbackScoreBatchItemSource",
+    "FeedbackScoreBatchItemThread",
+    "FeedbackScoreBatchItemThreadSource",
+    "FeedbackScoreBatchItemTracing",
+    "FeedbackScoreBatchItemTracingSource",
     "FeedbackScoreCompare",
     "FeedbackScoreCompareSource",
     "FeedbackScoreExperimentItemBulkWriteView",
@@ -592,12 +604,16 @@ __all__ = [
     "TraceThread",
     "TraceThreadIdentifier",
     "TraceThreadPage",
+    "TraceThreadStatus",
     "TraceVisibilityMode",
     "TraceWrite",
     "Usage",
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
+    "WorkspaceMetricRequest",
+    "WorkspaceMetricResponse",
+    "WorkspaceMetricsSummaryRequest",
     "WorkspaceMetricsSummaryResponse",
     "WorkspaceNameHolder",
     "WorkspaceSpansCount",

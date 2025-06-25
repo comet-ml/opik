@@ -5,6 +5,7 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
+from ..types.workspace_metric_response import WorkspaceMetricResponse
 from ..types.workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
 from .raw_client import AsyncRawWorkspacesClient, RawWorkspacesClient
 
@@ -27,12 +28,59 @@ class WorkspacesClient:
         """
         return self._raw_client
 
+    def get_metric(
+        self,
+        *,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> WorkspaceMetricResponse:
+        """
+        Get metric daily data
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        start_before_end : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WorkspaceMetricResponse
+            Workspace metric data by days
+
+        Examples
+        --------
+        from Opik import OpikApi
+        import datetime
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.workspaces.get_metric(interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), interval_end=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+        """
+        _response = self._raw_client.get_metric(
+            interval_start=interval_start,
+            interval_end=interval_end,
+            project_ids=project_ids,
+            start_before_end=start_before_end,
+            request_options=request_options,
+        )
+        return _response.data
+
     def metrics_summary(
         self,
         *,
         interval_start: dt.datetime,
         interval_end: dt.datetime,
         project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> WorkspaceMetricsSummaryResponse:
         """
@@ -45,6 +93,8 @@ class WorkspacesClient:
         interval_end : dt.datetime
 
         project_ids : typing.Optional[typing.Sequence[str]]
+
+        start_before_end : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -65,6 +115,7 @@ class WorkspacesClient:
             interval_start=interval_start,
             interval_end=interval_end,
             project_ids=project_ids,
+            start_before_end=start_before_end,
             request_options=request_options,
         )
         return _response.data
@@ -85,12 +136,62 @@ class AsyncWorkspacesClient:
         """
         return self._raw_client
 
+    async def get_metric(
+        self,
+        *,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> WorkspaceMetricResponse:
+        """
+        Get metric daily data
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        start_before_end : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WorkspaceMetricResponse
+            Workspace metric data by days
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import datetime
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.workspaces.get_metric(interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), interval_end=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_metric(
+            interval_start=interval_start,
+            interval_end=interval_end,
+            project_ids=project_ids,
+            start_before_end=start_before_end,
+            request_options=request_options,
+        )
+        return _response.data
+
     async def metrics_summary(
         self,
         *,
         interval_start: dt.datetime,
         interval_end: dt.datetime,
         project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> WorkspaceMetricsSummaryResponse:
         """
@@ -103,6 +204,8 @@ class AsyncWorkspacesClient:
         interval_end : dt.datetime
 
         project_ids : typing.Optional[typing.Sequence[str]]
+
+        start_before_end : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -126,6 +229,7 @@ class AsyncWorkspacesClient:
             interval_start=interval_start,
             interval_end=interval_end,
             project_ids=project_ids,
+            start_before_end=start_before_end,
             request_options=request_options,
         )
         return _response.data
