@@ -54,7 +54,7 @@ def run_optimization(
             initial_evaluation = []
             for metric_ in dataset_config.metrics:
                 result = optimizer.evaluate_prompt(
-                    prompt=initial_prompt, dataset=dataset, metric=metric_
+                    prompt=initial_prompt, dataset=dataset, metric=metric_, n_threads=4
                 )
                 initial_evaluation.append(
                     {
@@ -78,7 +78,10 @@ def run_optimization(
             optimized_evaluation = []
             for metric_ in dataset_config.metrics:
                 result = optimizer.evaluate_prompt(
-                    prompt=optimized_prompt, dataset=dataset, metric=metric_
+                    prompt=optimized_prompt,
+                    dataset=dataset,
+                    metric=metric_,
+                    n_threads=4,
                 )
                 optimized_evaluation.append(
                     {
