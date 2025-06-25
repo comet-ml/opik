@@ -18,7 +18,8 @@ from ..errors.unauthorized_error import UnauthorizedError
 from ..types.comment import Comment
 from ..types.error_info import ErrorInfo
 from ..types.error_info_write import ErrorInfoWrite
-from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
+from ..types.feedback_score_batch_item_thread import FeedbackScoreBatchItemThread
+from ..types.feedback_score_batch_item_tracing import FeedbackScoreBatchItemTracing
 from ..types.feedback_score_source import FeedbackScoreSource
 from ..types.json_list_string import JsonListString
 from ..types.json_list_string_write import JsonListStringWrite
@@ -583,6 +584,54 @@ class RawTracesClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def delete_thread_feedback_scores(
+        self,
+        *,
+        project_name: str,
+        thread_id: str,
+        names: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Delete thread feedback scores
+
+        Parameters
+        ----------
+        project_name : str
+
+        thread_id : str
+
+        names : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/traces/threads/feedback-scores/delete",
+            method="POST",
+            json={
+                "project_name": project_name,
+                "thread_id": thread_id,
+                "names": names,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def delete_trace_comments(
         self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[None]:
@@ -1073,10 +1122,52 @@ class RawTracesClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def score_batch_of_threads(
+        self,
+        *,
+        scores: typing.Sequence[FeedbackScoreBatchItemThread],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Batch feedback scoring for threads
+
+        Parameters
+        ----------
+        scores : typing.Sequence[FeedbackScoreBatchItemThread]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/traces/threads/feedback-scores",
+            method="PUT",
+            json={
+                "scores": convert_and_respect_annotation_metadata(
+                    object_=scores, annotation=typing.Sequence[FeedbackScoreBatchItemThread], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def score_batch_of_traces(
         self,
         *,
-        scores: typing.Sequence[FeedbackScoreBatchItem],
+        scores: typing.Sequence[FeedbackScoreBatchItemTracing],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -1084,7 +1175,7 @@ class RawTracesClient:
 
         Parameters
         ----------
-        scores : typing.Sequence[FeedbackScoreBatchItem]
+        scores : typing.Sequence[FeedbackScoreBatchItemTracing]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1098,7 +1189,7 @@ class RawTracesClient:
             method="PUT",
             json={
                 "scores": convert_and_respect_annotation_metadata(
-                    object_=scores, annotation=typing.Sequence[FeedbackScoreBatchItem], direction="write"
+                    object_=scores, annotation=typing.Sequence[FeedbackScoreBatchItemTracing], direction="write"
                 ),
             },
             headers={
@@ -1835,6 +1926,54 @@ class AsyncRawTracesClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def delete_thread_feedback_scores(
+        self,
+        *,
+        project_name: str,
+        thread_id: str,
+        names: typing.Sequence[str],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Delete thread feedback scores
+
+        Parameters
+        ----------
+        project_name : str
+
+        thread_id : str
+
+        names : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/traces/threads/feedback-scores/delete",
+            method="POST",
+            json={
+                "project_name": project_name,
+                "thread_id": thread_id,
+                "names": names,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def delete_trace_comments(
         self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[None]:
@@ -2325,10 +2464,52 @@ class AsyncRawTracesClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def score_batch_of_threads(
+        self,
+        *,
+        scores: typing.Sequence[FeedbackScoreBatchItemThread],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Batch feedback scoring for threads
+
+        Parameters
+        ----------
+        scores : typing.Sequence[FeedbackScoreBatchItemThread]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/traces/threads/feedback-scores",
+            method="PUT",
+            json={
+                "scores": convert_and_respect_annotation_metadata(
+                    object_=scores, annotation=typing.Sequence[FeedbackScoreBatchItemThread], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def score_batch_of_traces(
         self,
         *,
-        scores: typing.Sequence[FeedbackScoreBatchItem],
+        scores: typing.Sequence[FeedbackScoreBatchItemTracing],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2336,7 +2517,7 @@ class AsyncRawTracesClient:
 
         Parameters
         ----------
-        scores : typing.Sequence[FeedbackScoreBatchItem]
+        scores : typing.Sequence[FeedbackScoreBatchItemTracing]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2350,7 +2531,7 @@ class AsyncRawTracesClient:
             method="PUT",
             json={
                 "scores": convert_and_respect_annotation_metadata(
-                    object_=scores, annotation=typing.Sequence[FeedbackScoreBatchItem], direction="write"
+                    object_=scores, annotation=typing.Sequence[FeedbackScoreBatchItemTracing], direction="write"
                 ),
             },
             headers={

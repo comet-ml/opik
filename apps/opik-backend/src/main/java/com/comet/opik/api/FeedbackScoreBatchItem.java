@@ -25,7 +25,6 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record FeedbackScoreBatchItem(
         // entity (trace or span) id
-
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) @JsonView( {
                 FeedbackScoreBatch.View.Tracing.class}) @NotNull(groups = {
                         FeedbackScoreBatch.View.Tracing.class}) UUID id,
