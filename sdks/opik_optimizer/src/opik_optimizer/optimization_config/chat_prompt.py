@@ -87,6 +87,8 @@ class ChatPrompt:
                 )
                 for key, value in function_map.items()
             }
+        else:
+            self.function_map = {}
         # These are used for the LiteLLMAgent class:
         self.model = model
         self.model_kwargs = model_kwargs
