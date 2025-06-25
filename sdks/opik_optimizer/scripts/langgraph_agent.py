@@ -2,6 +2,7 @@ from typing import Any, List, Dict
 from typing_extensions import TypedDict
 
 from opik.integrations.langchain import OpikTracer
+from opik import track
 
 from opik_optimizer import (
     OptimizableAgent,
@@ -17,6 +18,7 @@ from langchain_core.prompts import PromptTemplate
 import dspy
 
 
+@track(type="tool")
 def search_wikipedia(query: str) -> list[str]:
     """
     This agent is used to search wikipedia. It can retrieve additional details
@@ -47,7 +49,7 @@ def create_graph(project_name: str, prompt_template: str) -> Any:
 
     agent_tools = [
         Tool(
-            name="Search Wikipedia",
+            name="search_wikipedia",
             func=search_wikipedia,
             description="""This agent is used to search wikipedia. It can retrieve additional details about a topic.""",
         )
