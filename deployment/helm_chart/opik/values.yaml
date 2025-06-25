@@ -348,6 +348,10 @@ clickhouse:
       enabled: false
     username: opik
     password: opik
+  serviceAccount:
+    annotations: {}
+    create: false
+    name: ""
   zookeeper:
       host: opik-zookeeper
   backup: 
@@ -361,6 +365,7 @@ clickhouse:
     # secretName: ""
     # schedule: ""
     # baseBackup: ""
+    schedule: "0 0 * * *" # daily at midnight
     command:
       - /bin/bash
       - '-cx'
