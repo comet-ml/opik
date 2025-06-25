@@ -38,6 +38,7 @@ optimizer = EvolutionaryOptimizer(
     enable_llm_crossover=True,
     infer_output_style=True,
     verbose=1,
+    num_threads=4,
 )
 
 optimization_result = optimizer.optimize_prompt(
