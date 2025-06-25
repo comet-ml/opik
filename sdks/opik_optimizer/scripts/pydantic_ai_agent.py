@@ -33,7 +33,7 @@ class PydanticAIAgent(OptimizableAgent):
 
     project_name: str = "pydantic-ai-agent"
 
-    def init_agent(self, prompts: Dict[str, ChatPrompt]) -> None:
+    def init_agent(self, prompt: ChatPrompt) -> None:
         """Initialize the agent with the provided configuration."""
         # This agent doesn't actually change the agent, so we just initialize it:
         self.agent = Agent(

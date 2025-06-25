@@ -27,7 +27,7 @@ The user will provide a question string like "Who is Barack Obama?".
 3. Respond clearly to the user, stating the answer found by the tool.
 """
 
-prompt = ChatPrompt(system=system_prompt, user="{question}", agent_class=ADKAgent)
+prompt = ChatPrompt(system=system_prompt, user="{question}")
 
 # Optimize it:
 optimizer = MetaPromptOptimizer(
@@ -42,6 +42,7 @@ optimizer = MetaPromptOptimizer(
 )
 optimization_result = optimizer.optimize_prompt(
     prompt=prompt,
+    agent_class=ADKAgent,
     dataset=dataset,
     metric=levenshtein_ratio,
     n_samples=10,

@@ -91,8 +91,8 @@ def create_graph(project_name: str, prompt_template: str) -> Any:
 class LangGraphAgent(OptimizableAgent):
     project_name = "langgraph-agent"
 
-    def init_agent(self, prompts: Dict[str, ChatPrompt]) -> None:
-        self.prompt = prompts["chat-prompt"]
+    def init_agent(self, prompt: ChatPrompt) -> None:
+        self.prompt = prompt
         self.graph = create_graph(
             self.project_name,
             self.prompt.get_messages()[0]["content"],

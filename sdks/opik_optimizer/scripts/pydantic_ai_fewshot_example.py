@@ -27,7 +27,6 @@ explanation."""
 prompt = ChatPrompt(
     system=system_prompt,
     user="{question}",
-    agent_class=PydanticAIAgent,
 )
 
 # Optimize it:
@@ -40,6 +39,7 @@ optimizer = FewShotBayesianOptimizer(
 )
 optimization_result = optimizer.optimize_prompt(
     prompt=prompt,
+    agent_class=PydanticAIAgent,
     dataset=dataset,
     metric=levenshtein_ratio,
     n_trials=10,

@@ -1,10 +1,10 @@
-from typing import Any, Dict, List, Optional, Union, Type
+from typing import Any, Dict, List, Optional, Union, Callable
 
 import copy
 
 from pydantic import BaseModel, Field
 
-from ..optimizable_agent import OptimizableAgent
+from opik import track
 
 
 class Tool(BaseModel):
@@ -30,20 +30,17 @@ class ChatPrompt:
             a content containing {input-dataset-field}
     """
 
-    system: Optional[str]
-    user: Optional[str]
-    messages: Optional[List[Dict[str, str]]]
-    tools: Optional[Dict[str, Any]]
-    agent_class: Type[OptimizableAgent]
-
     def __init__(
         self,
+        name: str = "chat-prompt",
         system: Optional[str] = None,
         user: Optional[str] = None,
         messages: Optional[List[Dict[str, str]]] = None,
-        tools: Optional[Dict[str, Any]] = None,
-        agent_class: Optional[Type[OptimizableAgent]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        function_map: Optional[Dict[str, Callable]] = None,
         model: Optional[str] = None,
+        invoke: Optional[Callable] = None,
+        project_name: Optional[str] = "Default Project",
         **model_kwargs: Any,
     ) -> None:
         if system is None and user is None and messages is None:
@@ -74,29 +71,27 @@ class ChatPrompt:
                         raise ValueError(
                             "`message` must have 'role' and 'content' keys."
                         )
-        if agent_class is None:
-            self.model = model
-            self.model_kwargs = model_kwargs
-
-            class LiteLLMAgent(OptimizableAgent):
-                model = self.model
-                model_kwargs = self.model_kwargs
-
-            self.agent_class = LiteLLMAgent
-        else:
-            self.agent_class = agent_class
-
+        self.name = name
         self.system = system
         self.user = user
         self.messages = messages
+        # ALl of the rest are just for the ChatPrompt LLM
+        # These are used from the prompt as controls:
         self.tools = tools
-        # Add defaults to tools:
-        if self.tools:
-            for tool_key in self.tools:
-                if "name" not in self.tools[tool_key]:
-                    self.tools[tool_key]["name"] = self.tools[tool_key][
-                        "function"
-                    ].__name__
+        if function_map:
+            self.function_map = {
+                key: (
+                    value
+                    if hasattr(value, "__wrapped__")
+                    else track(type="tool")(value)
+                )
+                for key, value in function_map.items()
+            }
+        # These are used for the LiteLLMAgent class:
+        self.model = model
+        self.model_kwargs = model_kwargs
+        self.invoke = invoke
+        self.project_name = project_name
 
     def get_messages(
         self,
@@ -147,15 +142,12 @@ class ChatPrompt:
         return retval
 
     def copy(self) -> "ChatPrompt":
-        # Deep copy the messages list and its contents
-        messages = copy.deepcopy(self.messages) if self.messages else None
-        tools = copy.deepcopy(self.tools)
         return ChatPrompt(
             system=self.system,
             user=self.user,
-            messages=messages,
-            tools=tools,
-            agent_class=self.agent_class,
+            messages=copy.deepcopy(self.messages),
+            tools=self.tools,
+            function_map=self.function_map,
         )
 
     def set_messages(self, messages: List[Dict[str, Any]]) -> None:

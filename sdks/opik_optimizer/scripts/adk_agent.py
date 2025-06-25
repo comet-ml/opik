@@ -59,8 +59,8 @@ def create_agent(project_name: str) -> Any:
 class ADKAgent(OptimizableAgent):
     project_name = "adk-agent"
 
-    def init_agent(self, prompts: Dict[str, ChatPrompt]) -> None:
-        self.prompt = prompts["chat-prompt"]
+    def init_agent(self, prompt: ChatPrompt) -> None:
+        self.prompt = prompt
         self.agent = create_agent(self.project_name)
 
     def invoke_dataset_item(self, dataset_item: Dict[str, str]) -> str:

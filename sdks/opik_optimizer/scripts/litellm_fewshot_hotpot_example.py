@@ -31,13 +31,6 @@ def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreRes
 
 dataset = hotpot_300()
 
-
-system_prompt = """
-Answer the question with a direct phrase. Use the tool `search_wikipedia`
-if you need it. Make sure you consider the results before answering the
-question.
-"""
-
 optimizer = FewShotBayesianOptimizer(
     model="openai/gpt-4o-mini",
     min_examples=3,
@@ -46,15 +39,36 @@ optimizer = FewShotBayesianOptimizer(
     seed=42,
 )
 
+system_prompt = """
+Answer the question with a direct phrase. Use the tool `search_wikipedia`
+if you need it. Make sure you consider the results before answering the
+question.
+"""
+
 prompt = ChatPrompt(
     system=system_prompt,
     user="{question}",
-    tools={
-        "Search Wikipedia": {
-            "function": search_wikipedia,
-            "description": "Use this tool to search wikipedia",
-        }
-    },
+    # Values for the ChatPrompt LLM
+    tools=[
+        {
+            "type": "function",
+            "function": {
+                "name": "search_wikipedia",
+                "description": "This function is used to search wikipedia abstracts.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The query parameter is the term or phrase to search for.",
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
+        },
+    ],
+    function_map={"search_wikipedia": search_wikipedia},
 )
 
 optimization_result = optimizer.optimize_prompt(

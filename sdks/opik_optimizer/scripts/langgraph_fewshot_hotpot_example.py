@@ -48,7 +48,6 @@ Thought: {agent_scratchpad}"""
 prompt = ChatPrompt(
     system=prompt_template,
     user="{question}",
-    agent_class=LangGraphAgent,
 )
 
 # Optimize it:
@@ -61,6 +60,7 @@ optimizer = FewShotBayesianOptimizer(
 )
 optimization_result = optimizer.optimize_prompt(
     prompt=prompt,
+    agent_class=LangGraphAgent,
     dataset=dataset,
     metric=levenshtein_ratio,
     n_trials=10,

@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import random
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, cast
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, cast, Type
 
 import rapidfuzz.distance.Indel
 import litellm
@@ -23,6 +23,7 @@ from opik_optimizer import _throttle, task_evaluator
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
 from opik_optimizer.optimization_config import chat_prompt, mappers
 from opik_optimizer.optimization_result import OptimizationResult
+from opik_optimizer.optimizable_agent import OptimizableAgent
 
 from .. import utils
 from . import reporting
@@ -956,6 +957,7 @@ Return only the new prompt list object.
         experiment_config: Optional[Dict] = None,
         n_samples: Optional[int] = None,
         auto_continue: bool = False,
+        agent_class: Optional[Type[OptimizableAgent]] = None,
         **kwargs: Any,
     ) -> OptimizationResult:
         """
@@ -979,7 +981,17 @@ Return only the new prompt list object.
                 "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
             )
 
-        self.project_name = prompt.agent_class.project_name
+        if prompt.model is None:
+            prompt.model = self.model
+        if prompt.model_kwargs is None:
+            prompt.model_kwargs = self.model_kwargs
+
+        if agent_class is None:
+            self.agent_class = utils.create_litellm_agent_class(prompt)
+        else:
+            self.agent_class = agent_class
+
+        self.project_name = self.agent_class.project_name
 
         # Step 0. Start Opik optimization run
         opik_optimization_run: Optional[optimization.Optimization] = None
@@ -1509,19 +1521,14 @@ Return only the new prompt list object.
         Returns:
             float: The metric value
         """
-        if prompt.agent_class.model is None:
-            prompt.agent_class.model = self.model
-        if prompt.agent_class.model_kwargs is None:
-            prompt.agent_class.model_kwargs = self.model_kwargs
-
         total_items = len(dataset.get_items())
 
         experiment_config = experiment_config or {}
-        experiment_config["project_name"] = prompt.agent_class.project_name
+        experiment_config["project_name"] = self.agent_class.project_name
         experiment_config = {
             **experiment_config,
             "optimizer": self.__class__.__name__,
-            "agent_class": prompt.agent_class.__name__,
+            "agent_class": self.agent_class.__name__,
             "agent_config": prompt.to_dict(),
             "metric": metric.__name__,
             "dataset": dataset.name,
@@ -1537,7 +1544,7 @@ Return only the new prompt list object.
         new_prompt = prompt.copy()
         new_prompt.set_messages(messages)
         try:
-            agent = prompt.agent_class({"chat-prompt": new_prompt})
+            agent = self.agent_class(new_prompt)
         except Exception:
             return 0.0
 

@@ -27,7 +27,6 @@ explanation."""
 prompt = ChatPrompt(
     system=system_prompt,
     user="{question}",
-    agent_class=PydanticAIAgent,
 )
 
 # Optimize it:
@@ -43,6 +42,7 @@ optimizer = EvolutionaryOptimizer(
 
 optimization_result = optimizer.optimize_agent(
     prompt=prompt,
+    agent_class=PydanticAIAgent,
     dataset=dataset,
     metric=levenshtein_ratio,
     n_samples=10,

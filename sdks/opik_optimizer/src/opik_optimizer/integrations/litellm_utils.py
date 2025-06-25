@@ -4,7 +4,7 @@ import inspect
 import typing
 
 
-def function_to_litellm_definition(
+def function_to_tool_definition(
     func: Callable, description: Optional[str] = None
 ) -> Dict[str, Any]:
     sig = inspect.signature(func)

@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 import litellm
 import opik
@@ -18,7 +18,9 @@ from .. import _throttle
 from ..base_optimizer import BaseOptimizer, OptimizationRound
 from ..optimization_config import chat_prompt, mappers
 from ..optimization_result import OptimizationResult
+from ..optimizable_agent import OptimizableAgent
 from . import reporting
+from . import utils
 
 tqdm = get_tqdm_for_current_environment()
 
@@ -259,7 +261,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             **experiment_config,
             **{
                 "optimizer": self.__class__.__name__,
-                "agent_class": prompt.agent_class.__name__,
+                "agent_class": self.agent_class.__name__,
                 "agent_config": prompt.to_dict(),
                 "metric": getattr(metric, "__name__", str(metric)),
                 "dataset": dataset.name,
@@ -286,7 +288,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             new_prompt = prompt.copy()
             messages = new_prompt.get_messages(dataset_item)
             new_prompt.set_messages(messages)
-            agent = new_prompt.agent_class({"chat-prompt": new_prompt})
+            agent = self.agent_class({"chat-prompt": new_prompt})
 
             # --- Step 2: Call the model ---
             try:
@@ -322,7 +324,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             evaluated_task=llm_task,
             dataset_item_ids=dataset_item_ids,
             num_threads=self.num_threads,
-            project_name=prompt.agent_class.project_name,
+            project_name=self.agent_class.project_name,
             n_samples=subset_size,  # Use subset_size for trials, None for full dataset
             experiment_config=experiment_config,
             optimization_id=optimization_id,
@@ -339,6 +341,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         experiment_config: Optional[Dict] = None,
         n_samples: Optional[int] = None,
         auto_continue: bool = False,
+        agent_class: Optional[Type[OptimizableAgent]] = None,
         **kwargs: Any,
     ) -> OptimizationResult:
         """
@@ -366,10 +369,15 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
             )
 
-        if prompt.agent_class.model is None:
-            prompt.agent_class.model = self.model
-        if prompt.agent_class.model_kwargs is None:
-            prompt.agent_class.model_kwargs = self.model_kwargs
+        if prompt.model is None:
+            prompt.model = self.model
+        if prompt.model_kwargs is None:
+            prompt.model_kwargs = self.model_kwargs
+
+        if agent_class is None:
+            self.agent_class = utils.create_litellm_agent_class(prompt)
+        else:
+            self.agent_class = agent_class
 
         total_items = len(dataset.get_items())
         if n_samples is not None and n_samples > total_items:
@@ -454,7 +462,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             **experiment_config,
             **{
                 "optimizer": self.__class__.__name__,
-                "agent_class": prompt.agent_class.__name__,
+                "agent_class": self.agent_class.__name__,
                 "agent_config": prompt.to_dict(),
                 "metric": getattr(metric, "__name__", str(metric)),
                 "dataset": dataset.name,
@@ -494,7 +502,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 # Step 1. Create a set of candidate prompts
                 try:
                     candidate_prompts = self._generate_candidate_prompts(
-                        project_name=prompt.agent_class.project_name,
+                        project_name=self.agent_class.project_name,
                         current_prompt=best_prompt,
                         best_score=best_score,
                         round_num=round_num,
