@@ -23,6 +23,7 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import NoData from "@/components/shared/NoData/NoData";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { VirtualizedTreeList } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/TraceTree";
 
 type SpanWithMetadata = Omit<Span, "type"> & {
   type: BASE_TRACE_DATA_TYPE;
@@ -314,6 +315,11 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
               </Button>
             )}
           </div>
+        </div>
+
+        <div style={{ padding: "20px" }}>
+          <h1>Virtualized Tree</h1>
+          <VirtualizedTreeList />
         </div>
 
         {treeData ? (
