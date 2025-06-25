@@ -295,7 +295,7 @@ function Show-Banner {
     Write-Host '║  🛠️  Configure the Python SDK:                                  ║'
     Write-Host '║    - Be sure Python 3.x is installed and available via PATH     ║'
     Write-Host '║    - `pip install opik` # (or `py -m pip install opik`)         ║'
-    Write-Host '║    - `opik configure`                                           ║'
+    Write-Host '║    - `opik configure --use-local`                               ║'
     Write-Host '║                                                                 ║'
     Write-Host '║  📚 Documentation: https://www.comet.com/docs/opik/             ║'
     Write-Host '║                                                                 ║'
