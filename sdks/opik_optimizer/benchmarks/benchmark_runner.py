@@ -14,8 +14,6 @@ from benchmark_task import TaskEvaluationResult, TaskResult
 import opik_optimizer
 import opik_optimizer.datasets
 from opik_optimizer import (
-    AgentConfig,
-    OptimizableAgent,
     BaseOptimizer,
     reporting_utils,
 )
@@ -49,20 +47,15 @@ def run_optimization(
             )(model=model_name, **optimizer_config.params)
 
             messages = benchmark_config.INITIAL_PROMPTS[dataset_name]
+            initial_prompt = chat_prompt.ChatPrompt(messages=messages)  # type: ignore
 
-            class LiteLLMAgent(OptimizableAgent):
-                model = model_name
-
-            agent_class = LiteLLMAgent
-            agent_config = AgentConfig(
-                chat_prompt=chat_prompt.ChatPrompt(messages=messages)  # type: ignore
-            )
-            agent = agent_class(agent_config)
             # Start by running a first evaluation
             start_time_initial_eval = time.time()
             initial_evaluation = []
             for metric_ in dataset_config.metrics:
-                result = agent.evaluate(dataset=dataset, metric=metric_, n_threads=4)
+                result = optimizer.evaluate_prompt(
+                    prompt=initial_prompt, dataset=dataset, metric=metric_
+                )
                 initial_evaluation.append(
                     {
                         "metric_name": metric_.__name__,
@@ -73,24 +66,19 @@ def run_optimization(
             initial_evaluation_duration = time.time() - start_time_initial_eval
 
             # Run optimization
-            optimization_results = optimizer.optimize_agent(
-                agent_class=agent_class,
-                agent_config=agent_config,
-                dataset=dataset,
-                metric=dataset_config.metrics[0],
+            optimization_results = optimizer.optimize_prompt(
+                prompt=initial_prompt, dataset=dataset, metric=dataset_config.metrics[0]
             )
-
-            new_agent_config = AgentConfig(
-                chat_prompt=chat_prompt.ChatPrompt(messages=optimization_results.prompt)
+            optimized_prompt = chat_prompt.ChatPrompt(
+                messages=optimization_results.prompt
             )
-            new_agent = agent_class(new_agent_config)
 
             # Run final evaluation
             start_time_final_eval = time.time()
             optimized_evaluation = []
             for metric_ in dataset_config.metrics:
-                result = new_agent.evaluate(
-                    dataset=dataset, metric=metric_, n_threads=4
+                result = optimizer.evaluate_prompt(
+                    prompt=optimized_prompt, dataset=dataset, metric=metric_
                 )
                 optimized_evaluation.append(
                     {
