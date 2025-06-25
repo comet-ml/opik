@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Type
 
 import logging
 import time
@@ -15,6 +15,8 @@ from pydantic import BaseModel
 from . import _throttle, optimization_result
 from .cache_config import initialize_cache
 from .optimization_config import chat_prompt, mappers
+from .optimizable_agent import OptimizableAgent
+from .utils import create_litellm_agent_class
 from . import task_evaluator
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -127,6 +129,7 @@ class BaseOptimizer:
     def evaluate_prompt(
         self,
         prompt: chat_prompt.ChatPrompt,
+        agent_class: Type[OptimizableAgent],
         dataset: Dataset,
         metric: Callable,
         n_threads: int,
@@ -138,7 +141,19 @@ class BaseOptimizer:
     ) -> float:
         random.seed(seed)
 
-        agent = prompt.agent_class({"chat-prompt": prompt})
+        if prompt.model is None:
+            prompt.model = self.model
+        if prompt.model_kwargs is None:
+            prompt.model_kwargs = self.model_kwargs
+
+        self.agent_class: Type[OptimizableAgent]
+
+        if agent_class is None:
+            self.agent_class = create_litellm_agent_class(prompt)
+        else:
+            self.agent_class = agent_class
+
+        agent = agent_class(prompt)
 
         def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
             messages = prompt.get_messages(dataset_item)
@@ -154,7 +169,7 @@ class BaseOptimizer:
         experiment_config = {
             **experiment_config,
             **{
-                "agent_class": self.__class__.__name__,
+                "agent_class": self.agent_class.__name__,
                 "agent_config": prompt.to_dict(),
                 "metric": metric.__name__,
                 "dataset": dataset.name,
@@ -175,7 +190,7 @@ class BaseOptimizer:
             metric=metric,
             evaluated_task=llm_task,
             num_threads=n_threads,
-            project_name=prompt.agent_class.project_name,
+            project_name=self.agent_class.project_name,
             experiment_config=experiment_config,
             optimization_id=None,
             verbose=verbose,
