@@ -969,9 +969,12 @@ def test_tracked_function__update_current_span__with_attachments(
 def test_low_level_client__update_span__with_attachments(
     opik_client: opik.Opik, data_file
 ):
-    span_client = opik_client.span(
-        name="original-span-name",
+    root_span_client = opik_client.span(
+        name="root-span-name",
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+    span_client = root_span_client.span(
+        name="child-span-name",
         input={"input": "original-span-input"},
     )
     opik.flush_tracker()
@@ -1000,9 +1003,10 @@ def test_low_level_client__update_span__with_attachments(
     verifiers.verify_span(
         opik_client=opik_client,
         span_id=span_client.id,
-        parent_span_id=None,
+        parent_span_id=root_span_client.id,
         trace_id=span_client.trace_id,
         input={"input": "new-span-input"},
+        name="child-span-name",
     )
     verifiers.verify_attachments(
         opik_client=opik_client,
