@@ -81,7 +81,7 @@ Call opik api on http://localhost:5173/api
 | https://charts.bitnami.com/bitnami | mysql | 11.1.9 |
 | https://charts.bitnami.com/bitnami | redis | 18.19.2 |
 | https://charts.bitnami.com/bitnami | zookeeper | 13.8.3 |
-| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.23.7 |
+| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.0 |
 | oci://registry-1.docker.io/bitnamicharts | common | 2.x.x |
 
 ## Values
@@ -94,10 +94,14 @@ Call opik api on http://localhost:5173/api
 | clickhouse.adminUser.password | string | `"opik"` |  |
 | clickhouse.adminUser.useSecret.enabled | bool | `false` |  |
 | clickhouse.adminUser.username | string | `"opik"` |  |
+| clickhouse.backup.command[0] | string | `"/bin/bash"` |  |
+| clickhouse.backup.command[1] | string | `"-cx"` |  |
+| clickhouse.backup.command[2] | string | `"export backupname=backup$(date +'%Y%m%d%H%M')\necho \"BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');\" > /tmp/backQuery.sql\nclickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql"` |  |
 | clickhouse.backup.enabled | bool | `false` |  |
+| clickhouse.backup.schedule | string | `"0 0 * * *"` |  |
 | clickhouse.backup.serviceAccount.annotations | object | `{}` |  |
-| clickhouse.backup.serviceAccount.create | bool | `true` |  |
-| clickhouse.backup.serviceAccount.enabled | bool | `false` |  |
+| clickhouse.backup.serviceAccount.create | bool | `false` |  |
+| clickhouse.backup.serviceAccount.name | string | `""` |  |
 | clickhouse.backup.successfulJobsHistoryLimit | int | `1` |  |
 | clickhouse.enabled | bool | `true` |  |
 | clickhouse.image | string | `"altinity/clickhouse-server:24.3.5.47.altinitystable"` |  |
@@ -107,6 +111,9 @@ Call opik api on http://localhost:5173/api
 | clickhouse.monitoring.username | string | `"opikmon"` |  |
 | clickhouse.replicasCount | int | `1` |  |
 | clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
+| clickhouse.serviceAccount.annotations | object | `{}` |  |
+| clickhouse.serviceAccount.create | bool | `false` |  |
+| clickhouse.serviceAccount.name | string | `""` |  |
 | clickhouse.shardsCount | int | `1` |  |
 | clickhouse.storage | string | `"50Gi"` |  |
 | clickhouse.zookeeper.host | string | `"opik-zookeeper"` |  |
@@ -141,7 +148,13 @@ Call opik api on http://localhost:5173/api
 | component.backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.backend.image.repository | string | `"opik-backend"` |  |
 | component.backend.image.tag | string | `"latest"` |  |
+| component.backend.ingress.annotations | object | `{}` |  |
 | component.backend.ingress.enabled | bool | `false` |  |
+| component.backend.ingress.hosts | list | `[]` |  |
+| component.backend.ingress.ingressClassName | string | `""` |  |
+| component.backend.ingress.tls.enabled | bool | `false` |  |
+| component.backend.ingress.tls.hosts | list | `[]` |  |
+| component.backend.ingress.tls.secretName | string | `""` |  |
 | component.backend.livenessProbe.path | string | `"/health-check?name=all&type=alive"` |  |
 | component.backend.livenessProbe.port | int | `8080` |  |
 | component.backend.metrics.enabled | bool | `false` |  |
@@ -175,7 +188,13 @@ Call opik api on http://localhost:5173/api
 | component.frontend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.frontend.image.repository | string | `"opik-frontend"` |  |
 | component.frontend.image.tag | string | `"latest"` |  |
+| component.frontend.ingress.annotations | object | `{}` |  |
 | component.frontend.ingress.enabled | bool | `false` |  |
+| component.frontend.ingress.hosts | list | `[]` |  |
+| component.frontend.ingress.ingressClassName | string | `""` |  |
+| component.frontend.ingress.tls.enabled | bool | `false` |  |
+| component.frontend.ingress.tls.hosts | list | `[]` |  |
+| component.frontend.ingress.tls.secretName | string | `""` |  |
 | component.frontend.logFormat | string | `"logger-json"` |  |
 | component.frontend.logFormats.logger-json | string | `"escape=json '{ \"body_bytes_sent\": $body_bytes_sent, \"http_referer\": \"$http_referer\", \"http_user_agent\": \"$http_user_agent\", \"remote_addr\": \"$remote_addr\", \"remote_user\": \"$remote_user\", \"request\": \"$request\", \"status\": $status, \"time_local\": \"$time_local\", \"x_forwarded_for\": \"$http_x_forwarded_for\" }'"` |  |
 | component.frontend.maps | list | `[]` |  |
@@ -217,7 +236,13 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.python-backend.image.repository | string | `"opik-python-backend"` |  |
 | component.python-backend.image.tag | string | `"latest"` |  |
+| component.python-backend.ingress.annotations | object | `{}` |  |
 | component.python-backend.ingress.enabled | bool | `false` |  |
+| component.python-backend.ingress.hosts | list | `[]` |  |
+| component.python-backend.ingress.ingressClassName | string | `""` |  |
+| component.python-backend.ingress.tls.enabled | bool | `false` |  |
+| component.python-backend.ingress.tls.hosts | list | `[]` |  |
+| component.python-backend.ingress.tls.secretName | string | `""` |  |
 | component.python-backend.metrics.enabled | bool | `false` |  |
 | component.python-backend.networkPolicy.enabled | bool | `true` |  |
 | component.python-backend.networkPolicy.engineEgress.except[0] | string | `"10.0.0.0/8"` |  |

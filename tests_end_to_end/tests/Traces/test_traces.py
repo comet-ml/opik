@@ -25,6 +25,8 @@ class TestTracesCrud:
         ],
         indirect=True,
     )
+    @pytest.mark.tracing
+    @pytest.mark.regression
     @allure.title("Trace creation - {create_traces}")
     def test_traces_visibility(
         self, page: Page, create_project_api, traces_number, create_traces
@@ -118,6 +120,8 @@ class TestTracesCrud:
         ],
         indirect=True,
     )
+    @pytest.mark.regression
+    @pytest.mark.tracing
     @allure.title("Trace deletion in SDK - {create_traces}")
     def test_delete_traces_sdk(
         self, page: Page, create_project_api, traces_number, create_traces
@@ -224,6 +228,8 @@ class TestTracesCrud:
         ],
         indirect=True,
     )
+    @pytest.mark.tracing
+    @pytest.mark.regression
     @allure.title("Trace deletion in UI - {create_traces}")
     def test_delete_traces_ui(
         self, page: Page, create_project_api, traces_number, create_traces

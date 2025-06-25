@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="opik_optimizer",
-    version="0.9.2",
+    version="1.0.2",
     description="Agent optimization with Opik",
     author="Comet ML",
     author_email="support@comet.com",
@@ -16,17 +16,17 @@ setup(
     },
     python_requires=">=3.9,<3.13",
     install_requires=[
-        "opik>=1.7.17",
-        "dspy>=2.6.18,<=2.6.24",
-        "litellm",
-        "tqdm",
         "datasets",
-        "optuna",
-        "pydantic",
-        "pandas",
-        "hf_xet",
-        "pyrate-limiter",
         "deap>=1.4.3",
+        "diskcache",
+        "hf_xet",
+        "litellm",
+        "opik>=1.7.17",
+        "optuna",
+        "pandas",
+        "pydantic",
+        "pyrate-limiter",
+        "tqdm",
     ],
     # dev requirements
     extras_require={
