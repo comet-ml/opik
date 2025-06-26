@@ -4,7 +4,7 @@ import GitHubIcon from "@/icons/github.svg?react";
 
 import useGitHubStarts from "@/api/external/useGitHubStarts";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, formatNumberInK } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 export interface GitHubStarListItemProps {
@@ -18,11 +18,7 @@ const GitHubStarListItem: React.FC<GitHubStarListItemProps> = ({
 
   const starCount = useMemo(() => {
     const count = data?.stargazers_count;
-    return isNumber(count)
-      ? count >= 1000
-        ? `${(count / 1000).toFixed(1)}k`
-        : count.toString()
-      : "5k";
+    return isNumber(count) ? formatNumberInK(count) : "9.6k";
   }, [data?.stargazers_count]);
 
   const itemElement = (

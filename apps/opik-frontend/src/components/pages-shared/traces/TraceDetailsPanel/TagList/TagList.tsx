@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Plus, Tag } from "lucide-react";
-import RemovableTag from "./RemovableTag";
+
+import RemovableTag from "@/components/shared/RemovableTag/RemovableTag";
 import useTraceUpdateMutation from "@/api/traces/useTraceUpdateMutation";
 import useSpanUpdateMutation from "@/api/traces/useSpanUpdateMutation";
 import { Button } from "@/components/ui/button";

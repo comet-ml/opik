@@ -122,7 +122,7 @@ const DropdownMenuCustomCheckboxItem = React.forwardRef<
   <DropdownMenuPrimitive.CheckboxItem
     ref={ref}
     className={cn(
-      "comet-body-s relative flex cursor-pointer min-h-10 select-none items-center rounded-sm pl-10 pr-4 outline-none transition-colors focus:bg-primary-foreground focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:bg-muted-disabled data-[disabled]:text-muted-gray",
+      "comet-body-s relative flex cursor-pointer min-h-10 select-none items-center rounded-sm pl-10 pr-4 outline-none transition-colors focus:bg-primary-foreground focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:bg-muted-disabled data-[disabled]:text-muted-gray break-all",
       className,
     )}
     checked={checked}

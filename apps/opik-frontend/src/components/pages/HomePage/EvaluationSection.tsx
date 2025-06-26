@@ -151,7 +151,7 @@ const EvaluationSection: React.FunctionComponent = () => {
 
   return (
     <div className="pb-4 pt-2">
-      <h2 className="comet-body-accented truncate break-words pb-3">
+      <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
         Evaluation
       </h2>
       <DataTable
