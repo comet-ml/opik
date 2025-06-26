@@ -4,11 +4,11 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .feedback_score_batch_item import FeedbackScoreBatchItem
+from .feedback_score_batch_item_tracing import FeedbackScoreBatchItemTracing
 
 
-class FeedbackScoreBatch(UniversalBaseModel):
-    scores: typing.List[FeedbackScoreBatchItem]
+class FeedbackScoreBatchTracing(UniversalBaseModel):
+    scores: typing.List[FeedbackScoreBatchItemTracing]
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

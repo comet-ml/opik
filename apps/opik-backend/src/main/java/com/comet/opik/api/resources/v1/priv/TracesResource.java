@@ -406,7 +406,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     public Response scoreBatchOfTraces(
-            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @NotNull @Valid FeedbackScoreBatch feedbackScoreBatch) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class, name = "FeedbackScoreBatch_Tracing"))) @JsonView(FeedbackScoreBatch.View.Tracing.class) @Validated(FeedbackScoreBatch.View.Tracing.class) @NotNull @Valid FeedbackScoreBatch feedbackScoreBatch) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -749,7 +749,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     public Response scoreBatchOfThreads(
-            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @JsonView(FeedbackScoreBatch.View.Thread.class) @Validated(FeedbackScoreBatch.View.Thread.class) @NotNull @Valid FeedbackScoreBatch batch) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class, name = "FeedbackScoreBatch_Thread"))) @JsonView(FeedbackScoreBatch.View.Thread.class) @Validated(FeedbackScoreBatch.View.Thread.class) @NotNull @Valid FeedbackScoreBatch batch) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 

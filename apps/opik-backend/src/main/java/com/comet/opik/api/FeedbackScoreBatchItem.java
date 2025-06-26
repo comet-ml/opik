@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -26,11 +27,11 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 public record FeedbackScoreBatchItem(
         // entity (trace or span) id
         @JsonView( {
-                FeedbackScoreBatch.View.Tracing.class}) @NotNull(groups = {
+                FeedbackScoreBatch.View.Tracing.class}) @Schema(requiredMode = Schema.RequiredMode.REQUIRED) @NotNull(groups = {
                         FeedbackScoreBatch.View.Tracing.class}) UUID id,
         // thread id
         @JsonView({FeedbackScoreBatch.View.Thread.class}) @NotBlank(groups = {
-                FeedbackScoreBatch.View.Thread.class}) String threadId,
+                FeedbackScoreBatch.View.Thread.class}) @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String threadId,
         @JsonView({FeedbackScoreBatch.View.Tracing.class,
                 FeedbackScoreBatch.View.Thread.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used") String projectName,
         @JsonIgnore UUID projectId,
@@ -41,4 +42,5 @@ public record FeedbackScoreBatchItem(
         @JsonView({FeedbackScoreBatch.View.Tracing.class, FeedbackScoreBatch.View.Thread.class}) String reason,
         @JsonView({FeedbackScoreBatch.View.Tracing.class,
                 FeedbackScoreBatch.View.Thread.class}) @NotNull ScoreSource source){
+
 }

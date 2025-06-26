@@ -286,7 +286,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     public Response scoreBatchOfSpans(
-            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @JsonView(FeedbackScoreBatch.View.Tracing.class) @NotNull @Valid FeedbackScoreBatch batch) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class, name = "FeedbackScoreBatch_Tracing"))) @JsonView(FeedbackScoreBatch.View.Tracing.class) @NotNull @Valid FeedbackScoreBatch batch) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
