@@ -10,7 +10,7 @@ on:
 
 jobs:
   trigger-release:
-    uses: ./.github/workflows/releases.yml  # or the path to your existing Release workflow
+    uses: ./.github/workflows/release.yaml  # or the path to your existing Release workflow
     secrets: inherit
 
   notify-n8n:
