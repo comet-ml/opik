@@ -66,6 +66,8 @@ public interface FeedbackScoreDAO {
     Mono<List<String>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds);
 
     Mono<List<String>> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
+
+    Mono<List<String>> getProjectsTraceThreadsFeedbackScoreNames(List<UUID> projectId);
 }
 
 @Singleton
@@ -163,8 +165,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     name
                 FROM feedback_scores
                 WHERE workspace_id = :workspace_id
-                <if(project_id)>
-                AND project_id = :project_id
+                <if(project_ids)>
+                AND project_id IN :project_ids
                 <endif>
                 <if(with_experiments_only)>
                 AND entity_id IN (
@@ -192,7 +194,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     ) ei ON e.id = ei.experiment_id
                 )
                 <endif>
-                AND entity_type = 'trace'
+                AND entity_type = :entity_type
                 ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
             ) AS names
@@ -440,11 +442,13 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             ST template = new ST(SELECT_TRACE_FEEDBACK_SCORE_NAMES);
 
-            bindTemplateParam(projectId, false, null, template);
+            List<UUID> projectIds = List.of(projectId);
+
+            bindTemplateParam(projectIds, false, null, template);
 
             var statement = connection.createStatement(template.render());
 
-            bindStatementParam(projectId, null, statement);
+            bindStatementParam(projectIds, null, statement, EntityType.TRACE);
 
             return getNames(statement);
         });
@@ -461,7 +465,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             var statement = connection.createStatement(template.render());
 
-            bindStatementParam(null, experimentIds, statement);
+            bindStatementParam(null, experimentIds, statement, EntityType.TRACE);
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
@@ -490,6 +494,24 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
                     .collect(Collectors.toList());
+        });
+    }
+
+    @Override
+    public Mono<List<String>> getProjectsTraceThreadsFeedbackScoreNames(@NonNull List<UUID> projectIds) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(projectIds), "Argument 'projectId' must not be empty");
+
+        return asyncTemplate.nonTransaction(connection -> {
+
+            ST template = new ST(SELECT_TRACE_FEEDBACK_SCORE_NAMES);
+
+            bindTemplateParam(projectIds, false, null, template);
+
+            var statement = connection.createStatement(template.render());
+
+            bindStatementParam(projectIds, null, statement, EntityType.THREAD);
+
+            return getNames(statement);
         });
     }
 
@@ -523,19 +545,23 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 .collect(Collectors.toList());
     }
 
-    private void bindStatementParam(UUID projectId, Set<UUID> experimentIds, Statement statement) {
-        if (projectId != null) {
-            statement.bind("project_id", projectId);
+    private void bindStatementParam(List<UUID> projectIds, Set<UUID> experimentIds, Statement statement,
+            EntityType entityType) {
+        if (CollectionUtils.isNotEmpty(projectIds)) {
+            statement.bind("project_ids", projectIds);
         }
 
         if (CollectionUtils.isNotEmpty(experimentIds)) {
             statement.bind("experiment_ids", experimentIds);
         }
+
+        statement.bind("entity_type", entityType.getType());
     }
 
-    private void bindTemplateParam(UUID projectId, boolean withExperimentsOnly, Set<UUID> experimentIds, ST template) {
-        if (projectId != null) {
-            template.add("project_id", projectId);
+    private void bindTemplateParam(List<UUID> projectIds, boolean withExperimentsOnly, Set<UUID> experimentIds,
+            ST template) {
+        if (CollectionUtils.isNotEmpty(projectIds)) {
+            template.add("project_ids", projectIds);
         }
 
         template.add("with_experiments_only", withExperimentsOnly);

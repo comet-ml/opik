@@ -6,6 +6,7 @@ import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
@@ -556,6 +557,27 @@ public class TraceResourceClient extends BaseCommentResourceClient {
             }
         }
         return items;
+    }
+
+    public FeedbackScoreNames getTraceThreadsFeedbackScoreNames(UUID projectId, String apiKey, String workspaceName) {
+
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("feedback-scores")
+                .path("names");
+
+        webTarget = webTarget.queryParam("project_id", projectId);
+
+        try (var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            // then
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return actualResponse.readEntity(FeedbackScoreNames.class);
+        }
     }
 
 }
