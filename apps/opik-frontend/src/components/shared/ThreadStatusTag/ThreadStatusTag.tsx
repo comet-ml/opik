@@ -8,12 +8,12 @@ interface ThreadStatusTagProps {
 }
 
 const StatusMap = {
-  [ThreadStatus.CLOSE]: {
+  [ThreadStatus.INACTIVE]: {
     Icon: MessageCircleOff,
     text: "Inactive",
     className: "bg-[#E2EFFD]",
   },
-  [ThreadStatus.OPEN]: {
+  [ThreadStatus.ACTIVE]: {
     Icon: MessageCircleMore,
     text: "Active",
     className: "bg-[#EBF2F5]",

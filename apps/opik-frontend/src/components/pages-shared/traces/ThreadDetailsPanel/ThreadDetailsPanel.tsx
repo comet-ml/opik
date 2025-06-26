@@ -116,6 +116,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       enabled: Boolean(threadId),
     },
   );
+  const isInactiveThread = thread?.status === ThreadStatus.INACTIVE;
 
   // TODO update once BE will send this data
   const annotationCount = 0;
@@ -216,40 +217,43 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             View all traces
           </Button>
 
-          <ThreadStatusTag status={ThreadStatus.CLOSE} />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="2xs"
-                className="border-[#EBF2F5] bg-[#EBF2F5] hover:bg-[#EBF2F5]/80"
-              >
-                <MessageCircleMore className="mr-1 size-3" /> Active
-                <ChevronDown className="ml-1 size-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-60">
-              <DropdownMenuItem onClick={() => setSetInactiveOpen(true)}>
-                <MessageCircleOff className="mr-2 size-4" />
-                Set as inactive
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <Button variant="link" className="w-full" asChild>
-                <Link
-                  to="/$workspaceName/configuration"
-                  params={{ workspaceName }}
-                  search={{
-                    tab: "workspace-preferences",
-                    editPreference: WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
-                  }}
-                  target="_blank"
-                  rel="noopener noreferrer"
+          {isInactiveThread ? (
+            <ThreadStatusTag status={thread.status} />
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="2xs"
+                  className="border-[#EBF2F5] bg-[#EBF2F5] hover:bg-[#EBF2F5]/80"
                 >
-                  Manage session timeout
-                </Link>
-              </Button>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  <MessageCircleMore className="mr-1 size-3" /> Active
+                  <ChevronDown className="ml-1 size-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                <DropdownMenuItem onClick={() => setSetInactiveOpen(true)}>
+                  <MessageCircleOff className="mr-2 size-4" />
+                  Set as inactive
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <Button variant="link" className="w-full" asChild>
+                  <Link
+                    to="/$workspaceName/configuration"
+                    params={{ workspaceName }}
+                    search={{
+                      tab: "workspace-preferences",
+                      editPreference: WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
+                    }}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Manage session timeout
+                  </Link>
+                </Button>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
         <div className=" flex w-full items-center gap-3 overflow-x-hidden py-1">
           <TooltipWrapper content="Thread start time">
@@ -279,12 +283,12 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             </div>
           </TooltipWrapper>
         </div>
-        <ThreadDetailsTags
+        {/* <ThreadDetailsTags
           // TODO implement for thread
           tags={[]}
           threadId={threadId}
           projectId={projectId}
-        />
+        /> */}
       </div>
     );
   };
@@ -386,19 +390,20 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   const renderHeaderContent = () => {
     return (
       <div className="flex gap-2">
-        <DetailsActionSectionToggle
+        {/* <DetailsActionSectionToggle
           activeSection={activeSection}
           setActiveSection={setActiveSection}
           layoutSize="sm"
           count={commentsCount}
           type={DetailsActionSection.Comments}
-        />
+        /> */}
         <DetailsActionSectionToggle
           activeSection={activeSection}
           setActiveSection={setActiveSection}
           layoutSize="sm"
           count={annotationCount}
           type={DetailsActionSection.Annotations}
+          disabled={!isInactiveThread}
         />
 
         <DropdownMenu>

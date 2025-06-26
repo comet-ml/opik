@@ -1,4 +1,4 @@
 export enum ThreadStatus {
-  CLOSE = "CLOSE",
-  OPEN = "OPEN",
+  ACTIVE = "active",
+  INACTIVE = "inactive",
 }

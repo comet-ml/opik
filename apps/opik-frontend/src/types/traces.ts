@@ -1,6 +1,7 @@
 import { UsageData } from "@/types/shared";
 import { CommentItems } from "./comment";
 import { GuardrailValidation } from "./guardrails";
+import { ThreadStatus } from "./thread";
 
 export enum USER_FEEDBACK_SCORE {
   dislike,
@@ -99,4 +100,5 @@ export interface Thread {
   last_updated_at: string;
   created_by: string;
   created_at: string;
+  status: ThreadStatus;
 }

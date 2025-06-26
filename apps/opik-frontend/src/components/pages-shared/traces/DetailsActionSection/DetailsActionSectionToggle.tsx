@@ -35,6 +35,7 @@ type DetailsActionSectionToggleProps = {
   layoutSize: ButtonLayoutSize;
   count?: number | string;
   type: DetailsActionSectionValue;
+  disabled?: boolean;
 };
 const DetailsActionSectionToggle: React.FC<DetailsActionSectionToggleProps> = ({
   activeSection,
@@ -42,6 +43,7 @@ const DetailsActionSectionToggle: React.FC<DetailsActionSectionToggleProps> = ({
   layoutSize,
   count,
   type,
+  disabled,
 }) => {
   const showFullActionLabel = isLargeLayout(layoutSize);
 
@@ -55,6 +57,7 @@ const DetailsActionSectionToggle: React.FC<DetailsActionSectionToggleProps> = ({
           "gap-1",
           activeSection === type && "bg-primary-100 hover:bg-primary-100",
         )}
+        disabled={disabled}
       >
         {configMap[type].icon}
         {showFullActionLabel && (
