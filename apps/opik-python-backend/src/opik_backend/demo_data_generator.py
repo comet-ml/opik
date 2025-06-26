@@ -5,12 +5,14 @@
 # The evaluation is going to be tracked into a separate project from the demo traces.
 # It was run using a simple context with 3 sentences, and 3 questions asking about it.
 
-import opik 
-import uuid6
+import opik
 import json
 import urllib.request
 import uuid6
 import logging
+import datetime
+import uuid
+import random
 
 import opik.rest_api
 from opik_backend.demo_data import evaluation_traces, evaluation_spans, demo_traces, demo_spans
@@ -18,6 +20,8 @@ from opik_backend.demo_data import evaluation_traces, evaluation_spans, demo_tra
 logger = logging.getLogger(__name__)
 
 UUID_MAP = {}
+TRACE_DAY_SHIFT = {}
+
 
 def make_http_request(base_url, message, workspace_name, comet_api_key):
     try:
@@ -50,9 +54,9 @@ def make_http_request(base_url, message, workspace_name, comet_api_key):
             raise e
         logger.info("Got error %s, from method %s on url %s", e.code, message["method"], url)
         return None, e.code
-    
-def create_feedback_scores_definition(base_url, workspace_name, comet_api_key):
 
+
+def create_feedback_scores_definition(base_url, workspace_name, comet_api_key):
     name = "User feedback"
     params = {
         "name": name
@@ -78,15 +82,16 @@ def create_feedback_scores_definition(base_url, workspace_name, comet_api_key):
             "description": "Feedback provided by the user",
             "type": "categorical",
             "details": {
-                "categories":{ 
+                "categories": {
                     "👍": 1.0,
-                    "👎": 0.0 
+                    "👎": 0.0
                 }
             },
         },
     }
 
     make_http_request(base_url, request, workspace_name, comet_api_key)
+
 
 def project_exists(base_url, workspace_name, comet_api_key, project_name):
     request = {
@@ -100,6 +105,66 @@ def project_exists(base_url, workspace_name, comet_api_key, project_name):
     _, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
     return status_code == 200
 
+
+def replace_datetime_to_today(time_object, day_shift=0):
+    today = datetime.datetime.today() + datetime.timedelta(days=day_shift)
+    return time_object.replace(year=today.year, month=today.month, day=today.day)
+
+
+def set_day_shift(trace_id, day_shift):
+    TRACE_DAY_SHIFT[trace_id] = day_shift
+
+
+def get_day_shift(trace_id):
+    """
+    Get the day shift value for a given trace ID from the TRACE_DAY_SHIFT dictionary.
+
+    Parameters:
+    - trace_id (string): The trace ID to retrieve the day shift value for.
+
+    Returns:
+    int: The day shift value for the provided trace ID. If the trace ID is not found in the dictionary, a default value of 0 is returned.
+    """
+    if trace_id in TRACE_DAY_SHIFT:
+        day_shift = TRACE_DAY_SHIFT[trace_id]
+    else:
+        day_shift = 0
+    return day_shift
+
+
+def uuid7_from_datetime(dt: datetime.datetime) -> uuid.UUID:
+
+    # 1. Get timestamp in milliseconds and microseconds
+    timestamp_ms = int(dt.timestamp() * 1000)  # 48 bits
+    micros = dt.microsecond  # 0–999999
+
+    # 2. Use 12 bits for sub-millisecond part: scale microseconds (0–999999) to 0–4095
+    sub_ms_bits = int(micros * 4096 / 1_000_000)  # 12 bits
+
+    # 3. Split 48-bit timestamp into time fields
+    time_low = (timestamp_ms >> 16) & 0xFFFFFFFF
+    time_mid = timestamp_ms & 0xFFFF
+    time_hi = (sub_ms_bits & 0x0FFF)  # 12-bit sub-millisecond precision
+    time_hi_and_version = (0x7 << 12) | time_hi  # version (4 bits) + sub-ms (12 bits)
+
+    # 4. 14 random bits for clock sequence
+    clock_seq = random.getrandbits(14)
+    clock_seq_low = clock_seq & 0xFF
+    clock_seq_hi_variant = 0x80 | ((clock_seq >> 8) & 0x3F)  # variant '10xxxxxx'
+
+    # 5. 48 random bits for node
+    node = random.getrandbits(48)
+
+    # 6. Construct UUID
+    return uuid.UUID(fields=(
+        time_low,
+        time_mid,
+        time_hi_and_version,
+        clock_seq_hi_variant,
+        clock_seq_low,
+        node
+    ))
+
 def get_new_uuid(old_id):
     """
     The demo_data has the IDs hardcoded in, to preserve the relationships between the traces and spans.
@@ -112,6 +177,19 @@ def get_new_uuid(old_id):
         UUID_MAP[old_id] = new_id
     return new_id
 
+def get_new_uuid_by_time(old_id, datetime):
+    """
+    The demo_data has the IDs hardcoded in, to preserve the relationships between the traces and spans.
+    However, we need to generate unique ones before logging them based on start_time.
+    """
+    if old_id in UUID_MAP:
+        new_id = UUID_MAP[old_id]
+    else:
+        new_id = str(uuid7_from_datetime(datetime))
+        UUID_MAP[old_id] = new_id
+    return new_id
+
+
 def create_demo_evaluation_project(base_url: str, workspace_name, comet_api_key):
     client: opik.Opik = None
     try:
@@ -119,7 +197,7 @@ def create_demo_evaluation_project(base_url: str, workspace_name, comet_api_key)
         if project_exists(base_url, workspace_name, comet_api_key, project_name):
             logger.info("%s project already exists", project_name)
             return
-        
+
         client = opik.Opik(
             project_name=project_name,
             workspace=workspace_name,
@@ -128,21 +206,32 @@ def create_demo_evaluation_project(base_url: str, workspace_name, comet_api_key)
             _use_batching=True,
         )
 
-        for trace in sorted(evaluation_traces, key=lambda x: x["start_time"]):
-            new_id = get_new_uuid(trace["id"])
+        days = len(evaluation_traces)
+
+        for idx, trace in enumerate(sorted(evaluation_traces, key=lambda x: x["start_time"])):
+            day_shift = idx + 1 - days
+            trace["start_time"] = replace_datetime_to_today(trace["start_time"], day_shift)
+            trace["end_time"] = replace_datetime_to_today(trace["end_time"], day_shift)
+            new_id = get_new_uuid_by_time(trace["id"], trace["start_time"])
             trace["id"] = new_id
+            set_day_shift(new_id, day_shift)
             client.trace(**trace)
 
+        # To handle parent_span_id correct UUIDv7 time first iterate over all spans
         for span in sorted(evaluation_spans, key=lambda x: x["start_time"]):
-            new_id = get_new_uuid(span["id"])
-            span["id"] = new_id
             new_trace_id = get_new_uuid(span["trace_id"])
+            span["start_time"] = replace_datetime_to_today(span["start_time"], get_day_shift(new_trace_id))
+            span["end_time"] = replace_datetime_to_today(span["end_time"], get_day_shift(new_trace_id))
+            new_id = get_new_uuid_by_time(span["id"], span["start_time"])
+            span["id"] = new_id
             span["trace_id"] = new_trace_id
+
+        for span in sorted(evaluation_spans, key=lambda x: x["start_time"]):
             if "parent_span_id" in span:
                 new_parent_span_id = get_new_uuid(span["parent_span_id"])
                 span["parent_span_id"] = new_parent_span_id
             client.span(**span)
-        
+
         # Prompts
         # We now create 3 versions of a Q&A prompt. The final version is from llama-index.
 
@@ -229,6 +318,7 @@ def create_demo_evaluation_project(base_url: str, workspace_name, comet_api_key)
             client.flush()
             client.end()
 
+
 def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
     client: opik.Opik = None
 
@@ -250,16 +340,27 @@ def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
             _use_batching=True,
         )
 
-        for trace in sorted(demo_traces, key=lambda x: x["start_time"]):
-            new_id = get_new_uuid(trace["id"])
+        days = len(demo_traces)
+
+        for idx, trace in enumerate(sorted(demo_traces, key=lambda x: x["start_time"])):
+            day_shift = idx + 1 - days
+            trace["start_time"] = replace_datetime_to_today(trace["start_time"], day_shift)
+            trace["end_time"] = replace_datetime_to_today(trace["end_time"], day_shift)
+            new_id = get_new_uuid_by_time(trace["id"], trace["start_time"])
             trace["id"] = new_id
+            set_day_shift(new_id, day_shift)
             client.trace(**trace)
 
+        # To handle parent_span_id correct UUIDv7 time first iterate over all spans
         for span in sorted(demo_spans, key=lambda x: x["start_time"]):
-            new_id = get_new_uuid(span["id"])
-            span["id"] = new_id
             new_trace_id = get_new_uuid(span["trace_id"])
+            span["start_time"] = replace_datetime_to_today(span["start_time"], get_day_shift(new_trace_id))
+            span["end_time"] = replace_datetime_to_today(span["end_time"], get_day_shift(new_trace_id))
+            new_id = get_new_uuid_by_time(span["id"], span["start_time"])
+            span["id"] = new_id
             span["trace_id"] = new_trace_id
+
+        for span in sorted(demo_spans, key=lambda x: x["start_time"]):
             if "parent_span_id" in span:
                 new_parent_span_id = get_new_uuid(span["parent_span_id"])
                 span["parent_span_id"] = new_parent_span_id
@@ -273,9 +374,9 @@ def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
             client.flush()
             client.end()
 
-def create_demo_data(base_url: str, workspace_name, comet_api_key):
 
-    try:        
+def create_demo_data(base_url: str, workspace_name, comet_api_key):
+    try:
         create_demo_evaluation_project(base_url, workspace_name, comet_api_key)
 
         create_demo_chatbot_project(base_url, workspace_name, comet_api_key)

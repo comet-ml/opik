@@ -22,6 +22,19 @@ demo_traces = [
         "usage": {"completion_tokens": 11, "prompt_tokens": 308, "total_tokens": 319},
         "total_estimated_cost": 0.0001705,
         "duration": 1086.523,
+        "thread_id": "opik_thread",
+        "feedback_scores": [
+            {
+                "name": "answer_relevance_metric",
+                "value": 1,
+                "reason": "The assistant's response is highly relevant and helpful. It provides a clear and concise motto that reflects Opik's mission of continuous improvement and community-driven innovation.",
+            },
+            {
+                "name": "UsefulnessMetric",
+                "value": 0.8,
+                "reason": "The assistant's response is useful as it encapsulates Opik's ethos in a memorable way, making it easy for users to understand the platform's core values.",
+            }
+        ]
     },
     {
         "id": "01942bd5-4e6f-7ebf-a1c0-d57c74b721a3",
@@ -46,6 +59,19 @@ demo_traces = [
         "usage": {"completion_tokens": 51, "prompt_tokens": 343, "total_tokens": 394},
         "total_estimated_cost": 0.000248,
         "duration": 3633.172,
+        "thread_id": "opik_thread",
+        "feedback_scores": [
+            {
+                "name": "answer_relevance_metric",
+                "value": 0.7,
+                "reason": "The assistant's response is relevant and helpful. It accurately describes Opik's morning routine in the context of LLM evaluations, focusing on logging, viewing, and evaluating traces. However, it could be more concise.",
+            },
+            {
+                "name": "UsefulnessMetric",
+                "value": 0.1,
+                "reason": "The assistant's response is somewhat useful as it provides insight into Opik's functionality, but it lacks specific details about the morning routine and could be more engaging or creative.",
+            }
+        ]
     },
     {
         "id": "01942bd5-3131-7c78-a9d4-265469015f38",
@@ -70,6 +96,20 @@ demo_traces = [
         "usage": {"completion_tokens": 34, "prompt_tokens": 316, "total_tokens": 350},
         "total_estimated_cost": 0.000209,
         "duration": 1397.155,
+        "thread_id": "opik_thread",
+        "feedback_scores": [
+            {
+                "name": "answer_relevance_metric",
+                "value": 0.5,
+                "reason": "The assistant's response is somewhat relevant and helpful. It provides a creative interpretation of Opik as a superhero with the superpower of monitoring and analyzing production applications. However, it could be more directly related to Opik's specific features and functionalities.",
+            },
+            {
+                "name": "UsefulnessMetric",
+                "value": 0.5,
+                "reason": "The assistant's response is useful in a creative context, but it lacks specific details about Opik's actual functionalities. It could be more informative by linking the superpower to real-world applications of Opik.",
+            }
+        ]
+
     },
     {
         "id": "01942bd5-0f68-7aa1-bd93-851aff17048d",
@@ -92,6 +132,19 @@ demo_traces = [
         "usage": {"completion_tokens": 38, "prompt_tokens": 337, "total_tokens": 375},
         "total_estimated_cost": 0.0002255,
         "duration": 1248.247,
+        "thread_id": "opik_thread",
+        "feedback_scores": [
+            {
+                "name": "answer_relevance_metric",
+                "value": 1,
+                "reason": "The assistant's response is highly relevant and helpful. It accurately describes Opik's dashboard features, which are indeed a key part of the user experience, allowing for detailed monitoring and evaluation of LLM applications."
+            },
+            {
+                "name": "UsefulnessMetric",
+                "value": 0.9,
+                "reason": "The assistant's response is useful as it highlights a specific feature of Opik that enhances user engagement and provides valuable insights into LLM performance. It effectively communicates the importance of the dashboard in the daily operations of users.",
+            }
+        ]
     },
     {
         "id": "01942bd4-e33b-73a9-b8b7-4f362fa6ba2e",
@@ -114,6 +167,19 @@ demo_traces = [
         "usage": {"completion_tokens": 55, "prompt_tokens": 343, "total_tokens": 398},
         "total_estimated_cost": 0.000254,
         "duration": 1478.529,
+        "thread_id": "opik_thread",
+        "feedback_scores": [
+            {
+                "name": "answer_relevance_metric",
+                "value": 1,
+                "reason": "The assistant's response is highly relevant and helpful. It accurately describes how Opik simplifies LLM evaluation through its features like Judge evaluators, Heuristic evaluators, and pytest integration, making the process straightforward for users."
+            },
+            {
+                "name": "UsefulnessMetric",
+                "value": 1,
+                "reason": "The assistant's response is very useful as it provides a clear understanding of how Opik facilitates LLM evaluation, highlighting specific features that enhance usability and efficiency. This information is valuable for users looking to streamline their evaluation processes."
+            }
+        ]
     },
     {
         "id": "01942bd4-bf94-796a-9372-38b62fbee02d",
@@ -136,6 +202,19 @@ demo_traces = [
         "usage": {"completion_tokens": 53, "prompt_tokens": 370, "total_tokens": 423},
         "total_estimated_cost": 0.0002645,
         "duration": 1379.213,
+        "thread_id": "opik_thread",
+        "feedback_scores": [
+            {
+                "name": "answer_relevance_metric",
+                "value": 0.8,
+                "reason": "The assistant's response is relevant and helpful. It provides a comprehensive explanation of the importance of annotating traces and evaluating LLM applications, covering key aspects such as performance tracking, improvement identification, and stakeholder communication. However, it could be more concise."
+            },
+            {
+                "name": "UsefulnessMetric",
+                "value": 1,
+                "reason": "The assistant's response is very useful as it outlines the critical reasons for annotating traces and evaluating LLM applications, making it clear why these practices are essential for maintaining and improving LLM performance. The detailed explanation provides valuable insights for users looking to understand the significance of these processes."
+            }
+        ]
     },
     {
         "id": "01942bd4-9921-74c4-9cb2-4c5e69e3458d",
@@ -158,6 +237,19 @@ demo_traces = [
         "usage": {"completion_tokens": 46, "prompt_tokens": 362, "total_tokens": 408},
         "total_estimated_cost": 0.00025,
         "duration": 1312.249,
+        "thread_id": "opik_thread",
+        "feedback_scores": [
+            {
+                "name": "answer_relevance_metric",
+                "value": 1,
+                "reason": "The assistant's response is highly relevant and helpful. It accurately describes the process of LLM evaluation, including key steps such as tracing, task definition, dataset selection, metric choice, and experiment execution, which are essential for assessing LLM performance."
+            },
+            {
+                "name": "UsefulnessMetric",
+                "value": 0.7,
+                "reason": "The assistant's response is useful as it provides a clear overview of LLM evaluation, outlining the necessary steps involved. However, it could be enhanced by including more specific examples or details about each step to provide a deeper understanding of the evaluation process.",
+            }
+        ]
     },
     {
         "id": "01942bd3-c51d-70c4-9db7-86cea436cf5e",
@@ -180,6 +272,19 @@ demo_traces = [
         "usage": {"completion_tokens": 79, "prompt_tokens": 307, "total_tokens": 386},
         "total_estimated_cost": 0.000272,
         "duration": 1647.847,
+        "thread_id": "opik_thread",
+        "feedback_scores": [
+            {
+                "name": "answer_relevance_metric",
+                "value": 0.9,
+                "reason": "The assistant's response is relevant and helpful. It provides a clear and concise description of Opik, highlighting its purpose, features, and suitability for monitoring production applications, particularly LLM applications. However, it could be more concise by avoiding repetition."
+            },
+            {
+                "name": "UsefulnessMetric",
+                "value": 1,
+                "reason": "The assistant's response is very useful as it gives a comprehensive overview of Opik, its functionalities, and its intended use case. This information is valuable for users who are unfamiliar with Opik and want to understand its capabilities in the context of LLM applications.",
+            }
+        ]
     },
     {
         "id": "01942bd2-4a56-775b-9fbd-4a9cee4d6c9b",
@@ -2230,6 +2335,18 @@ demo_traces = [
         "output": {"num_embeddings": 98},
         "metadata": {"created_from": "llama_index"},
         "duration": 5626.163,
+        "feedback_scores": [
+            {
+                "name": "answer_relevance_metric",
+                "value": 0.2,
+                "reason": "The answer is correct and follows the rules provided in the context.",
+            },
+            {
+                "name": "UsefulnessMetric",
+                "value": 0.1,
+                "reason": "The answer is somewhat useful, but could be more concise.",
+            }
+        ]
     },
 ]
 
