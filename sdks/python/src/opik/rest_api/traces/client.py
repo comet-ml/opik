@@ -8,8 +8,8 @@ from ..core.request_options import RequestOptions
 from ..types.comment import Comment
 from ..types.error_info import ErrorInfo
 from ..types.error_info_write import ErrorInfoWrite
+from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
 from ..types.feedback_score_batch_item_thread import FeedbackScoreBatchItemThread
-from ..types.feedback_score_batch_item_tracing import FeedbackScoreBatchItemTracing
 from ..types.feedback_score_source import FeedbackScoreSource
 from ..types.json_list_string import JsonListString
 from ..types.json_list_string_write import JsonListStringWrite
@@ -678,6 +678,35 @@ class TracesClient:
         _response = self._raw_client.find_feedback_score_names_2(project_id=project_id, request_options=request_options)
         return _response.data
 
+    def find_trace_threads_feedback_score_names(
+        self, *, project_id: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.List[str]:
+        """
+        Find Trace Threads Feedback Score names
+
+        Parameters
+        ----------
+        project_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        typing.List[str]
+            Find Trace Threads Feedback Score names
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.traces.find_trace_threads_feedback_score_names(project_id='project_id', )
+        """
+        _response = self._raw_client.find_trace_threads_feedback_score_names(
+            project_id=project_id, request_options=request_options
+        )
+        return _response.data
+
     def get_trace_stats(
         self,
         *,
@@ -910,7 +939,7 @@ class TracesClient:
     def score_batch_of_traces(
         self,
         *,
-        scores: typing.Sequence[FeedbackScoreBatchItemTracing],
+        scores: typing.Sequence[FeedbackScoreBatchItem],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -918,7 +947,7 @@ class TracesClient:
 
         Parameters
         ----------
-        scores : typing.Sequence[FeedbackScoreBatchItemTracing]
+        scores : typing.Sequence[FeedbackScoreBatchItem]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -930,9 +959,9 @@ class TracesClient:
         Examples
         --------
         from Opik import OpikApi
-        from Opik import FeedbackScoreBatchItemTracing
+        from Opik import FeedbackScoreBatchItem
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.traces.score_batch_of_traces(scores=[FeedbackScoreBatchItemTracing(name='name', value=1.1, source="ui", id='id', )], )
+        client.traces.score_batch_of_traces(scores=[FeedbackScoreBatchItem(name='name', value=1.1, source="ui", id='id', )], )
         """
         _response = self._raw_client.score_batch_of_traces(scores=scores, request_options=request_options)
         return _response.data
@@ -1788,6 +1817,38 @@ class AsyncTracesClient:
         )
         return _response.data
 
+    async def find_trace_threads_feedback_score_names(
+        self, *, project_id: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.List[str]:
+        """
+        Find Trace Threads Feedback Score names
+
+        Parameters
+        ----------
+        project_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        typing.List[str]
+            Find Trace Threads Feedback Score names
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.traces.find_trace_threads_feedback_score_names(project_id='project_id', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.find_trace_threads_feedback_score_names(
+            project_id=project_id, request_options=request_options
+        )
+        return _response.data
+
     async def get_trace_stats(
         self,
         *,
@@ -2038,7 +2099,7 @@ class AsyncTracesClient:
     async def score_batch_of_traces(
         self,
         *,
-        scores: typing.Sequence[FeedbackScoreBatchItemTracing],
+        scores: typing.Sequence[FeedbackScoreBatchItem],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -2046,7 +2107,7 @@ class AsyncTracesClient:
 
         Parameters
         ----------
-        scores : typing.Sequence[FeedbackScoreBatchItemTracing]
+        scores : typing.Sequence[FeedbackScoreBatchItem]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2058,11 +2119,11 @@ class AsyncTracesClient:
         Examples
         --------
         from Opik import AsyncOpikApi
-        from Opik import FeedbackScoreBatchItemTracing
+        from Opik import FeedbackScoreBatchItem
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.traces.score_batch_of_traces(scores=[FeedbackScoreBatchItemTracing(name='name', value=1.1, source="ui", id='id', )], )
+            await client.traces.score_batch_of_traces(scores=[FeedbackScoreBatchItem(name='name', value=1.1, source="ui", id='id', )], )
         asyncio.run(main())
         """
         _response = await self._raw_client.score_batch_of_traces(scores=scores, request_options=request_options)

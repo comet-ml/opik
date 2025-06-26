@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing.FeedbackScoreBatchItemTracingBuilder;
+import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem.FeedbackScoreBatchItemBuilder;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
@@ -43,7 +43,7 @@ import java.util.stream.StreamSupport;
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeMessage;
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeOutputSchema;
-import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 
 @UtilityClass
 @Slf4j
@@ -208,7 +208,7 @@ public class OnlineScoringEngine {
                 .build();
     }
 
-    public static List<FeedbackScoreBatchItemTracing> toFeedbackScores(@NotNull ChatResponse chatResponse) {
+    public static List<FeedbackScoreBatchItem> toFeedbackScores(@NotNull ChatResponse chatResponse) {
         var content = chatResponse.aiMessage().text();
         JsonNode structuredResponse;
         try {
@@ -231,7 +231,7 @@ public class OnlineScoringEngine {
                         log.info("No score found for '{}' score in {}", scoreName, scoreNested);
                         return null;
                     }
-                    FeedbackScoreBatchItemTracingBuilder resultBuilder = FeedbackScoreBatchItemTracing.builder()
+                    FeedbackScoreBatchItemBuilder resultBuilder = FeedbackScoreBatchItem.builder()
                             .name(scoreName)
                             .reason(scoreNested.path(REASON_FIELD_NAME).asText())
                             .source(ScoreSource.ONLINE_SCORING);

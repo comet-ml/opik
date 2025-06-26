@@ -2,7 +2,7 @@ package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.ProjectStats;
@@ -34,7 +34,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.ProjectStats.AvgValueStat;
 import static com.comet.opik.api.ProjectStats.CountValueStat;
 import static com.comet.opik.api.ProjectStats.PercentageValueStat;
@@ -423,13 +423,13 @@ public class StatsUtils {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    public static Map<String, Double> calculateFeedbackBatchAverage(List<FeedbackScoreBatchItemTracing> data) {
+    public static Map<String, Double> calculateFeedbackBatchAverage(List<FeedbackScoreBatchItem> data) {
         return data
                 .stream()
                 .filter(Objects::nonNull)
                 .collect(groupingBy(
-                        FeedbackScoreBatchItem::name,
-                        mapping(FeedbackScoreBatchItem::value, toList())))
+                        FeedbackScoreItem::name,
+                        mapping(FeedbackScoreItem::value, toList())))
                 .entrySet()
                 .stream()
                 .map(e -> Map.entry(e.getKey(), avgFromList(e.getValue())))

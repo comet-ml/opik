@@ -100,7 +100,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.ProjectStatsSummary.ProjectStatsSummaryItem;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
@@ -1490,8 +1490,8 @@ class ProjectsResourceTest {
 
         traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-        List<FeedbackScoreBatchItemTracing> scores = PodamFactoryUtils.manufacturePojoList(factory,
-                FeedbackScoreBatchItemTracing.class);
+        List<FeedbackScoreBatchItem> scores = PodamFactoryUtils.manufacturePojoList(factory,
+                FeedbackScoreBatchItem.class);
 
         var guardrailsByTraceId = traces.stream()
                 .collect(Collectors.toMap(Trace::id, trace -> guardrailsGenerator.generateGuardrailsForTrace(
@@ -1513,7 +1513,7 @@ class ProjectsResourceTest {
 
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
 
-            List<FeedbackScoreBatchItemTracing> feedbackScores = scores.stream()
+            List<FeedbackScoreBatchItem> feedbackScores = scores.stream()
                     .map(feedbackScore -> feedbackScore.toBuilder()
                             .projectId(project.id())
                             .projectName(project.name())

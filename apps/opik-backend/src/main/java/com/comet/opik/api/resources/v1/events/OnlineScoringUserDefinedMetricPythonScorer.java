@@ -21,7 +21,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.List;
 import java.util.Map;
 
-import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 @EagerSingleton
@@ -93,8 +93,8 @@ public class OnlineScoringUserDefinedMetricPythonScorer
             }
 
             try {
-                List<FeedbackScoreBatchItemTracing> scores = scoreResults.stream()
-                        .map(scoreResult -> (FeedbackScoreBatchItemTracing) FeedbackScoreBatchItemTracing.builder()
+                List<FeedbackScoreBatchItem> scores = scoreResults.stream()
+                        .map(scoreResult -> (FeedbackScoreBatchItem) FeedbackScoreBatchItem.builder()
                                 .id(trace.id())
                                 .projectName(trace.projectName())
                                 .projectId(trace.projectId())

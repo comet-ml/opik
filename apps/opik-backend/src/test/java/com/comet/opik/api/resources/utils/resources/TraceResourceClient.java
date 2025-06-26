@@ -4,8 +4,6 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatch;
-import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
@@ -45,10 +43,10 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import static com.comet.opik.api.FeedbackScoreBatch.FeedbackScoreBatchThread;
-import static com.comet.opik.api.FeedbackScoreBatch.FeedbackScoreBatchTracing;
-import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemThread;
-import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatchThread;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -86,26 +84,26 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .post(Entity.json(trace));
     }
 
-    public void feedbackScores(List<FeedbackScoreBatchItemTracing> score, String apiKey, String workspaceName) {
+    public void feedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
 
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("feedback-scores")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(FeedbackScoreBatchTracing.builder().scores(score).build()))) {
+                .put(Entity.json(FeedbackScoreBatch.builder().scores(score).build()))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }
 
-    public Response callFeedbackScores(List<FeedbackScoreBatchItemTracing> score, String apiKey, String workspaceName) {
+    public Response callFeedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("feedback-scores")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(FeedbackScoreBatchTracing.builder().scores(score).build()));
+                .put(Entity.json(FeedbackScoreBatch.builder().scores(score).build()));
     }
 
     public void threadFeedbackScores(List<FeedbackScoreBatchItemThread> score, String apiKey, String workspaceName) {
@@ -223,7 +221,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         return actualResponse;
     }
 
-    public List<List<FeedbackScoreBatchItemTracing>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
+    public List<List<FeedbackScoreBatchItem>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
             Project project, String apiKey, String workspaceName) {
         return IntStream.range(0, multipleValuesFeedbackScores.size())
                 .mapToObj(i -> {
@@ -234,8 +232,8 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
                     createTrace(trace, apiKey, workspaceName);
 
-                    List<FeedbackScoreBatchItemTracing> scores = multipleValuesFeedbackScores.stream()
-                            .map(name -> podamFactory.manufacturePojo(FeedbackScoreBatchItemTracing.class).toBuilder()
+                    List<FeedbackScoreBatchItem> scores = multipleValuesFeedbackScores.stream()
+                            .map(name -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                                     .name(name)
                                     .projectName(project.name())
                                     .id(trace.id())

@@ -4,6 +4,7 @@ export { type TraceUpdate } from "./TraceUpdate";
 export { type DeleteThreadFeedbackScores } from "./DeleteThreadFeedbackScores";
 export { type DeleteTraceThreads } from "./DeleteTraceThreads";
 export { type FindFeedbackScoreNames2Request } from "./FindFeedbackScoreNames2Request";
+export { type FindTraceThreadsFeedbackScoreNamesRequest } from "./FindTraceThreadsFeedbackScoreNamesRequest";
 export { type GetTraceStatsRequest } from "./GetTraceStatsRequest";
 export { type GetTraceThreadsRequest } from "./GetTraceThreadsRequest";
 export { type FeedbackScoreBatchThread } from "./FeedbackScoreBatchThread";

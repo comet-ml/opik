@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatch.FeedbackScoreBatchTracing;
+import com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
@@ -33,7 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -106,14 +106,14 @@ public class SpanResourceClient extends BaseCommentResourceClient {
         return response;
     }
 
-    public void feedbackScores(List<FeedbackScoreBatchItemTracing> score, String apiKey, String workspaceName) {
+    public void feedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
 
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("feedback-scores")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(FeedbackScoreBatchTracing.builder().scores(score).build()))) {
+                .put(Entity.json(FeedbackScoreBatch.builder().scores(score).build()))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }

@@ -32,7 +32,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @Accessors(fluent = true, chain = true)
 @Getter(onMethod_ = {@JsonProperty})
-public abstract sealed class FeedbackScoreBatchItem {
+public abstract sealed class FeedbackScoreItem {
 
     @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used")
     private final String projectName;
@@ -68,13 +68,13 @@ public abstract sealed class FeedbackScoreBatchItem {
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     @Accessors(fluent = true)
     @Getter(onMethod_ = {@JsonProperty})
-    public static final class FeedbackScoreBatchItemTracing extends FeedbackScoreBatchItem {
+    public static final class FeedbackScoreBatchItem extends FeedbackScoreItem {
 
         // entity (trace or span) id
         @NotNull private UUID id;
 
         @ConstructorProperties({"projectName", "projectId", "name", "categoryName", "value", "reason", "source", "id"})
-        public FeedbackScoreBatchItemTracing(String projectName, UUID projectId, String name, String categoryName,
+        public FeedbackScoreBatchItem(String projectName, UUID projectId, String name, String categoryName,
                 BigDecimal value, String reason, ScoreSource source, UUID id) {
             super(projectName, projectId, name, value, categoryName, reason, source);
             this.id = id;
@@ -94,7 +94,7 @@ public abstract sealed class FeedbackScoreBatchItem {
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     @Accessors(fluent = true)
     @Getter(onMethod_ = {@JsonProperty})
-    public static final class FeedbackScoreBatchItemThread extends FeedbackScoreBatchItem {
+    public static final class FeedbackScoreBatchItemThread extends FeedbackScoreItem {
 
         @NotBlank private String threadId;
 

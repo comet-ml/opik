@@ -71,8 +71,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.FeedbackScoreBatch.FeedbackScoreBatchTracing;
-import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
@@ -593,14 +593,14 @@ class RateLimitE2ETest {
                         .build())
                 .toList();
 
-        List<FeedbackScoreBatchItemTracing> tracesFeedbackScores = IntStream.range(0, (int) LIMIT)
-                .mapToObj(i -> factory.manufacturePojo(FeedbackScoreBatchItemTracing.class).toBuilder()
+        List<FeedbackScoreBatchItem> tracesFeedbackScores = IntStream.range(0, (int) LIMIT)
+                .mapToObj(i -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                         .projectId(null)
                         .build())
                 .collect(Collectors.toList());
 
-        List<FeedbackScoreBatchItemTracing> spansFeedbackScores = IntStream.range(0, (int) LIMIT)
-                .mapToObj(i -> factory.manufacturePojo(FeedbackScoreBatchItemTracing.class).toBuilder()
+        List<FeedbackScoreBatchItem> spansFeedbackScores = IntStream.range(0, (int) LIMIT)
+                .mapToObj(i -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                         .projectId(null)
                         .build())
                 .collect(Collectors.toList());
@@ -619,11 +619,11 @@ class RateLimitE2ETest {
                 Arguments.of(new DatasetItemBatch(projectName, null, datasetItems),
                         new DatasetItemBatch(projectName, null, List.of(datasetItems.getFirst())),
                         "%s/v1/private/datasets".formatted(baseURI) + "/items", HttpMethod.PUT),
-                Arguments.of(FeedbackScoreBatchTracing.builder().scores(tracesFeedbackScores).build(),
-                        FeedbackScoreBatchTracing.builder().scores(List.of(tracesFeedbackScores.getFirst())).build(),
+                Arguments.of(FeedbackScoreBatch.builder().scores(tracesFeedbackScores).build(),
+                        FeedbackScoreBatch.builder().scores(List.of(tracesFeedbackScores.getFirst())).build(),
                         BASE_RESOURCE_URI.formatted(baseURI) + "/feedback-scores", HttpMethod.PUT),
-                Arguments.of(FeedbackScoreBatchTracing.builder().scores(spansFeedbackScores).build(),
-                        FeedbackScoreBatchTracing.builder().scores(List.of(spansFeedbackScores.getFirst())).build(),
+                Arguments.of(FeedbackScoreBatch.builder().scores(spansFeedbackScores).build(),
+                        FeedbackScoreBatch.builder().scores(List.of(spansFeedbackScores.getFirst())).build(),
                         "%s/v1/private/spans".formatted(baseURI) + "/feedback-scores", HttpMethod.PUT),
                 Arguments.of(new ExperimentItemsBatch(experimentItems),
                         new ExperimentItemsBatch(Set.of(experimentItems.stream().findFirst().orElseThrow())),

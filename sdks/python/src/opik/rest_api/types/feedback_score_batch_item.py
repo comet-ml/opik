@@ -4,10 +4,10 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .feedback_score_batch_item_tracing_source import FeedbackScoreBatchItemTracingSource
+from .feedback_score_batch_item_source import FeedbackScoreBatchItemSource
 
 
-class FeedbackScoreBatchItemTracing(UniversalBaseModel):
+class FeedbackScoreBatchItem(UniversalBaseModel):
     project_name: typing.Optional[str] = pydantic.Field(default=None)
     """
     If null, the default project is used
@@ -17,7 +17,7 @@ class FeedbackScoreBatchItemTracing(UniversalBaseModel):
     category_name: typing.Optional[str] = None
     value: float
     reason: typing.Optional[str] = None
-    source: FeedbackScoreBatchItemTracingSource
+    source: FeedbackScoreBatchItemSource
     id: str
 
     if IS_PYDANTIC_V2:

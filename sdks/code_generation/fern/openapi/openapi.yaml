@@ -2782,7 +2782,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/FeedbackScoreBatchTracing"
+              $ref: "#/components/schemas/FeedbackScoreBatch"
       responses:
         "204":
           description: No Content
@@ -3160,6 +3160,29 @@ paths:
                 type: array
                 items:
                   type: string
+  /v1/private/traces/threads/feedback-scores/names:
+    get:
+      tags:
+      - Traces
+      summary: Find Trace Threads Feedback Score names
+      description: Find Trace Threads Feedback Score names
+      operationId: findTraceThreadsFeedbackScoreNames
+      parameters:
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Find Trace Threads Feedback Score names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
   /v1/private/traces/stats:
     get:
       tags:
@@ -3338,7 +3361,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/FeedbackScoreBatchTracing"
+              $ref: "#/components/schemas/FeedbackScoreBatch"
       responses:
         "204":
           description: No Content
@@ -8477,7 +8500,18 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ProjectStatItemObject_Public"
-    FeedbackScoreBatchItemTracing:
+    FeedbackScoreBatch:
+      required:
+      - scores
+      type: object
+      properties:
+        scores:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackScoreBatchItem"
+    FeedbackScoreBatchItem:
       required:
       - id
       - name
@@ -8511,17 +8545,6 @@ components:
         id:
           type: string
           format: uuid
-    FeedbackScoreBatchTracing:
-      required:
-      - scores
-      type: object
-      properties:
-        scores:
-          maxItems: 1000
-          minItems: 1
-          type: array
-          items:
-            $ref: "#/components/schemas/FeedbackScoreBatchItemTracing"
     SpanFilter_Public:
       type: object
       properties:

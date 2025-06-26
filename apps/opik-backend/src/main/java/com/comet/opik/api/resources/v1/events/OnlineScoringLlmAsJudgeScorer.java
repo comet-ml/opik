@@ -20,7 +20,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.List;
 import java.util.Map;
 
-import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
@@ -89,8 +89,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             }
 
             try {
-                List<FeedbackScoreBatchItemTracing> scores = OnlineScoringEngine.toFeedbackScores(chatResponse).stream()
-                        .map(item -> (FeedbackScoreBatchItemTracing) item.toBuilder()
+                List<FeedbackScoreBatchItem> scores = OnlineScoringEngine.toFeedbackScores(chatResponse).stream()
+                        .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
                                 .id(trace.id())
                                 .projectId(trace.projectId())
                                 .projectName(trace.projectName())

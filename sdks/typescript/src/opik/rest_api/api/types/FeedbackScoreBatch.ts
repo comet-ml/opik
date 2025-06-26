@@ -4,6 +4,6 @@
 
 import * as OpikApi from "../index";
 
-export interface FeedbackScoreBatchTracing {
-    scores: OpikApi.FeedbackScoreBatchItemTracing[];
+export interface FeedbackScoreBatch {
+    scores: OpikApi.FeedbackScoreBatchItem[];
 }

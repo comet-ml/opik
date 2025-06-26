@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.DataPoint;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.metrics.WorkspaceMetricRequest;
@@ -62,7 +62,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -461,8 +461,8 @@ class WorkspacesResourceTest {
                     traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
                     // create several feedback scores for that trace
-                    List<FeedbackScoreBatchItemTracing> scores = scoreNames.stream()
-                            .map(name -> factory.manufacturePojo(FeedbackScoreBatchItemTracing.class).toBuilder()
+                    List<FeedbackScoreBatchItem> scores = scoreNames.stream()
+                            .map(name -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                                     .name(name)
                                     .projectName(projectName)
                                     .id(trace.id())
@@ -474,11 +474,11 @@ class WorkspacesResourceTest {
                     return scores;
                 })
                 .flatMap(List::stream)
-                .collect(Collectors.groupingBy(FeedbackScoreBatchItem::name))
+                .collect(Collectors.groupingBy(FeedbackScoreItem::name))
                 .entrySet().stream()
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
-                        e -> calcAverage(e.getValue().stream().map(FeedbackScoreBatchItem::value)
+                        e -> calcAverage(e.getValue().stream().map(FeedbackScoreItem::value)
                                 .toList())));
     }
 

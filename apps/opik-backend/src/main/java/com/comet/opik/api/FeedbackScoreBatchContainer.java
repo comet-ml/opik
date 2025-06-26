@@ -17,20 +17,20 @@ import lombok.experimental.SuperBuilder;
 import java.beans.ConstructorProperties;
 import java.util.List;
 
-import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemThread;
-import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 
 @SuperBuilder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @Accessors(fluent = true, chain = true)
 @Getter(onMethod_ = {@JsonProperty})
-public abstract class FeedbackScoreBatch<T extends FeedbackScoreBatchItem> implements RateEventContainer {
+public abstract class FeedbackScoreBatchContainer<T extends FeedbackScoreItem> implements RateEventContainer {
 
     @NotNull @Size(min = 1, max = 1000) private List<@Valid T> scores;
 
     @ConstructorProperties({"scores"})
-    protected FeedbackScoreBatch(List<T> scores) {
+    protected FeedbackScoreBatchContainer(List<T> scores) {
         this.scores = scores;
     }
 
@@ -46,10 +46,10 @@ public abstract class FeedbackScoreBatch<T extends FeedbackScoreBatchItem> imple
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     @Accessors(fluent = true)
     @Getter
-    public static class FeedbackScoreBatchTracing extends FeedbackScoreBatch<FeedbackScoreBatchItemTracing> {
+    public static class FeedbackScoreBatch extends FeedbackScoreBatchContainer<FeedbackScoreBatchItem> {
 
         @ConstructorProperties({"scores"})
-        public FeedbackScoreBatchTracing(List<FeedbackScoreBatchItemTracing> scores) {
+        public FeedbackScoreBatch(List<FeedbackScoreBatchItem> scores) {
             super(scores);
         }
 
@@ -62,7 +62,7 @@ public abstract class FeedbackScoreBatch<T extends FeedbackScoreBatchItem> imple
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     @Accessors(fluent = true)
     @Getter
-    public static class FeedbackScoreBatchThread extends FeedbackScoreBatch<FeedbackScoreBatchItemThread> {
+    public static class FeedbackScoreBatchThread extends FeedbackScoreBatchContainer<FeedbackScoreBatchItemThread> {
 
         @ConstructorProperties({"scores"})
         public FeedbackScoreBatchThread(List<FeedbackScoreBatchItemThread> scores) {

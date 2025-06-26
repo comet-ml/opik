@@ -69,7 +69,7 @@ import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -321,9 +321,9 @@ class OptimizationsResourceTest {
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE_NAME);
             experimentResourceClient.createExperimentItem(experimentItems, API_KEY, TEST_WORKSPACE_NAME);
 
-            List<FeedbackScoreBatchItemTracing> scoreBatchItems = traces.stream()
+            List<FeedbackScoreBatchItem> scoreBatchItems = traces.stream()
                     .flatMap(trace -> feedbackScoreItems.stream()
-                            .map(score -> podamFactory.manufacturePojo(FeedbackScoreBatchItemTracing.class).toBuilder()
+                            .map(score -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                                     .projectName(project.name())
                                     .id(trace.id())
                                     .name(score.name())
@@ -654,9 +654,9 @@ class OptimizationsResourceTest {
             experimentResourceClient.createExperimentItem(experimentItems, apiKey, workspaceName);
 
             // Create feedback scores
-            List<FeedbackScoreBatchItemTracing> scoreBatchItems = traces.stream()
+            List<FeedbackScoreBatchItem> scoreBatchItems = traces.stream()
                     .flatMap(trace -> feedbackScoreItems.stream()
-                            .map(score -> podamFactory.manufacturePojo(FeedbackScoreBatchItemTracing.class).toBuilder()
+                            .map(score -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                                     .projectName(project.name())
                                     .id(trace.id())
                                     .name(score.name())

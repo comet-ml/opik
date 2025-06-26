@@ -1297,6 +1297,97 @@ export class Traces {
     }
 
     /**
+     * Find Trace Threads Feedback Score names
+     *
+     * @param {OpikApi.FindTraceThreadsFeedbackScoreNamesRequest} request
+     * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.traces.findTraceThreadsFeedbackScoreNames({
+     *         projectId: "project_id"
+     *     })
+     */
+    public findTraceThreadsFeedbackScoreNames(
+        request: OpikApi.FindTraceThreadsFeedbackScoreNamesRequest,
+        requestOptions?: Traces.RequestOptions,
+    ): core.HttpResponsePromise<string[]> {
+        return core.HttpResponsePromise.fromPromise(this.__findTraceThreadsFeedbackScoreNames(request, requestOptions));
+    }
+
+    private async __findTraceThreadsFeedbackScoreNames(
+        request: OpikApi.FindTraceThreadsFeedbackScoreNamesRequest,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<string[]>> {
+        const { projectId } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        _queryParams["project_id"] = projectId;
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/traces/threads/feedback-scores/names",
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.traces.findTraceThreadsFeedbackScoreNames.Response.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling GET /v1/private/traces/threads/feedback-scores/names.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Get trace stats
      *
      * @param {OpikApi.GetTraceStatsRequest} request
@@ -1866,7 +1957,7 @@ export class Traces {
     /**
      * Batch feedback scoring for traces
      *
-     * @param {OpikApi.FeedbackScoreBatchTracing} request
+     * @param {OpikApi.FeedbackScoreBatch} request
      * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
@@ -1880,14 +1971,14 @@ export class Traces {
      *     })
      */
     public scoreBatchOfTraces(
-        request: OpikApi.FeedbackScoreBatchTracing,
+        request: OpikApi.FeedbackScoreBatch,
         requestOptions?: Traces.RequestOptions,
     ): core.HttpResponsePromise<void> {
         return core.HttpResponsePromise.fromPromise(this.__scoreBatchOfTraces(request, requestOptions));
     }
 
     private async __scoreBatchOfTraces(
-        request: OpikApi.FeedbackScoreBatchTracing,
+        request: OpikApi.FeedbackScoreBatch,
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
@@ -1911,7 +2002,7 @@ export class Traces {
             },
             contentType: "application/json",
             requestType: "json",
-            body: serializers.FeedbackScoreBatchTracing.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            body: serializers.FeedbackScoreBatch.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
             withCredentials: true,
