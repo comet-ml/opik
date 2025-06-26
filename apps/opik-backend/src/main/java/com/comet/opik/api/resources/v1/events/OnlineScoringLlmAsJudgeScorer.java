@@ -5,6 +5,9 @@ import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
+import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
+import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -33,15 +36,18 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
     private final ChatCompletionService aiProxyService;
     private final Logger userFacingLogger;
+    private final LlmProviderFactory llmProviderFactory;
 
     @Inject
     public OnlineScoringLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
-            @NonNull ChatCompletionService aiProxyService) {
+            @NonNull ChatCompletionService aiProxyService,
+            @NonNull LlmProviderFactory llmProviderFactory) {
         super(config, redisson, feedbackScoreService, AutomationRuleEvaluatorType.LLM_AS_JUDGE, "llm_as_judge");
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringLlmAsJudgeScorer.class);
+        this.llmProviderFactory = llmProviderFactory;
     }
 
     /**
@@ -67,7 +73,11 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
             ChatRequest scoreRequest;
             try {
-                scoreRequest = OnlineScoringEngine.prepareLlmRequest(message.llmAsJudgeCode(), trace);
+                var llmProvider = llmProviderFactory.getLlmProvider(message.llmAsJudgeCode().model().name());
+                var strategy = llmProvider.isSupportsStructuredOutput()
+                        ? new ToolCallingStrategy()
+                        : new InstructionStrategy();
+                scoreRequest = OnlineScoringEngine.prepareLlmRequest(message.llmAsJudgeCode(), trace, strategy);
             } catch (Exception exception) {
                 userFacingLogger.error("Error preparing LLM request for traceId '{}': \n\n{}",
                         trace.id(), exception.getMessage());

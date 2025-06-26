@@ -3,7 +3,6 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorType;
 import com.comet.opik.api.FeedbackScoreItem;
-import com.comet.opik.api.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.TracesCreated;
@@ -20,6 +19,8 @@ import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResou
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.llm.ChatCompletionService;
+import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
+import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -35,9 +36,6 @@ import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.chat.request.json.JsonBooleanSchema;
-import dev.langchain4j.model.chat.request.json.JsonIntegerSchema;
-import dev.langchain4j.model.chat.request.json.JsonNumberSchema;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -71,7 +69,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
-import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeOutputSchema;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.LogItem.LogLevel;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
@@ -410,45 +407,46 @@ class OnlineScoringEngineTest {
     }
 
     @Test
-    @DisplayName("create a structured output response format given an Automation Rule Evaluator schema input")
-    void testToResponseFormat() {
-        // creates an entry for each possible output schema type
-        var inputIntSchema = factory.manufacturePojo(LlmAsJudgeOutputSchema.class)
-                .toBuilder().type(LlmAsJudgeOutputSchemaType.INTEGER).build();
-        var inputBoolSchema = factory.manufacturePojo(LlmAsJudgeOutputSchema.class)
-                .toBuilder().type(LlmAsJudgeOutputSchemaType.BOOLEAN).build();
-        var inputDoubleSchema = factory.manufacturePojo(LlmAsJudgeOutputSchema.class)
-                .toBuilder().type(LlmAsJudgeOutputSchemaType.DOUBLE).build();
-        var schema = List.of(inputIntSchema, inputBoolSchema, inputDoubleSchema);
+    @DisplayName("prepare LLM request with tool-calling strategy")
+    void testPrepareLlmRequestWithToolCallingStrategy() throws JsonProcessingException {
+        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var trace = createTrace(generator.generate(), generator.generate());
 
-        var responseFormat = OnlineScoringEngine.toResponseFormat(schema);
+        var request = OnlineScoringEngine.prepareLlmRequest(
+                evaluatorCode, trace, new ToolCallingStrategy());
 
-        var schemaRoot = (JsonObjectSchema) responseFormat.jsonSchema().rootElement();
-        assertThat(schemaRoot.properties()).hasSize(schema.size());
-        assertThat(schemaRoot.required()).containsOnly(inputBoolSchema.name(), inputDoubleSchema.name(),
-                inputIntSchema.name());
+        assertThat(request.responseFormat()).isNotNull();
+        var jsonObjectSchema = (JsonObjectSchema) request.responseFormat().jsonSchema().rootElement();
+        assertThat(jsonObjectSchema.properties()).containsKey("Relevance");
+        assertThat(jsonObjectSchema.properties()).containsKey("Conciseness");
+        assertThat(jsonObjectSchema.properties()).containsKey("Technical Accuracy");
+    }
 
-        var parsedIntSchema = (JsonObjectSchema) schemaRoot.properties().get(inputIntSchema.name());
-        assertThat(parsedIntSchema.description()).isEqualTo(inputIntSchema.description());
-        assertThat(parsedIntSchema.required()).containsOnly(OnlineScoringEngine.SCORE_FIELD_NAME,
-                OnlineScoringEngine.REASON_FIELD_NAME);
-        assertThat(parsedIntSchema.properties().get(OnlineScoringEngine.SCORE_FIELD_NAME).getClass())
-                .isEqualTo(JsonIntegerSchema.class);
+    @Test
+    @DisplayName("prepare LLM request with instruction strategy")
+    void testPrepareLlmRequestWithInstructionStrategy() throws JsonProcessingException {
+        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var trace = createTrace(generator.generate(), generator.generate());
 
-        var parsedBoolSchema = (JsonObjectSchema) schemaRoot.properties().get(inputBoolSchema.name());
-        assertThat(parsedBoolSchema.description()).isEqualTo(inputBoolSchema.description());
-        assertThat(parsedBoolSchema.required()).containsOnly(OnlineScoringEngine.SCORE_FIELD_NAME,
-                OnlineScoringEngine.REASON_FIELD_NAME);
-        assertThat(parsedBoolSchema.properties().get(OnlineScoringEngine.SCORE_FIELD_NAME).getClass())
-                .isEqualTo(JsonBooleanSchema.class);
+        var request = OnlineScoringEngine.prepareLlmRequest(
+                evaluatorCode, trace, new InstructionStrategy());
 
-        var parsedDoubleSchema = (JsonObjectSchema) schemaRoot.properties().get(inputDoubleSchema.name());
-        assertThat(parsedDoubleSchema.description()).isEqualTo(inputDoubleSchema.description());
-        assertThat(parsedDoubleSchema.required()).containsOnly(OnlineScoringEngine.SCORE_FIELD_NAME,
-                OnlineScoringEngine.REASON_FIELD_NAME);
-        assertThat(parsedDoubleSchema.properties().get(OnlineScoringEngine.SCORE_FIELD_NAME).getClass())
-                .isEqualTo(JsonNumberSchema.class);
+        assertThat(request.responseFormat()).isNull();
 
+        var messages = request.messages();
+        assertThat(messages).hasSize(2);
+
+        var lastMessage = messages.get(1);
+        assertThat(lastMessage).isInstanceOf(UserMessage.class);
+
+        var userMessage = (UserMessage) lastMessage;
+        assertThat(userMessage.singleText()).contains("IMPORTANT:");
+        assertThat(userMessage.singleText()).contains("You must respond with ONLY a single valid JSON object");
+
+        // Verify original content is preserved
+        assertThat(userMessage.singleText()).contains("Summary: " + SUMMARY_STR);
+        assertThat(userMessage.singleText()).contains("Instruction: " + OUTPUT_STR);
+        assertThat(userMessage.singleText()).contains("Literal: some literal value");
     }
 
     private static Stream<Arguments> feedbackParsingArguments() {

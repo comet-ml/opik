@@ -10,15 +10,17 @@ import java.util.Arrays;
 @Getter
 @RequiredArgsConstructor
 public enum LlmProvider {
-    OPEN_AI("openai"),
-    ANTHROPIC("anthropic"),
-    GEMINI("gemini"),
-    OPEN_ROUTER("openrouter"),
-    VERTEX_AI("vertex-ai"),
+    OPEN_AI("openai", true),
+    ANTHROPIC("anthropic", true),
+    GEMINI("gemini", true),
+    OPEN_ROUTER("openrouter", true),
+    VERTEX_AI("vertex-ai", true),
+    VLLM("vllm", false),
     ;
 
     @JsonValue
     private final String value;
+    private final boolean supportsStructuredOutput;
 
     @JsonCreator
     public static LlmProvider fromString(String value) {
