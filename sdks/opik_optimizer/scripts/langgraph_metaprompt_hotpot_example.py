@@ -58,7 +58,7 @@ optimizer = MetaPromptOptimizer(
     improvement_threshold=0.01,  # Minimum improvement required to continue
     temperature=0.1,  # Lower temperature for more focused responses
     max_completion_tokens=5000,  # Maximum tokens for model completion
-    num_threads=12,  # Number of threads for parallel evaluation
+    n_threads=12,  # Number of threads for parallel evaluation
     subsample_size=10,  # Fixed subsample size of 10 items
 )
 
