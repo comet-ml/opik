@@ -35,9 +35,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      {{- if $value.serviceAccount.enabled }}
-      serviceAccountName: {{ $value.serviceAccount.name | quote }}
-      {{- end }}
+      serviceAccountName: {{ include "service.serviceAccountName" ( merge . (dict "serviceName" $key ) ) }}
       {{- with $.Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -75,12 +73,10 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- end }}
-
       containers:
         {{- with $value.additionalContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
-
         - name: {{ include "opik.name" $ }}-{{ $key | lower }}
           securityContext:
             {{- toYaml $value.securityContext | nindent 12 }}
@@ -134,7 +130,6 @@ spec:
           lifecycle:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-
       {{- with $value.volumes }}
       volumes:
         {{- toYaml . | nindent 8 }}
@@ -147,7 +142,6 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      
       {{- with $value.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
