@@ -13,13 +13,17 @@ registry: &registry ghcr.io/comet-ml/opik
 localFEAddress: "host.minikube.internal:5174"
 localFE: false
 
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
+
 demoDataJob: true
 
 component:
   backend:
     enabled: true
     serviceAccount:
-      enabled: true 
       create: true
       name: opik-backend
     metrics:
@@ -105,7 +109,6 @@ component:
   python-backend:
     enabled: true
     serviceAccount:
-      enabled: true 
       create: true
       name: opik-python-backend
     metrics:
@@ -172,7 +175,6 @@ component:
   frontend:
     enabled: true
     serviceAccount:
-      enabled: true
       create: true
       name: opik-frontend
     metrics:
@@ -348,6 +350,10 @@ clickhouse:
       enabled: false
     username: opik
     password: opik
+  serviceAccount:
+    annotations: {}
+    create: false
+    name: ""
   zookeeper:
       host: opik-zookeeper
   backup: 
@@ -357,10 +363,11 @@ clickhouse:
       annotations: {}
       create: false
       name: ""
-    # bucketURL: ""
+    # bucketURL: "s3://opik-clickhouse-backup"
     # secretName: ""
     # schedule: ""
     # baseBackup: ""
+    schedule: "0 0 * * *" # daily at midnight
     command:
       - /bin/bash
       - '-cx'
