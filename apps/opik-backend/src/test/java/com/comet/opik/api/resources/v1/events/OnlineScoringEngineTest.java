@@ -36,7 +36,11 @@ import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.chat.request.json.JsonBooleanSchema;
+import dev.langchain4j.model.chat.request.json.JsonIntegerSchema;
+import dev.langchain4j.model.chat.request.json.JsonNumberSchema;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
+import dev.langchain4j.model.chat.request.json.JsonStringSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -416,10 +420,8 @@ class OnlineScoringEngineTest {
                 evaluatorCode, trace, new ToolCallingStrategy());
 
         assertThat(request.responseFormat()).isNotNull();
-        var jsonObjectSchema = (JsonObjectSchema) request.responseFormat().jsonSchema().rootElement();
-        assertThat(jsonObjectSchema.properties()).containsKey("Relevance");
-        assertThat(jsonObjectSchema.properties()).containsKey("Conciseness");
-        assertThat(jsonObjectSchema.properties()).containsKey("Technical Accuracy");
+        var expectedSchema = createTestSchema();
+        assertThat(request.responseFormat().jsonSchema().rootElement()).isEqualTo(expectedSchema);
     }
 
     @Test
@@ -449,50 +451,82 @@ class OnlineScoringEngineTest {
         assertThat(userMessage.singleText()).contains("Literal: some literal value");
     }
 
-    private static Stream<Arguments> feedbackParsingArguments() {
-        var validAiMsgTxt = "{\"Relevance\":{\"score\":5,\"reason\":\"The summary directly addresses the approach taken in the study by mentioning the systematic experimentation with varying data mixtures and the manipulation of proportions and sources.\"},"
-                +
-                "\"Conciseness\":{\"score\":4,\"reason\":\"The summary is mostly concise but could be slightly more streamlined by removing redundant phrases.\"},"
-                +
-                "\"Technical Accuracy\":{\"score\":0,\"reason\":\"The summary accurately describes the experimental approach involving data mixtures, proportions, and sources, reflecting the technical details of the study.\"}}";
-        var invalidAiMsgTxt = "a" + validAiMsgTxt;
-
-        var validJson = arguments(validAiMsgTxt, 3);
-        var invalidJson = arguments(invalidAiMsgTxt, 0);
-        var emptyJson = arguments("", 0);
-
-        return Stream.of(validJson, invalidJson, emptyJson);
-    }
-
     @ParameterizedTest
     @MethodSource("feedbackParsingArguments")
-    @DisplayName("parse a OnlineScoring ChatResponse into Feedback Scores")
-    void testParseResponseIntoFeedbacks(String aiMessage, Integer expectedResults) {
-        var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(aiMessage)).build();
+    @DisplayName("parse feedback scores from AI response")
+    void testToFeedbackScores(String aiMessage, int expectedSize) {
+        var chatResponse = ChatResponse.builder()
+                .aiMessage(AiMessage.aiMessage(aiMessage))
+                .build();
+
         var feedbackScores = OnlineScoringEngine.toFeedbackScores(chatResponse);
 
-        assertThat(feedbackScores).hasSize(expectedResults);
+        assertThat(feedbackScores).hasSize(expectedSize);
 
-        if (expectedResults > 0) {
-            var relevanceScore = feedbackScores.getFirst();
-            assertThat(relevanceScore.name()).isEqualTo("Relevance");
-            assertThat(relevanceScore.value()).isEqualTo(new BigDecimal(5));
-            assertThat(relevanceScore.reason()).startsWith("The summary directly ");
-            assertThat(relevanceScore.source()).isEqualTo(ScoreSource.ONLINE_SCORING);
+        if (expectedSize > 0) {
+            var scoresMap = feedbackScores.stream()
+                    .collect(Collectors.toMap(FeedbackScoreBatchItem::name, Function.identity()));
 
-            var concisenessScore = feedbackScores.get(1);
-            assertThat(concisenessScore.name()).isEqualTo("Conciseness");
-            assertThat(concisenessScore.value()).isEqualTo(new BigDecimal(4));
-            assertThat(concisenessScore.reason()).startsWith("The summary is mostly ");
-            assertThat(concisenessScore.source()).isEqualTo(ScoreSource.ONLINE_SCORING);
+            var relevance = scoresMap.get("Relevance");
+            assertThat(relevance.value()).isEqualTo(BigDecimal.valueOf(5));
+            assertThat(relevance.source()).isEqualTo(ScoreSource.ONLINE_SCORING);
 
-            var techAccScore = feedbackScores.get(2);
-            assertThat(techAccScore.name()).isEqualTo("Technical Accuracy");
-            assertThat(techAccScore.value()).isEqualTo(new BigDecimal(0));
-            assertThat(techAccScore.reason()).startsWith("The summary accurately ");
-            assertThat(techAccScore.source()).isEqualTo(ScoreSource.ONLINE_SCORING);
+            var conciseness = scoresMap.get("Conciseness");
+            assertThat(conciseness.value()).isEqualTo(new BigDecimal("4.0"));
+            assertThat(conciseness.source()).isEqualTo(ScoreSource.ONLINE_SCORING);
 
+            var techAccuracy = scoresMap.get("Technical Accuracy");
+            assertThat(techAccuracy.value()).isEqualTo(BigDecimal.ZERO);
+            assertThat(techAccuracy.source()).isEqualTo(ScoreSource.ONLINE_SCORING);
         }
+    }
+
+    private static Stream<Arguments> feedbackParsingArguments() {
+        var validAiMsgTxt = "{\"Relevance\":{\"score\":5,\"reason\":\"The summary directly addresses the approach taken in the study by mentioning the systematic experimentation with varying data mixtures and the manipulation of proportions and sources.\"},"
+                + "\"Conciseness\":{\"score\":4.0,\"reason\":\"The summary is mostly concise but could be slightly more streamlined by removing redundant phrases.\"},"
+                + "\"Technical Accuracy\":{\"score\":false,\"reason\":\"The summary accurately describes the experimental approach involving data mixtures, proportions, and sources, reflecting the technical details of the study.\"}}";
+        var invalidAiMsgTxt = "a" + validAiMsgTxt;
+        var emptyAiMsgTxt = "{}";
+        var emptyJson = "";
+
+        return Stream.of(
+                arguments(validAiMsgTxt, 3),
+                arguments(invalidAiMsgTxt, 0),
+                arguments(emptyAiMsgTxt, 0),
+                arguments(emptyJson, 0));
+    }
+
+    private JsonObjectSchema createTestSchema() {
+        return JsonObjectSchema.builder()
+                .addProperty("Relevance", JsonObjectSchema.builder()
+                        .description("Relevance of the summary")
+                        .required("score", "reason")
+                        .addProperty("score",
+                                JsonIntegerSchema.builder().description("the score for Relevance").build())
+                        .addProperty("reason",
+                                JsonStringSchema.builder().description("the reason for the score for Relevance")
+                                        .build())
+                        .build())
+                .addProperty("Conciseness", JsonObjectSchema.builder()
+                        .description("Conciseness of the summary")
+                        .required("score", "reason")
+                        .addProperty("score",
+                                JsonNumberSchema.builder().description("the score for Conciseness").build())
+                        .addProperty("reason",
+                                JsonStringSchema.builder().description("the reason for the score for Conciseness")
+                                        .build())
+                        .build())
+                .addProperty("Technical Accuracy", JsonObjectSchema.builder()
+                        .description("Technical accuracy of the summary")
+                        .required("score", "reason")
+                        .addProperty("score",
+                                JsonBooleanSchema.builder().description("the score for Technical Accuracy").build())
+                        .addProperty("reason",
+                                JsonStringSchema.builder()
+                                        .description("the reason for the score for Technical Accuracy").build())
+                        .build())
+                .required("Relevance", "Technical Accuracy", "Conciseness")
+                .build();
     }
 
     @Test
