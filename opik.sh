@@ -213,7 +213,7 @@ print_banner() {
   echo "║  🛠️  Configure the Python SDK:                                   ║"
   echo "║     \$ python --version                                          ║"
   echo "║     \$ pip install opik                                          ║"
-  echo "║     \$ opik configure                                            ║"
+  echo "║     \$ opik configure --use-local                                ║"
   echo "║                                                                 ║"
   echo "║  📚 Documentation: https://www.comet.com/docs/opik/             ║"
   echo "║                                                                 ║"
