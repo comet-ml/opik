@@ -1,8 +1,8 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatch;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchTracing;
+import com.comet.opik.api.FeedbackScoreBatchTracingItem;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
@@ -106,14 +106,14 @@ public class SpanResourceClient extends BaseCommentResourceClient {
         return response;
     }
 
-    public void feedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
+    public void feedbackScores(List<FeedbackScoreBatchTracingItem> score, String apiKey, String workspaceName) {
 
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("feedback-scores")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(new FeedbackScoreBatch(score)))) {
+                .put(Entity.json(new FeedbackScoreBatchTracing(score)))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }

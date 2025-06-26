@@ -17,8 +17,8 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentType;
-import com.comet.opik.api.FeedbackScoreBatch;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchTracing;
+import com.comet.opik.api.FeedbackScoreBatchTracingItem;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Project;
@@ -1566,7 +1566,7 @@ class DatasetsResourceTest {
             var traces = List.of(trace1, trace2);
 
             // Creating 5 scores peach each of the two traces above
-            var scores1 = PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class)
+            var scores1 = PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchTracingItem.class)
                     .stream()
                     .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
                             .id(trace1.id())
@@ -1574,7 +1574,7 @@ class DatasetsResourceTest {
                             .build())
                     .toList();
 
-            var scores2 = PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class)
+            var scores2 = PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchTracingItem.class)
                     .stream()
                     .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
                             .id(trace2.id())
@@ -1583,10 +1583,10 @@ class DatasetsResourceTest {
                     .toList();
 
             var traceIdToScoresMap = Stream.concat(scores1.stream(), scores2.stream())
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreBatchTracingItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
-            var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatch.class);
+            var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatchTracing.class);
             feedbackScoreBatch = feedbackScoreBatch.toBuilder()
                     .scores(Stream.concat(
                             feedbackScoreBatch.scores().stream(),
@@ -1628,7 +1628,8 @@ class DatasetsResourceTest {
 
     }
 
-    private void createScoreAndAssert(FeedbackScoreBatch feedbackScoreBatch, String apiKey, String workspaceName) {
+    private void createScoreAndAssert(FeedbackScoreBatchTracing feedbackScoreBatch, String apiKey,
+            String workspaceName) {
         try (var actualResponse = client.target(getTracesPath())
                 .path("feedback-scores")
                 .request()
@@ -2072,7 +2073,7 @@ class DatasetsResourceTest {
             index.set(0);
 
             // Creating 5 scores peach each of the two traces above
-            var scores = PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class)
+            var scores = PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchTracingItem.class)
                     .stream()
                     .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
                             .id(traces.get(index.get()).id())
@@ -2081,10 +2082,10 @@ class DatasetsResourceTest {
                     .toList();
 
             var traceIdToScoresMap = scores.stream()
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreBatchTracingItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
-            var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatch.class);
+            var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatchTracing.class);
             feedbackScoreBatch = feedbackScoreBatch.toBuilder()
                     .scores(Stream.concat(
                             feedbackScoreBatch.scores().stream(),
@@ -3859,7 +3860,7 @@ class DatasetsResourceTest {
             var traces = List.of(trace1, trace2);
 
             // Creating 5 scores peach each of the two traces above
-            var scores1 = PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class)
+            var scores1 = PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchTracingItem.class)
                     .stream()
                     .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
                             .id(trace1.id())
@@ -3868,7 +3869,7 @@ class DatasetsResourceTest {
                             .build())
                     .toList();
 
-            var scores2 = PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class)
+            var scores2 = PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchTracingItem.class)
                     .stream()
                     .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
                             .id(trace2.id())
@@ -3878,10 +3879,10 @@ class DatasetsResourceTest {
                     .toList();
 
             var traceIdToScoresMap = Stream.concat(scores1.stream(), scores2.stream())
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreBatchTracingItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
-            var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatch.class);
+            var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatchTracing.class);
             feedbackScoreBatch = feedbackScoreBatch.toBuilder()
                     .scores(Stream.concat(feedbackScoreBatch.scores().stream(),
                             traceIdToScoresMap.values().stream().flatMap(List::stream)).toList())
@@ -4439,9 +4440,9 @@ class DatasetsResourceTest {
 
             UUID experimentId = GENERATOR.generate();
 
-            List<FeedbackScoreBatchItem> scores = new ArrayList<>();
+            List<FeedbackScoreBatchTracingItem> scores = new ArrayList<>();
             createScores(traces, projectName, scores);
-            createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
+            createScoreAndAssert(new FeedbackScoreBatchTracing(scores), apiKey, workspaceName);
 
             List<ExperimentItem> experimentItems = new ArrayList<>();
             createExperimentItems(items, traces, scores, experimentId, experimentItems);
@@ -4522,9 +4523,9 @@ class DatasetsResourceTest {
 
             UUID experimentId = GENERATOR.generate();
 
-            List<FeedbackScoreBatchItem> scores = new ArrayList<>();
+            List<FeedbackScoreBatchTracingItem> scores = new ArrayList<>();
             createScores(traces, projectName, scores);
-            createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
+            createScoreAndAssert(new FeedbackScoreBatchTracing(scores), apiKey, workspaceName);
 
             List<ExperimentItem> experimentItems = new ArrayList<>();
             createExperimentItems(datasetItems, traces, scores, experimentId, experimentItems);
@@ -4589,7 +4590,7 @@ class DatasetsResourceTest {
         }
 
         private void createExperimentItems(List<DatasetItem> items, List<Trace> traces,
-                List<FeedbackScoreBatchItem> scores, UUID experimentId, List<ExperimentItem> experimentItems) {
+                List<FeedbackScoreBatchTracingItem> scores, UUID experimentId, List<ExperimentItem> experimentItems) {
             for (int i = 0; i < items.size(); i++) {
                 var item = items.get(i);
                 var trace = traces.get(i);
@@ -4614,11 +4615,11 @@ class DatasetsResourceTest {
             }
         }
 
-        private void createScores(List<Trace> traces, String projectName, List<FeedbackScoreBatchItem> scores) {
+        private void createScores(List<Trace> traces, String projectName, List<FeedbackScoreBatchTracingItem> scores) {
             for (int i = 0; i < traces.size(); i++) {
                 var trace = traces.get(i);
 
-                var score = FeedbackScoreBatchItem.builder()
+                var score = FeedbackScoreBatchTracingItem.builder()
                         .name("sql_cost")
                         .value(BigDecimal.valueOf(i == 0 ? 10 : i))
                         .source(ScoreSource.SDK)
@@ -4698,7 +4699,8 @@ class DatasetsResourceTest {
             }
         }
 
-        private void createScoreAndAssert(FeedbackScoreBatch feedbackScoreBatch, String apiKey, String workspaceName) {
+        private void createScoreAndAssert(FeedbackScoreBatchTracing feedbackScoreBatch, String apiKey,
+                String workspaceName) {
             try (var actualResponse = client.target(getTracesPath())
                     .path("feedback-scores")
                     .request()
@@ -4736,18 +4738,18 @@ class DatasetsResourceTest {
 
             UUID experimentId = GENERATOR.generate();
 
-            List<FeedbackScoreBatchItem> scores = new ArrayList<>();
+            List<FeedbackScoreBatchTracingItem> scores = new ArrayList<>();
             createScores(traces.subList(0, traces.size() - 1), projectName, scores);
             scores = scores.stream()
                     .map(score -> score.toBuilder()
                             .name(factory.manufacturePojo(String.class))
                             .build())
                     .toList();
-            createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
+            createScoreAndAssert(new FeedbackScoreBatchTracing(scores), apiKey, workspaceName);
 
             List<ExperimentItem> experimentItems = new ArrayList<>();
             createExperimentItems(datasetItems, traces, Stream.concat(scores.stream(),
-                    Stream.of((FeedbackScoreBatchItem) null)).collect(toList()),
+                    Stream.of((FeedbackScoreBatchTracingItem) null)).collect(toList()),
                     experimentId, experimentItems);
 
             createAndAssert(

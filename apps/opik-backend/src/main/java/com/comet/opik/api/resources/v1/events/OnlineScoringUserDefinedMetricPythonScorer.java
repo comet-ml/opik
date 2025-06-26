@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.AutomationRuleEvaluatorType;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchTracingItem;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -94,7 +94,7 @@ public class OnlineScoringUserDefinedMetricPythonScorer
 
             try {
                 var scores = scoreResults.stream()
-                        .map(scoreResult -> FeedbackScoreBatchItem.builder()
+                        .map(scoreResult -> FeedbackScoreBatchTracingItem.builder()
                                 .id(trace.id())
                                 .projectName(trace.projectName())
                                 .projectId(trace.projectId())

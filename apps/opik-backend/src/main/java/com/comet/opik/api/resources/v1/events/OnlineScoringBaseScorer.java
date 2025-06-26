@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.AutomationRuleEvaluatorType;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchTracingItem;
 import com.comet.opik.api.Trace;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
@@ -216,7 +216,7 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
     protected abstract void score(M message);
 
     protected Map<String, List<BigDecimal>> storeScores(
-            List<FeedbackScoreBatchItem> scores, Trace trace, String userName, String workspaceId) {
+            List<FeedbackScoreBatchTracingItem> scores, Trace trace, String userName, String workspaceId) {
         log.info("Received '{}' scores for traceId '{}' in workspace '{}'. Storing them",
                 scores.size(), trace.id(), workspaceId);
         feedbackScoreService.scoreBatchOfTraces(scores)
@@ -224,8 +224,8 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                 .block();
         return scores.stream()
-                .collect(Collectors.groupingBy(FeedbackScoreBatchItem::name,
-                        Collectors.mapping(FeedbackScoreBatchItem::value, Collectors.toList())));
+                .collect(Collectors.groupingBy(FeedbackScoreBatchTracingItem::name,
+                        Collectors.mapping(FeedbackScoreBatchTracingItem::value, Collectors.toList())));
     }
 
     /**

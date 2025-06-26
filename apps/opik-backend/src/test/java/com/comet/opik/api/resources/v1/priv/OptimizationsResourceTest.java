@@ -7,7 +7,7 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreAverage;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchTracingItem;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.OptimizationUpdate;
@@ -320,9 +320,9 @@ class OptimizationsResourceTest {
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE_NAME);
             experimentResourceClient.createExperimentItem(experimentItems, API_KEY, TEST_WORKSPACE_NAME);
 
-            List<FeedbackScoreBatchItem> scoreBatchItems = traces.stream()
+            List<FeedbackScoreBatchTracingItem> scoreBatchItems = traces.stream()
                     .flatMap(trace -> feedbackScoreItems.stream()
-                            .map(score -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .map(score -> podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                                     .projectName(project.name())
                                     .id(trace.id())
                                     .name(score.name())
@@ -653,9 +653,9 @@ class OptimizationsResourceTest {
             experimentResourceClient.createExperimentItem(experimentItems, apiKey, workspaceName);
 
             // Create feedback scores
-            List<FeedbackScoreBatchItem> scoreBatchItems = traces.stream()
+            List<FeedbackScoreBatchTracingItem> scoreBatchItems = traces.stream()
                     .flatMap(trace -> feedbackScoreItems.stream()
-                            .map(score -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .map(score -> podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                                     .projectName(project.name())
                                     .id(trace.id())
                                     .name(score.name())

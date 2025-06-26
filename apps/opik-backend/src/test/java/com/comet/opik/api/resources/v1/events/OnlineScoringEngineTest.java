@@ -2,7 +2,7 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorType;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchTracingItem;
 import com.comet.opik.api.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
@@ -258,7 +258,7 @@ class OnlineScoringEngineTest {
         // mocked response from AI, reused from dev tests
         var aiResponse = ChatResponse.builder().aiMessage(AiMessage.aiMessage(aiMessage)).build();
 
-        ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<List<FeedbackScoreBatchTracingItem>> captor = ArgumentCaptor.forClass(List.class);
         Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
         Mockito.doReturn(aiResponse).when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
 
@@ -269,12 +269,13 @@ class OnlineScoringEngineTest {
         Mockito.verify(feedbackScoreService, Mockito.times(1)).scoreBatchOfTraces(captor.capture());
 
         // check which feedback scores would be stored in Clickhouse by our process
-        List<FeedbackScoreBatchItem> processed = captor.getValue();
+        List<FeedbackScoreBatchTracingItem> processed = captor.getValue();
 
         assertThat(processed).hasSize(event.traces().size() * 3);
 
         // test if all 3 feedbacks are generated with the expected value
-        var resultMap = processed.stream().collect(Collectors.toMap(FeedbackScoreBatchItem::name, Function.identity()));
+        var resultMap = processed.stream()
+                .collect(Collectors.toMap(FeedbackScoreBatchTracingItem::name, Function.identity()));
         assertThat(resultMap.get("Relevance").value()).isEqualTo(new BigDecimal(4));
         assertThat(resultMap.get("Technical Accuracy").value()).isEqualTo(new BigDecimal("4.5"));
         assertThat(resultMap.get("Conciseness").value()).isEqualTo(BigDecimal.ONE);

@@ -3,7 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemBulkRecord;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchTracingItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
@@ -75,7 +75,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                         Set<ExperimentItem> experimentItems = new HashSet<>();
                         List<Trace> traces = new ArrayList<>();
                         List<Span> spans = new ArrayList<>();
-                        List<FeedbackScoreBatchItem> feedbackScores = new ArrayList<>();
+                        List<FeedbackScoreBatchTracingItem> feedbackScores = new ArrayList<>();
 
                         this.splitBatches(
                                 items,
@@ -101,7 +101,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
     }
 
     private Mono<? extends Tuple3<Long, ? extends Number, Integer>> saveAll(List<Trace> traces,
-            List<Span> spans, List<FeedbackScoreBatchItem> feedbackScores) {
+            List<Span> spans, List<FeedbackScoreBatchTracingItem> feedbackScores) {
         return Mono.defer(() -> Mono.zip(
                 saveTraces(traces),
                 saveSpans(spans),
@@ -120,7 +120,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                         .retryWhen(AsyncUtils.handleConnectionError());
     }
 
-    private Mono<Integer> saveFeedBackScores(List<FeedbackScoreBatchItem> feedbackScores) {
+    private Mono<Integer> saveFeedBackScores(List<FeedbackScoreBatchTracingItem> feedbackScores) {
         return feedbackScores.isEmpty()
                 ? Mono.just(0)
                 : feedbackScoreService.scoreBatchOfTraces(feedbackScores)
@@ -132,7 +132,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
             List<Trace> traces, UUID experimentId,
             Set<ExperimentItem> experimentItems,
             List<Span> spans,
-            List<FeedbackScoreBatchItem> feedbackScores) {
+            List<FeedbackScoreBatchTracingItem> feedbackScores) {
 
         for (ExperimentItemBulkRecord item : items) {
             Trace trace;

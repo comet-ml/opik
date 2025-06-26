@@ -5,8 +5,8 @@ import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatch;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchTracing;
+import com.comet.opik.api.FeedbackScoreBatchTracingItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ReactServiceErrorResponse;
@@ -565,7 +565,7 @@ class SpansResourceTest {
 
             var spanId = spanResourceClient.createSpan(span, okApikey, workspaceName);
 
-            var items = PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScoreBatchItem.class)
+            var items = PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScoreBatchTracingItem.class)
                     .stream()
                     .map(item -> item.toBuilder()
                             .projectName(span.projectName())
@@ -573,7 +573,7 @@ class SpansResourceTest {
                             .build())
                     .toList();
 
-            var feedbackScoreBatch = FeedbackScoreBatch.builder()
+            var feedbackScoreBatch = FeedbackScoreBatchTracing.builder()
                     .scores(items)
                     .build();
 
@@ -946,7 +946,7 @@ class SpansResourceTest {
 
             var spanId = spanResourceClient.createSpan(span, API_KEY, workspaceName);
 
-            var items = PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScoreBatchItem.class)
+            var items = PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScoreBatchTracingItem.class)
                     .stream()
                     .map(item -> item.toBuilder()
                             .projectName(span.projectName())
@@ -954,7 +954,7 @@ class SpansResourceTest {
                             .build())
                     .toList();
 
-            var feedbackScoreBatch = FeedbackScoreBatch.builder()
+            var feedbackScoreBatch = FeedbackScoreBatchTracing.builder()
                     .scores(items)
                     .build();
 
@@ -4388,12 +4388,12 @@ class SpansResourceTest {
 
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
 
-            List<FeedbackScoreBatchItem> scoreForSpan = PodamFactoryUtils.manufacturePojoList(podamFactory,
-                    FeedbackScoreBatchItem.class);
+            List<FeedbackScoreBatchTracingItem> scoreForSpan = PodamFactoryUtils.manufacturePojoList(podamFactory,
+                    FeedbackScoreBatchTracingItem.class);
 
-            List<FeedbackScoreBatchItem> allScores = new ArrayList<>();
+            List<FeedbackScoreBatchTracingItem> allScores = new ArrayList<>();
             for (Span span : spans) {
-                for (FeedbackScoreBatchItem item : scoreForSpan) {
+                for (FeedbackScoreBatchTracingItem item : scoreForSpan) {
 
                     if (spans.getLast().equals(span) && scoreForSpan.getFirst().equals(item)) {
                         continue;
@@ -4508,8 +4508,8 @@ class SpansResourceTest {
                     .toList();
 
             List<Span> finalSpans = spans;
-            List<FeedbackScoreBatchItem> scoreForSpan = IntStream.range(0, spans.size())
-                    .mapToObj(i -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            List<FeedbackScoreBatchTracingItem> scoreForSpan = IntStream.range(0, spans.size())
+                    .mapToObj(i -> podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                             .projectName(finalSpans.get(i).projectName())
                             .id(finalSpans.get(i).id())
                             .build())
@@ -6277,40 +6277,44 @@ class SpansResourceTest {
 
         Stream<Arguments> invalidRequestBodyParams() {
             return Stream.of(
-                    arguments(FeedbackScoreBatch.builder().build(), "scores must not be null"),
-                    arguments(FeedbackScoreBatch.builder().scores(List.of()).build(),
+                    arguments(FeedbackScoreBatchTracing.builder().build(), "scores must not be null"),
+                    arguments(FeedbackScoreBatchTracing.builder().scores(List.of()).build(),
                             "scores size must be between 1 and 1000"),
-                    arguments(FeedbackScoreBatch.builder().scores(
+                    arguments(FeedbackScoreBatchTracing.builder().scores(
                             IntStream.range(0, 1001)
                                     .mapToObj(
-                                            __ -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                            __ -> podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class)
+                                                    .toBuilder()
                                                     .projectName(DEFAULT_PROJECT).build())
                                     .toList())
                             .build(), "scores size must be between 1 and 1000"),
                     arguments(
-                            FeedbackScoreBatch.builder()
+                            FeedbackScoreBatchTracing.builder()
                                     .scores(List
-                                            .of(podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                            .of(podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class)
+                                                    .toBuilder()
                                                     .projectName(DEFAULT_PROJECT).name(null).build()))
                                     .build(),
                             "scores[0].name must not be blank"),
                     arguments(
-                            FeedbackScoreBatch.builder()
+                            FeedbackScoreBatchTracing.builder()
                                     .scores(List
-                                            .of(podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                            .of(podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class)
+                                                    .toBuilder()
                                                     .projectName(DEFAULT_PROJECT).name("").build()))
                                     .build(),
                             "scores[0].name must not be blank"),
                     arguments(
-                            FeedbackScoreBatch.builder()
+                            FeedbackScoreBatchTracing.builder()
                                     .scores(List
-                                            .of(podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                            .of(podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class)
+                                                    .toBuilder()
                                                     .projectName(DEFAULT_PROJECT).value(null).build()))
                                     .build(),
                             "scores[0].value must not be null"),
                     arguments(
-                            FeedbackScoreBatch.builder()
-                                    .scores(List.of(podamFactory.manufacturePojo(FeedbackScoreBatchItem.class)
+                            FeedbackScoreBatchTracing.builder()
+                                    .scores(List.of(podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class)
                                             .toBuilder()
                                             .projectName(DEFAULT_PROJECT)
                                             .value(new BigDecimal(MIN_FEEDBACK_SCORE_VALUE).subtract(BigDecimal.ONE))
@@ -6318,9 +6322,10 @@ class SpansResourceTest {
                                     .build(),
                             "scores[0].value must be greater than or equal to -999999999.999999999"),
                     arguments(
-                            FeedbackScoreBatch.builder()
+                            FeedbackScoreBatchTracing.builder()
                                     .scores(List
-                                            .of(podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                            .of(podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class)
+                                                    .toBuilder()
                                                     .projectName(DEFAULT_PROJECT)
                                                     .value(new BigDecimal(MAX_FEEDBACK_SCORE_VALUE).add(BigDecimal.ONE))
                                                     .build()))
@@ -6343,19 +6348,19 @@ class SpansResourceTest {
 
             var id2 = spanResourceClient.createSpan(expectedSpan2, API_KEY, TEST_WORKSPACE);
 
-            var score = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class)
+            var score = podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class)
                     .toBuilder()
                     .id(id)
                     .projectName(expectedSpan1.projectName())
                     .build();
 
-            var score2 = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score2 = podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                     .id(id2)
                     .name("hallucination")
                     .projectName(expectedSpan2.projectName())
                     .build();
 
-            var score3 = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score3 = podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                     .id(id)
                     .name("hallucination")
                     .projectName(expectedSpan1.projectName())
@@ -6366,7 +6371,7 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(score, score2, score3))))) {
+                    .put(Entity.json(new FeedbackScoreBatchTracing(List.of(score, score2, score3))))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -6405,19 +6410,19 @@ class SpansResourceTest {
 
             var id2 = spanResourceClient.createSpan(expectedSpan2, apiKey, workspaceName);
 
-            var score = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class)
+            var score = podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class)
                     .toBuilder()
                     .id(id)
                     .projectName(expectedSpan1.projectName())
                     .build();
 
-            var score2 = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score2 = podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                     .id(id2)
                     .name("hallucination")
                     .projectName(expectedSpan2.projectName())
                     .build();
 
-            var score3 = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score3 = podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                     .id(id)
                     .name("hallucination")
                     .projectName(expectedSpan1.projectName())
@@ -6428,7 +6433,7 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(score, score2, score3))))) {
+                    .put(Entity.json(new FeedbackScoreBatchTracing(List.of(score, score2, score3))))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -6448,7 +6453,8 @@ class SpansResourceTest {
         @ParameterizedTest
         @MethodSource("invalidRequestBodyParams")
         @DisplayName("when batch request is invalid, then return bad request")
-        void feedback__whenBatchRequestIsInvalid__thenReturnBadRequest(FeedbackScoreBatch batch, String errorMessage) {
+        void feedback__whenBatchRequestIsInvalid__thenReturnBadRequest(FeedbackScoreBatchTracing batch,
+                String errorMessage) {
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("feedback-scores")
@@ -6473,7 +6479,7 @@ class SpansResourceTest {
 
             var id = spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
 
-            var score = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score = podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                     .id(id)
                     .projectName(expectedSpan.projectName())
                     .categoryName(null)
@@ -6485,7 +6491,7 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(score))))) {
+                    .put(Entity.json(new FeedbackScoreBatchTracing(List.of(score))))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -6508,7 +6514,7 @@ class SpansResourceTest {
 
             var id = spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
 
-            var score = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score = podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                     .id(id)
                     .projectName(expectedSpan.projectName())
                     .build();
@@ -6518,7 +6524,7 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(score))))) {
+                    .put(Entity.json(new FeedbackScoreBatchTracing(List.of(score))))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -6541,7 +6547,7 @@ class SpansResourceTest {
 
             var id = spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
 
-            var score = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score = podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                     .id(id)
                     .projectName(expectedSpan.projectName())
                     .build();
@@ -6551,7 +6557,7 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(score))))) {
+                    .put(Entity.json(new FeedbackScoreBatchTracing(List.of(score))))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -6563,7 +6569,7 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(newScore))))) {
+                    .put(Entity.json(new FeedbackScoreBatchTracing(List.of(newScore))))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -6581,7 +6587,7 @@ class SpansResourceTest {
 
             UUID id = generator.generate();
 
-            var score = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score = podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                     .id(id)
                     .build();
 
@@ -6590,7 +6596,7 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(score))))) {
+                    .put(Entity.json(new FeedbackScoreBatchTracing(List.of(score))))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
                 assertThat(actualResponse.hasEntity()).isFalse();
@@ -6602,7 +6608,7 @@ class SpansResourceTest {
         @DisplayName("when feedback span id is not valid, then return 400")
         void feedback__whenFeedbackSpanIdIsNotValid__thenReturn400() {
 
-            var score = podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+            var score = podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                     .id(UUID.randomUUID())
                     .projectName(DEFAULT_PROJECT)
                     .build();
@@ -6612,7 +6618,7 @@ class SpansResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .put(Entity.json(new FeedbackScoreBatch(List.of(score))))) {
+                    .put(Entity.json(new FeedbackScoreBatchTracing(List.of(score))))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
                 assertThat(actualResponse.hasEntity()).isTrue();
@@ -6632,7 +6638,7 @@ class SpansResourceTest {
             var id = spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
 
             var scores = IntStream.range(0, 1000)
-                    .mapToObj(__ -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .mapToObj(__ -> podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                             .projectName(DEFAULT_PROJECT)
                             .id(id)
                             .build())
@@ -6661,7 +6667,7 @@ class SpansResourceTest {
             spanResourceClient.batchCreateSpans(spans, API_KEY, TEST_WORKSPACE);
 
             var scores = spans.stream()
-                    .map(span -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .map(span -> podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                             .id(span.id())
                             .projectName(projectNameModifier.apply(projectName))
                             .build())
@@ -6671,7 +6677,7 @@ class SpansResourceTest {
 
             var expectedSpansWithScores = spans.stream()
                     .map(span -> {
-                        FeedbackScoreBatchItem feedbackScoreBatchItem = scores.stream()
+                        FeedbackScoreBatchTracingItem feedbackScoreBatchItem = scores.stream()
                                 .filter(score -> score.id().equals(span.id()))
                                 .findFirst()
                                 .orElseThrow();
@@ -6690,7 +6696,7 @@ class SpansResourceTest {
         }
     }
 
-    private FeedbackScore mapFeedbackScore(FeedbackScoreBatchItem feedbackScoreBatchItem) {
+    private FeedbackScore mapFeedbackScore(FeedbackScoreBatchTracingItem feedbackScoreBatchItem) {
         return FeedbackScore.builder()
                 .name(feedbackScoreBatchItem.name())
                 .value(feedbackScoreBatchItem.value())
@@ -6898,7 +6904,7 @@ class SpansResourceTest {
         }
     }
 
-    private List<List<FeedbackScoreBatchItem>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
+    private List<List<FeedbackScoreBatchTracingItem>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
             Project project, String apiKey, String workspaceName, boolean shouldBeFound, Optional<SpanType> spanType) {
         return IntStream.range(0, multipleValuesFeedbackScores.size())
                 .mapToObj(i -> {
@@ -6917,8 +6923,8 @@ class SpansResourceTest {
 
                     spanResourceClient.createSpan(span, apiKey, workspaceName);
 
-                    List<FeedbackScoreBatchItem> scores = multipleValuesFeedbackScores.stream()
-                            .map(name -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    List<FeedbackScoreBatchTracingItem> scores = multipleValuesFeedbackScores.stream()
+                            .map(name -> podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                                     .name(name)
                                     .projectName(project.name())
                                     .id(span.id())

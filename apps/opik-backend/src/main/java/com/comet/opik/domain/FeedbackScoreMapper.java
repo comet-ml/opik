@@ -1,7 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchTracingItem;
 import com.comet.opik.api.ScoreSource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -23,15 +23,16 @@ public interface FeedbackScoreMapper {
 
     FeedbackScoreMapper INSTANCE = Mappers.getMapper(FeedbackScoreMapper.class);
 
-    FeedbackScore toFeedbackScore(FeedbackScoreBatchItem feedbackScoreBatchItem);
+    FeedbackScore toFeedbackScore(FeedbackScoreBatchTracingItem feedbackScoreBatchItem);
 
-    List<FeedbackScore> toFeedbackScores(List<FeedbackScoreBatchItem> feedbackScoreBatchItems);
-
-    @Mapping(target = "id", source = "entityId")
-    FeedbackScoreBatchItem toFeedbackScoreBatchItem(UUID entityId, String projectName, FeedbackScore feedbackScore);
+    List<FeedbackScore> toFeedbackScores(List<FeedbackScoreBatchTracingItem> feedbackScoreBatchItems);
 
     @Mapping(target = "id", source = "entityId")
-    FeedbackScoreBatchItem toFeedbackScore(UUID entityId, UUID projectId, FeedbackScore score);
+    FeedbackScoreBatchTracingItem toFeedbackScoreBatchItem(UUID entityId, String projectName,
+            FeedbackScore feedbackScore);
+
+    @Mapping(target = "id", source = "entityId")
+    FeedbackScoreBatchTracingItem toFeedbackScore(UUID entityId, UUID projectId, FeedbackScore score);
 
     static List<FeedbackScore> getFeedbackScores(Object feedbackScoresRaw) {
         if (feedbackScoresRaw instanceof List[] feedbackScoresArray) {

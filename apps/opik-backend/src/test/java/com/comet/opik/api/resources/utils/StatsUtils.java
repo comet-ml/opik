@@ -2,7 +2,7 @@ package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchTracingItem;
 import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.ProjectStats;
@@ -422,13 +422,13 @@ public class StatsUtils {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    public static Map<String, Double> calculateFeedbackBatchAverage(List<FeedbackScoreBatchItem> data) {
+    public static Map<String, Double> calculateFeedbackBatchAverage(List<FeedbackScoreBatchTracingItem> data) {
         return data
                 .stream()
                 .filter(Objects::nonNull)
                 .collect(groupingBy(
-                        FeedbackScoreBatchItem::name,
-                        mapping(FeedbackScoreBatchItem::value, toList())))
+                        FeedbackScoreBatchTracingItem::name,
+                        mapping(FeedbackScoreBatchTracingItem::value, toList())))
                 .entrySet()
                 .stream()
                 .map(e -> Map.entry(e.getKey(), avgFromList(e.getValue())))

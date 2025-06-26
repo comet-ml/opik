@@ -4,8 +4,8 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatch;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchTracing;
+import com.comet.opik.api.FeedbackScoreBatchTracingItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
@@ -81,36 +81,36 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .post(Entity.json(trace));
     }
 
-    public void feedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
+    public void feedbackScores(List<FeedbackScoreBatchTracingItem> score, String apiKey, String workspaceName) {
 
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("feedback-scores")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(new FeedbackScoreBatch(score)))) {
+                .put(Entity.json(new FeedbackScoreBatchTracing(score)))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }
 
-    public Response callFeedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
+    public Response callFeedbackScores(List<FeedbackScoreBatchTracingItem> score, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("feedback-scores")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(new FeedbackScoreBatch(score)));
+                .put(Entity.json(new FeedbackScoreBatchTracing(score)));
     }
 
-    public void threadFeedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
+    public void threadFeedbackScores(List<FeedbackScoreBatchTracingItem> score, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
                 .path("feedback-scores")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(FeedbackScoreBatch.builder()
+                .put(Entity.json(FeedbackScoreBatchTracing.builder()
                         .scores(score)
                         .build()))) {
 
@@ -118,14 +118,15 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
     }
 
-    public Response callThreadFeedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
+    public Response callThreadFeedbackScores(List<FeedbackScoreBatchTracingItem> score, String apiKey,
+            String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
                 .path("feedback-scores")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(FeedbackScoreBatch.builder()
+                .put(Entity.json(FeedbackScoreBatchTracing.builder()
                         .scores(score)
                         .build()));
     }
@@ -217,7 +218,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         return actualResponse;
     }
 
-    public List<List<FeedbackScoreBatchItem>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
+    public List<List<FeedbackScoreBatchTracingItem>> createMultiValueScores(List<String> multipleValuesFeedbackScores,
             Project project, String apiKey, String workspaceName) {
         return IntStream.range(0, multipleValuesFeedbackScores.size())
                 .mapToObj(i -> {
@@ -228,8 +229,8 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
                     createTrace(trace, apiKey, workspaceName);
 
-                    List<FeedbackScoreBatchItem> scores = multipleValuesFeedbackScores.stream()
-                            .map(name -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    List<FeedbackScoreBatchTracingItem> scores = multipleValuesFeedbackScores.stream()
+                            .map(name -> podamFactory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                                     .name(name)
                                     .projectName(project.name())
                                     .id(trace.id())

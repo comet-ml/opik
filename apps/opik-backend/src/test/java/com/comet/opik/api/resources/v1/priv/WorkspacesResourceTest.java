@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.DataPoint;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchTracingItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.metrics.WorkspaceMetricRequest;
@@ -460,8 +460,8 @@ class WorkspacesResourceTest {
                     traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
                     // create several feedback scores for that trace
-                    List<FeedbackScoreBatchItem> scores = scoreNames.stream()
-                            .map(name -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    List<FeedbackScoreBatchTracingItem> scores = scoreNames.stream()
+                            .map(name -> factory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                                     .name(name)
                                     .projectName(projectName)
                                     .id(trace.id())
@@ -473,11 +473,11 @@ class WorkspacesResourceTest {
                     return scores;
                 })
                 .flatMap(List::stream)
-                .collect(Collectors.groupingBy(FeedbackScoreBatchItem::name))
+                .collect(Collectors.groupingBy(FeedbackScoreBatchTracingItem::name))
                 .entrySet().stream()
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
-                        e -> calcAverage(e.getValue().stream().map(FeedbackScoreBatchItem::value)
+                        e -> calcAverage(e.getValue().stream().map(FeedbackScoreBatchTracingItem::value)
                                 .toList())));
     }
 

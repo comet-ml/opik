@@ -6,7 +6,7 @@ import com.comet.opik.api.ErrorCountWithDeviation;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchTracingItem;
 import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.Project;
@@ -1490,8 +1490,8 @@ class ProjectsResourceTest {
 
         traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-        List<FeedbackScoreBatchItem> scores = PodamFactoryUtils.manufacturePojoList(factory,
-                FeedbackScoreBatchItem.class);
+        List<FeedbackScoreBatchTracingItem> scores = PodamFactoryUtils.manufacturePojoList(factory,
+                FeedbackScoreBatchTracingItem.class);
 
         var guardrailsByTraceId = traces.stream()
                 .collect(Collectors.toMap(Trace::id, trace -> guardrailsGenerator.generateGuardrailsForTrace(
@@ -1513,7 +1513,7 @@ class ProjectsResourceTest {
 
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
 
-            List<FeedbackScoreBatchItem> feedbackScores = scores.stream()
+            List<FeedbackScoreBatchTracingItem> feedbackScores = scores.stream()
                     .map(feedbackScore -> feedbackScore.toBuilder()
                             .projectId(project.id())
                             .projectName(project.name())

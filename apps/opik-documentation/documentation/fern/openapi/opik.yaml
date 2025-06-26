@@ -2782,7 +2782,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/FeedbackScoreBatch"
+              $ref: "#/components/schemas/FeedbackScoreBatchTracing_Tracing"
       responses:
         "204":
           description: No Content
@@ -3056,6 +3056,21 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/traces/threads/feedback-scores/delete:
+    post:
+      tags:
+      - Traces
+      summary: Delete thread feedback scores
+      description: Delete thread feedback scores
+      operationId: deleteThreadFeedbackScores
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteThreadFeedbackScores"
+      responses:
+        "204":
+          description: No Content
   /v1/private/traces/comments/delete:
     post:
       tags:
@@ -3139,6 +3154,29 @@ paths:
       responses:
         "200":
           description: Feedback Scores resource
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+  /v1/private/traces/threads/feedback-scores/names:
+    get:
+      tags:
+      - Traces
+      summary: Find Trace Threads Feedback Score names
+      description: Find Trace Threads Feedback Score names
+      operationId: findTraceThreadsFeedbackScoreNames
+      parameters:
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Find Trace Threads Feedback Score names
           content:
             application/json:
               schema:
@@ -3297,6 +3335,21 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/traces/threads/feedback-scores:
+    put:
+      tags:
+      - Traces
+      summary: Batch feedback scoring for threads
+      description: Batch feedback scoring for threads
+      operationId: scoreBatchOfThreads
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeedbackScoreBatchTracing_Thread"
+      responses:
+        "204":
+          description: No Content
   /v1/private/traces/feedback-scores:
     put:
       tags:
@@ -3308,10 +3361,41 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/FeedbackScoreBatch"
+              $ref: "#/components/schemas/FeedbackScoreBatchTracing"
       responses:
         "204":
           description: No Content
+  /v1/private/traces/threads/search:
+    post:
+      tags:
+      - Traces
+      summary: Search trace threads
+      description: Search trace threads
+      operationId: searchTraceThreads
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TraceThreadSearchStreamRequest"
+      responses:
+        "200":
+          description: Trace threads stream or error during process
+          content:
+            application/octet-stream:
+              schema:
+                maxItems: 2000
+                type: array
+                items:
+                  type: string
+                  anyOf:
+                  - $ref: "#/components/schemas/TraceThread"
+                  - $ref: "#/components/schemas/ErrorMessage"
+        "400":
+          description: Bad Request
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/traces/search:
     post:
       tags:
@@ -3373,6 +3457,81 @@ paths:
           description: No Content
         "404":
           description: Not found
+  /v1/private/workspaces/costs/summaries:
+    post:
+      tags:
+      - Workspaces
+      summary: Get costs summary
+      description: Get costs summary
+      operationId: costsSummary
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceMetricsSummaryRequest"
+      responses:
+        "200":
+          description: Workspace Metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Result"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/workspaces/costs:
+    post:
+      tags:
+      - Workspaces
+      summary: Get cost daily data
+      description: Get cost daily data
+      operationId: getCost
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceMetricsSummaryRequest"
+      responses:
+        "200":
+          description: Workspace cost data by days
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceMetricResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/workspaces/metrics:
+    post:
+      tags:
+      - Workspaces
+      summary: Get metric daily data
+      description: Get metric daily data
+      operationId: getMetric
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceMetricsSummaryRequest"
+      responses:
+        "200":
+          description: Workspace metric data by days
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceMetricResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/workspaces/metrics/summaries:
     post:
       tags:
@@ -3842,15 +4001,15 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -3998,15 +4157,15 @@ components:
         sampling_rate:
           type: number
           format: float
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -4152,15 +4311,15 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -4309,15 +4468,15 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -4382,15 +4541,15 @@ components:
         project_id:
           type: string
           format: uuid
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -4939,7 +5098,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-      readOnly: true
     JsonListString:
       type: object
       anyOf:
@@ -8342,7 +8500,7 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ProjectStatItemObject_Public"
-    FeedbackScoreBatch:
+    FeedbackScoreBatchTracing:
       required:
       - scores
       type: object
@@ -8352,10 +8510,44 @@ components:
           minItems: 1
           type: array
           items:
-            $ref: "#/components/schemas/FeedbackScoreBatchItem"
-    FeedbackScoreBatchItem:
+            $ref: "#/components/schemas/FeedbackScoreBatchTracingItem"
+    FeedbackScoreBatchTracingItem:
       required:
-      - id
+      - name
+      - source
+      - value
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        thread_id:
+          type: string
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        name:
+          minLength: 1
+          type: string
+        category_name:
+          type: string
+        value:
+          maximum: 999999999.999999999
+          exclusiveMaximum: false
+          minimum: -999999999.999999999
+          exclusiveMinimum: false
+          type: number
+        reason:
+          type: string
+        source:
+          type: string
+          enum:
+          - ui
+          - sdk
+          - online_scoring
+    FeedbackScoreBatchTracingItem_Tracing:
+      required:
       - name
       - source
       - value
@@ -8387,6 +8579,17 @@ components:
           - ui
           - sdk
           - online_scoring
+    FeedbackScoreBatchTracing_Tracing:
+      required:
+      - scores
+      type: object
+      properties:
+        scores:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackScoreBatchTracingItem_Tracing"
     SpanFilter_Public:
       type: object
       properties:
@@ -8578,6 +8781,27 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Trace_Write"
+    DeleteThreadFeedbackScores:
+      required:
+      - names
+      - project_name
+      - thread_id
+      type: object
+      properties:
+        project_name:
+          minLength: 1
+          type: string
+        thread_id:
+          minLength: 1
+          type: string
+        names:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            minLength: 1
+            type: string
     DeleteTraceThreads:
       required:
       - thread_ids
@@ -8723,6 +8947,9 @@ components:
         project_id:
           type: string
           format: uuid
+        thread_model_id:
+          type: string
+          format: uuid
         start_time:
           type: string
           format: date-time
@@ -8736,6 +8963,15 @@ components:
           $ref: "#/components/schemas/JsonNode"
         last_message:
           $ref: "#/components/schemas/JsonNode"
+        feedback_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackScore"
+        status:
+          type: string
+          enum:
+          - active
+          - inactive
         number_of_messages:
           type: integer
           format: int64
@@ -8794,6 +9030,99 @@ components:
           type: array
           items:
             type: string
+    FeedbackScoreBatchTracingItem_Thread:
+      required:
+      - name
+      - source
+      - value
+      type: object
+      properties:
+        thread_id:
+          type: string
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        name:
+          minLength: 1
+          type: string
+        category_name:
+          type: string
+        value:
+          maximum: 999999999.999999999
+          exclusiveMaximum: false
+          minimum: -999999999.999999999
+          exclusiveMinimum: false
+          type: number
+        reason:
+          type: string
+        source:
+          type: string
+          enum:
+          - ui
+          - sdk
+          - online_scoring
+    FeedbackScoreBatchTracing_Thread:
+      required:
+      - scores
+      type: object
+      properties:
+        scores:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackScoreBatchTracingItem_Thread"
+    TraceThreadFilter:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    TraceThreadSearchStreamRequest:
+      type: object
+      properties:
+        project_name:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceThreadFilter"
+        last_retrieved_thread_model_id:
+          type: string
+          format: uuid
+        limit:
+          maximum: 2000
+          minimum: 1
+          type: integer
+          description: Max number of trace thread to be streamed
+          format: int32
+          default: 500
+        truncate:
+          type: boolean
+          description: "Truncate image included in either input, output or metadata"
+          default: true
     TraceFilter_Public:
       type: object
       properties:
@@ -8887,13 +9216,6 @@ components:
         previous:
           type: number
           format: double
-    WorkspaceMetricsSummaryResponse:
-      type: object
-      properties:
-        results:
-          type: array
-          items:
-            $ref: "#/components/schemas/Result"
     WorkspaceMetricsSummaryRequest:
       required:
       - interval_end
@@ -8912,3 +9234,52 @@ components:
         interval_end:
           type: string
           format: date-time
+        start_before_end:
+          type: boolean
+    DataPointDouble:
+      required:
+      - time
+      type: object
+      properties:
+        time:
+          type: string
+          format: date-time
+        value:
+          type: number
+          format: double
+    WorkspaceMetricResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Result"
+    WorkspaceMetricRequest:
+      required:
+      - interval_end
+      - interval_start
+      type: object
+      properties:
+        project_ids:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+        name:
+          type: string
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
+        start_before_end:
+          type: boolean
+    WorkspaceMetricsSummaryResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Result"

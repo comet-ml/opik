@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchTracingItem;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
@@ -207,7 +207,7 @@ public class OnlineScoringEngine {
                 .build();
     }
 
-    public static List<FeedbackScoreBatchItem> toFeedbackScores(@NotNull ChatResponse chatResponse) {
+    public static List<FeedbackScoreBatchTracingItem> toFeedbackScores(@NotNull ChatResponse chatResponse) {
         var content = chatResponse.aiMessage().text();
         JsonNode structuredResponse;
         try {
@@ -230,7 +230,7 @@ public class OnlineScoringEngine {
                         log.info("No score found for '{}' score in {}", scoreName, scoreNested);
                         return null;
                     }
-                    var resultBuilder = FeedbackScoreBatchItem.builder()
+                    var resultBuilder = FeedbackScoreBatchTracingItem.builder()
                             .name(scoreName)
                             .reason(scoreNested.path(REASON_FIELD_NAME).asText())
                             .source(ScoreSource.ONLINE_SCORING);

@@ -4,8 +4,8 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemsBatch;
-import com.comet.opik.api.FeedbackScoreBatch;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchTracing;
+import com.comet.opik.api.FeedbackScoreBatchTracingItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
@@ -594,13 +594,13 @@ class RateLimitE2ETest {
                 .toList();
 
         var tracesFeedbackScores = IntStream.range(0, (int) LIMIT)
-                .mapToObj(i -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                .mapToObj(i -> factory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                         .projectId(null)
                         .build())
                 .toList();
 
         var spansFeedbackScores = IntStream.range(0, (int) LIMIT)
-                .mapToObj(i -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                .mapToObj(i -> factory.manufacturePojo(FeedbackScoreBatchTracingItem.class).toBuilder()
                         .projectId(null)
                         .build())
                 .toList();
@@ -619,11 +619,11 @@ class RateLimitE2ETest {
                 Arguments.of(new DatasetItemBatch(projectName, null, datasetItems),
                         new DatasetItemBatch(projectName, null, List.of(datasetItems.getFirst())),
                         "%s/v1/private/datasets".formatted(baseURI) + "/items", HttpMethod.PUT),
-                Arguments.of(new FeedbackScoreBatch(tracesFeedbackScores),
-                        new FeedbackScoreBatch(List.of(tracesFeedbackScores.getFirst())),
+                Arguments.of(new FeedbackScoreBatchTracing(tracesFeedbackScores),
+                        new FeedbackScoreBatchTracing(List.of(tracesFeedbackScores.getFirst())),
                         BASE_RESOURCE_URI.formatted(baseURI) + "/feedback-scores", HttpMethod.PUT),
-                Arguments.of(new FeedbackScoreBatch(spansFeedbackScores),
-                        new FeedbackScoreBatch(List.of(spansFeedbackScores.getFirst())),
+                Arguments.of(new FeedbackScoreBatchTracing(spansFeedbackScores),
+                        new FeedbackScoreBatchTracing(List.of(spansFeedbackScores.getFirst())),
                         "%s/v1/private/spans".formatted(baseURI) + "/feedback-scores", HttpMethod.PUT),
                 Arguments.of(new ExperimentItemsBatch(experimentItems),
                         new ExperimentItemsBatch(Set.of(experimentItems.stream().findFirst().orElseThrow())),

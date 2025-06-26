@@ -8,7 +8,7 @@ import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatch;
+import com.comet.opik.api.FeedbackScoreBatchTracing;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
@@ -406,7 +406,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     public Response scoreBatchOfTraces(
-            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @NotNull @Valid FeedbackScoreBatch feedbackScoreBatch) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatchTracing.class))) @NotNull @Valid FeedbackScoreBatchTracing feedbackScoreBatch) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -749,7 +749,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
     public Response scoreBatchOfThreads(
-            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @JsonView(FeedbackScoreBatch.View.Thread.class) @Validated(FeedbackScoreBatch.View.Thread.class) @NotNull @Valid FeedbackScoreBatch batch) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatchTracing.class))) @JsonView(FeedbackScoreBatchTracing.View.Thread.class) @Validated(FeedbackScoreBatchTracing.View.Thread.class) @NotNull @Valid FeedbackScoreBatchTracing batch) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
