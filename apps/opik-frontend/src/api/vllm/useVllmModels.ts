@@ -15,7 +15,7 @@ const fetchVllmModels = async (base_url: string) => {
   if (models.length > 0) {
     retVal = {
       [PROVIDER_TYPE.VLLM]: models.map((m) => ({
-        value: m.trim() as PROVIDER_MODEL_TYPE,
+        value: `vllm/${m.trim()}` as PROVIDER_MODEL_TYPE,
         label: m.split("/").pop()!,
       })),
     };

@@ -37,7 +37,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     }
 
     public LlmProviderService getService(@NonNull String workspaceId, @NonNull String model) {
-        var llmProvider = getLlmProvider(model, workspaceId);
+        var llmProvider = getLlmProvider(model);
         var providerConfig = getProviderApiKey(workspaceId, llmProvider);
 
         var config = buildConfig(providerConfig);
@@ -59,7 +59,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
 
     public ChatModel getLanguageModel(@NonNull String workspaceId,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
-        var llmProvider = getLlmProvider(modelParameters.name(), workspaceId);
+        var llmProvider = getLlmProvider(modelParameters.name());
         var providerConfig = getProviderApiKey(workspaceId, llmProvider);
 
         var config = buildConfig(providerConfig);
@@ -73,7 +73,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     /**
      * The agreed requirement is to resolve the LLM provider and its API key based on the model.
      */
-    private LlmProvider getLlmProvider(String model, String workspaceId) {
+    private LlmProvider getLlmProvider(String model) {
         if (isModelBelongToProvider(model, OpenaiModelName.class, OpenaiModelName::toString)) {
             return LlmProvider.OPEN_AI;
         }
@@ -91,7 +91,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
             return LlmProvider.VERTEX_AI;
         }
 
-        if (isModelBelongToVllm(model, workspaceId)) {
+        if (isModelBelongToVllm(model)) {
             return LlmProvider.VLLM;
         }
 
@@ -117,8 +117,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                 .anyMatch(model::equals);
     }
 
-    private boolean isModelBelongToVllm(String model, String workspaceId) {
-        ProviderApiKey providerApiKey = getProviderApiKey(workspaceId, LlmProvider.VLLM);
-        return VllmModelNameChecker.isVllmModel(model, providerApiKey.baseUrl());
+    private boolean isModelBelongToVllm(String model) {
+        return VllmModelNameChecker.isVllmModel(model);
     }
 }

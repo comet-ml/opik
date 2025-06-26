@@ -21,7 +21,8 @@ public class LlmProviderVllm implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        return openAiClient.chatCompletion(request).execute();
+        ChatCompletionRequest cleanedRequest = cleanModelName(request);
+        return openAiClient.chatCompletion(cleanedRequest).execute();
     }
 
     @Override
@@ -31,7 +32,8 @@ public class LlmProviderVllm implements LlmProviderService {
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-        openAiClient.chatCompletion(request)
+        ChatCompletionRequest cleanedRequest = cleanModelName(request);
+        openAiClient.chatCompletion(cleanedRequest)
                 .onPartialResponse(handleMessage)
                 .onComplete(handleClose)
                 .onError(handleError)
@@ -46,6 +48,39 @@ public class LlmProviderVllm implements LlmProviderService {
     @Override
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
         return LlmProviderLangChainMapper.INSTANCE.getVllmErrorObject(throwable, log);
+    }
+
+    private ChatCompletionRequest cleanModelName(@NonNull ChatCompletionRequest request) {
+        String cleanedModel = request.model().startsWith("vllm/") ? request.model().substring(5) : request.model();
+
+        // Is there a way to make this less verbose to somehow only modify the model name?
+        return ChatCompletionRequest.builder()
+                .model(cleanedModel)
+                .messages(request.messages())
+                .temperature(request.temperature())
+                .topP(request.topP())
+                .n(request.n())
+                .stream(request.stream())
+                .streamOptions(request.streamOptions())
+                .stop(request.stop())
+                .maxTokens(request.maxTokens())
+                .maxCompletionTokens(request.maxCompletionTokens())
+                .presencePenalty(request.presencePenalty())
+                .frequencyPenalty(request.frequencyPenalty())
+                .logitBias(request.logitBias())
+                .user(request.user())
+                .responseFormat(request.responseFormat())
+                .seed(request.seed())
+                .tools(request.tools())
+                .toolChoice(request.toolChoice())
+                .parallelToolCalls(request.parallelToolCalls())
+                .store(request.store())
+                .metadata(request.metadata())
+                .reasoningEffort(request.reasoningEffort())
+                .serviceTier(request.serviceTier())
+                .functions(request.functions())
+                .functionCall(request.functionCall())
+                .build();
     }
 
 }

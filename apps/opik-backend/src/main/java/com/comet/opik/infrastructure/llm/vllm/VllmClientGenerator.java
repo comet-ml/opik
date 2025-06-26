@@ -27,7 +27,7 @@ public class VllmClientGenerator implements LlmProviderClientGenerator<OpenAiCli
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
 
     public OpenAiClient newVllmClient(@NonNull LlmProviderClientApiConfig config) {
-        if (StringUtils.isEmpty(config.baseUrl())) {
+        if (StringUtils.isBlank(config.baseUrl())) {
             throw new BadRequestException("vLLM baseUrl is not configured");
         }
 
@@ -40,7 +40,6 @@ public class VllmClientGenerator implements LlmProviderClientGenerator<OpenAiCli
                 .httpClientBuilder(httpClientBuilder);
 
         var openAiClientBuilder = OpenAiClient.builder()
-                .baseUrl(config.baseUrl())
                 .httpClientBuilder(jdkHttpClientBuilder)
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
@@ -48,9 +47,9 @@ public class VllmClientGenerator implements LlmProviderClientGenerator<OpenAiCli
         Optional.ofNullable(llmProviderClientConfig.getVllmClient())
                 .map(LlmProviderClientConfig.VllmClientConfig::url)
                 .filter(StringUtils::isNotBlank)
-                .ifPresent(url -> {
-                    openAiClientBuilder.baseUrl(url);
-                });
+                .ifPresent(openAiClientBuilder::baseUrl);
+
+        openAiClientBuilder.baseUrl(config.baseUrl());
 
         Optional.ofNullable(config.headers())
                 .filter(MapUtils::isNotEmpty)
@@ -70,9 +69,21 @@ public class VllmClientGenerator implements LlmProviderClientGenerator<OpenAiCli
 
     public ChatModel newVllmChatLanguageModel(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
+        if (StringUtils.isBlank(config.baseUrl())) {
+            throw new BadRequestException("vLLM baseUrl is not configured");
+        }
+
+        // Force HTTP/1.1 to avoid upgrade. vLLM is built on FastAPI and explicitly uses
+        // HTTP/1.1.
+        HttpClient.Builder httpClientBuilder = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1);
+
+        JdkHttpClientBuilder jdkHttpClientBuilder = JdkHttpClient.builder()
+                .httpClientBuilder(httpClientBuilder);
+
         var builder = OpenAiChatModel.builder()
+                .httpClientBuilder(jdkHttpClientBuilder)
                 .modelName(modelParameters.name())
-                .baseUrl(config.baseUrl())
                 .apiKey(config.apiKey())
                 .logRequests(true)
                 .logResponses(true);
@@ -84,6 +95,8 @@ public class VllmClientGenerator implements LlmProviderClientGenerator<OpenAiCli
                 .map(LlmProviderClientConfig.VllmClientConfig::url)
                 .filter(StringUtils::isNotBlank)
                 .ifPresent(builder::baseUrl);
+
+        builder.baseUrl(config.baseUrl());
 
         Optional.ofNullable(config.headers())
                 .filter(MapUtils::isNotEmpty)
