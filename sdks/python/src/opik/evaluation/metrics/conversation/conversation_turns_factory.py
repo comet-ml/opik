@@ -27,12 +27,9 @@ def build_conversation_turns(
     for message_dict in conversation:
         if message_dict["role"] == "user":
             user_input = message_dict
-        elif message_dict["role"] == "assistant":
-            if user_input is not None:
-                current_turn = types.ConversationTurn(
-                    input=user_input, output=message_dict
-                )
-                turns.append(current_turn)
-                user_input = None
+        elif message_dict["role"] == "assistant" and user_input is not None:
+            current_turn = types.ConversationTurn(input=user_input, output=message_dict)
+            turns.append(current_turn)
+            user_input = None
 
     return turns
