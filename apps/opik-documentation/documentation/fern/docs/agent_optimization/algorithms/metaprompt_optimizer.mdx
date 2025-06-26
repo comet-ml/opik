@@ -75,7 +75,7 @@ prompter = MetaPromptOptimizer(
     reasoning_model="openai/gpt-4-turbo", # Optional: model for generating prompt suggestions
     max_rounds=3,
     num_prompts_per_round=4,
-    num_threads=8,
+    n_threads=8,
     seed=42 # Seed for LLM calls if supported by the model
 )
 ```
@@ -107,7 +107,7 @@ optimizer = MetaPromptOptimizer(
     model="openai/gpt-4",  # or "azure/gpt-4"
     temperature=0.1,
     max_tokens=5000,
-    num_threads=8,
+    n_threads=8,
     seed=42
 )
 
