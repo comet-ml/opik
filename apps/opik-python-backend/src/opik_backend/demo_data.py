@@ -2335,7 +2335,6 @@ demo_traces = [
         "output": {"num_embeddings": 98},
         "metadata": {"created_from": "llama_index"},
         "duration": 5626.163,
-        "thread_id": "opik_thread",
         "feedback_scores": [
             {
                 "name": "answer_relevance_metric",
