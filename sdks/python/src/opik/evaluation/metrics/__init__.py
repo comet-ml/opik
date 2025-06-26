@@ -1,5 +1,6 @@
 from .aggregated_metric import AggregatedMetric
 from .conversation.session_completeness.metric import SessionCompletenessQuality
+from .conversation.conversational_coherence.metric import ConversationalCoherenceMetric
 from .heuristics.contains import Contains
 from .heuristics.equals import Equals
 from .heuristics.is_json import IsJson
@@ -26,6 +27,7 @@ __all__ = [
     "Contains",
     "ContextPrecision",
     "ContextRecall",
+    "ConversationalCoherenceMetric",
     "Equals",
     # "Factuality",
     "GEval",

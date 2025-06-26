@@ -6,10 +6,9 @@ import pydantic
 from opik import exceptions
 from opik.evaluation.models import base_model, models_factory
 from . import schema, templates
-from .. import conversation_thread_metric
+from .. import conversation_thread_metric, types as conversation_types
 from ... import score_result
 from ...llm_judges import parsing_helpers
-from ..types import Conversation
 
 LOGGER = logging.getLogger(__name__)
 
@@ -79,21 +78,21 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
 
     def score(
         self,
-        conversation: Conversation,
+        conversation: conversation_types.Conversation,
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         return self._calculate_score(conversation=conversation)
 
     async def ascore(
         self,
-        conversation: Conversation,
+        conversation: conversation_types.Conversation,
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         return await self._a_calculate_score(conversation=conversation)
 
     def _extract_user_goals(
         self,
-        conversation: Conversation,
+        conversation: conversation_types.Conversation,
     ) -> List[str]:
         llm_query = templates.extract_user_goals(conversation)
         model_output = self._model.generate_string(
@@ -102,7 +101,7 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
         return _extract_user_goals_from_model_output(model_output=model_output)
 
     def _evaluate_user_goal(
-        self, conversation: Conversation, user_goal: str
+        self, conversation: conversation_types.Conversation, user_goal: str
     ) -> schema.EvaluateUserGoalResponse:
         llm_query = templates.evaluate_user_goal(
             conversation=conversation, user_goal=user_goal
@@ -133,9 +132,12 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
 
     def _calculate_score(
         self,
-        conversation: Conversation,
+        conversation: conversation_types.Conversation,
     ) -> score_result.ScoreResult:
         try:
+            if len(conversation) == 0:
+                raise ValueError("Conversation is empty")
+
             user_goals = self._extract_user_goals(conversation)
             verdicts = [
                 self._evaluate_user_goal(conversation=conversation, user_goal=user_goal)
@@ -151,12 +153,12 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
         except Exception as e:
             LOGGER.error(f"Failed to calculate session completeness quality: {e}")
             raise exceptions.MetricComputationError(
-                "Failed to calculate session completeness quality: {e}"
+                f"Failed to calculate session completeness quality: {e}"
             ) from e
 
     async def _a_extract_user_goals(
         self,
-        conversation: Conversation,
+        conversation: conversation_types.Conversation,
     ) -> List[str]:
         llm_query = templates.extract_user_goals(conversation)
         model_output = await self._model.agenerate_string(
@@ -165,7 +167,7 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
         return _extract_user_goals_from_model_output(model_output=model_output)
 
     async def _a_evaluate_user_goal(
-        self, conversation: Conversation, user_goal: str
+        self, conversation: conversation_types.Conversation, user_goal: str
     ) -> schema.EvaluateUserGoalResponse:
         llm_query = templates.evaluate_user_goal(
             conversation=conversation, user_goal=user_goal
@@ -196,9 +198,12 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
 
     async def _a_calculate_score(
         self,
-        conversation: Conversation,
+        conversation: conversation_types.Conversation,
     ) -> score_result.ScoreResult:
         try:
+            if len(conversation) == 0:
+                raise ValueError("Conversation is empty")
+
             user_goals = await self._a_extract_user_goals(conversation)
             verdicts = await asyncio.gather(
                 *[
@@ -220,7 +225,7 @@ class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMe
                 f"Failed to calculate session completeness quality: {e}", exc_info=True
             )
             raise exceptions.MetricComputationError(
-                "Failed to calculate session completeness quality: {e}"
+                f"Failed to calculate session completeness quality: {e}"
             ) from e
 
 
