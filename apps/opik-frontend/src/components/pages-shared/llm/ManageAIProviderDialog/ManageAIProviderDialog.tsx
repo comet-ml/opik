@@ -87,10 +87,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   const providerUrl = useMemo(() => {
     if (providerKey?.provider === PROVIDER_TYPE.VLLM) {
       const vllmData = getVllmAIProviderData();
-      return vllmData?.url || "";
+      return vllmData?.url ?? "";
     }
 
-    return localData?.url || "";
+    return localData?.url ?? "";
   }, [providerKey, localData, getVllmAIProviderData]);
 
   const form: UseFormReturn<AIProviderFormType> = useForm<
