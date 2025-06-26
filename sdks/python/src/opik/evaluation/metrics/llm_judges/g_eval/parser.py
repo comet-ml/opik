@@ -21,7 +21,7 @@ def parse_model_output_string(
 
         score = float(dict_content["score"])
         if not 0 <= score <= 10:
-            raise ValueError
+            raise ValueError(f"LLM returned score outside of [0, 10] range: {score}")
 
         reason = str(dict_content["reason"])
 
@@ -30,9 +30,9 @@ def parse_model_output_string(
             value=score / 10,
             reason=reason,
         )
-    except Exception as e:
-        LOGGER.error(f"Failed to parse model output: {e}", exc_info=True)
-        raise exceptions.MetricComputationError(GEVAL_SCORE_CALC_FAILED)
+    except Exception as exception:
+        LOGGER.error(f"Failed to parse model output: {exception}", exc_info=True)
+        raise exceptions.MetricComputationError(GEVAL_SCORE_CALC_FAILED) from exception
 
 
 def parse_litellm_model_output(
@@ -97,13 +97,15 @@ def parse_litellm_model_output(
                 final_score = int(log_probs_token) / 10
 
             if not (0.0 <= final_score <= 1.0):
-                raise ValueError
+                raise ValueError(
+                    f"Failed to compute final score from log_probs, the value is out of [0, 1] range: {final_score}"
+                )
 
             # Get the reason
             reason = json.loads(content.choices[0].message.content)["reason"]
 
             # Return the score and the reason
             return score_result.ScoreResult(name=name, value=final_score, reason=reason)
-    except Exception as e:
-        LOGGER.error(f"Failed to parse model output: {e}", exc_info=True)
-        raise exceptions.MetricComputationError(GEVAL_SCORE_CALC_FAILED)
+    except Exception as exception:
+        LOGGER.error(f"Failed to parse model output: {exception}", exc_info=True)
+        raise exceptions.MetricComputationError(GEVAL_SCORE_CALC_FAILED) from exception
