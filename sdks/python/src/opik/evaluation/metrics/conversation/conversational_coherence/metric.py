@@ -5,15 +5,14 @@ from typing import Optional, Union, Any, List, Dict
 import pydantic
 
 from opik import exceptions
+from opik.evaluation.models import base_model, models_factory
 from . import schema, templates
-from ... import score_result
 from .. import (
     types as conversation_types,
     conversation_thread_metric,
     helpers,
-    conversation_turns_factory,
 )
-from opik.evaluation.models import base_model, models_factory
+from ... import score_result
 from ...llm_judges import parsing_helpers
 
 LOGGER = logging.getLogger(__name__)
@@ -113,7 +112,7 @@ class ConversationalCoherenceMetric(
         conversation: conversation_types.Conversation,
     ) -> score_result.ScoreResult:
         try:
-            turns_windows = _extract_turns_windows_from_conversation(
+            turns_windows = helpers.extract_turns_windows_from_conversation(
                 conversation=conversation, window_size=self._window_size
             )
 
@@ -144,7 +143,7 @@ class ConversationalCoherenceMetric(
         conversation: conversation_types.Conversation,
     ) -> score_result.ScoreResult:
         try:
-            turns_windows = _extract_turns_windows_from_conversation(
+            turns_windows = helpers.extract_turns_windows_from_conversation(
                 conversation=conversation, window_size=self._window_size
             )
 
@@ -221,26 +220,6 @@ class ConversationalCoherenceMetric(
             response_format=schema.EvaluateConversationCoherenceResponse,
         )
         return _evaluate_conversation_from_model_output(model_output=model_output)
-
-
-def _extract_turns_windows_from_conversation(
-    conversation: conversation_types.Conversation, window_size: int
-) -> List[conversation_types.Conversation]:
-    if len(conversation) == 0:
-        raise ValueError("Conversation is empty")
-
-    turns = conversation_turns_factory.build_conversation_turns(
-        conversation=conversation
-    )
-    if len(turns) == 0:
-        raise ValueError("Conversation has no turns")
-
-    turns_windows: List[conversation_types.Conversation] = [
-        helpers.merge_turns(turns_window)
-        for turns_window in helpers.get_turns_in_sliding_window(turns, window_size)
-    ]
-
-    return turns_windows
 
 
 def _generate_reason_from_model_output(model_output: str) -> str:

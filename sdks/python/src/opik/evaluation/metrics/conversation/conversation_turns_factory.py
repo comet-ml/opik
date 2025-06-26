@@ -32,4 +32,8 @@ def build_conversation_turns(
             turns.append(current_turn)
             user_input = None
 
+    # append the last user input if it exists
+    if user_input is not None:
+        turns.append(types.ConversationTurn(input=user_input, output=None))
+
     return turns
