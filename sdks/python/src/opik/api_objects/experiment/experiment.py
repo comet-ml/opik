@@ -6,6 +6,7 @@ import opik.rest_api
 from opik.message_processing.batching import sequence_splitter
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import experiment_item as rest_experiment_item
+from opik.rest_api.types import experiment_public
 from . import experiment_item
 from .. import constants, helpers, rest_stream_parser
 from ...api_objects.prompt import Prompt
@@ -32,6 +33,20 @@ class Experiment:
     def id(self) -> str:
         return self._id
 
+    @property
+    def dataset_name(self) -> str:
+        return self._dataset_name
+
+    @property
+    def name(self) -> str:
+        if self._name is not None:
+            return self._name
+
+        name = self._rest_client.experiments.get_experiment_by_id(id=self.id).name
+        self._name = name
+
+        return name
+
     @functools.cached_property
     def dataset_id(self) -> str:
         return self._rest_client.datasets.get_dataset_by_identifier(
@@ -39,15 +54,11 @@ class Experiment:
         ).id
 
     @property
-    def dataset_name(self) -> str:
-        return self._dataset_name
+    def experiments_rest_client(self) -> rest_api_client.ExperimentsClient:
+        return self._rest_client.experiments
 
-    @functools.cached_property
-    def name(self) -> str:
-        if self._name is not None:
-            return self._name
-
-        return self._rest_client.experiments.get_experiment_by_id(id=self.id).name
+    def get_experiment_data(self) -> experiment_public.ExperimentPublic:
+        return self._rest_client.experiments.get_experiment_by_id(id=self.id)
 
     def insert(
         self,
