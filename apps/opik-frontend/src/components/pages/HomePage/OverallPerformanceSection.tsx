@@ -22,7 +22,7 @@ const OverallPerformanceSection = () => {
   const [period, setPeriod] = useLocalStorageState<PERIOD_OPTION_TYPE>(
     TIME_PERIOD_KEY,
     {
-      defaultValue: PERIOD_OPTION_TYPE.FOURTEEN_DAYS,
+      defaultValue: PERIOD_OPTION_TYPE.SEVEN_DAYS,
     },
   );
 

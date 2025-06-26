@@ -30,7 +30,7 @@ const WelcomeBanner: React.FC<WelcomeBannerProps> = ({ setOpen }) => {
         <div className="comet-title-xl text-white">Welcome to Opik 👋</div>
         <div className="comet-body mt-4 text-white/80">
           Opik helps you build safer, more reliable AI systems through advanced
-          tracing, experiment management, evaluation , and real-time monitoring
+          tracing, experiment management, evaluation, and real-time monitoring
         </div>
         <Button
           variant="secondary"
