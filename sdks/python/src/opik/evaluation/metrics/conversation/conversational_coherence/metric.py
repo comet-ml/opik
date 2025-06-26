@@ -22,6 +22,52 @@ LOGGER = logging.getLogger(__name__)
 class ConversationalCoherenceMetric(
     conversation_thread_metric.ConversationThreadMetric
 ):
+    """
+    Calculates the conversational coherence metric for a given conversation thread.
+    This metric assesses the coherence and relevance across a series of conversation
+    turns by evaluating the consistency in responses, logical flow, and overall
+    context maintenance. It evaluates whether the conversation session felt like a
+    natural, adaptive, helpful interaction.
+
+    The ``ConversationalCoherenceMetric`` builds a sliding window of dialogue turns for
+    each turn in the conversation. It then uses a language model to evaluate whether
+    the final “assistant” message within each window is relevant and coherent in
+    relation to the preceding conversational context.
+
+    It supports both synchronous and asynchronous operations to
+    accommodate the model's operation type.
+
+    Args:
+        model: The model to use for
+            evaluating the conversation. If a string is provided, it will be used to
+            fetch the model from the OpenAI API. If a base_model.OpikBaseModel is
+            provided, it will be used directly. Default is None.
+        name: The name of the metric. The default is "conversational_coherence_score".
+        include_reason: Whether to include the reason for the score in the
+            result. Default is True.
+        track: Whether to track the metric. Default is True.
+        project_name: The name of the project to track the metric in.
+            Default is None.
+        window_size: The window size to use for calculating the score. It defines the
+            maximal number of historical turns to include in each window when assesing
+            the coherence of current turn in the conversation. Default is 10.
+
+    Example:
+        >>> from opik.evaluation.metrics import ConversationalCoherenceMetric
+        >>> conversation = [
+        >>>     {"role": "user", "content": "Hello!"},
+        >>>     {"role": "assistant", "content": "Hi there!"},
+        >>>     {"role": "user", "content": "How are you?"},
+        >>>     {"role": "assistant", "content": "I'm doing well, thank you!"},
+        >>> ]
+        >>> metric = ConversationalCoherenceMetric()
+        >>> result = metric.score(conversation)
+        >>> if result.scoring_failed:
+        >>>     print(f"Scoring failed: {result.reason}")
+        >>> else:
+        >>>     print(result.value)
+    """
+
     def __init__(
         self,
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,
