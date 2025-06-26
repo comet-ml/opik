@@ -97,7 +97,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             reasoning_model: The model to use for reasoning and prompt generation
             rounds: Number of optimization rounds
             num_prompts_per_round: Number of prompts to generate per round
-            num_threads: Number of threads for parallel evaluation
+            n_threads: Number of threads for parallel evaluation
             verbose: Controls internal logging/progress bars (0=off, 1=on).
             enable_context: Whether to include task-specific context (metrics, examples) in the reasoning prompt.
             **model_kwargs: Additional model parameters
