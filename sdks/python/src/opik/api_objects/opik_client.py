@@ -484,27 +484,29 @@ class Opik:
         """
         Update the span attributes. It's only safe to use this method if spans are already
         stored in the backend, otherwise the update will fail.
-        Don't use this method while the spans are created or shortly after.
+        It's not safe to use this method while the spans are created or shortly after.
 
         Args:
             id: The unique identifier for the span to update.
             trace_id: The unique identifier for the trace to which the span belongs.
-            project_name: The name of the project in which the span is stored.
-            end_time: The end time of the span.
-            metadata: Additional metadata to be associated with the span.
-            input: The input data for the span.
-            output: The output data for the span.
-            tags: A list of tags to be associated with the span.
-            usage: Usage data for the span. In order for input, output and total tokens to be visible in the UI,
+            parent_span_id: The unique identifier for the parent span.
+            project_name: The project name to which the span belongs.
+            end_time: The new end time of the span.
+            metadata: The new metadata to be associated with the span.
+            input: The new input data for the span.
+            output: The new output data for the span.
+            tags: A new list of tags to be associated with the span.
+            usage: The new usage data for the span. In order for input, output and total tokens to be visible in the UI,
                 the usage must contain OpenAI-formatted keys (they can be passed additionaly to original usage on the top level of the dict):  prompt_tokens, completion_tokens and total_tokens.
                 If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
                 format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
-            model: The name of LLM.
-            provider: The provider of LLM. You can find providers officially supported by Opik for cost tracking
+            model: The new name of LLM.
+            provider: The new provider of LLM. You can find providers officially supported by Opik for cost tracking
                 in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
                 If your provider not in the list, you can still specify it but the cost tracking will not be available
-            error_info: The dictionary with error information (typically used when the span function has failed).
-            total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
+            error_info: The new dictionary with error information (typically used when the span function has failed).
+            total_cost: The new cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
+            attachments: The new list of attachments to be uploaded to the span.
 
         Returns:
             None
@@ -513,9 +515,9 @@ class Opik:
             id=id,
             trace_id=trace_id,
             parent_span_id=parent_span_id,
-            project_name=project_name,
             url_override=self._config.url_override,
             message_streamer=self._streamer,
+            project_name=project_name,
             end_time=end_time,
             metadata=metadata,
             input=input,
