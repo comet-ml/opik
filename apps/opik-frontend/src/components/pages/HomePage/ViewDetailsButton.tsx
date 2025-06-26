@@ -18,7 +18,7 @@ const ViewDetailsButton: React.FC<ViewDetailsButtonProps> = ({
     <Link
       to={
         projectId
-          ? "/$workspaceName/projects/$projectId"
+          ? "/$workspaceName/projects/$projectId/traces"
           : "/$workspaceName/projects"
       }
       params={{

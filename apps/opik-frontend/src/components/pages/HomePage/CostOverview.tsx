@@ -96,6 +96,7 @@ export const CostOverview: React.FC<CostOverviewProps> = ({
                   data?.current,
                 )}
                 trend="inverted"
+                tooltip="Compares the total cost between the current and previous periods."
               />
             </div>
             <div className="comet-body-s text-muted-foreground">
