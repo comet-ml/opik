@@ -58,9 +58,7 @@ public class OnlineScoringEngine {
         var renderedMessages = renderMessages(evaluatorCode.messages(), evaluatorCode.variables(), trace);
         var chatRequestBuilder = ChatRequest.builder().messages(renderedMessages);
 
-        structuredOutputStrategy.apply(chatRequestBuilder, renderedMessages, evaluatorCode.schema());
-
-        return chatRequestBuilder.build();
+        return structuredOutputStrategy.apply(chatRequestBuilder, renderedMessages, evaluatorCode.schema()).build();
     }
 
     /**

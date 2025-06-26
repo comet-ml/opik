@@ -19,8 +19,9 @@ public interface StructuredOutputStrategy {
      * @param chatRequestBuilder The builder for the chat request.
      * @param messages           The list of messages for the chat request.
      * @param schema             The desired output schema.
+     * @return  The builder for the chat request
      */
-    void apply(
+    ChatRequest.Builder apply(
             ChatRequest.Builder chatRequestBuilder,
             List<ChatMessage> messages,
             List<LlmAsJudgeOutputSchema> schema);

@@ -25,12 +25,14 @@ public class ToolCallingStrategy implements StructuredOutputStrategy {
     private static final String REASON_FIELD_DESCRIPTION = "the reason for the score for ";
 
     @Override
-    public void apply(
+    public ChatRequest.Builder apply(
             ChatRequest.Builder chatRequestBuilder,
             List<ChatMessage> messages,
             List<LlmAsJudgeOutputSchema> schema) {
         var responseFormat = toResponseFormat(schema);
         chatRequestBuilder.responseFormat(responseFormat);
+
+        return chatRequestBuilder;
     }
 
     private ResponseFormat toResponseFormat(@NotNull List<LlmAsJudgeOutputSchema> schema) {

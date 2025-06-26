@@ -22,12 +22,12 @@ public class InstructionStrategy implements StructuredOutputStrategy {
             "The JSON object should look like this:\n\n%s";
 
     @Override
-    public void apply(
+    public ChatRequest.Builder apply(
             ChatRequest.Builder chatRequestBuilder,
             List<ChatMessage> messages,
             List<LlmAsJudgeOutputSchema> schema) {
         if (messages.isEmpty()) {
-            return;
+            return chatRequestBuilder;
         }
 
         String jsonExample = generateJsonExample(schema);
@@ -57,6 +57,8 @@ public class InstructionStrategy implements StructuredOutputStrategy {
             // Update the request builder with the new message list
             chatRequestBuilder.messages(modifiableMessages);
         }
+
+        return chatRequestBuilder;
     }
 
     private String generateJsonExample(List<LlmAsJudgeOutputSchema> schema) {
