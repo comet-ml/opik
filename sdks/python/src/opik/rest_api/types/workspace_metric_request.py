@@ -9,7 +9,7 @@ from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 
 class WorkspaceMetricRequest(UniversalBaseModel):
     project_ids: typing.Optional[typing.List[str]] = None
-    name: str
+    name: typing.Optional[str] = None
     interval_start: dt.datetime
     interval_end: dt.datetime
     start_before_end: typing.Optional[bool] = None

@@ -14,7 +14,7 @@ export const WorkspaceMetricRequest: core.serialization.ObjectSchema<
         "project_ids",
         core.serialization.list(core.serialization.string()).optional(),
     ),
-    name: core.serialization.string(),
+    name: core.serialization.string().optional(),
     intervalStart: core.serialization.property("interval_start", core.serialization.date()),
     intervalEnd: core.serialization.property("interval_end", core.serialization.date()),
     startBeforeEnd: core.serialization.property("start_before_end", core.serialization.boolean().optional()),
@@ -23,7 +23,7 @@ export const WorkspaceMetricRequest: core.serialization.ObjectSchema<
 export declare namespace WorkspaceMetricRequest {
     export interface Raw {
         project_ids?: string[] | null;
-        name: string;
+        name?: string | null;
         interval_start: string;
         interval_end: string;
         start_before_end?: boolean | null;

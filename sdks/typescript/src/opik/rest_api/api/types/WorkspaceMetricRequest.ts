@@ -4,7 +4,7 @@
 
 export interface WorkspaceMetricRequest {
     projectIds?: string[];
-    name: string;
+    name?: string;
     intervalStart: Date;
     intervalEnd: Date;
     startBeforeEnd?: boolean;

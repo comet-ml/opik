@@ -30,6 +30,7 @@ from ..types.trace_filter_public import TraceFilterPublic
 from ..types.trace_page_public import TracePagePublic
 from ..types.trace_public import TracePublic
 from ..types.trace_thread import TraceThread
+from ..types.trace_thread_filter import TraceThreadFilter
 from ..types.trace_thread_page import TraceThreadPage
 from ..types.trace_write import TraceWrite
 
@@ -1205,6 +1206,93 @@ class RawTracesClient:
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    @contextlib.contextmanager
+    def search_trace_threads(
+        self,
+        *,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        filters: typing.Optional[typing.Sequence[TraceThreadFilter]] = OMIT,
+        last_retrieved_thread_model_id: typing.Optional[str] = OMIT,
+        limit: typing.Optional[int] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
+        """
+        Search trace threads
+
+        Parameters
+        ----------
+        project_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+
+        filters : typing.Optional[typing.Sequence[TraceThreadFilter]]
+
+        last_retrieved_thread_model_id : typing.Optional[str]
+
+        limit : typing.Optional[int]
+            Max number of trace thread to be streamed
+
+        truncate : typing.Optional[bool]
+            Truncate image included in either input, output or metadata
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Returns
+        -------
+        typing.Iterator[HttpResponse[typing.Iterator[bytes]]]
+            Trace threads stream or error during process
+        """
+        with self._client_wrapper.httpx_client.stream(
+            "v1/private/traces/threads/search",
+            method="POST",
+            json={
+                "project_name": project_name,
+                "project_id": project_id,
+                "filters": convert_and_respect_annotation_metadata(
+                    object_=filters, annotation=typing.Sequence[TraceThreadFilter], direction="write"
+                ),
+                "last_retrieved_thread_model_id": last_retrieved_thread_model_id,
+                "limit": limit,
+                "truncate": truncate,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        ) as _response:
+
+            def stream() -> HttpResponse[typing.Iterator[bytes]]:
+                try:
+                    if 200 <= _response.status_code < 300:
+                        _chunk_size = request_options.get("chunk_size", None) if request_options is not None else None
+                        return HttpResponse(
+                            response=_response, data=(_chunk for _chunk in _response.iter_bytes(chunk_size=_chunk_size))
+                        )
+                    _response.read()
+                    if _response.status_code == 400:
+                        raise BadRequestError(
+                            headers=dict(_response.headers),
+                            body=typing.cast(
+                                typing.Optional[typing.Any],
+                                parse_obj_as(
+                                    type_=typing.Optional[typing.Any],  # type: ignore
+                                    object_=_response.json(),
+                                ),
+                            ),
+                        )
+                    _response_json = _response.json()
+                except JSONDecodeError:
+                    raise ApiError(
+                        status_code=_response.status_code, headers=dict(_response.headers), body=_response.text
+                    )
+                raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+            yield stream()
 
     @contextlib.contextmanager
     def search_traces(
@@ -2547,6 +2635,94 @@ class AsyncRawTracesClient:
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    @contextlib.asynccontextmanager
+    async def search_trace_threads(
+        self,
+        *,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        filters: typing.Optional[typing.Sequence[TraceThreadFilter]] = OMIT,
+        last_retrieved_thread_model_id: typing.Optional[str] = OMIT,
+        limit: typing.Optional[int] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
+        """
+        Search trace threads
+
+        Parameters
+        ----------
+        project_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+
+        filters : typing.Optional[typing.Sequence[TraceThreadFilter]]
+
+        last_retrieved_thread_model_id : typing.Optional[str]
+
+        limit : typing.Optional[int]
+            Max number of trace thread to be streamed
+
+        truncate : typing.Optional[bool]
+            Truncate image included in either input, output or metadata
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Returns
+        -------
+        typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]
+            Trace threads stream or error during process
+        """
+        async with self._client_wrapper.httpx_client.stream(
+            "v1/private/traces/threads/search",
+            method="POST",
+            json={
+                "project_name": project_name,
+                "project_id": project_id,
+                "filters": convert_and_respect_annotation_metadata(
+                    object_=filters, annotation=typing.Sequence[TraceThreadFilter], direction="write"
+                ),
+                "last_retrieved_thread_model_id": last_retrieved_thread_model_id,
+                "limit": limit,
+                "truncate": truncate,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        ) as _response:
+
+            async def stream() -> AsyncHttpResponse[typing.AsyncIterator[bytes]]:
+                try:
+                    if 200 <= _response.status_code < 300:
+                        _chunk_size = request_options.get("chunk_size", None) if request_options is not None else None
+                        return AsyncHttpResponse(
+                            response=_response,
+                            data=(_chunk async for _chunk in _response.aiter_bytes(chunk_size=_chunk_size)),
+                        )
+                    await _response.aread()
+                    if _response.status_code == 400:
+                        raise BadRequestError(
+                            headers=dict(_response.headers),
+                            body=typing.cast(
+                                typing.Optional[typing.Any],
+                                parse_obj_as(
+                                    type_=typing.Optional[typing.Any],  # type: ignore
+                                    object_=_response.json(),
+                                ),
+                            ),
+                        )
+                    _response_json = _response.json()
+                except JSONDecodeError:
+                    raise ApiError(
+                        status_code=_response.status_code, headers=dict(_response.headers), body=_response.text
+                    )
+                raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+            yield await stream()
 
     @contextlib.asynccontextmanager
     async def search_traces(

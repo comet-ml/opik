@@ -4,6 +4,10 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.TraceThreadStatus;
+import com.comet.opik.api.error.ConflictException;
+import com.comet.opik.domain.threads.TraceThreadCriteria;
+import com.comet.opik.domain.threads.TraceThreadModel;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.WorkspaceUtils;
@@ -28,6 +32,7 @@ import java.util.stream.Collectors;
 import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemTracing;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
+import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.groupingBy;
 
 @ImplementedBy(FeedbackScoreServiceImpl.class)
@@ -282,9 +287,46 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                             .map(threadIdMap -> bindThreadModelId(projectDto, threadIdMap))
                             .filter(projectDtoWithThreads -> !projectDtoWithThreads.scores().isEmpty())
                             // score the batch of threads with resolved thread model IDs
+                            .flatMap(this::validateThreadStatus)
                             .flatMap(score -> dao.scoreBatchOfThreads(score.scores()));
                 })
                 .reduce(0L, Long::sum);
+    }
+
+    private Mono<ProjectDto<FeedbackScoreBatchItemThread>> validateThreadStatus(
+            ProjectDto<FeedbackScoreBatchItemThread> dto) {
+        Set<String> expectedCloseThreadIds = dto.scores.stream()
+                .map(FeedbackScoreBatchItem::threadId)
+                .collect(Collectors.toSet());
+
+        Set<UUID> ids = dto.scores.stream()
+                .map(FeedbackScoreBatchItem::id)
+                .collect(Collectors.toSet());
+
+        var criteria = TraceThreadCriteria.builder()
+                .projectId(dto.project().id())
+                .ids(List.copyOf(ids))
+                .status(TraceThreadStatus.INACTIVE)
+                .build();
+
+        return traceThreadService.getThreadsByProject(1, ids.size(), criteria)
+                .flatMap(threads -> {
+                    List<String> openedThreads = threads.stream()
+                            .map(TraceThreadModel::threadId)
+                            .filter(not(expectedCloseThreadIds::contains))
+                            .toList();
+
+                    if (!threads.isEmpty() && openedThreads.isEmpty()) {
+                        return Mono.just(dto); // All threads are closed, proceed with scoring
+                    }
+
+                    return Mono.error(
+                            new ConflictException(
+                                    "Threads must be closed before scoring. Thread IDs are active: '[%s]'".formatted(
+                                            String.join(", ", openedThreads.isEmpty()
+                                                    ? expectedCloseThreadIds.stream().sorted().toList()
+                                                    : openedThreads.stream().sorted().toList()))));
+                });
     }
 
     private Mono<Map.Entry<String, UUID>> getOrCreateThread(ProjectDto<FeedbackScoreBatchItemThread> projectDto,

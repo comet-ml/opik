@@ -17,7 +17,9 @@ import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadIdentifier;
+import com.comet.opik.api.TraceThreadSearchStreamRequest;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
@@ -76,6 +78,7 @@ import org.glassfish.jersey.server.ChunkedOutput;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static com.comet.opik.api.FeedbackScoreBatch.FeedbackScoreBatchThread;
@@ -176,14 +179,13 @@ public class TracesResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceSearchStreamRequest.class))) @NotNull @Valid TraceSearchStreamRequest request) {
 
         var workspaceId = requestContext.get().getWorkspaceId();
-        var userName = requestContext.get().getUserName();
 
         validateProjectNameAndProjectId(request.projectName(), request.projectId());
 
         log.info("Streaming traces search results by '{}', workspaceId '{}'", request, workspaceId);
 
         var searchCriteria = TraceSearchCriteria.builder()
-                .lastReceivedTraceId(request.lastRetrievedId())
+                .lastReceivedId(request.lastRetrievedId())
                 .projectName(request.projectName())
                 .projectId(request.projectId())
                 .filters(filtersFactory.validateFilter(request.filters()))
@@ -191,9 +193,19 @@ public class TracesResource {
                 .sortingFields(List.of())
                 .build();
 
+        Visibility visibility = requestContext.get().getVisibility();
+        String userName = requestContext.get().getUserName();
+
+        UUID projectId = projectService.resolveProjectIdAndVerifyVisibility(request.projectId(), request.projectName())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        searchCriteria = searchCriteria.toBuilder().projectId(projectId).build();
+
         Flux<Trace> items = service.search(request.limit(), searchCriteria)
-                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId));
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.VISIBILITY, Optional.ofNullable(visibility).orElse(Visibility.PRIVATE)));
 
         return streamer.getOutputStream(items,
                 () -> log.info("Streamed traces search results by '{}', workspaceId '{}'", request, workspaceId));
@@ -579,6 +591,46 @@ public class TracesResource {
                 workspaceId);
 
         return Response.ok(traceThreadPage).build();
+    }
+
+    @POST
+    @Path("/threads/search")
+    @Produces(MediaType.APPLICATION_OCTET_STREAM)
+    @Operation(operationId = "searchTraceThreads", summary = "Search trace threads", description = "Search trace threads", responses = {
+            @ApiResponse(responseCode = "200", description = "Trace threads stream or error during process", content = @Content(array = @ArraySchema(schema = @Schema(anyOf = {
+                    TraceThread.class,
+                    ErrorMessage.class
+            }), maxItems = 2000))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public ChunkedOutput<JsonNode> searchTraceThreads(
+            @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadSearchStreamRequest.class))) @NotNull @Valid TraceThreadSearchStreamRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        Visibility visibility = requestContext.get().getVisibility();
+        String userName = requestContext.get().getUserName();
+
+        validateProjectNameAndProjectId(request.projectName(), request.projectId());
+
+        log.info("Streaming trace threads search results by '{}', workspaceId '{}'", request, workspaceId);
+
+        var searchCriteria = TraceSearchCriteria.builder()
+                .lastReceivedId(request.lastRetrievedThreadModelId())
+                .projectName(request.projectName())
+                .projectId(request.projectId())
+                .filters(filtersFactory.validateFilter(request.filters()))
+                .truncate(request.truncate())
+                .sortingFields(List.of())
+                .build();
+
+        Flux<TraceThread> items = service.threadsSearch(request.limit(), searchCriteria)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.VISIBILITY, Optional.ofNullable(visibility).orElse(Visibility.PRIVATE)));
+
+        return streamer.getOutputStream(items,
+                () -> log.info("Streamed trace threads search results by '{}', workspaceId '{}'", request,
+                        workspaceId));
     }
 
     @POST

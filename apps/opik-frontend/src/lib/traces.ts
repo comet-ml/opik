@@ -250,6 +250,7 @@ const prettifyGenericLogic = (
       "query",
       "input_prompt",
       "prompt",
+      "sys.query", // Dify
     ],
     output: ["answer", "output", "response"],
   };

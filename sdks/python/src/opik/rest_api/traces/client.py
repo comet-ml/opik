@@ -20,6 +20,7 @@ from ..types.trace_filter_public import TraceFilterPublic
 from ..types.trace_page_public import TracePagePublic
 from ..types.trace_public import TracePublic
 from ..types.trace_thread import TraceThread
+from ..types.trace_thread_filter import TraceThreadFilter
 from ..types.trace_thread_page import TraceThreadPage
 from ..types.trace_write import TraceWrite
 from .raw_client import AsyncRawTracesClient, RawTracesClient
@@ -935,6 +936,55 @@ class TracesClient:
         """
         _response = self._raw_client.score_batch_of_traces(scores=scores, request_options=request_options)
         return _response.data
+
+    def search_trace_threads(
+        self,
+        *,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        filters: typing.Optional[typing.Sequence[TraceThreadFilter]] = OMIT,
+        last_retrieved_thread_model_id: typing.Optional[str] = OMIT,
+        limit: typing.Optional[int] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.Iterator[bytes]:
+        """
+        Search trace threads
+
+        Parameters
+        ----------
+        project_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+
+        filters : typing.Optional[typing.Sequence[TraceThreadFilter]]
+
+        last_retrieved_thread_model_id : typing.Optional[str]
+
+        limit : typing.Optional[int]
+            Max number of trace thread to be streamed
+
+        truncate : typing.Optional[bool]
+            Truncate image included in either input, output or metadata
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Returns
+        -------
+        typing.Iterator[bytes]
+            Trace threads stream or error during process
+        """
+        with self._raw_client.search_trace_threads(
+            project_name=project_name,
+            project_id=project_id,
+            filters=filters,
+            last_retrieved_thread_model_id=last_retrieved_thread_model_id,
+            limit=limit,
+            truncate=truncate,
+            request_options=request_options,
+        ) as r:
+            yield from r.data
 
     def search_traces(
         self,
@@ -2017,6 +2067,56 @@ class AsyncTracesClient:
         """
         _response = await self._raw_client.score_batch_of_traces(scores=scores, request_options=request_options)
         return _response.data
+
+    async def search_trace_threads(
+        self,
+        *,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
+        filters: typing.Optional[typing.Sequence[TraceThreadFilter]] = OMIT,
+        last_retrieved_thread_model_id: typing.Optional[str] = OMIT,
+        limit: typing.Optional[int] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.AsyncIterator[bytes]:
+        """
+        Search trace threads
+
+        Parameters
+        ----------
+        project_name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
+
+        filters : typing.Optional[typing.Sequence[TraceThreadFilter]]
+
+        last_retrieved_thread_model_id : typing.Optional[str]
+
+        limit : typing.Optional[int]
+            Max number of trace thread to be streamed
+
+        truncate : typing.Optional[bool]
+            Truncate image included in either input, output or metadata
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Returns
+        -------
+        typing.AsyncIterator[bytes]
+            Trace threads stream or error during process
+        """
+        async with self._raw_client.search_trace_threads(
+            project_name=project_name,
+            project_id=project_id,
+            filters=filters,
+            last_retrieved_thread_model_id=last_retrieved_thread_model_id,
+            limit=limit,
+            truncate=truncate,
+            request_options=request_options,
+        ) as r:
+            async for data in r.data:
+                yield data
 
     async def search_traces(
         self,

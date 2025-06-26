@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/accordion";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import AttachmentsList from "./AttachmentsList";
-import { Spinner } from "@/components/ui/spinner";
+import Loader from "@/components/shared/Loader/Loader";
 
 type InputOutputTabProps = {
   data: Trace | Span;
@@ -41,11 +41,10 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
             className="group-data-[state=closed]:hidden"
           >
             {isLoading ? (
-              <Spinner size="small" />
+              <Loader />
             ) : (
               <SyntaxHighlighter
                 data={data.error_info!}
-                prettifyConfig={{ fieldType: "input" }}
                 preserveKey="syntax-highlighter-trace-sidebar-error"
               />
             )}
@@ -59,7 +58,7 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
           className="group-data-[state=closed]:hidden"
         >
           {isLoading ? (
-            <Spinner size="small" />
+            <Loader />
           ) : (
             <SyntaxHighlighter
               data={formattedData as object}
@@ -76,7 +75,7 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
           className="group-data-[state=closed]:hidden"
         >
           {isLoading ? (
-            <Spinner size="small" />
+            <Loader />
           ) : (
             <SyntaxHighlighter
               data={data.output}

@@ -3342,6 +3342,37 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/traces/threads/search:
+    post:
+      tags:
+      - Traces
+      summary: Search trace threads
+      description: Search trace threads
+      operationId: searchTraceThreads
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TraceThreadSearchStreamRequest"
+      responses:
+        "200":
+          description: Trace threads stream or error during process
+          content:
+            application/octet-stream:
+              schema:
+                maxItems: 2000
+                type: array
+                items:
+                  type: string
+                  anyOf:
+                  - $ref: "#/components/schemas/TraceThread"
+                  - $ref: "#/components/schemas/ErrorMessage"
+        "400":
+          description: Bad Request
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/traces/search:
     post:
       tags:
@@ -3403,6 +3434,56 @@ paths:
           description: No Content
         "404":
           description: Not found
+  /v1/private/workspaces/costs/summaries:
+    post:
+      tags:
+      - Workspaces
+      summary: Get costs summary
+      description: Get costs summary
+      operationId: costsSummary
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceMetricsSummaryRequest"
+      responses:
+        "200":
+          description: Workspace Metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Result"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/workspaces/costs:
+    post:
+      tags:
+      - Workspaces
+      summary: Get cost daily data
+      description: Get cost daily data
+      operationId: getCost
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceMetricsSummaryRequest"
+      responses:
+        "200":
+          description: Workspace cost data by days
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceMetricResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/workspaces/metrics:
     post:
       tags:
@@ -8926,6 +9007,56 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/FeedbackScoreBatchItemThread"
+    TraceThreadFilter:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    TraceThreadSearchStreamRequest:
+      type: object
+      properties:
+        project_name:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceThreadFilter"
+        last_retrieved_thread_model_id:
+          type: string
+          format: uuid
+        limit:
+          maximum: 2000
+          minimum: 1
+          type: integer
+          description: Max number of trace thread to be streamed
+          format: int32
+          default: 500
+        truncate:
+          type: boolean
+          description: "Truncate image included in either input, output or metadata"
+          default: true
     TraceFilter_Public:
       type: object
       properties:
@@ -9008,17 +9139,6 @@ components:
           $ref: "#/components/schemas/ErrorInfo"
         thread_id:
           type: string
-    DataPointDouble:
-      required:
-      - time
-      type: object
-      properties:
-        time:
-          type: string
-          format: date-time
-        value:
-          type: number
-          format: double
     Result:
       type: object
       properties:
@@ -9028,6 +9148,37 @@ components:
           type: number
           format: double
         previous:
+          type: number
+          format: double
+    WorkspaceMetricsSummaryRequest:
+      required:
+      - interval_end
+      - interval_start
+      type: object
+      properties:
+        project_ids:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
+        start_before_end:
+          type: boolean
+    DataPointDouble:
+      required:
+      - time
+      type: object
+      properties:
+        time:
+          type: string
+          format: date-time
+        value:
           type: number
           format: double
     WorkspaceMetricResponse:
@@ -9041,7 +9192,6 @@ components:
       required:
       - interval_end
       - interval_start
-      - name
       type: object
       properties:
         project_ids:
@@ -9051,28 +9201,7 @@ components:
             type: string
             format: uuid
         name:
-          minLength: 1
           type: string
-        interval_start:
-          type: string
-          format: date-time
-        interval_end:
-          type: string
-          format: date-time
-        start_before_end:
-          type: boolean
-    WorkspaceMetricsSummaryRequest:
-      required:
-      - interval_end
-      - interval_start
-      type: object
-      properties:
-        project_ids:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-            format: uuid
         interval_start:
           type: string
           format: date-time
