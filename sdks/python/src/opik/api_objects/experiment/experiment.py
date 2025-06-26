@@ -53,6 +53,10 @@ class Experiment:
             dataset_name=self._dataset_name
         ).id
 
+    @property
+    def experiments_rest_client(self) -> rest_api_client.ExperimentsClient:
+        return self._rest_client.experiments
+
     def get_experiment_data(self) -> experiment_public.ExperimentPublic:
         return self._rest_client.experiments.get_experiment_by_id(id=self.id)
 
