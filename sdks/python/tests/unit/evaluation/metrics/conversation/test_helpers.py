@@ -1,5 +1,8 @@
-def test_window_size(self, mock_get_turns):
-    """Test that window_size parameter is correctly used."""
+from opik.evaluation.metrics.conversation import conversation_turns_factory, helpers
+
+
+def test_get_turns_in_sliding_window():
+    """Test that the window_size parameter is correctly used."""
     conversation = [
         {"role": "user", "content": "Hello!"},
         {"role": "assistant", "content": "Hi there!"},
@@ -7,8 +10,12 @@ def test_window_size(self, mock_get_turns):
         {"role": "assistant", "content": "I'm doing well!"},
     ]
 
-    # Call score method
-    self.metric.score(conversation=conversation)
+    turns = conversation_turns_factory.build_conversation_turns(conversation)
 
-    # Verify window_size was used
-    mock_get_turns.assert_called_once_with(conversation, 2)
+    window_generator = helpers.get_turns_in_sliding_window(turns, window_size=2)
+
+    # Check that the first window has 1 turn and the second window has 2
+    expected_size = 1
+    for window in window_generator:
+        assert len(window) == expected_size
+        expected_size += 1
