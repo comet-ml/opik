@@ -57,6 +57,7 @@ import ThreadStatusTag from "@/components/shared/ThreadStatusTag/ThreadStatusTag
 import { ThreadStatus } from "@/types/thread";
 import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
 import ThreadFeedbackScoresInfo from "./ThreadFeedbackScoresInfo";
+import { Separator } from "@/components/ui/separator";
 
 type ThreadDetailsPanelProps = {
   projectId: string;
@@ -122,6 +123,10 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   );
   const isInactiveThread = thread?.status === ThreadStatus.INACTIVE;
   const threadFeedbackScores = thread?.feedback_scores ?? [];
+
+  const disabledAnnotationExplainer = !isInactiveThread
+    ? "Feedback scores are disabled during an ongoing session to avoid conflicts while the thread is still active. "
+    : "";
 
   // TODO update once BE will send this data
   const annotationCount = threadFeedbackScores.length;
@@ -198,33 +203,6 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           </div>
           <div className="comet-title-s truncate py-0.5">Thread</div>
           <div className="flex flex-auto"></div>
-          <Button
-            variant="outline"
-            size="2xs"
-            key="Go to project"
-            onClick={() => {
-              navigate({
-                to: "/$workspaceName/projects/$projectId/traces",
-                params: {
-                  projectId,
-                  workspaceName,
-                },
-                search: {
-                  traces_filters: [
-                    {
-                      id: "thread_id_filter",
-                      field: "thread_id",
-                      type: COLUMN_TYPE.string,
-                      operator: "=",
-                      value: threadId,
-                    },
-                  ],
-                },
-              });
-            }}
-          >
-            View all traces
-          </Button>
 
           {isInactiveThread ? (
             <ThreadStatusTag status={thread.status} />
@@ -318,13 +296,17 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             <TabsTrigger variant="underline" value="messages">
               Messages
             </TabsTrigger>
-            <TabsTrigger
-              variant="underline"
-              value="feedback_scores"
-              disabled={!isInactiveThread}
-            >
-              Feedback scores
-            </TabsTrigger>
+            <TooltipWrapper content={disabledAnnotationExplainer}>
+              <div>
+                <TabsTrigger
+                  variant="underline"
+                  value="feedback_scores"
+                  disabled={!isInactiveThread}
+                >
+                  Feedback scores
+                </TabsTrigger>
+              </div>
+            </TooltipWrapper>
           </TabsList>
         </div>
         <TabsContent value="messages">
@@ -410,6 +392,41 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     );
   };
 
+  const renderNavigationContent = () => {
+    return (
+      <>
+        <Separator orientation="vertical" className="mx-2 h-8" />
+        <Button
+          variant="outline"
+          size="sm"
+          key="Go to project"
+          onClick={() => {
+            navigate({
+              to: "/$workspaceName/projects/$projectId/traces",
+              params: {
+                projectId,
+                workspaceName,
+              },
+              search: {
+                traces_filters: [
+                  {
+                    id: "thread_id_filter",
+                    field: "thread_id",
+                    type: COLUMN_TYPE.string,
+                    operator: "=",
+                    value: threadId,
+                  },
+                ],
+              },
+            });
+          }}
+        >
+          View all traces
+        </Button>
+      </>
+    );
+  };
+
   const renderHeaderContent = () => {
     return (
       <div className="flex gap-2">
@@ -424,15 +441,11 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         <DetailsActionSectionToggle
           activeSection={activeSection}
           setActiveSection={setActiveSection}
-          layoutSize="sm"
+          layoutSize="lg"
           count={annotationCount}
           type={DetailsActionSection.Annotations}
           disabled={!isInactiveThread}
-          tooltipContent={
-            !isInactiveThread
-              ? "Feedback scores are disabled during an ongoing session to avoid conflicts while the thread is still active. "
-              : ""
-          }
+          tooltipContent={disabledAnnotationExplainer}
         />
 
         <DropdownMenu>
@@ -499,6 +512,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       entity="thread"
       open={open}
       headerContent={renderHeaderContent()}
+      navigationContent={renderNavigationContent()}
       hasPreviousRow={hasPreviousRow}
       hasNextRow={hasNextRow}
       onClose={onClose}

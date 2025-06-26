@@ -189,6 +189,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
   "last_updated_at",
   "duration",
+  "status",
 ];
 
 const SELECTED_COLUMNS_KEY = "threads-selected-columns";
