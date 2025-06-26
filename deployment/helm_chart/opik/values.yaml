@@ -94,6 +94,13 @@ component:
 
     ingress:
       enabled: false
+      ingressClassName: ""
+      annotations: {}
+      hosts: []
+      tls:
+        enabled: false
+        hosts: []
+        secretName: ""
 
   python-backend:
     enabled: true
@@ -154,6 +161,13 @@ component:
 
     ingress:
       enabled: false
+      ingressClassName: ""
+      annotations: {}
+      hosts: []
+      tls:
+        enabled: false
+        hosts: []
+        secretName: ""
 
   frontend:
     enabled: true
@@ -191,6 +205,18 @@ component:
         targetPort:  5173
     ingress:
       enabled: false
+      ingressClassName: ""
+      annotations: {}
+      hosts: []
+        # - host: opik.example.com
+        #   paths:
+        #     - path: /
+        #       port: 5173
+        #       pathType: Prefix
+      tls:
+        enabled: false
+        hosts: []
+        secretName: ""
     # throttled locations
     throttling: {}
     # map variables for use with throttling and other places
@@ -322,19 +348,31 @@ clickhouse:
       enabled: false
     username: opik
     password: opik
+  serviceAccount:
+    annotations: {}
+    create: false
+    name: ""
   zookeeper:
       host: opik-zookeeper
   backup: 
     enabled: false
     successfulJobsHistoryLimit: 1
     serviceAccount:
-        enabled: false
-        create: true
-        annotations: {}
+      annotations: {}
+      create: false
+      name: ""
     # bucketURL: ""
     # secretName: ""
     # schedule: ""
     # baseBackup: ""
+    schedule: "0 0 * * *" # daily at midnight
+    command:
+      - /bin/bash
+      - '-cx'
+      - |-
+        export backupname=backup$(date +'%Y%m%d%H%M')
+        echo "BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');" > /tmp/backQuery.sql
+        clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql
   monitoring:
     enabled: false
     username: opikmon # readonly user

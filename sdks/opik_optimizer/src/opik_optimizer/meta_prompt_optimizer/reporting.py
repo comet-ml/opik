@@ -164,7 +164,7 @@ def display_prompt_candidate_scoring_report(verbose: int = 1) -> Any:
                 console.print(
                     Text(f"│    Evaluating candidate prompt {candidate_count+1}:")
                 )
-                display_messages(prompt.formatted_messages, "│         ")
+                display_messages(prompt.get_messages(), "│         ")
 
         def set_final_score(self, best_score: float, score: float) -> None:
             if verbose >= 1:

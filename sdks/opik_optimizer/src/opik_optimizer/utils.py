@@ -1,5 +1,19 @@
 """Utility functions and constants for the optimizer package."""
 
+from typing import (
+    Any,
+    Dict,
+    Final,
+    Literal,
+    Optional,
+    Type,
+    TYPE_CHECKING,
+    List,
+    Callable,
+)
+
+import inspect
+import typing
 import base64
 import json
 import logging
@@ -7,7 +21,6 @@ import random
 import string
 import urllib.parse
 from types import TracebackType
-from typing import Any, Dict, Final, Literal, Optional, Type
 
 import opik
 from opik.api_objects.opik_client import Opik
@@ -15,6 +28,10 @@ from opik.api_objects.optimization import Optimization
 
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from .optimizable_agent import OptimizableAgent
+    from .optimization_config.chat_prompt import ChatPrompt
 
 
 class OptimizationContextManager:
@@ -250,3 +267,83 @@ def get_optimization_run_url_by_id(dataset_id: str, optimization_id: str) -> str
         safe=ALLOWED_URL_CHARACTERS,
     )
     return urllib.parse.urljoin(ensure_ending_slash(url_override), run_path)
+
+
+def create_litellm_agent_class(prompt: "ChatPrompt") -> Type["OptimizableAgent"]:
+    """
+    Create a LiteLLMAgent from a chat prompt.
+    """
+    from .optimizable_agent import OptimizableAgent
+
+    if prompt.invoke is not None:
+
+        class LiteLLMAgent(OptimizableAgent):
+            model = prompt.model
+            model_kwargs = prompt.model_kwargs
+            project_name = prompt.project_name
+
+            def invoke(
+                self, messages: List[Dict[str, str]], seed: Optional[int] = None
+            ) -> str:
+                return prompt.invoke(
+                    self.model, messages, prompt.tools, **self.model_kwargs
+                )  # type: ignore[misc]
+
+    else:
+
+        class LiteLLMAgent(OptimizableAgent):  # type: ignore[no-redef]
+            model = prompt.model
+            model_kwargs = prompt.model_kwargs
+            project_name = prompt.project_name
+
+    return LiteLLMAgent
+
+
+def function_to_tool_definition(
+    func: Callable, description: Optional[str] = None
+) -> Dict[str, Any]:
+    sig = inspect.signature(func)
+    doc = description or func.__doc__ or ""
+
+    properties: Dict[str, Dict[str, str]] = {}
+    required: List[str] = []
+
+    for name, param in sig.parameters.items():
+        param_type = (
+            param.annotation if param.annotation != inspect.Parameter.empty else str
+        )
+        json_type = python_type_to_json_type(param_type)
+        properties[name] = {"type": json_type, "description": f"{name} parameter"}
+        if param.default == inspect.Parameter.empty:
+            required.append(name)
+
+    return {
+        "type": "function",
+        "function": {
+            "name": func.__name__,
+            "description": doc.strip(),
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": required,
+            },
+        },
+    }
+
+
+def python_type_to_json_type(python_type: type) -> str:
+    # Basic type mapping
+    if python_type in [str]:
+        return "string"
+    elif python_type in [int]:
+        return "integer"
+    elif python_type in [float]:
+        return "number"
+    elif python_type in [bool]:
+        return "boolean"
+    elif python_type in [dict]:
+        return "object"
+    elif python_type in [list, typing.List]:
+        return "array"
+    else:
+        return "string"  # default fallback
