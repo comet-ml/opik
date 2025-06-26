@@ -27,7 +27,7 @@ class LangchainChatModel(base_model.OpikBaseModel):
                 all the requirement dependencies are installed.
             track: Whether to track the model calls.
         """
-        model_name = _try_extract_model_name(chat_model)
+        model_name = _extract_model_name(chat_model)
         super().__init__(model_name=model_name)
 
         self._engine = chat_model
@@ -137,9 +137,9 @@ class LangchainChatModel(base_model.OpikBaseModel):
         return response
 
 
-def _try_extract_model_name(
+def _extract_model_name(
     langchain_chat_model: "langchain_core.language_models.BaseChatModel",
-) -> Optional[str]:
+) -> str:
     if hasattr(langchain_chat_model, "model") and isinstance(
         langchain_chat_model.model, str
     ):
@@ -150,4 +150,9 @@ def _try_extract_model_name(
     ):
         return langchain_chat_model.model_name
 
-    return None
+    if hasattr(langchain_chat_model, "model_id") and isinstance(
+        langchain_chat_model.model_id, str
+    ):
+        return langchain_chat_model.model_id
+
+    return "unknown-model"
