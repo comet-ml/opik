@@ -130,8 +130,8 @@ def _score_from_verdicts(
     if len(verdicts) == 0:
         return 0.0
 
-    relevant_count = sum(v.verdict.strip().lower() != "yes" for v in verdicts)
-    return relevant_count / len(verdicts)
+    frustrated_count = sum(v.verdict.strip().lower() == "yes" for v in verdicts)
+    return frustrated_count / len(verdicts)
 
 
 def _extract_frustrations_from_verdicts(
