@@ -424,6 +424,7 @@ class WorkspacesResourceTest {
         var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
                 .stream()
                 .map(span -> span.toBuilder()
+                        .startTime(time)
                         .id(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
                         .projectId(null)
                         .projectName(projectName)
@@ -451,6 +452,9 @@ class WorkspacesResourceTest {
                                     ? idGenerator.generateId()
                                     : idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
                             .projectName(projectName)
+                            .startTime(time == null
+                                    ? Instant.now()
+                                    : time)
                             .build();
 
                     traceResourceClient.createTrace(trace, apiKey, workspaceName);
