@@ -966,7 +966,7 @@ def test_tracked_function__update_current_span__with_attachments(
     )
 
 
-def test_low_level_client__update_span__with_attachments(
+def test_low_level_client__update_span_with_attachments__original_fields_preserved_but_some_are_patched(
     opik_client: opik.Opik, data_file
 ):
     root_span_client = opik_client.span(
@@ -976,6 +976,7 @@ def test_low_level_client__update_span__with_attachments(
     span_client = root_span_client.span(
         name="child-span-name",
         input={"input": "original-span-input"},
+        output={"output": "original-span-output"},
     )
     opik.flush_tracker()
 
@@ -1006,6 +1007,7 @@ def test_low_level_client__update_span__with_attachments(
         parent_span_id=root_span_client.id,
         trace_id=span_client.trace_id,
         input={"input": "new-span-input"},
+        output={"output": "original-span-output"},
         name="child-span-name",
     )
     verifiers.verify_attachments(
