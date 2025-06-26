@@ -71,6 +71,10 @@ Given the relevancy score, which is a 0-1 score indicating how irrelevant the OV
     {{
         "message_number": "1",
         "reason": "The LLM responded 'isn't it a nice day today' to a message that asked about how to treat a sore throat, which is completely irrelevant."
+    }},
+    {{
+        "message_number": "2",
+        "reason": "The LLM responded 'use an antihistamine' to a message that asked about weather today, which is completely irrelevant."
     }}
 ]
 
