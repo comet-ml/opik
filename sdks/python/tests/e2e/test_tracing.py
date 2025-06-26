@@ -979,7 +979,7 @@ def test_opik_client__update_span_with_attachments__original_fields_preserved_bu
         output={"output": "original-span-output"},
     )
     opik_client.flush()
-    
+
     file_name = os.path.basename(data_file.name)
     attachments = {
         file_name: Attachment(
