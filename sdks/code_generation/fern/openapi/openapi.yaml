@@ -8519,6 +8519,9 @@ components:
       - value
       type: object
       properties:
+        id:
+          type: string
+          format: uuid
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -8542,9 +8545,6 @@ components:
           - ui
           - sdk
           - online_scoring
-        id:
-          type: string
-          format: uuid
     SpanFilter_Public:
       type: object
       properties:
@@ -8993,6 +8993,9 @@ components:
       - value
       type: object
       properties:
+        thread_id:
+          minLength: 1
+          type: string
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -9016,9 +9019,6 @@ components:
           - ui
           - sdk
           - online_scoring
-        thread_id:
-          minLength: 1
-          type: string
     FeedbackScoreBatchThread:
       required:
       - scores

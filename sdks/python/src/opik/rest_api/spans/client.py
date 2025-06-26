@@ -712,7 +712,7 @@ class SpansClient:
         from Opik import OpikApi
         from Opik import FeedbackScoreBatchItem
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.spans.score_batch_of_spans(scores=[FeedbackScoreBatchItem(name='name', value=1.1, source="ui", id='id', )], )
+        client.spans.score_batch_of_spans(scores=[FeedbackScoreBatchItem(id='id', name='name', value=1.1, source="ui", )], )
         """
         _response = self._raw_client.score_batch_of_spans(scores=scores, request_options=request_options)
         return _response.data
@@ -1553,7 +1553,7 @@ class AsyncSpansClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.spans.score_batch_of_spans(scores=[FeedbackScoreBatchItem(name='name', value=1.1, source="ui", id='id', )], )
+            await client.spans.score_batch_of_spans(scores=[FeedbackScoreBatchItem(id='id', name='name', value=1.1, source="ui", )], )
         asyncio.run(main())
         """
         _response = await self._raw_client.score_batch_of_spans(scores=scores, request_options=request_options)

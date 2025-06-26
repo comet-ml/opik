@@ -1878,10 +1878,10 @@ export class Traces {
      * @example
      *     await client.traces.scoreBatchOfThreads({
      *         scores: [{
+     *                 threadId: "thread_id",
      *                 name: "name",
      *                 value: 1.1,
-     *                 source: "ui",
-     *                 threadId: "thread_id"
+     *                 source: "ui"
      *             }]
      *     })
      */
@@ -1963,10 +1963,10 @@ export class Traces {
      * @example
      *     await client.traces.scoreBatchOfTraces({
      *         scores: [{
+     *                 id: "id",
      *                 name: "name",
      *                 value: 1.1,
-     *                 source: "ui",
-     *                 id: "id"
+     *                 source: "ui"
      *             }]
      *     })
      */
