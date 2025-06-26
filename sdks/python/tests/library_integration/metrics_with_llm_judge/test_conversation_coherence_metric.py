@@ -3,11 +3,10 @@ import os
 import certifi
 import pytest
 
-from opik.evaluation.metrics.conversation.session_completeness import (
-    metric as session_completeness,
+from opik.evaluation.metrics.conversation.conversational_coherence import (
+    metric as conversational_coherence,
 )
-
-from ...testlib import assert_helpers
+from testlib import assert_helpers
 
 
 @pytest.fixture
@@ -34,12 +33,10 @@ def real_model_conversation():
     ]
 
 
-def test__session_completeness_quality__with_real_model__happy_path(
-    ensure_openai_configured, real_model_conversation
-):
+def test_conversation_coherence_metric(real_model_conversation):
     """Integration test with a real model."""
-    metric = session_completeness.SessionCompletenessQuality(
-        track=False
+    metric = conversational_coherence.ConversationalCoherenceMetric(
+        track=False, window_size=2
     )  # Uses default model
     result = metric.score(real_model_conversation)
 
@@ -48,14 +45,12 @@ def test__session_completeness_quality__with_real_model__happy_path(
 
 
 @pytest.mark.asyncio
-async def test__session_completeness_quality__with_real_model_async__happy_path(
-    ensure_openai_configured, real_model_conversation
-):
+async def test_conversation_coherence_metric_async(real_model_conversation):
+    """Integration test with a real model asyncio mode."""
     os.environ["SSL_CERT_FILE"] = certifi.where()
 
-    """Integration test with a real model asyncio mode."""
-    metric = session_completeness.SessionCompletenessQuality(
-        track=False
+    metric = conversational_coherence.ConversationalCoherenceMetric(
+        track=False, window_size=2
     )  # Uses default model
     result = await metric.ascore(real_model_conversation)
 
