@@ -11,7 +11,7 @@ class OpikBaseModel(abc.ABC):
     you should inherit from this class.
     """
 
-    def __init__(self, model_name: Optional[str] = None):
+    def __init__(self, model_name: str):
         """
         Initializes the base model with a given model name.
 
