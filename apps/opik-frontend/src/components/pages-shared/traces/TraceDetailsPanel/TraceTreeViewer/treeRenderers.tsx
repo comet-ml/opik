@@ -182,7 +182,8 @@ export const treeRenderers: TreeRenderProps = {
                     content={`Estimated cost ${formatCost(estimatedCost)}`}
                   >
                     <div className={styles.chainSpanDetailsItem}>
-                      <Coins /> {formatCost(estimatedCost, true)}
+                      <Coins />{" "}
+                      {formatCost(estimatedCost, { modifier: "short" })}
                     </div>
                   </TooltipWrapper>
                 )}
