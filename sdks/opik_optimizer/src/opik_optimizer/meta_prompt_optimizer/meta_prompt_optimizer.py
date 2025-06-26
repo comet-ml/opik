@@ -85,9 +85,10 @@ class MetaPromptOptimizer(BaseOptimizer):
         reasoning_model: Optional[str] = None,
         rounds: int = DEFAULT_ROUNDS,
         num_prompts_per_round: int = DEFAULT_PROMPTS_PER_ROUND,
-        num_threads: int = 12,
+        num_threads: Optional[int] = None,
         verbose: int = 1,
         enable_context: bool = True,
+        n_threads: int = 12,
         **model_kwargs: Any,
     ) -> None:
         """
@@ -111,7 +112,10 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.reasoning_model = reasoning_model if reasoning_model is not None else model
         self.rounds = rounds
         self.num_prompts_per_round = num_prompts_per_round
-        self.num_threads = num_threads
+        if num_threads is not None:
+            print("num_threads is deprecated; use n_threads instead")
+            n_threads = num_threads
+        self.num_threads = n_threads
         self.dataset: Optional[Dataset] = None
         self._opik_client = opik_client.get_client_cached()
         self.llm_call_counter = 0
