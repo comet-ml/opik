@@ -173,7 +173,6 @@ Call opik api on http://localhost:5173/api
 | component.backend.service.ports[1].targetPort | int | `3003` |  |
 | component.backend.service.type | string | `"ClusterIP"` |  |
 | component.backend.serviceAccount.create | bool | `true` |  |
-| component.backend.serviceAccount.enabled | bool | `true` |  |
 | component.backend.serviceAccount.name | string | `"opik-backend"` |  |
 | component.backend.waitForClickhouse.clickhouse.host | string | `"clickhouse-opik-clickhouse"` |  |
 | component.backend.waitForClickhouse.clickhouse.port | int | `8123` |  |
@@ -206,7 +205,6 @@ Call opik api on http://localhost:5173/api
 | component.frontend.service.ports[0].targetPort | int | `5173` |  |
 | component.frontend.service.type | string | `"ClusterIP"` |  |
 | component.frontend.serviceAccount.create | bool | `true` |  |
-| component.frontend.serviceAccount.enabled | bool | `true` |  |
 | component.frontend.serviceAccount.name | string | `"opik-frontend"` |  |
 | component.frontend.throttling | object | `{}` |  |
 | component.frontend.upstreamConfig | object | `{}` |  |
@@ -260,7 +258,6 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.service.ports[0].targetPort | int | `8000` |  |
 | component.python-backend.service.type | string | `"ClusterIP"` |  |
 | component.python-backend.serviceAccount.create | bool | `true` |  |
-| component.python-backend.serviceAccount.enabled | bool | `true` |  |
 | component.python-backend.serviceAccount.name | string | `"opik-python-backend"` |  |
 | demoDataJob | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
@@ -307,6 +304,9 @@ Call opik api on http://localhost:5173/api
 | redis.metrics.enabled | bool | `false` |  |
 | redis.ssl | bool | `false` |  |
 | registry | string | `"ghcr.io/comet-ml/opik"` |  |
+| serviceAccount.annotations | object | `{}` |  |
+| serviceAccount.create | bool | `false` |  |
+| serviceAccount.name | string | `""` |  |
 | standalone | bool | `true` |  |
 | zookeeper.enabled | bool | `true` |  |
 | zookeeper.env.ZK_HEAP_SIZE | string | `"512M"` |  |

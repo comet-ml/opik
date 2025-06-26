@@ -15,6 +15,7 @@ import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
+import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -58,6 +59,8 @@ public interface FeedbackScoreService {
     Mono<Void> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores);
 
     Mono<Void> deleteThreadScores(String projectName, String threadId, Set<String> names);
+
+    Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(UUID projectId);
 }
 
 @Slf4j
@@ -230,6 +233,13 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                                 threadId,
                                 projectId)))
                 .then();
+    }
+
+    @Override
+    public Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(@NotNull UUID projectId) {
+        return dao.getProjectsTraceThreadsFeedbackScoreNames(List.of(projectId))
+                .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
+                .map(FeedbackScoreNames::new);
     }
 
     private Mono<UUID> getProject(String projectName) {
