@@ -177,7 +177,7 @@ def get_new_uuid(old_id):
         UUID_MAP[old_id] = new_id
     return new_id
 
-def get_new_uuid(old_id, datetime):
+def get_new_uuid_by_time(old_id, datetime):
     """
     The demo_data has the IDs hardcoded in, to preserve the relationships between the traces and spans.
     However, we need to generate unique ones before logging them based on start_time.
@@ -212,7 +212,7 @@ def create_demo_evaluation_project(base_url: str, workspace_name, comet_api_key)
             day_shift = idx + 1 - days
             trace["start_time"] = replace_datetime_to_today(trace["start_time"], day_shift)
             trace["end_time"] = replace_datetime_to_today(trace["end_time"], day_shift)
-            new_id = get_new_uuid(trace["id"], trace["start_time"])
+            new_id = get_new_uuid_by_time(trace["id"], trace["start_time"])
             trace["id"] = new_id
             set_day_shift(new_id, day_shift)
             client.trace(**trace)
@@ -222,7 +222,7 @@ def create_demo_evaluation_project(base_url: str, workspace_name, comet_api_key)
             new_trace_id = get_new_uuid(span["trace_id"])
             span["start_time"] = replace_datetime_to_today(span["start_time"], get_day_shift(new_trace_id))
             span["end_time"] = replace_datetime_to_today(span["end_time"], get_day_shift(new_trace_id))
-            new_id = get_new_uuid(span["id"], span["start_time"])
+            new_id = get_new_uuid_by_time(span["id"], span["start_time"])
             span["id"] = new_id
             span["trace_id"] = new_trace_id
 
@@ -346,7 +346,7 @@ def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
             day_shift = idx + 1 - days
             trace["start_time"] = replace_datetime_to_today(trace["start_time"], day_shift)
             trace["end_time"] = replace_datetime_to_today(trace["end_time"], day_shift)
-            new_id = get_new_uuid(trace["id"], trace["start_time"])
+            new_id = get_new_uuid_by_time(trace["id"], trace["start_time"])
             trace["id"] = new_id
             set_day_shift(new_id, day_shift)
             client.trace(**trace)
@@ -356,7 +356,7 @@ def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
             new_trace_id = get_new_uuid(span["trace_id"])
             span["start_time"] = replace_datetime_to_today(span["start_time"], get_day_shift(new_trace_id))
             span["end_time"] = replace_datetime_to_today(span["end_time"], get_day_shift(new_trace_id))
-            new_id = get_new_uuid(span["id"], span["start_time"])
+            new_id = get_new_uuid_by_time(span["id"], span["start_time"])
             span["id"] = new_id
             span["trace_id"] = new_trace_id
 
