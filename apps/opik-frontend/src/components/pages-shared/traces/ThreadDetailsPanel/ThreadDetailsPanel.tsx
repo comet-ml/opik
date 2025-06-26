@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import {
   Calendar,
   ChevronDown,
@@ -39,11 +39,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/use-toast";
-import ThreadDetailsTags from "./ThreadDetailsTags";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -55,12 +53,14 @@ import { StringParam, useQueryParam } from "use-query-params";
 import ThreadAnnotations from "./ThreadAnnotations";
 import FeedbackScoreTab from "../TraceDetailsPanel/TraceDataViewer/FeedbackScoreTab";
 import SetInactiveConfirmDialog from "./SetInactiveConfirmDialog";
-import { WORKSPACE_PREFERENCE_TYPE } from "@/components/pages/ConfigurationPage/WorkspacePreferencesTab/types";
 import ThreadStatusTag from "@/components/shared/ThreadStatusTag/ThreadStatusTag";
 import { ThreadStatus } from "@/types/thread";
+import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
+import ThreadFeedbackScoresInfo from "./ThreadFeedbackScoresInfo";
 
 type ThreadDetailsPanelProps = {
   projectId: string;
+  projectName: string;
   threadId: string;
   traceId?: string;
   setTraceId: OnChangeFn<string | null | undefined>;
@@ -73,6 +73,7 @@ type ThreadDetailsPanelProps = {
 
 const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   projectId,
+  projectName,
   threadId,
   traceId,
   setTraceId,
@@ -98,6 +99,9 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   });
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastThreadSection");
+
+  const { mutate: threadFeedbackScoreDelete } =
+    useThreadFeedbackScoreDeleteMutation();
   const [activeTab = "messages", setActiveTab] = useQueryParam(
     "threadTab",
     StringParam,
@@ -117,10 +121,11 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     },
   );
   const isInactiveThread = thread?.status === ThreadStatus.INACTIVE;
+  const threadFeedbackScores = thread?.feedback_scores ?? [];
 
   // TODO update once BE will send this data
-  const annotationCount = 0;
-  const commentsCount = 0;
+  const annotationCount = threadFeedbackScores.length;
+  // const commentsCount = thread?.comments?.length ?? 0;
 
   const { data: tracesData, isPending: isTracesPending } = useTracesList(
     {
@@ -167,9 +172,13 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     });
   }, [onClose, mutate, threadId, projectId]);
 
-  // TODO implement for thread
   const handleDeleteFeedbackScore = (name: string) => {
-    console.log("delete", name);
+    threadFeedbackScoreDelete({
+      names: [name],
+      threadId,
+      projectName,
+      projectId,
+    });
   };
 
   const bodyStyle = {
@@ -236,7 +245,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                   <MessageCircleOff className="mr-2 size-4" />
                   Set as inactive
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
+                {/* <DropdownMenuSeparator />
                 <Button variant="link" className="w-full" asChild>
                   <Link
                     to="/$workspaceName/configuration"
@@ -250,7 +259,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                   >
                     Manage session timeout
                   </Link>
-                </Button>
+                </Button> */}
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -309,7 +318,11 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             <TabsTrigger variant="underline" value="messages">
               Messages
             </TabsTrigger>
-            <TabsTrigger variant="underline" value="feedback_scores">
+            <TabsTrigger
+              variant="underline"
+              value="feedback_scores"
+              disabled={!isInactiveThread}
+            >
               Feedback scores
             </TabsTrigger>
           </TabsList>
@@ -325,10 +338,17 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         </TabsContent>
         <TabsContent value="feedback_scores" className="px-6">
           <FeedbackScoreTab
-            // TODO implement for thread
             onDeleteFeedbackScore={handleDeleteFeedbackScore}
             entityName="thread"
-            feedbackScores={[]}
+            feedbackScores={threadFeedbackScores}
+            onAddHumanReview={() =>
+              setActiveSection(DetailsActionSection.Annotations)
+            }
+            entityType="thread"
+          />
+
+          <ThreadFeedbackScoresInfo
+            feedbackScores={threadFeedbackScores}
             onAddHumanReview={() =>
               setActiveSection(DetailsActionSection.Annotations)
             }
@@ -369,8 +389,11 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                 {activeSection === DetailsActionSection.Annotations && (
                   <ThreadAnnotations
                     threadId={threadId}
+                    projectId={projectId}
+                    projectName={projectName}
                     activeSection={activeSection}
                     setActiveSection={setActiveSection}
+                    feedbackScores={threadFeedbackScores}
                   />
                 )}
                 {activeSection === DetailsActionSection.Comments && (
@@ -397,6 +420,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           count={commentsCount}
           type={DetailsActionSection.Comments}
         /> */}
+
         <DetailsActionSectionToggle
           activeSection={activeSection}
           setActiveSection={setActiveSection}
@@ -404,6 +428,11 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           count={annotationCount}
           type={DetailsActionSection.Annotations}
           disabled={!isInactiveThread}
+          tooltipContent={
+            !isInactiveThread
+              ? "Feedback scores are disabled during an ongoing session to avoid conflicts while the thread is still active. "
+              : ""
+          }
         />
 
         <DropdownMenu>
@@ -457,6 +486,8 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         <SetInactiveConfirmDialog
           open={setInactiveOpen}
           setOpen={setSetInactiveOpen}
+          threadId={threadId}
+          projectId={projectId}
         />
       </div>
     );

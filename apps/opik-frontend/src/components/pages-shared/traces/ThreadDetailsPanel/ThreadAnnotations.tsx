@@ -8,27 +8,49 @@ import {
 } from "@/components/pages-shared/traces/DetailsActionSection";
 import FeedbackScoresEditor from "../FeedbackScoresEditor/FeedbackScoresEditor";
 import { UpdateFeedbackScoreData } from "../TraceDetailsPanel/TraceAnnotateViewer/types";
+import useThreadFeedbackScoreSetMutation from "@/api/traces/useThreadFeedbackScoreSetMutation";
+import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
 
 type ThreadAnnotationsProps = {
   threadId: string;
+  projectId: string;
+  projectName: string;
   activeSection: DetailsActionSectionValue | null;
   setActiveSection: (v: DetailsActionSectionValue | null) => void;
+  feedbackScores: TraceFeedbackScore[];
 };
 
 const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
   threadId,
+  projectId,
+  projectName,
   activeSection,
   setActiveSection,
+  feedbackScores,
 }) => {
-  const feedbackScores: TraceFeedbackScore[] = [];
   const hasFeedbackScores = Boolean(feedbackScores.length);
 
+  const { mutate: setThreadFeedbackScore } =
+    useThreadFeedbackScoreSetMutation();
+  const { mutate: threadFeedbackScoreDelete } =
+    useThreadFeedbackScoreDeleteMutation();
+
   const onUpdateFeedbackScore = (data: UpdateFeedbackScoreData) => {
-    console.log("onUpdateFeedbackScore", data);
+    setThreadFeedbackScore({
+      ...data,
+      threadId,
+      projectId,
+      projectName,
+    });
   };
 
   const onDeleteFeedbackScore = (name: string) => {
-    console.log("onDeleteFeedbackScore", name);
+    threadFeedbackScoreDelete({
+      names: [name],
+      threadId,
+      projectName,
+      projectId,
+    });
   };
 
   return (
@@ -59,6 +81,7 @@ const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
         onUpdateFeedbackScore={onUpdateFeedbackScore}
         onDeleteFeedbackScore={onDeleteFeedbackScore}
         className="mt-4"
+        entityCopy="threads"
       />
     </DetailsActionSectionLayout>
   );

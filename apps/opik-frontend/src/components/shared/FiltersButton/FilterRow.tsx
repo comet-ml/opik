@@ -73,8 +73,8 @@ export const FilterRow = <TColumnData,>({
         return (
           <EqualsRow
             options={[
-              { value: ThreadStatus.CLOSE, label: "Inactive" },
-              { value: ThreadStatus.OPEN, label: "Active" },
+              { value: ThreadStatus.INACTIVE, label: "Inactive" },
+              { value: ThreadStatus.ACTIVE, label: "Active" },
             ]}
             placeholder="Select value"
             filter={filter}

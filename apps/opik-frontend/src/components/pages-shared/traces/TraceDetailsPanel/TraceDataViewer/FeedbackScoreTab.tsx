@@ -12,12 +12,9 @@ import { FEEDBACK_SCORE_SOURCE_MAP } from "@/lib/feedback-scores";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import useLocalStorageState from "use-local-storage-state";
 import FeedbackScoreTableNoData from "./FeedbackScoreTableNoData";
-import { ExternalLink, InfoIcon } from "lucide-react";
-import { buildDocsUrl } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 
-const SELECTED_COLUMNS_KEY = "trace-feedback-scores-tab-selected-columns";
-const COLUMNS_ORDER_KEY = "trace-feedback-scores-tab-columns-order";
+const SELECTED_COLUMNS_KEY = "feedback-scores-tab-selected-columns";
+const COLUMNS_ORDER_KEY = "feedback-scores-tab-columns-order";
 
 export const DEFAULT_COLUMNS: ColumnData<TraceFeedbackScore>[] = [
   {
@@ -63,6 +60,7 @@ type FeedbackScoreTabProps = {
   onAddHumanReview: () => void;
   entityName: string;
   feedbackScores?: TraceFeedbackScore[];
+  entityType: "trace" | "thread";
 };
 
 const FeedbackScoreTab: React.FunctionComponent<FeedbackScoreTabProps> = ({
@@ -70,16 +68,17 @@ const FeedbackScoreTab: React.FunctionComponent<FeedbackScoreTabProps> = ({
   onAddHumanReview,
   entityName,
   feedbackScores = [],
+  entityType,
 }) => {
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    `${entityType}-${SELECTED_COLUMNS_KEY}`,
     {
       defaultValue: DEFAULT_SELECTED_COLUMNS,
     },
   );
 
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
-    COLUMNS_ORDER_KEY,
+    `${entityType}-${COLUMNS_ORDER_KEY}`,
     {
       defaultValue: [],
     },
@@ -113,8 +112,6 @@ const FeedbackScoreTab: React.FunctionComponent<FeedbackScoreTabProps> = ({
     [feedbackScores],
   );
 
-  const scoreDocsLink = buildDocsUrl("/tracing/annotate_traces");
-
   return (
     <>
       <div className="mb-4 flex justify-end">
@@ -131,41 +128,12 @@ const FeedbackScoreTab: React.FunctionComponent<FeedbackScoreTabProps> = ({
         columns={columns}
         data={sortedFeedbackScores}
         noData={
-          <FeedbackScoreTableNoData onAddHumanReview={onAddHumanReview} />
+          <FeedbackScoreTableNoData
+            entityType={entityType}
+            onAddHumanReview={onAddHumanReview}
+          />
         }
       />
-
-      {sortedFeedbackScores.length > 0 && (
-        <div className="comet-body-xs mt-2 flex gap-1.5 py-2 text-light-slate">
-          <div className="pt-[3px]">
-            <InfoIcon className="size-3" />
-          </div>
-          <div className="leading-relaxed">
-            Use the SDK or Online evaluation rules to
-            <Button
-              size="sm"
-              variant="link"
-              className="comet-body-xs inline-flex h-auto gap-0.5 px-1"
-              asChild
-            >
-              <a href={scoreDocsLink} target="_blank" rel="noopener noreferrer">
-                automatically score
-                <ExternalLink className="size-3" />
-              </a>
-            </Button>
-            your threads, or manually annotate your thread with
-            <Button
-              size="sm"
-              variant="link"
-              className="comet-body-xs inline-flex h-auto gap-0.5 px-1"
-              onClick={onAddHumanReview}
-            >
-              human review
-            </Button>
-            .
-          </div>
-        </div>
-      )}
     </>
   );
 };

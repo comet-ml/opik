@@ -804,6 +804,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       />
       <ThreadDetailsPanel
         projectId={projectId}
+        projectName={projectName}
         traceId={traceId!}
         setTraceId={setTraceId}
         threadId={threadId!}

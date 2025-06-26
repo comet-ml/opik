@@ -67,6 +67,7 @@ const TraceAnnotateViewer: React.FunctionComponent<
         onUpdateFeedbackScore={onUpdateFeedbackScore}
         onDeleteFeedbackScore={onDeleteFeedbackScore}
         className="mt-4"
+        entityCopy="traces"
       />
     </DetailsActionSectionLayout>
   );

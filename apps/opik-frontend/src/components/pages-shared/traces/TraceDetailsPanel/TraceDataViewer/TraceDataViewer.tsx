@@ -204,6 +204,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               onAddHumanReview={() =>
                 setActiveSection(DetailsActionSection.Annotations)
               }
+              entityType="trace"
             />
           </TabsContent>
           <TabsContent value="metadata">

@@ -18,6 +18,7 @@ type FeedbackScoresEditorProps = {
   className?: string;
   onUpdateFeedbackScore: (update: UpdateFeedbackScoreData) => void;
   onDeleteFeedbackScore: (name: string) => void;
+  entityCopy: string;
 };
 
 type FeebackScoreRow = {
@@ -31,6 +32,7 @@ const FeedbackScoresEditor = ({
   onUpdateFeedbackScore,
   onDeleteFeedbackScore,
   className,
+  entityCopy,
 }: FeedbackScoresEditorProps) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { data: feedbackDefinitionsData } = useFeedbackDefinitionsList({
@@ -115,7 +117,7 @@ const FeedbackScoresEditor = ({
                 <ExternalLink className="size-3" />
               </Link>
             </Button>
-            to annotate your traces.
+            to annotate your {entityCopy}.
           </div>
         </div>
       </div>

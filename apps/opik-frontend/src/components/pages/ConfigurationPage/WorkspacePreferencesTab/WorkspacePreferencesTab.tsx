@@ -13,6 +13,7 @@ import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import WorkspacePreferencesActionsCell from "./WorkspacePreferencesActionsCell";
 import EditThreadTimeoutDialog from "./EditThreadTimeoutDialog";
 import { useQueryParam } from "use-query-params";
+import { useCallback } from "react";
 
 export const DEFAULT_COLUMNS: ColumnData<WorkspacePreference>[] = [
   {
@@ -59,10 +60,12 @@ const WorkspacePreferencesTab = () => {
     };
   };
 
-  const onEdit = (row: WorkspacePreference) => {
-    console.log("onEdit", row);
-    setEditPreferenceOpen(row.type);
-  };
+  const onEdit = useCallback(
+    (row: WorkspacePreference) => {
+      setEditPreferenceOpen(row.type);
+    },
+    [setEditPreferenceOpen],
+  );
 
   const columns = useMemo(() => {
     return [
@@ -77,11 +80,7 @@ const WorkspacePreferencesTab = () => {
         },
       }),
     ];
-  }, []);
-
-  //   if (isPending) {
-  //     return <Loader />;
-  //   }
+  }, [onEdit]);
 
   return (
     <>

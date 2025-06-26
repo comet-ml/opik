@@ -3,12 +3,11 @@ import AIProvidersTab from "@/components/pages/ConfigurationPage/AIProvidersTab/
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StringParam, useQueryParam } from "use-query-params";
 import FeedbackDefinitionsTab from "@/components/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsTab";
-import WorkspacePreferencesTab from "./WorkspacePreferencesTab/WorkspacePreferencesTab";
 
 enum CONFIGURATION_TABS {
   FEEDBACK_DEFINITIONS = "feedback-definitions",
   AI_PROVIDER = "ai-provider",
-  WORKSPACE_PREFERENCES = "workspace-preferences",
+  // WORKSPACE_PREFERENCES = "workspace-preferences",
 }
 
 const DEFAULT_TAB = CONFIGURATION_TABS.FEEDBACK_DEFINITIONS;
@@ -45,12 +44,12 @@ const ConfigurationPage = () => {
             >
               AI Providers
             </TabsTrigger>
-            <TabsTrigger
+            {/* <TabsTrigger
               variant="underline"
               value={CONFIGURATION_TABS.WORKSPACE_PREFERENCES}
             >
               Workspace preferences
-            </TabsTrigger>
+            </TabsTrigger> */}
           </TabsList>
 
           <TabsContent value={CONFIGURATION_TABS.FEEDBACK_DEFINITIONS}>
@@ -61,9 +60,9 @@ const ConfigurationPage = () => {
             <AIProvidersTab />
           </TabsContent>
 
-          <TabsContent value={CONFIGURATION_TABS.WORKSPACE_PREFERENCES}>
+          {/* <TabsContent value={CONFIGURATION_TABS.WORKSPACE_PREFERENCES}>
             <WorkspacePreferencesTab />
-          </TabsContent>
+          </TabsContent> */}
         </Tabs>
       </div>
     </div>

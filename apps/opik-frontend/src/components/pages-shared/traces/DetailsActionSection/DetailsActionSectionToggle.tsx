@@ -36,6 +36,7 @@ type DetailsActionSectionToggleProps = {
   count?: number | string;
   type: DetailsActionSectionValue;
   disabled?: boolean;
+  tooltipContent?: string;
 };
 const DetailsActionSectionToggle: React.FC<DetailsActionSectionToggleProps> = ({
   activeSection,
@@ -44,27 +45,30 @@ const DetailsActionSectionToggle: React.FC<DetailsActionSectionToggleProps> = ({
   count,
   type,
   disabled,
+  tooltipContent,
 }) => {
   const showFullActionLabel = isLargeLayout(layoutSize);
 
   return (
-    <TooltipWrapper content={configMap[type].tooltip}>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setActiveSection(type)}
-        className={cn(
-          "gap-1",
-          activeSection === type && "bg-primary-100 hover:bg-primary-100",
-        )}
-        disabled={disabled}
-      >
-        {configMap[type].icon}
-        {showFullActionLabel && (
-          <div className="pl-1">{configMap[type].tooltip}</div>
-        )}
-        {Boolean(count) && <div>{formatCounter(layoutSize, count)}</div>}
-      </Button>
+    <TooltipWrapper content={tooltipContent || configMap[type].tooltip}>
+      <div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setActiveSection(type)}
+          className={cn(
+            "gap-1",
+            activeSection === type && "bg-primary-100 hover:bg-primary-100",
+          )}
+          disabled={disabled}
+        >
+          {configMap[type].icon}
+          {showFullActionLabel && (
+            <div className="pl-1">{configMap[type].tooltip}</div>
+          )}
+          {Boolean(count) && <div>{formatCounter(layoutSize, count)}</div>}
+        </Button>
+      </div>
     </TooltipWrapper>
   );
 };

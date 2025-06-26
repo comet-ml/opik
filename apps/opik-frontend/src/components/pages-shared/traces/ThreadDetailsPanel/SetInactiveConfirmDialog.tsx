@@ -9,20 +9,34 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Link } from "@tanstack/react-router";
-import { ExternalLink } from "lucide-react";
-import useAppStore from "@/store/AppStore";
-import { WORKSPACE_PREFERENCE_TYPE } from "@/components/pages/ConfigurationPage/WorkspacePreferencesTab/types";
+import useThreadCloseStatusMutation from "@/api/traces/useThreadCloseStatusMutation";
 
 type SetInactiveConfirmDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
+  threadId: string;
+  projectId: string;
 };
 
 const SetInactiveConfirmDialog: React.FunctionComponent<
   SetInactiveConfirmDialogProps
-> = ({ open, setOpen }) => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+> = ({ open, setOpen, threadId, projectId }) => {
+  const { mutate: setThreadInactive, isPending } =
+    useThreadCloseStatusMutation();
+
+  const onConfirm = () => {
+    setThreadInactive(
+      {
+        threadId,
+        projectId,
+      },
+      {
+        onSettled: () => {
+          setOpen(false);
+        },
+      },
+    );
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -30,7 +44,7 @@ const SetInactiveConfirmDialog: React.FunctionComponent<
         <DialogHeader>
           <DialogTitle>Set as inactive</DialogTitle>
           <DialogDescription>
-            Setting this thread as inactive will let you add scores, tags, and
+            {/* Setting this thread as inactive will let you add scores, tags, and
             comments. Online evaluation rules will also run. <br /> <br />
             If you send a new message, the thread will become active again, and
             all feedback will be cleared. You can also
@@ -54,7 +68,11 @@ const SetInactiveConfirmDialog: React.FunctionComponent<
                 <ExternalLink className="size-3" />
               </Link>
             </Button>
-            to automatically expire the session later.
+            to automatically expire the session later. */}
+            Marking this thread as inactive will allow you to add feedback
+            scores. <br />
+            If a new message is sent, the thread will automatically become
+            active again, and any feedback will be cleared.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -63,15 +81,14 @@ const SetInactiveConfirmDialog: React.FunctionComponent<
               Cancel
             </Button>
           </DialogClose>
-          <DialogClose asChild>
-            <Button
-              type="submit"
-              variant="default"
-              onClick={() => setOpen(false)}
-            >
-              Set as inactive
-            </Button>
-          </DialogClose>
+          <Button
+            type="submit"
+            variant="default"
+            onClick={onConfirm}
+            disabled={isPending}
+          >
+            Set as inactive
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
