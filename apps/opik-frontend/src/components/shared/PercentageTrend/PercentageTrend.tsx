@@ -4,6 +4,7 @@ import isUndefined from "lodash/isUndefined";
 
 import { formatNumericData } from "@/lib/utils";
 import { Tag, TagProps } from "@/components/ui/tag";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const getConfig = (percentage: number, trend: PercentageTrendType) => {
   if (percentage === 0) {
@@ -32,18 +33,19 @@ type PercentageTrendProps = {
   percentage?: number;
   precision?: number;
   trend?: PercentageTrendType;
+  tooltip?: string;
 };
 
 const PercentageTrend: React.FC<PercentageTrendProps> = ({
   percentage,
   precision = 0,
   trend = "direct",
+  tooltip,
 }) => {
   if (isUndefined(percentage)) return null;
 
   const { Icon, variant } = getConfig(percentage, trend);
-
-  return (
+  const tag = (
     <Tag
       size="md"
       variant={variant as TagProps["variant"]}
@@ -57,6 +59,12 @@ const PercentageTrend: React.FC<PercentageTrendProps> = ({
       </div>
     </Tag>
   );
+
+  if (tooltip) {
+    return <TooltipWrapper content={tooltip}>{tag}</TooltipWrapper>;
+  }
+
+  return tag;
 };
 
 export default PercentageTrend;

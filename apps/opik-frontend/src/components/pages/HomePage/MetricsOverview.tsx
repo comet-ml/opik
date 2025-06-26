@@ -223,6 +223,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
                 <PercentageTrend
                   percentage={percentageMap[metric.name]?.percentage}
                   trend={trend}
+                  tooltip={`Compares the average value of ${metric.name} between the current and previous periods.`}
                 />
               </div>
             </li>
