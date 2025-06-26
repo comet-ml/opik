@@ -6,7 +6,7 @@ import pytest
 from opik.evaluation.metrics.conversation.conversational_coherence import (
     metric as conversational_coherence,
 )
-from testlib import assert_helpers
+from ...testlib import assert_helpers
 
 
 @pytest.fixture
