@@ -133,6 +133,7 @@ class Span:
         update_span(
             id=self.id,
             trace_id=self.trace_id,
+            parent_span_id=self.parent_span_id,
             project_name=self._project_name,
             url_override=self._url_override,
             message_streamer=self._streamer,
@@ -342,6 +343,7 @@ def create_span(
 def update_span(
     id: str,
     trace_id: str,
+    parent_span_id: Optional[str],
     project_name: str,
     url_override: str,
     message_streamer: streamer.Streamer,
@@ -369,7 +371,7 @@ def update_span(
     update_span_message = messages.UpdateSpanMessage(
         span_id=id,
         trace_id=trace_id,
-        parent_span_id=None,
+        parent_span_id=parent_span_id,
         project_name=project_name,
         end_time=end_time,
         metadata=metadata,

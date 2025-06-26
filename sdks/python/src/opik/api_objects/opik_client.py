@@ -467,6 +467,7 @@ class Opik:
         self,
         id: str,
         trace_id: str,
+        parent_span_id: Optional[str],
         project_name: str,
         end_time: Optional[datetime.datetime] = None,
         metadata: Optional[Dict[str, Any]] = None,
@@ -511,6 +512,7 @@ class Opik:
         span.span_client.update_span(
             id=id,
             trace_id=trace_id,
+            parent_span_id=parent_span_id,
             project_name=project_name,
             url_override=self._config.url_override,
             message_streamer=self._streamer,
