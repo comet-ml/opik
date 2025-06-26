@@ -1,2 +1,4 @@
 openai
 openai-agents
+langchain
+langchain_openai
