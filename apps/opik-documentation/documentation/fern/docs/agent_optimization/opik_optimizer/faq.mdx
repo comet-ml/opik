@@ -37,7 +37,7 @@ the tool.
 </AccordionGroup>
 
 <AccordionGroup>
-  <Accordion title="Q: How does `project_name` in the optimizer constructor work?">
+  <Accordion title="Q: How does `project_name` in the ChatPrompt constructor work?">
     A: The `project_name` parameter allows you to group and organize your optimization runs within the Opik platform.
     When you view your experiments in the Opik UI, runs with the same `project_name` will be logically associated,
     making it easier to track progress and compare different optimization attempts for the same underlying task.
@@ -69,8 +69,8 @@ the tool.
 
 <AccordionGroup>
   <Accordion title="Q: Can I run optimizers in parallel or control threading?">
-    A: Yes, most optimizers have a `num_threads` parameter in their constructor (e.g., `MetaPromptOptimizer(...,
-    num_threads=8)`). This parameter controls the number of worker threads used for parallel evaluation of candidate
+    A: Yes, all optimizers have an `n_threads` parameter in their constructor (e.g., `MetaPromptOptimizer(...,
+    n_threads=8)`). This parameter controls the number of worker threads used for parallel evaluation of candidate
     prompts or dataset items, which can significantly speed up the optimization process, especially when evaluations
     involve LLM calls. The optimal number of threads depends on your CPU, the LLM API's rate limits, and the nature of
     the task.
@@ -313,7 +313,7 @@ the tool.
 ## Example Projects & Cookbooks
 
 <Info>
-  Looking for hands-on, runnable examples? Explore our [Example Projects & Cookbooks](/agent_optimization/cookbook) for
+  Looking for hands-on, runnable examples? Explore our [Example Projects & Cookbooks](/agent_optimization/opik_optimizer/quickstart) for
   step-by-step Colab notebooks on prompt and agent optimization.
 </Info>
 

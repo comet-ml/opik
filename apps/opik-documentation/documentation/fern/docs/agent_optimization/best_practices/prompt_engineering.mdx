@@ -65,7 +65,6 @@ LLMs perform better when given relevant context and examples of the desired inpu
 
   optimizer = FewShotBayesianOptimizer(
       model="openai/gpt-4", # Or your preferred chat model
-      project_name="MyFewShotOptimization",
       min_examples=1,
       max_examples=5,
       n_iterations=20 # Number of Bayesian optimization trials
@@ -134,7 +133,6 @@ Prompt engineering is rarely a one-shot process. Continuous iteration is key. A 
   prompter = MetaPromptOptimizer( # Note: often aliased as 'prompter' in examples
       model="openai/gpt-4", # Evaluation model
       reasoning_model="openai/gpt-4-turbo", # Model for generating prompt suggestions
-      project_name="MyMetaPromptOptimization",
       max_rounds=5,
       num_prompts_per_round=3
   )
@@ -152,7 +150,6 @@ Evolutionary or genetic algorithms can be applied to "evolve" prompts over gener
 
   optimizer = EvolutionaryOptimizer(
       model="openai/gpt-4o-mini",
-      project_name="MyEvolutionaryOpt",
       population_size=20,
       num_generations=10
   )
