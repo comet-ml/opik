@@ -359,68 +359,114 @@ clickhouse:
       host: opik-zookeeper
   backup: 
     enabled: false
-    env:
-      LOG_LEVEL: info
-      ALLOW_EMPTY_BACKUPS: true
-      API_LISTEN: 0.0.0.0:7171
-      API_CREATE_INTEGRATION_TABLES: true
-      BACKUPS_TO_KEEP_REMOTE: 3
-      REMOTE_STORAGE: s3
-      S3_ACL: private
-      # S3_ENDPOINT: http://opik-minio:9000
-      # S3_REGION: us-east-1
-      S3_BUCKET: clickhouse-backup
-      S3_PATH: backup/shard-{shard}
-      S3_ACCESS_KEY: ''
-      S3_SECRET_KEY: ''
-      S3_FORCE_PATH_STYLE: true
-      # S3_DISABLE_SSL: true
-      # S3_DEBUG: true
-    port: 7171
-    image: altinity/clickhouse-backup:2.6.23
-    imagePullPolicy: Always
-    successfulJobsHistoryLimit: 1
     serviceAccount:
       annotations: {}
       create: false
       name: ""
-    # bucketURL: "s3://opik-clickhouse-backup"
-    # secretName: ""
-    # schedule: ""
-    # baseBackup: ""
-    schedule: "0 0 * * *" # daily at midnight
-    command:
-      - /bin/bash
-      - '-cx'
-      - |
-        if [ $(date +%j) -eq 1 ]; then
-          echo "Running backup for the first day of the year"
-          export BACKUP_PREFIX=yearly/
-        elif [ $(date +%d) -eq 1 ]; then
-          echo "Skipping backup, not the first day of the year"
-          export BACKUP_PREFIX=monthly/
-        else
-          echo "Running backup for the current day"
-          export BACKUP_PREFIX=""
-        fi
-        export BACKUP_NAME=${BACKUP_PREFIX}backup$(date +'%Y%m%d%H%M')
-        BACKUP_QUERY_FILE=$(mktemp --suffix .sql /tmp/clickhouse-backup-query.XXXXXX)
-        cat << BACKUP_SQL | tee "${BACKUP_QUERY_FILE}"
-          BACKUP ALL EXCEPT DATABASE system 
-            TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${BACKUP_NAME}/', '${ACCESS_KEY}', '${SECRET_KEY}');
-        BACKUP_SQL
-        clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file="${BACKUP_QUERY_FILE}"
-            
+    monitoring:
+      enabled: false
+      additionalLabels: {}
+      annotations: {}
+      service:
+        type: ClusterIP
+        ports:
+          - name: ch-backup-rest
+            port: 80
+            targetPort: 7171
+      serviceMonitor:
+        enabled: false
+        additionalLabels: {}
+        annotations: {}
+        namespace: ""
+        portName: ""
+        interval: "60s"
+        scrapeTimeout: "30s"
+        relabelings: []
+        metricRelabelings: []
+        podTargetLabels: []
+        honorLabels: false
+    backupServer:
+      enabled: false
+      env:
+        LOG_LEVEL: info
+        ALLOW_EMPTY_BACKUPS: true
+        API_LISTEN: 0.0.0.0:7171
+        API_CREATE_INTEGRATION_TABLES: true
+        BACKUPS_TO_KEEP_REMOTE: 3
+        REMOTE_STORAGE: s3
+        S3_ACL: private
+        # S3_ENDPOINT: http://opik-minio:9000
+        # S3_REGION: us-east-1
+        S3_BUCKET: clickhouse-backup
+        S3_PATH: backup/shard-{shard}
+        S3_ACCESS_KEY: ''
+        S3_SECRET_KEY: ''
+        S3_FORCE_PATH_STYLE: true
+        # S3_DISABLE_SSL: true
+        # S3_DEBUG: true
+      port: 7171
+      image: altinity/clickhouse-backup:2.6.23
+    backupCronJob:
+      enabled: false
+      successfulJobsHistoryLimit: 1
+      # bucketURL: "s3://opik-clickhouse-backup"
+      # secretName: ""
+      # schedule: ""
+      # baseBackup: ""
+      schedule: "0 0 * * *" # daily at midnight
+      command:
+        - /bin/bash
+        - '-cx'
+        - |
+          if [ $(date +%j) -eq 1 ]; then
+            echo "Running backup for the first day of the year"
+            export BACKUP_PREFIX=yearly/
+          elif [ $(date +%d) -eq 1 ]; then
+            echo "Skipping backup, not the first day of the year"
+            export BACKUP_PREFIX=monthly/
+          else
+            echo "Running backup for the current day"
+            export BACKUP_PREFIX=""
+          fi
+          export BACKUP_NAME=${BACKUP_PREFIX}backup$(date +'%Y%m%d%H%M')
+          BACKUP_QUERY_FILE=$(mktemp --suffix .sql /tmp/clickhouse-backup-query.XXXXXX)
+          cat << BACKUP_SQL | tee "${BACKUP_QUERY_FILE}"
+            BACKUP ALL EXCEPT DATABASE system 
+              TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${BACKUP_NAME}/', '${AWS_ACCESS_KEY_ID}', '${AWS_SECRET_ACCESS_KEY}');
+          BACKUP_SQL
+          clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file="${BACKUP_QUERY_FILE}"
   monitoring:
     enabled: false
     username: opikmon # readonly user
     password: opikmon
+    useSecret:
+      enabled: false
     # resources:
     #   requests:
     #     cpu: 300m
     #     memory: 1Gi
     #   limits:
     #     memory: 1Gi
+    additionalLabels: {}
+    annotations: {}
+    service:
+      type: ClusterIP
+      ports:
+        - name: prometheus-metrics
+          port: 80
+          targetPort: 9363
+    serviceMonitor:
+      enabled: false
+      additionalLabels: {}
+      annotations: {}
+      namespace: ""
+      portName: ""
+      interval: "60s"
+      scrapeTimeout: "30s"
+      relabelings: []
+      metricRelabelings: []
+      podTargetLabels: []
+      honorLabels: false
 
 zookeeper:
     enabled: true

@@ -1,0 +1,68 @@
+
+{{- if and .Values.clickhouse.enabled .Values.clickhouse.monitoring.enabled  }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "opik.name" $ }}-ch-monitoring
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "altinity-clickhouse-operator.labels" . | nindent 4 }}
+    {{- include "opik.clickhouse.labels" . | nindent 4 }}
+    {{- with .Values.clickhouse.monitoring.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    service-name: {{ include "opik.name" $ }}-ch-monitoring
+  {{- with .annotations }}
+  annotations:
+    {{- with .Values.clickhouse.monitoring.annotations  }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  type: {{ .Values.clickhouse.monitoring.service.type }}
+  selector:
+    {{- include "opik.clickhouse.selectorLabels" . | nindent 4 }}
+  ports:
+  {{- range .Values.clickhouse.monitoring.service.ports }}
+    - port: {{ .port }}
+      targetPort: {{ .targetPort | default "9363" }}
+      protocol: {{ .protocol | default "TCP"}}
+      name: {{ .name | default "prometheus-metrics" }}
+    {{- end }}
+{{- end }}
+
+####################################
+
+{{- if and .Values.clickhouse.enabled .Values.clickhouse.backup.enabled .Values.clickhouse.backup.monitoring.enabled  }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "opik.name" $ }}-ch-backup-monitoring
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "altinity-clickhouse-operator.labels" . | nindent 4 }}
+    {{- include "opik.clickhouse.labels" . | nindent 4 }}
+    {{- with .Values.clickhouse.backup.monitoring.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    service-name: {{ include "opik.name" $ }}-ch-backup-monitoring
+  {{- with .annotations }}
+  annotations:
+    {{- with .Values.clickhouse.backup.monitoring.annotations  }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  type: {{ .Values.clickhouse.backup.monitoring.service.type }}
+  selector:
+    {{- include "opik.clickhouse.selectorLabels" . | nindent 4 }}
+  ports:
+  {{- range .Values.clickhouse.backup.monitoring.service.ports }}
+    - port: {{ .port }}
+      targetPort: {{ .targetPort | default "7171" }}
+      protocol: {{ .protocol | default "TCP"}}
+      name: {{ .name | default "ch-backup-rest" }}
+    {{- end }}
+{{- end }}

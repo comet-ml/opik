@@ -1,0 +1,95 @@
+{{- if and .Values.clickhouse.enabled .Values.clickhouse.monitoring.enabled .Values.clickhouse.monitoring.serviceMonitor.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ template "opik.name" $ }}-ch-monitoring
+  namespace: {{ default .Release.Namespace  .Values.clickhouse.backup.monitoring.serviceMonitor.namespace | quote }}
+  labels:
+    {{- include "opik.clickhouse.labels" $  | nindent 4 }}
+    {{- with .Values.clickhouse.backup.monitoring.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with  .Values.clickhouse.backup.monitoring.serviceMonitor.annotations }}
+  annotations:
+    {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.clickhouse.backup.monitoring.serviceMonitor }}
+  endpoints:
+    - port: {{ .portName | default "prometheus-metrics" }}
+      interval: {{ .interval | default "60s" }}
+      scrapeTimeout: {{ .scrapeTimeout | default "30s" }}
+      {{- if .honorLabels }}
+      honorLabels: {{ .honorLabels }}
+      {{- end }}
+      {{- if .relabelings }}
+      relabelings:
+      {{- toYaml .relabelings | nindent 6 }}
+      {{- end }}
+      {{- if .metricRelabelings }}
+      metricRelabelings:
+      {{- toYaml .metricRelabelings | nindent 6 }}
+      {{- end }}
+      path: {{ .path | default "/metrics" }}
+  {{- end }}
+  {{- if .Values.clickhouse.backup.monitoring.serviceMonitor.podTargetLabels }}
+  podTargetLabels:
+  {{- toYaml .Values.clickhouse.backup.monitoring.serviceMonitor.podTargetLabels | nindent 4 }}
+  {{- end }}
+  namespaceSelector:
+    matchNames:
+      - {{ default .Release.Namespace .Values.clickhouse.backup.monitoring.serviceMonitor.namespace | quote }}
+  selector:
+    matchLabels:
+      {{- include "opik.clickhouse.selectorLabels" . | nindent 6 }}
+      service-name: {{ include "opik.name" $ }}-ch-monitoring
+{{- end }}
+##############################################
+{{- if and .Values.clickhouse.enabled .Values.clickhouse.backup.enabled .Values.clickhouse.backup.monitoring.enabled .Values.clickhouse.backup.monitoring.serviceMonitor.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ template "opik.name" $ }}-ch-backup-monitoring
+  namespace: {{ default .Release.Namespace  .Values.clickhouse.backup.monitoring.serviceMonitor.namespace | quote }}
+  labels:
+    {{- include "opik.clickhouse.labels" $  | nindent 4 }}
+    {{- with .Values.clickhouse.backup.monitoring.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with  .Values.clickhouse.backup.monitoring.serviceMonitor.annotations }}
+  annotations:
+    {{- include "common.tplvalues.render" (dict "value" . "context" $) | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.clickhouse.backup.monitoring.serviceMonitor }}
+  endpoints:
+    - port: {{ .portName | default "ch-backup-rest" }}
+      interval: {{ .interval | default "60s" }}
+      scrapeTimeout: {{ .scrapeTimeout | default "30s" }}
+      {{- if .honorLabels }}
+      honorLabels: {{ .honorLabels }}
+      {{- end }}
+      {{- if .relabelings }}
+      relabelings:
+      {{- toYaml .relabelings | nindent 6 }}
+      {{- end }}
+      {{- if .metricRelabelings }}
+      metricRelabelings:
+      {{- toYaml .metricRelabelings | nindent 6 }}
+      {{- end }}
+      path: {{ .path | default "/metrics" }}
+  {{- end }}
+  {{- if .Values.clickhouse.backup.monitoring.serviceMonitor.podTargetLabels }}
+  podTargetLabels:
+  {{- toYaml .Values.clickhouse.backup.monitoring.serviceMonitor.podTargetLabels | nindent 4 }}
+  {{- end }}
+  namespaceSelector:
+    matchNames:
+      - {{ default .Release.Namespace .Values.clickhouse.backup.monitoring.serviceMonitor.namespace | quote }}
+  selector:
+    matchLabels:
+      {{- include "opik.clickhouse.selectorLabels" . | nindent 6 }}
+      service-name: {{ include "opik.name" $ }}-ch-backup-monitoring
+{{- end }}
