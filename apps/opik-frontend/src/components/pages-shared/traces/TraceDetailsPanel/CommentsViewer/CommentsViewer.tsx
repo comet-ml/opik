@@ -8,28 +8,30 @@ import useCreateSpanCommentMutation from "@/api/traces/useCreateSpanCommentMutat
 import useCreateTraceCommentMutation from "@/api/traces/useCreateTraceCommentMutation";
 import useUpdateSpanCommentMutation from "@/api/traces/useUpdateSpanCommentMutation";
 import useUpdateTraceCommentMutation from "@/api/traces/useUpdateTraceCommentMutation";
-import { LastSectionValue } from "../TraceDetailsPanel";
 import UserComment from "../../UserComment/UserComment";
-import LastSectionLayout from "../LastSectionLayout";
 import { orderBy } from "lodash";
 import { useLoggedInUserName } from "@/store/AppStore";
+import {
+  DetailsActionSectionValue,
+  DetailsActionSectionLayout,
+} from "@/components/pages-shared/traces/DetailsActionSection";
 
 export type CommentsViewerProps = {
   data: Trace | Span;
   spanId?: string;
   traceId: string;
   projectId: string;
-  lastSection?: LastSectionValue | null;
-  setLastSection: (v: LastSectionValue | null) => void;
+  activeSection?: DetailsActionSectionValue | null;
+  setActiveSection: (v: DetailsActionSectionValue | null) => void;
 };
 
 const CommentsViewer: React.FC<CommentsViewerProps> = ({
   data,
   spanId,
   traceId,
-  lastSection,
-  setLastSection,
   projectId,
+  activeSection,
+  setActiveSection,
 }) => {
   const traceDeleteMutation = useTraceCommentsBatchDeleteMutation();
   const spanDeleteMutation = useSpanCommentsBatchDeleteMutation();
@@ -91,11 +93,11 @@ const CommentsViewer: React.FC<CommentsViewerProps> = ({
   };
 
   return (
-    <LastSectionLayout
+    <DetailsActionSectionLayout
       title="Comments"
       closeTooltipContent="Close comments"
-      setLastSection={setLastSection}
-      lastSection={lastSection}
+      setActiveSection={setActiveSection}
+      activeSection={activeSection}
     >
       <UserCommentForm
         onSubmit={(data) => onSubmit(data.commentText)}
@@ -142,7 +144,7 @@ const CommentsViewer: React.FC<CommentsViewerProps> = ({
           </div>
         )}
       </div>
-    </LastSectionLayout>
+    </DetailsActionSectionLayout>
   );
 };
 

@@ -26,7 +26,7 @@ const CommentsCellContent: React.FC<CommentsCellContentProps> = ({
   const isLocalComments = isLocalCommentCheck(commentsList[0]?.created_by);
 
   if (!commentsCount) {
-    return "-";
+    return <div className="px-3 py-2">-</div>;
   }
 
   if (commentsCount === 1) {

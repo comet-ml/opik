@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 import { StringParam, useQueryParam } from "use-query-params";
@@ -21,10 +21,14 @@ import { formatDuration } from "@/lib/date";
 import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
 import TraceDataViewerActionsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/TraceDataViewerActionsPanel";
-import { LastSectionValue } from "../TraceDetailsPanel";
+import {
+  DetailsActionSection,
+  DetailsActionSectionValue,
+} from "@/components/pages-shared/traces/DetailsActionSection";
 import TraceDataViewerHeader from "./TraceDataViewerHeader";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 
 type TraceDataViewerProps = {
   data: Trace | Span;
@@ -32,8 +36,8 @@ type TraceDataViewerProps = {
   projectId: string;
   traceId: string;
   spanId?: string;
-  lastSection?: LastSectionValue | null;
-  setLastSection: (v: LastSectionValue) => void;
+  activeSection: DetailsActionSectionValue | null;
+  setActiveSection: (v: DetailsActionSectionValue) => void;
   isSpansLazyLoading: boolean;
 };
 
@@ -43,8 +47,8 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   projectId,
   traceId,
   spanId,
-  lastSection,
-  setLastSection,
+  activeSection,
+  setActiveSection,
   isSpansLazyLoading,
 }) => {
   const type = get(data, "type", TRACE_TYPE_FOR_TREE);
@@ -63,6 +67,20 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
 
   const isSpanInputOutputLoading =
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
+  const entityName = type === TRACE_TYPE_FOR_TREE ? "trace" : "span";
+
+  const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
+
+  const onDeleteFeedbackScore = useCallback(
+    (name: string) => {
+      feedbackScoreDeleteMutation.mutate({
+        traceId,
+        spanId,
+        name,
+      });
+    },
+    [traceId, spanId, feedbackScoreDeleteMutation],
+  );
 
   return (
     <div className="size-full max-w-full overflow-auto p-6">
@@ -85,8 +103,8 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 data={data}
                 traceId={traceId}
                 spanId={spanId}
-                lastSection={lastSection}
-                setLastSection={setLastSection}
+                activeSection={activeSection}
+                setActiveSection={setActiveSection}
                 layoutSize={layoutSize}
               />
             )}
@@ -169,7 +187,15 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             <InputOutputTab data={data} isLoading={isSpanInputOutputLoading} />
           </TabsContent>
           <TabsContent value="feedback_scores">
-            <FeedbackScoreTab data={data} traceId={traceId} spanId={spanId} />
+            <FeedbackScoreTab
+              feedbackScores={data.feedback_scores}
+              onDeleteFeedbackScore={onDeleteFeedbackScore}
+              entityName={entityName}
+              onAddHumanReview={() =>
+                setActiveSection(DetailsActionSection.Annotations)
+              }
+              entityType="trace"
+            />
           </TabsContent>
           <TabsContent value="metadata">
             <MetadataTab data={data} />

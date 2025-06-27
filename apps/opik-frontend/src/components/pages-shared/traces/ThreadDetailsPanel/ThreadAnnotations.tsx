@@ -1,42 +1,56 @@
 import React from "react";
-import { Span, Trace } from "@/types/traces";
-import FeedbackScoresEditor from "../../FeedbackScoresEditor/FeedbackScoresEditor";
+import { TraceFeedbackScore } from "@/types/traces";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import {
   DetailsActionSectionLayout,
   DetailsActionSectionValue,
 } from "@/components/pages-shared/traces/DetailsActionSection";
-import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
-import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
-import { UpdateFeedbackScoreData } from "./types";
+import FeedbackScoresEditor from "../FeedbackScoresEditor/FeedbackScoresEditor";
+import { UpdateFeedbackScoreData } from "../TraceDetailsPanel/TraceAnnotateViewer/types";
+import useThreadFeedbackScoreSetMutation from "@/api/traces/useThreadFeedbackScoreSetMutation";
+import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
 
-type TraceAnnotateViewerProps = {
-  data: Trace | Span;
-  spanId?: string;
-  traceId: string;
+type ThreadAnnotationsProps = {
+  threadId: string;
+  projectId: string;
+  projectName: string;
   activeSection: DetailsActionSectionValue | null;
   setActiveSection: (v: DetailsActionSectionValue | null) => void;
+  feedbackScores: TraceFeedbackScore[];
 };
 
-const TraceAnnotateViewer: React.FunctionComponent<
-  TraceAnnotateViewerProps
-> = ({ data, spanId, traceId, activeSection, setActiveSection }) => {
-  const hasFeedbackScores = Boolean(data.feedback_scores?.length);
+const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
+  threadId,
+  projectId,
+  projectName,
+  activeSection,
+  setActiveSection,
+  feedbackScores,
+}) => {
+  const hasFeedbackScores = Boolean(feedbackScores.length);
 
-  const { mutate: setTraceFeedbackScore } = useTraceFeedbackScoreSetMutation();
-  const { mutate: feedbackScoreDelete } = useTraceFeedbackScoreDeleteMutation();
+  const { mutate: setThreadFeedbackScore } =
+    useThreadFeedbackScoreSetMutation();
+  const { mutate: threadFeedbackScoreDelete } =
+    useThreadFeedbackScoreDeleteMutation();
 
   const onUpdateFeedbackScore = (data: UpdateFeedbackScoreData) => {
-    setTraceFeedbackScore({
+    setThreadFeedbackScore({
       ...data,
-      traceId,
-      spanId,
+      threadId,
+      projectId,
+      projectName,
     });
   };
 
   const onDeleteFeedbackScore = (name: string) => {
-    feedbackScoreDelete({ name, traceId, spanId });
+    threadFeedbackScoreDelete({
+      names: [name],
+      threadId,
+      projectName,
+      projectId,
+    });
   };
 
   return (
@@ -49,7 +63,7 @@ const TraceAnnotateViewer: React.FunctionComponent<
     >
       {hasFeedbackScores && (
         <div className="flex flex-wrap gap-2 px-6 pb-2 pt-4">
-          {data.feedback_scores?.map((score) => (
+          {feedbackScores.map((score) => (
             <FeedbackScoreTag
               key={score.name}
               label={score.name}
@@ -62,15 +76,15 @@ const TraceAnnotateViewer: React.FunctionComponent<
         </div>
       )}
       <FeedbackScoresEditor
-        key={traceId ?? spanId}
-        feedbackScores={data.feedback_scores || []}
+        key={threadId}
+        feedbackScores={feedbackScores}
         onUpdateFeedbackScore={onUpdateFeedbackScore}
         onDeleteFeedbackScore={onDeleteFeedbackScore}
         className="mt-4"
-        entityCopy="traces"
+        entityCopy="threads"
       />
     </DetailsActionSectionLayout>
   );
 };
 
-export default TraceAnnotateViewer;
+export default ThreadAnnotations;
