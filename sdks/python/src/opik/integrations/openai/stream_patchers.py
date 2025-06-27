@@ -16,14 +16,6 @@ LOGGER = logging.getLogger(__name__)
 original_stream_iter_method = openai.Stream.__iter__
 original_async_stream_aiter_method = openai.AsyncStream.__aiter__
 
-# Higher level stream methods
-original_chat_completion_stream_iter_method = (
-    openai.lib.streaming.chat.ChatCompletionStream.__iter__
-)
-original_async_chat_completion_stream_aiter_method = (
-    openai.lib.streaming.chat.AsyncChatCompletionStream.__aiter__
-)
-
 # Stream manager (factory object) methods
 original_chat_completion_stream_manager_enter_method = (
     openai.lib.streaming.chat.ChatCompletionStreamManager.__enter__
