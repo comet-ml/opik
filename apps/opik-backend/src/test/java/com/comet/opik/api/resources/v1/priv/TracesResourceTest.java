@@ -46,6 +46,7 @@ import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
+import com.comet.opik.api.resources.utils.resources.ThreadCommentResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
@@ -148,8 +149,8 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComment;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
-import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertTraceComment;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertUpdatedComment;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
@@ -258,6 +259,7 @@ class TracesResourceTest {
     private SpanResourceClient spanResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
     private GuardrailsGenerator guardrailsGenerator;
+    private ThreadCommentResourceClient threadCommentResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -273,6 +275,7 @@ class TracesResourceTest {
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
         this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
+        this.threadCommentResourceClient = new ThreadCommentResourceClient(client, baseURI);
         this.guardrailsGenerator = new GuardrailsGenerator();
     }
 
@@ -7920,7 +7923,7 @@ class TracesResourceTest {
             // Get created comment by id and assert
             Comment actualComment = traceResourceClient.getCommentById(expectedComment.id(), traceId, API_KEY,
                     TEST_WORKSPACE, 200);
-            assertTraceComment(expectedComment, actualComment);
+            assertComment(expectedComment, actualComment);
         }
 
         @Test
@@ -9499,6 +9502,135 @@ class TracesResourceTest {
                     TraceThreadStatus.INACTIVE);
 
             TraceAssertions.assertThreads(expectedClosedThreads, closedThreadPage.content());
+        }
+    }
+
+    @Nested
+    @DisplayName("Thread Comment:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ThreadComment {
+
+        @Test
+        void createCommentForNonExistingThreadFail() {
+            threadCommentResourceClient.generateAndCreateComment(generator.generate(), API_KEY, TEST_WORKSPACE, 404);
+        }
+
+        @Test
+        void createAndGetComment() {
+            // Create comment for existing thread
+            var thread = createThread();
+            Comment expectedComment = threadCommentResourceClient.generateAndCreateComment(thread.threadModelId(),
+                    API_KEY, TEST_WORKSPACE,
+                    201);
+
+            // Get created comment by id and assert
+            Comment actualComment = threadCommentResourceClient.getCommentById(expectedComment.id(),
+                    thread.threadModelId(), API_KEY,
+                    TEST_WORKSPACE, 200);
+            assertComment(expectedComment, actualComment);
+        }
+
+        @Test
+        void createAndUpdateComment() {
+            // Create comment for existing thread
+            var thread = createThread();
+            Comment expectedComment = threadCommentResourceClient.generateAndCreateComment(thread.threadModelId(),
+                    API_KEY, TEST_WORKSPACE,
+                    201);
+
+            // Get created comment by id and assert
+            Comment actualComment = threadCommentResourceClient.getCommentById(expectedComment.id(),
+                    thread.threadModelId(), API_KEY,
+                    TEST_WORKSPACE, 200);
+
+            // Update existing comment
+            String updatedText = factory.manufacturePojo(String.class);
+            threadCommentResourceClient.updateComment(updatedText, expectedComment.id(), API_KEY,
+                    TEST_WORKSPACE, 204);
+
+            // Get comment by id and assert it was updated
+            Comment updatedComment = threadCommentResourceClient.getCommentById(expectedComment.id(),
+                    thread.threadModelId(), API_KEY,
+                    TEST_WORKSPACE, 200);
+            assertUpdatedComment(actualComment, updatedComment, updatedText);
+        }
+
+        @Test
+        void deleteComments() {
+            // Create comments for existing thread
+            var thread = createThread();
+
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> threadCommentResourceClient.generateAndCreateComment(thread.threadModelId(), API_KEY,
+                            TEST_WORKSPACE, 201))
+                    .toList().reversed();
+
+            // Check it was created
+            expectedComments.forEach(
+                    comment -> threadCommentResourceClient.getCommentById(comment.id(), thread.threadModelId(), API_KEY,
+                            TEST_WORKSPACE, 200));
+
+            // Delete comment
+            BatchDelete request = BatchDelete.builder()
+                    .ids(expectedComments.stream().map(Comment::id).collect(Collectors.toSet())).build();
+            threadCommentResourceClient.deleteComments(request, API_KEY, TEST_WORKSPACE);
+
+            // Verify comments were actually deleted via get and update endpoints
+            expectedComments.forEach(
+                    comment -> threadCommentResourceClient.getCommentById(comment.id(), thread.threadModelId(), API_KEY,
+                            TEST_WORKSPACE, 404));
+            expectedComments
+                    .forEach(comment -> threadCommentResourceClient.updateComment(factory.manufacturePojo(String.class),
+                            comment.id(), API_KEY, TEST_WORKSPACE, 404));
+        }
+
+        @Test
+        void getThreadWithComments() {
+            // Create comments for existing thread
+            var thread = createThread();
+
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> threadCommentResourceClient.generateAndCreateComment(thread.threadModelId(), API_KEY,
+                            TEST_WORKSPACE, 201))
+                    .toList().reversed();
+
+            TraceThread actualThread = traceResourceClient.getTraceThread(thread.id(), thread.projectId(), API_KEY,
+                    TEST_WORKSPACE);
+
+            assertComments(expectedComments, actualThread.comments().reversed());
+        }
+
+        @Test
+        void getThreadsWithComments() {
+            // Create comments for existing thread
+            var thread = createThread();
+
+            List<Comment> expectedComments = IntStream.range(0, 5)
+                    .mapToObj(i -> threadCommentResourceClient.generateAndCreateComment(thread.threadModelId(), API_KEY,
+                            TEST_WORKSPACE, 201))
+                    .toList().reversed();
+
+            var threadsPage = traceResourceClient.getTraceThreads(thread.projectId(), null, API_KEY, TEST_WORKSPACE,
+                    null, null, null);
+
+            assertComments(expectedComments, threadsPage.content().getFirst().comments().reversed());
+        }
+
+        private TraceThread createThread() {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+
+            var traces = IntStream.range(0, 5)
+                    .mapToObj(i -> createTrace().toBuilder()
+                            .threadId(threadId)
+                            .projectName(projectName)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            return traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
         }
     }
 
