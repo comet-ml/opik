@@ -7,7 +7,6 @@ from opik.decorator import generator_wrappers, error_info_collector
 import functools
 import openai
 import openai.lib.streaming.chat
-import openai
 
 
 LOGGER = logging.getLogger(__name__)
