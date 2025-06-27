@@ -1129,6 +1129,22 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id = :project_id
                 AND thread_id IN (SELECT thread_id FROM traces_final)
             )
+            <if(feedback_scores_empty_filters)>
+            , fsc AS (
+                 SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM feedback_scores
+                    WHERE entity_type = 'thread'
+                    AND workspace_id = :workspace_id
+                    AND project_id IN :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+                 HAVING <feedback_scores_empty_filters>
+            )
+            <endif>
             SELECT
                 count(DISTINCT t.id) AS count
             FROM (
@@ -1181,7 +1197,32 @@ class TraceDAOImpl implements TraceDAO {
                     AND t.project_id = tt.project_id
                     AND t.id = tt.thread_id
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
-                <if(trace_thread_filters)>WHERE <trace_thread_filters><endif>
+                WHERE workspace_id = :workspace_id
+                <if(feedback_scores_filters)>
+                AND thread_model_id IN (
+                    SELECT
+                        entity_id
+                    FROM (
+                        SELECT *
+                        FROM feedback_scores
+                        WHERE entity_type = 'thread'
+                        AND workspace_id = :workspace_id
+                        AND project_id = :project_id
+                        ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                        LIMIT 1 BY entity_id, name
+                    )
+                    GROUP BY entity_id
+                    HAVING <feedback_scores_filters>
+                )
+                <endif>
+                <if(feedback_scores_empty_filters)>
+                AND (
+                    thread_model_id IN (SELECT entity_id FROM fsc WHERE fsc.feedback_scores_count = 0)
+                        OR
+                    thread_model_id NOT IN (SELECT entity_id FROM fsc)
+                )
+                <endif>
+                <if(trace_thread_filters)>AND<trace_thread_filters><endif>
             ) AS t
             """;
 
@@ -1250,6 +1291,22 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id = :project_id
                 AND thread_id IN (SELECT thread_id FROM traces_final)
             )
+            <if(feedback_scores_empty_filters)>
+            , fsc AS (
+                 SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM feedback_scores
+                    WHERE entity_type = 'thread'
+                    AND workspace_id = :workspace_id
+                    AND project_id IN :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+                 HAVING <feedback_scores_empty_filters>
+            )
+            <endif>
             SELECT
                 t.workspace_id as workspace_id,
                 t.project_id as project_id,
@@ -1299,7 +1356,32 @@ class TraceDAOImpl implements TraceDAO {
                 AND t.project_id = tt.project_id
                 AND t.id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
-            <if(trace_thread_filters)>WHERE <trace_thread_filters><endif>
+            WHERE workspace_id = :workspace_id
+            <if(feedback_scores_filters)>
+            AND thread_model_id IN (
+                SELECT
+                    entity_id
+                FROM (
+                    SELECT *
+                    FROM feedback_scores
+                    WHERE entity_type = 'thread'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                )
+                GROUP BY entity_id
+                HAVING <feedback_scores_filters>
+            )
+            <endif>
+            <if(feedback_scores_empty_filters)>
+            AND (
+                thread_model_id IN (SELECT entity_id FROM fsc WHERE fsc.feedback_scores_count = 0)
+                    OR
+                thread_model_id NOT IN (SELECT entity_id FROM fsc)
+            )
+            <endif>
+            <if(trace_thread_filters)>AND<trace_thread_filters><endif>
             <if(last_retrieved_id)> AND thread_model_id > :last_retrieved_id<endif>
             <if(stream)>
             ORDER BY workspace_id, project_id, thread_model_id DESC

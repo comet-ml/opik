@@ -125,6 +125,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -132,6 +133,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -4969,6 +4971,248 @@ class TracesResourceTest {
                     sortingFields);
         }
 
+        private Stream<Arguments> getFeedbackScoreFilterTestArguments() {
+            return Stream.of(
+                    Arguments.of(
+                            true,
+                            Operator.EQUAL,
+                            generateExpectedIndices(),
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) this::generateExpectedEqualsMatch,
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) this::generateUnexpectedEqualsMatch,
+                            (Function<BigDecimal, String>) BigDecimal::toString), // Filter value function for EQUAL
+                    Arguments.of(
+                            false,
+                            Operator.EQUAL,
+                            generateExpectedIndices(),
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) this::generateExpectedEqualsMatch,
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) this::generateUnexpectedEqualsMatch,
+                            (Function<BigDecimal, String>) BigDecimal::toString),
+                    Arguments.of(
+                            true,
+                            Operator.IS_NOT_EMPTY,
+                            generateExpectedIndices(),
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) (name,
+                                    value) -> generateNotEmptyMatch(name),
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) (name,
+                                    value) -> generateUnexpectedNotEmptyMatch(name),
+                            (Function<BigDecimal, String>) value -> ""), // Empty value for IS_NOT_EMPTY
+                    Arguments.of(
+                            false,
+                            Operator.IS_NOT_EMPTY,
+                            generateExpectedIndices(),
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) (name,
+                                    value) -> generateNotEmptyMatch(name),
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) (name,
+                                    value) -> generateUnexpectedNotEmptyMatch(name),
+                            (Function<BigDecimal, String>) value -> ""),
+                    Arguments.of(
+                            true,
+                            Operator.IS_EMPTY,
+                            generateExpectedIndices(),
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) (name,
+                                    value) -> generateIsEmptyMatch(name),
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) (name,
+                                    value) -> generateNotEmptyMatch(name),
+                            (Function<BigDecimal, String>) value -> ""), // Empty value for IS_EMPTY
+                    Arguments.of(
+                            false,
+                            Operator.IS_EMPTY,
+                            generateExpectedIndices(),
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) (name,
+                                    value) -> generateIsEmptyMatch(name),
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) (name,
+                                    value) -> generateNotEmptyMatch(name),
+                            (Function<BigDecimal, String>) value -> "")
+
+            );
+        }
+
+        private Set<Integer> generateExpectedIndices() {
+            return new HashSet<>(List.of(RandomUtils.secure().randomInt(0, 5), RandomUtils.secure().randomInt(0, 5)));
+        }
+
+        private List<FeedbackScoreBatchItem> generateIsEmptyMatch(String name) {
+            return PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class)
+                    .stream()
+                    .filter(score -> !score.name().equals(name))
+                    .toList();
+        }
+
+        private List<FeedbackScoreBatchItem> generateNotEmptyMatch(String name) {
+            List<FeedbackScoreBatchItem> scores = PodamFactoryUtils.manufacturePojoList(factory,
+                    FeedbackScoreBatchItem.class);
+
+            scores.set(0, scores.getFirst().toBuilder()
+                    .name(name)
+                    .build());
+
+            return scores;
+        }
+
+        private List<FeedbackScoreBatchItem> generateUnexpectedNotEmptyMatch(String name) {
+            return PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class)
+                    .stream()
+                    .filter(score -> !score.name().equals(name))
+                    .toList();
+        }
+
+        private List<FeedbackScoreBatchItem> generateExpectedEqualsMatch(String name, BigDecimal value) {
+            List<FeedbackScoreBatchItem> scores = PodamFactoryUtils.manufacturePojoList(factory,
+                    FeedbackScoreBatchItem.class);
+
+            scores.set(0, scores.getFirst().toBuilder()
+                    .name(name)
+                    .value(value)
+                    .build());
+
+            return scores;
+        }
+
+        private List<FeedbackScoreBatchItem> generateUnexpectedEqualsMatch(String name, BigDecimal value) {
+            List<FeedbackScoreBatchItem> scores = PodamFactoryUtils.manufacturePojoList(factory,
+                    FeedbackScoreBatchItem.class);
+
+            scores.set(0, scores.getFirst().toBuilder()
+                    .name(name)
+                    .build());
+
+            return scores;
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFeedbackScoreFilterTestArguments")
+        @DisplayName("When filtering by feedback score with different operators, should return matching threads")
+        void whenFilterByFeedbackScore__thenReturnThreadsWithMatchingFeedbackScore(
+                boolean stream,
+                Operator operator,
+                Set<Integer> expectedThreadIndices,
+                BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>> matchingScoreFunction,
+                BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>> unmatchingScoreFunction,
+                Function<BigDecimal, String> filterValueFunction) {
+
+            // Given
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var project = factory.manufacturePojo(Project.class).toBuilder()
+                    .name(projectName)
+                    .build();
+
+            UUID projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Create threads with different feedback scores
+            var allThreadIds = PodamFactoryUtils.manufacturePojoList(factory, UUID.class);
+
+            // Create traces for threads
+            var allTraces = allThreadIds
+                    .stream()
+                    .map(threadId -> createTrace().toBuilder()
+                            .threadId(threadId.toString())
+                            .projectId(null)
+                            .projectName(projectName)
+                            .startTime(Instant.now().minusSeconds(3).truncatedTo(ChronoUnit.MICROS))
+                            .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
+                            .build())
+                    .toList();
+
+            allTraces.forEach(trace -> traceResourceClient.createTrace(trace, apiKey, workspaceName));
+
+            // Add feedback scores with different values
+            Map<String, Instant> threadIdAndLastUpdateAts = new HashMap<>();
+
+            Mono.delay(Duration.ofMillis(500)).block();
+            allThreadIds.forEach(threadId -> {
+                threadIdAndLastUpdateAts.put(threadId.toString(), Instant.now());
+                traceResourceClient.closeTraceThread(threadId.toString(), null, projectName, apiKey, workspaceName);
+            });
+
+            String targetScoreName = RandomStringUtils.secure().nextAlphanumeric(30);
+            BigDecimal targetScoreValue = factory.manufacturePojo(BigDecimal.class);
+
+            // Create feedback scores based on the provided map
+            List<FeedbackScoreBatchItem> expectedScores = allThreadIds
+                    .stream()
+                    .filter(threadId -> isExpected(expectedThreadIndices, threadId, allThreadIds))
+                    .flatMap(threadId -> {
+                        return matchingScoreFunction.apply(targetScoreName, targetScoreValue).stream()
+                                .map(item -> item.toBuilder()
+                                        .threadId(threadId.toString())
+                                        .projectName(projectName)
+                                        .build());
+                    }).toList();
+
+            List<FeedbackScoreBatchItem> unexpectedScores = allThreadIds.stream()
+                    .filter(threadId -> !isExpected(expectedThreadIndices, threadId, allThreadIds))
+                    .flatMap(threadId -> {
+                        return unmatchingScoreFunction.apply(targetScoreName, targetScoreValue).stream()
+                                .map(item -> item.toBuilder()
+                                        .threadId(threadId.toString())
+                                        .projectName(projectName)
+                                        .build());
+                    }).toList();
+
+            List<FeedbackScoreBatchItem> scoreItems = Stream.concat(expectedScores.stream(), unexpectedScores.stream())
+                    .toList();
+
+            // Create feedback scores for threads
+            Instant feedbackScoreCreationTime = Instant.now();
+            traceResourceClient.threadFeedbackScores(scoreItems, apiKey, workspaceName);
+
+            // Determine expected threads based on indices
+            var expectedThreadIds = allThreadIds.reversed()
+                    .stream()
+                    .filter(threadId -> isExpected(expectedThreadIndices, threadId, allThreadIds))
+                    .map(UUID::toString)
+                    .toList();
+
+            // Create expected threads with ALL feedback scores from matching threads
+            Comparator<TraceThread> comparing = Comparator
+                    .comparing((TraceThread traceThread) -> threadIdAndLastUpdateAts.get(traceThread.id())).reversed();
+
+            List<TraceThread> expectedThreads = expectedThreadIds.stream()
+                    .map(threadId -> {
+                        // Get ALL feedback scores for this thread (both expected and unexpected)
+                        var allFeedbackScoresForThread = scoreItems.stream()
+                                .filter(item -> item.threadId().equals(threadId))
+                                .map(item -> createExpectedFeedbackScore(item, feedbackScoreCreationTime))
+                                .toList();
+
+                        var traces = allTraces.stream()
+                                .filter(trace -> trace.threadId().equals(threadId))
+                                .toList();
+
+                        return getExpectedThreads(traces, projectId, threadId, List.of(),
+                                TraceThreadStatus.INACTIVE, allFeedbackScoresForThread).getFirst();
+                    })
+                    .sorted(comparing)
+                    .toList();
+
+            // Create filter for the specific feedback score
+            var feedbackScoreFilter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.FEEDBACK_SCORES)
+                    .operator(operator)
+                    .key(targetScoreName)
+                    .value(filterValueFunction.apply(targetScoreValue))
+                    .build();
+
+            // When & Then
+            if (!stream) {
+                assertThreadPage(null, projectId, expectedThreads, List.of(feedbackScoreFilter), Map.of(), apiKey,
+                        workspaceName);
+            } else {
+                assertTheadStream(null, projectId, apiKey, workspaceName, expectedThreads,
+                        List.of(feedbackScoreFilter));
+            }
+        }
+
+        private static boolean isExpected(Set<Integer> expectedThreadIndices, UUID threadId, List<UUID> allThreadIds) {
+            return expectedThreadIndices.stream()
+                    .anyMatch(index -> allThreadIds.get(index).toString().equals(threadId.toString()));
+        }
     }
 
     private List<TraceThread> getExpectedThreads(List<Trace> expectedTraces, UUID projectId, String threadId,
