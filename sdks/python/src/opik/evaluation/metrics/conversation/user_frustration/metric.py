@@ -5,6 +5,7 @@ from typing import Optional, Union, Any, List, Dict
 import pydantic
 
 from opik import exceptions
+from opik.evaluation.metrics import score_result
 from opik.evaluation.models import base_model, models_factory
 from . import schema, templates
 from .. import (
@@ -12,36 +13,31 @@ from .. import (
     conversation_thread_metric,
     helpers,
 )
-from ... import score_result
 from ...llm_judges import parsing_helpers
 
 LOGGER = logging.getLogger(__name__)
 
 
-class ConversationalCoherenceMetric(
-    conversation_thread_metric.ConversationThreadMetric
-):
+class UserFrustrationMetric(conversation_thread_metric.ConversationThreadMetric):
     """
-    Calculates the conversational coherence metric for a given conversation thread.
-    This metric assesses the coherence and relevance across a series of conversation
-    turns by evaluating the consistency in responses, logical flow, and overall
-    context maintenance. It evaluates whether the conversation session felt like a
-    natural, adaptive, helpful interaction.
+    A heuristic score estimating the likelihood that the user experienced confusion, annoyance,
+    or disengagement during the session — due to repetition, lack of adaptation, ignored
+    intent signals, or failure to smoothly conclude.
 
-    The ``ConversationalCoherenceMetric`` builds a sliding window of dialogue turns for
-    each turn in the conversation. It then uses a language model to evaluate whether
-    the final “assistant” message within each window is relevant and coherent in
-    relation to the preceding conversational context.
+    The ``UserFrustrationMetric`` class integrates with machine learning models to analyze
+    conversation data in sliding windows and produce a numerical score along with an optional
+    reason for the calculated score. It provides both synchronous and asynchronous methods for
+    calculation and supports customization through attributes like window size and reason inclusion.
 
-    It supports both synchronous and asynchronous operations to
-    accommodate the model's operation type.
+    This metric can be used to monitor and track user frustration levels during conversations, enabling
+    insights into user experience. The metric makes use of machine learning models to score conversational
+    windows and summarize results. The higher the score, the more frustrated the user is likely to be.
 
     Args:
-        model: The model to use for
-            evaluating the conversation. If a string is provided, it will be used to
+        model: The model to use for evaluating the conversation. If a string is provided, it will be used to
             fetch the model from the LiteLLM API. If a base_model.OpikBaseModel is
             provided, it will be used directly. Default is None.
-        name: The name of the metric. The default is "conversational_coherence_score".
+        name: The name of the metric. The default is "user_frustration_score".
         include_reason: Whether to include the reason for the score in the
             result. Default is True.
         track: Whether to track the metric. Default is True.
@@ -49,17 +45,18 @@ class ConversationalCoherenceMetric(
             Default is None.
         window_size: The window size to use for calculating the score. It defines the
             maximal number of historical turns to include in each window when assessing
-            the coherence of the current turn in the conversation. Default is 10.
+            the frustration of the current turn in the conversation. Default is 10.
 
     Example:
-        >>> from opik.evaluation.metrics import ConversationalCoherenceMetric
+        >>> from opik.evaluation.metrics import UserFrustrationMetric
         >>> conversation = [
-        >>>     {"role": "user", "content": "Hello!"},
-        >>>     {"role": "assistant", "content": "Hi there!"},
-        >>>     {"role": "user", "content": "How are you?"},
-        >>>     {"role": "assistant", "content": "I'm doing well, thank you!"},
+        >>>     {"role": "user", "content": "How do I center a div using CSS?"},
+        >>>     {"role": "assistant", "content": "There are many ways to center elements in CSS."},
+        >>>     {"role": "user", "content": "Okay... can you show me one?"},
+        >>>     {"role": "assistant", "content": "Sure. It depends on the context — are you centering horizontally, vertically, or both?"},
+        >>>     {"role": "user", "content": "Both. Just give me a basic example."},
         >>> ]
-        >>> metric = ConversationalCoherenceMetric()
+        >>> metric = UserFrustrationMetric()
         >>> result = metric.score(conversation)
         >>> if result.scoring_failed:
         >>>     print(f"Scoring failed: {result.reason}")
@@ -70,7 +67,7 @@ class ConversationalCoherenceMetric(
     def __init__(
         self,
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,
-        name: str = "conversational_coherence_score",
+        name: str = "user_frustration_score",
         include_reason: bool = True,
         track: bool = True,
         project_name: Optional[str] = None,
@@ -133,9 +130,9 @@ class ConversationalCoherenceMetric(
                 reason=reason,
             )
         except Exception as e:
-            LOGGER.error(f"Failed to calculate conversational coherence score: {e}")
+            LOGGER.error(f"Failed to calculate user frustration score: {e}")
             raise exceptions.MetricComputationError(
-                f"Failed to calculate conversational coherence score: {e}"
+                f"Failed to calculate user frustration score: {e}"
             ) from e
 
     async def _a_calculate_score(
@@ -166,60 +163,98 @@ class ConversationalCoherenceMetric(
                 reason=reason,
             )
         except Exception as e:
-            LOGGER.error(f"Failed to calculate conversational coherence score: {e}")
+            LOGGER.error(f"Failed to calculate user frustration score: {e}")
             raise exceptions.MetricComputationError(
-                f"Failed to calculate conversational coherence score: {e}"
-            )
+                f"Failed to calculate user frustration score: {e}"
+            ) from e
+
+    def _evaluate_conversation(
+        self,
+        conversation_sliding_window: conversation_types.Conversation,
+    ) -> schema.EvaluateUserFrustrationResponse:
+        llm_query = templates.evaluate_conversation(
+            sliding_window=conversation_sliding_window
+        )
+        model_output = self._model.generate_string(
+            input=llm_query,
+            response_format=schema.EvaluateUserFrustrationResponse,
+        )
+        return _evaluate_conversation_from_model_output(model_output=model_output)
+
+    async def _a_evaluate_conversation(
+        self,
+        conversation_sliding_window: conversation_types.Conversation,
+    ) -> schema.EvaluateUserFrustrationResponse:
+        llm_query = templates.evaluate_conversation(
+            sliding_window=conversation_sliding_window
+        )
+        model_output = await self._model.agenerate_string(
+            input=llm_query,
+            response_format=schema.EvaluateUserFrustrationResponse,
+        )
+        return _evaluate_conversation_from_model_output(model_output=model_output)
 
     def _reason_from_verdicts(
-        self, score: float, verdicts: List[schema.EvaluateConversationCoherenceResponse]
+        self, score: float, verdicts: List[schema.EvaluateUserFrustrationResponse]
     ) -> str:
-        irrelevancies: List[Dict[str, str]] = _extract_irrelevancies_from_verdicts(
+        frustrations: List[Dict[str, str]] = _extract_frustrations_from_verdicts(
             verdicts
         )
-        llm_query = templates.generate_reason(score=score, irrelevancies=irrelevancies)
+
+        llm_query = templates.generate_reason(score=score, frustrations=frustrations)
+
         model_output = self._model.generate_string(
             input=llm_query, response_format=schema.ScoreReasonResponse
         )
         return _generate_reason_from_model_output(model_output=model_output)
 
     async def _a_reason_from_verdicts(
-        self, score: float, verdicts: List[schema.EvaluateConversationCoherenceResponse]
+        self, score: float, verdicts: List[schema.EvaluateUserFrustrationResponse]
     ) -> str:
-        irrelevancies: List[Dict[str, str]] = _extract_irrelevancies_from_verdicts(
+        frustrations: List[Dict[str, str]] = _extract_frustrations_from_verdicts(
             verdicts
         )
-        llm_query = templates.generate_reason(score=score, irrelevancies=irrelevancies)
+
+        llm_query = templates.generate_reason(score=score, frustrations=frustrations)
+
         model_output = await self._model.agenerate_string(
             input=llm_query, response_format=schema.ScoreReasonResponse
         )
         return _generate_reason_from_model_output(model_output=model_output)
 
-    def _evaluate_conversation(
-        self, conversation_sliding_window: conversation_types.Conversation
-    ) -> schema.EvaluateConversationCoherenceResponse:
-        llm_query = templates.evaluate_conversation(
-            sliding_window=conversation_sliding_window
-        )
 
-        model_output = self._model.generate_string(
-            input=llm_query,
-            response_format=schema.EvaluateConversationCoherenceResponse,
+def _evaluate_conversation_from_model_output(
+    model_output: str,
+) -> schema.EvaluateUserFrustrationResponse:
+    try:
+        dict_content = parsing_helpers.extract_json_content_or_raise(model_output)
+        return schema.EvaluateUserFrustrationResponse.model_validate(dict_content)
+    except pydantic.ValidationError as e:
+        LOGGER.warning(
+            f"Failed to parse user's frustration evaluation results from the LLM output: {model_output}, reason: {e}",
+            exc_info=True,
         )
-        return _evaluate_conversation_from_model_output(model_output=model_output)
+        raise e
 
-    async def _a_evaluate_conversation(
-        self, conversation_sliding_window: conversation_types.Conversation
-    ) -> schema.EvaluateConversationCoherenceResponse:
-        llm_query = templates.evaluate_conversation(
-            sliding_window=conversation_sliding_window
-        )
 
-        model_output = await self._model.agenerate_string(
-            input=llm_query,
-            response_format=schema.EvaluateConversationCoherenceResponse,
-        )
-        return _evaluate_conversation_from_model_output(model_output=model_output)
+def _score_from_verdicts(
+    verdicts: List[schema.EvaluateUserFrustrationResponse],
+) -> float:
+    if len(verdicts) == 0:
+        return 0.0
+
+    frustrated_count = sum(v.verdict.strip().lower() == "yes" for v in verdicts)
+    return frustrated_count / len(verdicts)
+
+
+def _extract_frustrations_from_verdicts(
+    verdicts: List[schema.EvaluateUserFrustrationResponse],
+) -> List[Dict[str, str]]:
+    return [
+        {"message_number": f"{index + 1}", "reason": verdict.reason}
+        for index, verdict in enumerate(verdicts)
+        if verdict.verdict.strip().lower() == "yes" and verdict.reason is not None
+    ]
 
 
 def _generate_reason_from_model_output(model_output: str) -> str:
@@ -228,41 +263,7 @@ def _generate_reason_from_model_output(model_output: str) -> str:
         return schema.ScoreReasonResponse.model_validate(dict_content).reason
     except pydantic.ValidationError as e:
         LOGGER.warning(
-            f"Failed to parse coherence score reason from the LLM output: {model_output}, reason: {e}",
+            f"Failed to parse frustration score reason from the LLM output: {model_output}, reason: {e}",
             exc_info=True,
         )
         raise e
-
-
-def _extract_irrelevancies_from_verdicts(
-    verdicts: List[schema.EvaluateConversationCoherenceResponse],
-) -> List[Dict[str, str]]:
-    return [
-        {"message_number": f"{index + 1}", "reason": verdict.reason}
-        for index, verdict in enumerate(verdicts)
-        if verdict.verdict.strip().lower() == "no" and verdict.reason is not None
-    ]
-
-
-def _evaluate_conversation_from_model_output(
-    model_output: str,
-) -> schema.EvaluateConversationCoherenceResponse:
-    try:
-        dict_content = parsing_helpers.extract_json_content_or_raise(model_output)
-        return schema.EvaluateConversationCoherenceResponse.model_validate(dict_content)
-    except pydantic.ValidationError as e:
-        LOGGER.warning(
-            f"Failed to parse conversation coherence evaluation results from the LLM output: {model_output}, reason: {e}",
-            exc_info=True,
-        )
-        raise e
-
-
-def _score_from_verdicts(
-    verdicts: List[schema.EvaluateConversationCoherenceResponse],
-) -> float:
-    if len(verdicts) == 0:
-        return 0.0
-
-    relevant_count = sum(v.verdict.strip().lower() != "no" for v in verdicts)
-    return relevant_count / len(verdicts)

@@ -1,4 +1,4 @@
-from typing import Dict, Literal, List
+from typing import Dict, Literal, List, Optional
 
 import pydantic
 
@@ -26,7 +26,10 @@ class ConversationTurn(pydantic.BaseModel):
     """
 
     input: ConversationDict
-    output: ConversationDict
+    output: Optional[ConversationDict]
 
     def as_list(self) -> List[ConversationDict]:
+        if self.output is None:
+            return [self.input]
+
         return [self.input, self.output]
