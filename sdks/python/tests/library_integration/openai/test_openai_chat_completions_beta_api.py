@@ -18,7 +18,7 @@ from ...testlib import (
     assert_dict_has_keys,
     assert_equal,
 )
-from opik import semantic_version
+
 
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
@@ -37,9 +37,6 @@ EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
     "original_usage.prompt_tokens_details.audio_tokens": ANY_BUT_NONE,
     "original_usage.prompt_tokens_details.cached_tokens": ANY_BUT_NONE,
 }
-OPENAI_OLDER_THAN_1_92_0 = (
-    semantic_version.SemanticVersion.parse(openai.__version__) < "1.92.0"
-)
 
 
 def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
@@ -63,439 +60,7 @@ def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
         ("openai-integration-test", "openai-integration-test"),
     ],
 )
-def test_openai_client_chat_completions_create__happyflow(
-    fake_backend, project_name, expected_project_name
-):
-    client = openai.OpenAI()
-    wrapped_client = track_openai(
-        openai_client=client,
-        project_name=project_name,
-    )
-    messages = [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Tell a fact"},
-    ]
-
-    _ = wrapped_client.chat.completions.create(
-        model=MODEL_FOR_TESTS,
-        messages=messages,
-        max_tokens=10,
-    )
-
-    opik.flush_tracker()
-
-    EXPECTED_TRACE_TREE = TraceModel(
-        id=ANY_BUT_NONE,
-        name="chat_completion_create",
-        input={"messages": messages},
-        output={"choices": ANY_BUT_NONE},
-        tags=["openai"],
-        metadata=ANY_DICT,
-        start_time=ANY_BUT_NONE,
-        end_time=ANY_BUT_NONE,
-        last_updated_at=ANY_BUT_NONE,
-        project_name=expected_project_name,
-        spans=[
-            SpanModel(
-                id=ANY_BUT_NONE,
-                type="llm",
-                name="chat_completion_create",
-                input={"messages": messages},
-                output={"choices": ANY_BUT_NONE},
-                tags=["openai"],
-                metadata=ANY_DICT,
-                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
-                start_time=ANY_BUT_NONE,
-                end_time=ANY_BUT_NONE,
-                project_name=expected_project_name,
-                spans=[],
-                model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
-                provider="openai",
-            )
-        ],
-    )
-
-    assert len(fake_backend.trace_trees) == 1
-    trace_tree = fake_backend.trace_trees[0]
-
-    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-
-    llm_span_metadata = trace_tree.spans[0].metadata
-    _assert_metadata_contains_required_keys(llm_span_metadata)
-
-
-def test_openai_client_chat_completions_create__create_raises_an_error__span_and_trace_finished_gracefully__error_info_is_logged(
-    fake_backend,
-):
-    client = openai.OpenAI()
-    wrapped_client = track_openai(client)
-
-    with pytest.raises(openai.OpenAIError):
-        _ = wrapped_client.chat.completions.create(
-            messages=None,
-            model=None,
-        )
-
-    opik.flush_tracker()
-
-    EXPECTED_TRACE_TREE = TraceModel(
-        id=ANY_BUT_NONE,
-        name="chat_completion_create",
-        input={"messages": None},
-        output=None,
-        tags=["openai"],
-        metadata={
-            "created_from": "openai",
-            "type": "openai_chat",
-            "model": None,
-        },
-        start_time=ANY_BUT_NONE,
-        end_time=ANY_BUT_NONE,
-        last_updated_at=ANY_BUT_NONE,
-        project_name=ANY_BUT_NONE,
-        error_info={
-            "exception_type": ANY_STRING,
-            "message": ANY_STRING,
-            "traceback": ANY_STRING,
-        },
-        spans=[
-            SpanModel(
-                id=ANY_BUT_NONE,
-                type="llm",
-                name="chat_completion_create",
-                input={"messages": None},
-                output=None,
-                tags=["openai"],
-                metadata={
-                    "created_from": "openai",
-                    "type": "openai_chat",
-                    "model": None,
-                },
-                usage=None,
-                start_time=ANY_BUT_NONE,
-                end_time=ANY_BUT_NONE,
-                project_name=ANY_BUT_NONE,
-                model=None,
-                provider="openai",
-                error_info={
-                    "exception_type": ANY_STRING,
-                    "message": ANY_STRING,
-                    "traceback": ANY_STRING,
-                },
-                spans=[],
-            )
-        ],
-    )
-
-    assert len(fake_backend.trace_trees) == 1
-
-    trace_tree = fake_backend.trace_trees[0]
-    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-
-
-def test_openai_client_chat_completions_create__openai_call_made_in_another_tracked_function__openai_span_attached_to_existing_trace(
-    fake_backend,
-):
-    project_name = "openai-integration-test"
-
-    messages = [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Tell a fact"},
-    ]
-
-    @opik.track(project_name=project_name)
-    def f():
-        client = openai.OpenAI()
-        wrapped_client = track_openai(
-            openai_client=client,
-            # we are trying to log span into another project, but parent's project name will be used
-            project_name="openai-integration-test-nested-level",
-        )
-
-        _ = wrapped_client.chat.completions.create(
-            model=MODEL_FOR_TESTS,
-            messages=messages,
-            max_tokens=10,
-        )
-
-    f()
-
-    opik.flush_tracker()
-
-    EXPECTED_TRACE_TREE = TraceModel(
-        id=ANY_BUT_NONE,
-        name="f",
-        input={},
-        output=None,
-        start_time=ANY_BUT_NONE,
-        end_time=ANY_BUT_NONE,
-        last_updated_at=ANY_BUT_NONE,
-        project_name=project_name,
-        spans=[
-            SpanModel(
-                id=ANY_BUT_NONE,
-                name="f",
-                input={},
-                output=None,
-                start_time=ANY_BUT_NONE,
-                end_time=ANY_BUT_NONE,
-                project_name=project_name,
-                model=None,
-                provider=None,
-                spans=[
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        type="llm",
-                        name="chat_completion_create",
-                        input={"messages": messages},
-                        output={"choices": ANY_BUT_NONE},
-                        tags=["openai"],
-                        metadata=ANY_DICT,
-                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        project_name=project_name,
-                        spans=[],
-                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
-                        provider="openai",
-                    )
-                ],
-            )
-        ],
-    )
-
-    assert len(fake_backend.trace_trees) == 1
-
-    trace_tree = fake_backend.trace_trees[0]
-
-    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-
-    llm_span_metadata = trace_tree.spans[0].spans[0].metadata
-    _assert_metadata_contains_required_keys(llm_span_metadata)
-
-
-def test_openai_client_chat_completions_create__async_openai_call_made_in_another_tracked_async_function__openai_span_attached_to_existing_trace(
-    fake_backend,
-):
-    messages = [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Tell a fact"},
-    ]
-
-    @opik.track()
-    async def async_f():
-        client = openai.AsyncOpenAI()
-        wrapped_client = track_openai(client)
-        _ = await wrapped_client.chat.completions.create(
-            model=MODEL_FOR_TESTS,
-            messages=messages,
-            max_tokens=10,
-        )
-
-    asyncio.run(async_f())
-
-    opik.flush_tracker()
-
-    EXPECTED_TRACE_TREE = TraceModel(
-        id=ANY_BUT_NONE,
-        name="async_f",
-        input={},
-        output=None,
-        start_time=ANY_BUT_NONE,
-        end_time=ANY_BUT_NONE,
-        last_updated_at=ANY_BUT_NONE,
-        project_name=ANY_BUT_NONE,
-        spans=[
-            SpanModel(
-                id=ANY_BUT_NONE,
-                name="async_f",
-                input={},
-                output=None,
-                start_time=ANY_BUT_NONE,
-                end_time=ANY_BUT_NONE,
-                project_name=ANY_BUT_NONE,
-                model=None,
-                provider=None,
-                spans=[
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        type="llm",
-                        name="chat_completion_create",
-                        input={"messages": messages},
-                        output={"choices": ANY_BUT_NONE},
-                        tags=["openai"],
-                        metadata=ANY_DICT,
-                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        project_name=ANY_BUT_NONE,
-                        spans=[],
-                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
-                        provider="openai",
-                    )
-                ],
-            )
-        ],
-    )
-
-    assert len(fake_backend.trace_trees) == 1
-    trace_tree = fake_backend.trace_trees[0]
-
-    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-
-    llm_span_metadata = trace_tree.spans[0].spans[0].metadata
-    _assert_metadata_contains_required_keys(llm_span_metadata)
-
-
-def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tracked_correctly(
-    fake_backend,
-):
-    client = openai.OpenAI()
-    wrapped_client = track_openai(client)
-    messages = [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Tell a fact"},
-    ]
-
-    stream = wrapped_client.chat.completions.create(
-        model=MODEL_FOR_TESTS,
-        messages=messages,
-        max_tokens=10,
-        stream=True,
-        stream_options={"include_usage": True},
-    )
-
-    for item in stream:
-        pass
-
-    opik.flush_tracker()
-
-    EXPECTED_TRACE_TREE = TraceModel(
-        id=ANY_BUT_NONE,
-        name="chat_completion_create",
-        input={"messages": messages},
-        output={"choices": ANY_BUT_NONE},
-        tags=["openai"],
-        metadata=ANY_DICT,
-        start_time=ANY_BUT_NONE,
-        end_time=ANY_BUT_NONE,
-        last_updated_at=ANY_BUT_NONE,
-        project_name=ANY_BUT_NONE,
-        spans=[
-            SpanModel(
-                id=ANY_BUT_NONE,
-                type="llm",
-                name="chat_completion_create",
-                input={"messages": messages},
-                output={"choices": ANY_BUT_NONE},
-                tags=["openai"],
-                metadata=ANY_DICT,
-                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
-                start_time=ANY_BUT_NONE,
-                end_time=ANY_BUT_NONE,
-                project_name=ANY_BUT_NONE,
-                spans=[],
-                model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
-                provider="openai",
-            )
-        ],
-    )
-
-    assert len(fake_backend.trace_trees) == 1
-    trace_tree = fake_backend.trace_trees[0]
-
-    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-
-    llm_span_metadata = trace_tree.spans[0].metadata
-    _assert_metadata_contains_required_keys(llm_span_metadata)
-
-
-def test_openai_client_chat_completions_create__async_openai_call_made_in_another_tracked_async_function__streaming_mode_enabled__openai_span_attached_to_existing_trace(
-    fake_backend,
-):
-    messages = [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Tell a fact"},
-    ]
-
-    @opik.track()
-    async def async_f():
-        client = openai.AsyncOpenAI()
-        wrapped_client = track_openai(client)
-        stream = await wrapped_client.chat.completions.create(
-            model=MODEL_FOR_TESTS,
-            messages=messages,
-            max_tokens=10,
-            stream=True,
-            stream_options={"include_usage": True},
-        )
-        async for item in stream:
-            pass
-
-    asyncio.run(async_f())
-
-    opik.flush_tracker()
-
-    EXPECTED_TRACE_TREE = TraceModel(
-        id=ANY_BUT_NONE,
-        name="async_f",
-        input={},
-        output=None,
-        start_time=ANY_BUT_NONE,
-        end_time=ANY_BUT_NONE,
-        last_updated_at=ANY_BUT_NONE,
-        project_name=ANY_BUT_NONE,
-        spans=[
-            SpanModel(
-                id=ANY_BUT_NONE,
-                name="async_f",
-                input={},
-                output=None,
-                start_time=ANY_BUT_NONE,
-                end_time=ANY_BUT_NONE,
-                project_name=ANY_BUT_NONE,
-                model=None,
-                provider=None,
-                spans=[
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        type="llm",
-                        name="chat_completion_create",
-                        input={"messages": messages},
-                        output={"choices": ANY_BUT_NONE},
-                        tags=["openai"],
-                        metadata=ANY_DICT,
-                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        project_name=ANY_BUT_NONE,
-                        spans=[],
-                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
-                        provider="openai",
-                    )
-                ],
-            )
-        ],
-    )
-
-    assert len(fake_backend.trace_trees) == 1
-    trace_tree = fake_backend.trace_trees[0]
-
-    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-
-    llm_span_metadata = trace_tree.spans[0].spans[0].metadata
-    _assert_metadata_contains_required_keys(llm_span_metadata)
-
-
-@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
-@pytest.mark.parametrize(
-    "project_name, expected_project_name",
-    [
-        (None, OPIK_PROJECT_DEFAULT_NAME),
-        ("openai-integration-test", "openai-integration-test"),
-    ],
-)
-def test_openai_client_chat_completions_parse__happyflow(
+def test_openai_client_beta_chat_completions_parse__happyflow(
     fake_backend, project_name, expected_project_name
 ):
     client = openai.OpenAI()
@@ -514,7 +79,7 @@ def test_openai_client_chat_completions_parse__happyflow(
         },
     ]
 
-    _ = wrapped_client.chat.completions.parse(
+    _ = wrapped_client.beta.chat.completions.parse(
         model="gpt-4o",
         messages=messages,
         max_tokens=100,
@@ -563,8 +128,7 @@ def test_openai_client_chat_completions_parse__happyflow(
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
-def test_async_openai_client_chat_completions_parse__happyflow(fake_backend):
+def test_async_openai_client_beta_chat_completions_parse__happyflow(fake_backend):
     client = openai.AsyncOpenAI()
     wrapped_client = track_openai(client)
 
@@ -582,7 +146,7 @@ def test_async_openai_client_chat_completions_parse__happyflow(fake_backend):
     ]
 
     asyncio.run(
-        wrapped_client.chat.completions.parse(
+        wrapped_client.beta.chat.completions.parse(
             model="gpt-4o",
             messages=messages,
             response_format=CalendarEvent,
@@ -630,8 +194,7 @@ def test_async_openai_client_chat_completions_parse__happyflow(fake_backend):
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
-def test_openai_chat_completion_stream__generator_tracked_correctly(
+def test_openai_beta_chat_completion_stream__generator_tracked_correctly(
     fake_backend,
 ):
     client = openai.OpenAI()
@@ -647,7 +210,7 @@ def test_openai_chat_completion_stream__generator_tracked_correctly(
         },
     ]
 
-    chat_completion_stream_manager = wrapped_client.chat.completions.stream(
+    chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,
@@ -696,8 +259,7 @@ def test_openai_chat_completion_stream__generator_tracked_correctly(
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
-def test_openai_chat_completion_stream__include_usage_is_not_enabled__usage_not_logged(
+def test_openai_beta_chat_completion_stream__include_usage_is_not_enabled__usage_not_logged(
     fake_backend,
 ):
     client = openai.OpenAI()
@@ -713,7 +275,7 @@ def test_openai_chat_completion_stream__include_usage_is_not_enabled__usage_not_
         },
     ]
 
-    chat_completion_stream_manager = wrapped_client.chat.completions.stream(
+    chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,
@@ -761,12 +323,11 @@ def test_openai_chat_completion_stream__include_usage_is_not_enabled__usage_not_
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
-def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked_correctly(
+def test_openai_beta_chat_completion_stream__stream_called_2_times__generator_tracked_correctly(
     fake_backend,
 ):
     def run_stream(messages):
-        chat_completion_stream_manager = wrapped_client.chat.completions.stream(
+        chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
             model=MODEL_FOR_TESTS,
             messages=messages,
             max_tokens=10,
@@ -865,8 +426,7 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
     _assert_metadata_contains_required_keys(llm_joke_span_metadata)
 
 
-@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
-def test_openai_chat_completion_stream__get_final_completion_called__generator_tracked_correctly(
+def test_openai_beta_chat_completion_stream__get_final_completion_called__generator_tracked_correctly(
     fake_backend,
 ):
     client = openai.OpenAI()
@@ -882,7 +442,7 @@ def test_openai_chat_completion_stream__get_final_completion_called__generator_t
         },
     ]
 
-    chat_completion_stream_manager = wrapped_client.chat.completions.stream(
+    chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=200,  # increased max tokens because get_final_completion() fails on low ones
@@ -929,8 +489,7 @@ def test_openai_chat_completion_stream__get_final_completion_called__generator_t
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
-def test_openai_chat_completion_stream__get_final_completion_called_after_stream_iteration_loop__generator_tracked_correctly_only_once(
+def test_openai_beta_chat_completion_stream__get_final_completion_called_after_stream_iteration_loop__generator_tracked_correctly_only_once(
     fake_backend,
 ):
     client = openai.OpenAI()
@@ -946,7 +505,7 @@ def test_openai_chat_completion_stream__get_final_completion_called_after_stream
         },
     ]
 
-    chat_completion_stream_manager = wrapped_client.chat.completions.stream(
+    chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=200,  # increased max tokens because get_final_completion() fails on low ones
@@ -995,8 +554,7 @@ def test_openai_chat_completion_stream__get_final_completion_called_after_stream
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
-def test_async_openai_chat_completion_stream__data_tracked_correctly(
+def test_async_openai_beta_chat_completion_stream__data_tracked_correctly(
     fake_backend,
 ):
     client = openai.AsyncOpenAI()
@@ -1013,7 +571,7 @@ def test_async_openai_chat_completion_stream__data_tracked_correctly(
     ]
 
     async def async_f():
-        chat_completion_stream_manager = wrapped_client.chat.completions.stream(
+        chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
             model=MODEL_FOR_TESTS,
             messages=messages,
             max_tokens=10,
@@ -1063,8 +621,7 @@ def test_async_openai_chat_completion_stream__data_tracked_correctly(
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
-def test_async_openai_chat_completion_stream__get_final_completion_called_twice__data_tracked_correctly_once(
+def test_async_openai_beta_chat_completion_stream__get_final_completion_called_twice__data_tracked_correctly_once(
     fake_backend,
 ):
     client = openai.AsyncOpenAI()
@@ -1080,21 +637,8 @@ def test_async_openai_chat_completion_stream__get_final_completion_called_twice_
         },
     ]
 
-    # async def async_f0():
-    #     chat_completion_stream_manager = wrapped_client.chat.completions.stream(
-    #         model=MODEL_FOR_TESTS,
-    #         messages=messages,
-    #         max_tokens=10,
-    #         stream_options={"include_usage": True},
-    #     )
-    #     async with chat_completion_stream_manager as stream:
-    #         async for _ in stream:
-    #             pass
-
-    # asyncio.run(async_f0())
-
     async def async_f():
-        chat_completion_stream_manager = wrapped_client.chat.completions.stream(
+        chat_completion_stream_manager = wrapped_client.beta.chat.completions.stream(
             model=MODEL_FOR_TESTS,
             messages=messages,
             max_tokens=200,  # increased max tokens because get_final_completion() fails on low ones
