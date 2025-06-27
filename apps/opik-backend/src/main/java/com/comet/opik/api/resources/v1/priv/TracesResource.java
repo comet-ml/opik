@@ -779,7 +779,7 @@ public class TracesResource {
         log.info("Deleting feedback scores for threadId '{}', projectName '{}' on workspaceId '{}'", scores.threadId(),
                 projectName, workspaceId);
 
-        feedbackScoreService.deleteThreadScores(scores.projectName(), scores.threadId(), scores.names())
+        feedbackScoreService.deleteThreadScores(projectName, scores.threadId(), scores.names())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
