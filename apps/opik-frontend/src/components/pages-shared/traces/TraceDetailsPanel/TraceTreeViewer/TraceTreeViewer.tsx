@@ -1,4 +1,10 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   addAllParentIds,
@@ -12,10 +18,12 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import NoData from "@/components/shared/NoData/NoData";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import VirtualizedTreeViewer, {
+import VirtualizedTreeViewer from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/VirtualizedTreeViewer";
+import useTreeDetailsStore, {
   TreeNode,
-  VirtualizedTreeViewerRef,
-} from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/VirtualizedTreeViewer";
+} from "@/components/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { FoldVertical, UnfoldVertical } from "lucide-react";
 
 type TraceTreeViewerProps = {
   trace: Trace;
@@ -35,7 +43,6 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
   const [search, setSearch] = useState("");
   const traceSpans = useMemo(() => spans ?? [], [spans]);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const virtualTreeViewerRef = useRef<VirtualizedTreeViewerRef>();
 
   const noSearch = !search;
 
@@ -78,8 +85,15 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
     return retVal;
   }, [trace, traceSpans, predicate, noSearch]);
 
-  const virtualTreeData = useMemo(() => {
-    if (!filteredTraceSpans) return null;
+  const { tree, toggleExpandAll, setTree, expandedTreeRows, fullExpandedSet } =
+    useTreeDetailsStore();
+  const isAllExpanded = expandedTreeRows.size === fullExpandedSet.size;
+
+  useEffect(() => {
+    if (!filteredTraceSpans) {
+      setTree([]);
+      return;
+    }
 
     const sharedData = {
       maxStartTime: new Date(trace.start_time).getTime(),
@@ -140,57 +154,55 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
       }
     });
 
-    return retVal;
-  }, [filteredTraceSpans, trace, searchIds]);
+    setTree(retVal);
+  }, [filteredTraceSpans, trace, searchIds, setTree]);
 
   return (
     <div
       className="relative size-full max-w-full overflow-auto pb-4"
       ref={scrollRef}
     >
-      <div className="mt-4 min-w-[400px] max-w-full">
-        <div className="mt-2 flex flex-row items-end gap-2 px-6">
-          <div className="comet-title-s">Trace spans</div>
-          <ExplainerIcon
-            className="-ml-1 self-center"
-            {...EXPLAINERS_MAP[
-              EXPLAINER_ID.what_are_these_elements_in_the_tree
-            ]}
-          />
-          <div className="comet-body-s pb-[3px] text-muted-slate">
-            <div>{traceSpans.length} spans</div>
+      <div className="min-w-[300px] max-w-full">
+        <div className="sticky top-0 z-10 flex flex-row items-center justify-between gap-2 pb-2 pl-6 pr-4 pt-4">
+          <div className="flex items-center gap-1">
+            <div className="comet-title-xs">Trace spans</div>
+            <div className="comet-body-s text-muted-slate">
+              {traceSpans.length} spans
+            </div>
+            <ExplainerIcon
+              {...EXPLAINERS_MAP[
+                EXPLAINER_ID.what_are_these_elements_in_the_tree
+              ]}
+            />
           </div>
-        </div>
-        <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 bg-white px-6 pb-4 pt-3">
-          <div className="flex items-center gap-2">
-            <SearchInput
-              searchText={search}
-              setSearchText={setSearch}
-              placeholder="Search by all fields"
-              dimension="sm"
-              disabled={isSpansLazyLoading}
-            ></SearchInput>
-          </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-x-1.5">
             {noSearch && (
-              <Button
-                onClick={virtualTreeViewerRef.current?.toggleExpandAll}
-                variant="ghost"
-                size="sm"
-                className="-mr-3"
+              <TooltipWrapper
+                content={isAllExpanded ? "Collapse all" : "Expand all"}
               >
-                {virtualTreeViewerRef.current?.isCollapsedAll
-                  ? "Collapse all"
-                  : "Expand all"}
-              </Button>
+                <Button
+                  onClick={toggleExpandAll}
+                  variant="outline"
+                  size="icon-xs"
+                >
+                  {isAllExpanded ? <FoldVertical /> : <UnfoldVertical />}
+                </Button>
+              </TooltipWrapper>
             )}
           </div>
         </div>
+        <div className="sticky top-0 z-10 flex flex-wrap items-center bg-white py-2 pl-6 pr-4">
+          <SearchInput
+            searchText={search}
+            setSearchText={setSearch}
+            placeholder="Search by all fields"
+            dimension="sm"
+            disabled={isSpansLazyLoading}
+          ></SearchInput>
+        </div>
 
-        {virtualTreeData ? (
+        {tree.length ? (
           <VirtualizedTreeViewer
-            ref={virtualTreeViewerRef}
-            tree={virtualTreeData}
             scrollRef={scrollRef}
             rowId={rowId}
             onRowIdChange={onSelectRow}

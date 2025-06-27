@@ -1,250 +1,80 @@
-import React, {
-  useMemo,
-  useEffect,
-  useRef,
-  useCallback,
-  forwardRef,
-  useImperativeHandle,
-} from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useHotkeys } from "react-hotkeys-hook";
 
 import useTreeDetailsStore from "@/components/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
-import { BASE_TRACE_DATA_TYPE, Span } from "@/types/traces";
-
-// TODO lala optimize
-const getNodePath = (
-  nodes: TreeNode[],
-  targetId: string,
-  path: string[] = [],
-): string[] | null => {
-  for (const node of nodes) {
-    if (node.id === targetId) {
-      return [...path, node.id];
-    }
-    if (node.children) {
-      const foundPath = getNodePath(node.children, targetId, [
-        ...path,
-        node.id,
-      ]);
-      if (foundPath) return foundPath;
-    }
-  }
-  return null;
-};
-
-export type SpanWithMetadata = Omit<Span, "type"> & {
-  type: BASE_TRACE_DATA_TYPE;
-  duration: number;
-  tokens?: number;
-  spanColor?: string;
-  startTimestamp?: number;
-  maxStartTime?: number;
-  maxEndTime?: number;
-  maxDuration?: number;
-  hasError?: boolean;
-  isInSearch?: boolean;
-};
-
-export interface TreeNode {
-  id: string;
-  name: string;
-  data: SpanWithMetadata;
-  children?: TreeNode[];
-}
-
-interface FlattenedNode extends TreeNode {
-  depth: number;
-}
-
-export type VirtualizedTreeViewerRef = {
-  isCollapsedAll: () => boolean;
-  toggleExpandAll: () => void;
-};
 
 type VirtualizedTreeViewerProps = {
-  tree: TreeNode[];
   scrollRef: React.RefObject<HTMLDivElement>;
   rowId: string;
   onRowIdChange: (id: string) => void;
 };
 
-const VirtualizedTreeViewer = forwardRef<
-  VirtualizedTreeViewerRef,
-  VirtualizedTreeViewerProps
->(({ tree, scrollRef, rowId, onRowIdChange }, ref) => {
-  const {
-    expandedTreeRows,
-    setExpandedTreeRows,
-    focusedRowIndex,
-    setFocusedRowIndex,
-  } = useTreeDetailsStore();
+const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
+  scrollRef,
+  rowId,
+  onRowIdChange,
+}) => {
+  const { flattenedTree, expandedTreeRows, expandToNode, toggleExpand } =
+    useTreeDetailsStore();
 
-  const initiallyExpanded = useRef<{
-    id: string;
-    lengthMap: Record<string, number>;
-  }>({
-    id: "",
-    lengthMap: {},
+  const selectedRowRef = useRef<{ current?: string; previous?: string }>({
+    current: undefined,
+    previous: undefined,
   });
-  const selectedRowRef = useRef<string | undefined>();
-
-  useImperativeHandle(ref, () => ({
-    isCollapsedAll: () => expandedTreeRows.size === 0,
-    toggleExpandAll: () =>
-      expandedTreeRows.size === 0 ? expandAll() : collapseAll(),
-  }));
-
-  const expandAll = () => {
-    const allIds = new Set<string>();
-    const collectIds = (nodes: TreeNode[]) => {
-      nodes.forEach((node) => {
-        if (node.children) {
-          allIds.add(node.id);
-          collectIds(node.children);
-        }
-      });
-    };
-    collectIds(tree);
-    setExpandedTreeRows(allIds);
-  };
-
-  const collapseAll = () => {
-    setExpandedTreeRows(new Set());
-  };
-
-  // Flatten visible nodes based on expandedTreeRows state
-  const flattened = useMemo<FlattenedNode[]>(() => {
-    const list: FlattenedNode[] = [];
-    const traverse = (nodes: TreeNode[], depth: number) => {
-      nodes.forEach((node) => {
-        list.push({ ...node, depth });
-        if (node.children && expandedTreeRows.has(node.id)) {
-          traverse(node.children, depth + 1);
-        }
-      });
-    };
-    traverse(tree, 0);
-    return list;
-  }, [tree, expandedTreeRows]);
 
   // Virtualizer setup
   const rowVirtualizer = useVirtualizer({
-    count: flattened.length,
+    count: flattenedTree.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 50, // TODO lala
     overscan: 5,
   });
 
-  const expandToNode = useCallback(
-    (id: string) => {
-      const path = getNodePath(tree, id);
-      if (path) {
-        setExpandedTreeRows((prev) => {
-          const next = new Set(prev);
-          path.forEach((nodeId) => next.add(nodeId));
-          return next;
-        });
-      }
-    },
-    [setExpandedTreeRows, tree],
-  );
-
   const selectRow = useCallback(
     (id: string) => {
-      const selectedIndex = flattened.findIndex((node) => node.id === id);
-      if (selectedIndex !== -1) {
-        setFocusedRowIndex(selectedIndex);
-      }
-      if (id !== selectedRowRef.current) {
-        selectedRowRef.current = id;
+      console.log("selectRow", id); // TODO lala remove
+      const selectedIndex = flattenedTree.findIndex((node) => node.id === id);
+      if (id !== selectedRowRef.current.current) {
+        selectedRowRef.current.previous = selectedRowRef.current.current;
+        selectedRowRef.current.current = id;
         onRowIdChange(id);
       }
+
+      return selectedIndex;
     },
-    [flattened, onRowIdChange, setFocusedRowIndex],
+    [flattenedTree, onRowIdChange],
   );
 
   useEffect(() => {
-    const root = tree[0];
     if (
-      (root && initiallyExpanded.current.id !== root.id) ||
-      (initiallyExpanded.current.id === root.id &&
-        initiallyExpanded.current.lengthMap[root.id] !== root.children?.length)
+      rowId !== selectedRowRef.current.current &&
+      rowId !== selectedRowRef.current.previous
     ) {
-      initiallyExpanded.current.id = root.id;
-      initiallyExpanded.current.lengthMap[root.id] = root.children?.length || 0;
-      console.log("on root change"); //TODO lala remove
-
-      const level = 3;
-      const levelExpandedSet = new Set<string>();
-      const collectIds = (nodes: TreeNode[], currentDepth: number) => {
-        nodes.forEach((node) => {
-          if (node.children && currentDepth < level) {
-            levelExpandedSet.add(node.id);
-            collectIds(node.children, currentDepth + 1);
-          }
-        });
-      };
-      collectIds(tree, 0);
-      setExpandedTreeRows(levelExpandedSet);
-    }
-  }, [setExpandedTreeRows, tree]);
-
-  useEffect(() => {
-    if (rowId !== selectedRowRef.current) {
+      console.log("useEffect selectRow", rowId, selectedRowRef.current); //TODO lala remove
       expandToNode(rowId);
-      selectRow(rowId);
-      setFocusedRowIndex((index) => {
-        setTimeout(() => {
-          console.log(rowId);
+      const index = selectRow(rowId);
+      if (index !== -1) {
+        requestAnimationFrame(() =>
           rowVirtualizer.scrollToIndex(index, {
-            align: "start",
             behavior: "smooth",
-          });
-        }, 0);
-
-        return index;
-      });
+          }),
+        );
+      }
     }
-  }, [expandToNode, rowVirtualizer, selectRow, rowId, setFocusedRowIndex]);
+  }, [expandToNode, rowVirtualizer, selectRow, rowId]);
 
-  // Toggle expand/collapse
-  const toggleExpand = (id: string) => {
-    setExpandedTreeRows((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  // Keyboard navigation
-  useHotkeys(
-    "up",
-    (e) => {
-      e.preventDefault();
-      setFocusedRowIndex((i) => Math.max(0, i - 1));
-    },
-    [flattened],
-  );
-  useHotkeys(
-    "down",
-    (e) => {
-      e.preventDefault();
-      setFocusedRowIndex((i) => Math.min(flattened.length - 1, i + 1));
-    },
-    [flattened],
-  );
+  // TODO lala remove
   useHotkeys(
     "space, enter",
     (e) => {
       e.preventDefault();
-      const node = flattened[focusedRowIndex];
-      if (node.children) {
+      const node = flattenedTree.find((node) => node.id === rowId);
+      if (node?.children?.length) {
         toggleExpand(node.id);
       }
     },
-    [flattened, focusedRowIndex],
+    [flattenedTree, rowId],
   );
 
   return (
@@ -256,8 +86,8 @@ const VirtualizedTreeViewer = forwardRef<
       }}
     >
       {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-        const node = flattened[virtualRow.index];
-        const isFocused = virtualRow.index === focusedRowIndex;
+        const node = flattenedTree[virtualRow.index];
+        const isFocused = node.id === rowId;
         const isExpandable = Boolean(node.children?.length);
 
         return (
@@ -283,10 +113,7 @@ const VirtualizedTreeViewer = forwardRef<
             {isExpandable && (
               <div
                 className="mr-2 flex size-4 cursor-pointer items-center justify-center rounded border"
-                onClick={(event) => {
-                  toggleExpand(node.id);
-                  event.stopPropagation();
-                }}
+                onClick={() => toggleExpand(node.id)}
               >
                 {expandedTreeRows.has(node.id) ? "▾" : "▸"}
               </div>
@@ -297,8 +124,6 @@ const VirtualizedTreeViewer = forwardRef<
       })}
     </div>
   );
-});
-
-VirtualizedTreeViewer.displayName = "VirtualizedTreeViewer";
+};
 
 export default VirtualizedTreeViewer;
