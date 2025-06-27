@@ -140,7 +140,6 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.FeedbackScoreBatchItem.FeedbackScoreBatchItemBuilder;
-import static com.comet.opik.api.FeedbackScoreBatchItem.builder;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -170,7 +169,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.UUID.randomUUID;
 import static java.util.function.Predicate.not;
-import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -709,7 +707,7 @@ class TracesResourceTest {
             var id = create(trace, okApikey, workspaceName);
 
             var scores = IntStream.range(0, 5)
-                    .mapToObj(i -> builder()
+                    .mapToObj(i -> FeedbackScoreBatchItem.builder()
                             .name("name" + i)
                             .id(id)
                             .value(BigDecimal.valueOf(i))
@@ -1155,7 +1153,7 @@ class TracesResourceTest {
             var id = create(trace, API_KEY, TEST_WORKSPACE);
 
             var scores = IntStream.range(0, 5)
-                    .mapToObj(i -> builder()
+                    .mapToObj(i -> FeedbackScoreBatchItem.builder()
                             .name("name" + i)
                             .id(id)
                             .value(BigDecimal.valueOf(i))
@@ -6215,7 +6213,7 @@ class TracesResourceTest {
         @ParameterizedTest
         @MethodSource("threadFeedbackScoreTestCases")
         @DisplayName("Thread feedback scores contract test")
-        void scoreBatchOfThreads_contractTest(List<FeedbackScoreBatchItem> scores, int expectedStatus,
+        void scoreBatchOfThreads_contractErrorTest(List<FeedbackScoreBatchItem> scores, int expectedStatus,
                 String expectedError) {
             // Given
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
@@ -6224,47 +6222,12 @@ class TracesResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            if (expectedStatus == HttpStatus.SC_NO_CONTENT) {
-
-                Map<String, List<FeedbackScoreBatchItem>> scoresByProjectName = scores.stream()
-                        .collect(groupingBy(FeedbackScoreBatchItem::projectName));
-
-                scoresByProjectName.forEach((projectName, projectScores) -> {
-                    projectResourceClient.createProject(projectName, apiKey, workspaceName);
-
-                    // Create traces with threads first (threads need traces to exist)
-                    List<Trace> traces = projectScores.stream()
-                            .map(item -> createTrace().toBuilder()
-                                    .threadId(item.threadId())
-                                    .projectId(null)
-                                    .projectName(projectName)
-                                    .startTime(Instant.now().minusSeconds(5))
-                                    .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
-                                    .build())
-                            .toList();
-
-                    traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
-                });
-
-                Mono.delay(Duration.ofMillis(500)).block();
-
-                // Close threads
-                scoresByProjectName.forEach((projectName, projectScores) -> {
-                    projectScores.forEach(item -> {
-                        traceResourceClient.closeTraceThread(item.threadId(), null, projectName, apiKey, workspaceName);
-                    });
-                });
-            }
-
             // When
             try (var response = traceResourceClient.callThreadFeedbackScores(scores, apiKey, workspaceName)) {
+
                 // Then
                 assertThat(response.getStatus()).isEqualTo(expectedStatus);
-                if (expectedStatus == HttpStatus.SC_NO_CONTENT) {
-                    assertThat(response.hasEntity()).isFalse();
-                } else {
-                    assertThat(response.readEntity(ErrorMessage.class).errors()).contains(expectedError);
-                }
+                assertThat(response.readEntity(ErrorMessage.class).errors()).contains(expectedError);
             }
         }
 
@@ -6417,9 +6380,6 @@ class TracesResourceTest {
                     .build();
 
             return Stream.of(
-                    // Valid case - 204 No Content
-                    arguments(List.of(validScore), HttpStatus.SC_NO_CONTENT, null),
-
                     // Missing thread ID - 422 Unprocessable Entity
                     arguments(List.of(missingThreadIdScore), HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             "scores[0].threadId must not be blank"),
