@@ -172,7 +172,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.UUID.randomUUID;
 import static java.util.function.Predicate.not;
-import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -4980,50 +4979,50 @@ class TracesResourceTest {
                             true,
                             Operator.EQUAL,
                             generateExpectedIndices(),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) this::generateExpectedEqualsMatch,
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) this::generateUnexpectedEqualsMatch,
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) this::generateExpectedEqualsMatch,
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) this::generateUnexpectedEqualsMatch,
                             (Function<BigDecimal, String>) BigDecimal::toString), // Filter value function for EQUAL
                     Arguments.of(
                             false,
                             Operator.EQUAL,
                             generateExpectedIndices(),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) this::generateExpectedEqualsMatch,
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) this::generateUnexpectedEqualsMatch,
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) this::generateExpectedEqualsMatch,
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) this::generateUnexpectedEqualsMatch,
                             (Function<BigDecimal, String>) BigDecimal::toString),
                     Arguments.of(
                             true,
                             Operator.IS_NOT_EMPTY,
                             generateExpectedIndices(),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) (name,
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) (name,
                                     value) -> generateNotEmptyMatch(name),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) (name,
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) (name,
                                     value) -> generateUnexpectedNotEmptyMatch(name),
                             (Function<BigDecimal, String>) value -> ""), // Empty value for IS_NOT_EMPTY
                     Arguments.of(
                             false,
                             Operator.IS_NOT_EMPTY,
                             generateExpectedIndices(),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) (name,
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) (name,
                                     value) -> generateNotEmptyMatch(name),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) (name,
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) (name,
                                     value) -> generateUnexpectedNotEmptyMatch(name),
                             (Function<BigDecimal, String>) value -> ""),
                     Arguments.of(
                             true,
                             Operator.IS_EMPTY,
                             generateExpectedIndices(),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) (name,
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) (name,
                                     value) -> generateIsEmptyMatch(name),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) (name,
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) (name,
                                     value) -> generateNotEmptyMatch(name),
                             (Function<BigDecimal, String>) value -> ""), // Empty value for IS_EMPTY
                     Arguments.of(
                             false,
                             Operator.IS_EMPTY,
                             generateExpectedIndices(),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) (name,
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) (name,
                                     value) -> generateIsEmptyMatch(name),
-                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>>) (name,
+                            (BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>>) (name,
                                     value) -> generateNotEmptyMatch(name),
                             (Function<BigDecimal, String>) value -> "")
 
@@ -5034,16 +5033,16 @@ class TracesResourceTest {
             return new HashSet<>(List.of(RandomUtils.secure().randomInt(0, 5), RandomUtils.secure().randomInt(0, 5)));
         }
 
-        private List<FeedbackScoreBatchItem> generateIsEmptyMatch(String name) {
-            return PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class)
+        private List<FeedbackScoreBatchItemThread> generateIsEmptyMatch(String name) {
+            return PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItemThread.class)
                     .stream()
                     .filter(score -> !score.name().equals(name))
                     .toList();
         }
 
-        private List<FeedbackScoreBatchItem> generateNotEmptyMatch(String name) {
-            List<FeedbackScoreBatchItem> scores = PodamFactoryUtils.manufacturePojoList(factory,
-                    FeedbackScoreBatchItem.class);
+        private List<FeedbackScoreBatchItemThread> generateNotEmptyMatch(String name) {
+            List<FeedbackScoreBatchItemThread> scores = PodamFactoryUtils.manufacturePojoList(factory,
+                    FeedbackScoreBatchItemThread.class);
 
             scores.set(0, scores.getFirst().toBuilder()
                     .name(name)
@@ -5052,16 +5051,16 @@ class TracesResourceTest {
             return scores;
         }
 
-        private List<FeedbackScoreBatchItem> generateUnexpectedNotEmptyMatch(String name) {
-            return PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class)
+        private List<FeedbackScoreBatchItemThread> generateUnexpectedNotEmptyMatch(String name) {
+            return PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItemThread.class)
                     .stream()
                     .filter(score -> !score.name().equals(name))
                     .toList();
         }
 
-        private List<FeedbackScoreBatchItem> generateExpectedEqualsMatch(String name, BigDecimal value) {
-            List<FeedbackScoreBatchItem> scores = PodamFactoryUtils.manufacturePojoList(factory,
-                    FeedbackScoreBatchItem.class);
+        private List<FeedbackScoreBatchItemThread> generateExpectedEqualsMatch(String name, BigDecimal value) {
+            List<FeedbackScoreBatchItemThread> scores = PodamFactoryUtils.manufacturePojoList(factory,
+                    FeedbackScoreBatchItemThread.class);
 
             scores.set(0, scores.getFirst().toBuilder()
                     .name(name)
@@ -5071,9 +5070,9 @@ class TracesResourceTest {
             return scores;
         }
 
-        private List<FeedbackScoreBatchItem> generateUnexpectedEqualsMatch(String name, BigDecimal value) {
-            List<FeedbackScoreBatchItem> scores = PodamFactoryUtils.manufacturePojoList(factory,
-                    FeedbackScoreBatchItem.class);
+        private List<FeedbackScoreBatchItemThread> generateUnexpectedEqualsMatch(String name, BigDecimal value) {
+            List<FeedbackScoreBatchItemThread> scores = PodamFactoryUtils.manufacturePojoList(factory,
+                    FeedbackScoreBatchItemThread.class);
 
             scores.set(0, scores.getFirst().toBuilder()
                     .name(name)
@@ -5089,8 +5088,8 @@ class TracesResourceTest {
                 boolean stream,
                 Operator operator,
                 Set<Integer> expectedThreadIndices,
-                BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>> matchingScoreFunction,
-                BiFunction<String, BigDecimal, List<FeedbackScoreBatchItem>> unmatchingScoreFunction,
+                BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>> matchingScoreFunction,
+                BiFunction<String, BigDecimal, List<FeedbackScoreBatchItemThread>> unmatchingScoreFunction,
                 Function<BigDecimal, String> filterValueFunction) {
 
             // Given
@@ -5137,7 +5136,7 @@ class TracesResourceTest {
             BigDecimal targetScoreValue = factory.manufacturePojo(BigDecimal.class);
 
             // Create feedback scores based on the provided map
-            List<FeedbackScoreBatchItem> expectedScores = allThreadIds
+            List<FeedbackScoreBatchItemThread> expectedScores = allThreadIds
                     .stream()
                     .filter(threadId -> isExpected(expectedThreadIndices, threadId, allThreadIds))
                     .flatMap(threadId -> {
@@ -5146,9 +5145,9 @@ class TracesResourceTest {
                                         .threadId(threadId.toString())
                                         .projectName(projectName)
                                         .build());
-                    }).toList();
+                    }).collect(Collectors.toList());
 
-            List<FeedbackScoreBatchItem> unexpectedScores = allThreadIds.stream()
+            List<FeedbackScoreBatchItemThread> unexpectedScores = allThreadIds.stream()
                     .filter(threadId -> !isExpected(expectedThreadIndices, threadId, allThreadIds))
                     .flatMap(threadId -> {
                         return unmatchingScoreFunction.apply(targetScoreName, targetScoreValue).stream()
@@ -5156,9 +5155,10 @@ class TracesResourceTest {
                                         .threadId(threadId.toString())
                                         .projectName(projectName)
                                         .build());
-                    }).toList();
+                    }).collect(Collectors.toList());
 
-            List<FeedbackScoreBatchItem> scoreItems = Stream.concat(expectedScores.stream(), unexpectedScores.stream())
+            List<FeedbackScoreBatchItemThread> scoreItems = Stream
+                    .concat(expectedScores.stream(), unexpectedScores.stream())
                     .toList();
 
             // Create feedback scores for threads
