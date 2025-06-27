@@ -39,7 +39,7 @@ class ConversationalCoherenceMetric(
     Args:
         model: The model to use for
             evaluating the conversation. If a string is provided, it will be used to
-            fetch the model from the OpenAI API. If a base_model.OpikBaseModel is
+            fetch the model from the LiteLLM API. If a base_model.OpikBaseModel is
             provided, it will be used directly. Default is None.
         name: The name of the metric. The default is "conversational_coherence_score".
         include_reason: Whether to include the reason for the score in the
@@ -48,8 +48,8 @@ class ConversationalCoherenceMetric(
         project_name: The name of the project to track the metric in.
             Default is None.
         window_size: The window size to use for calculating the score. It defines the
-            maximal number of historical turns to include in each window when assesing
-            the coherence of current turn in the conversation. Default is 10.
+            maximal number of historical turns to include in each window when assessing
+            the coherence of the current turn in the conversation. Default is 10.
 
     Example:
         >>> from opik.evaluation.metrics import ConversationalCoherenceMetric

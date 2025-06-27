@@ -19,6 +19,51 @@ LOGGER = logging.getLogger(__name__)
 
 
 class UserFrustrationMetric(conversation_thread_metric.ConversationThreadMetric):
+    """
+    A heuristic score estimating the likelihood that the user experienced confusion, annoyance,
+    or disengagement during the session — due to repetition, lack of adaptation, ignored
+    intent signals, or failure to smoothly conclude.
+
+    The ``UserFrustrationMetric`` class integrates with machine learning models to analyze
+    conversation data in sliding windows and produce a numerical score along with an optional
+    reason for the calculated score. It provides both synchronous and asynchronous methods for
+    calculation and supports customization through attributes like window size and reason inclusion.
+
+    This metric can be used to monitor and track user frustration levels during conversations, enabling
+    insights into user experience. The metric makes use of machine learning models to score conversational
+    windows and summarize results. The higher the score, the more frustrated the user is likely to be.
+
+    Args:
+        model: The model to use for evaluating the conversation. If a string is provided, it will be used to
+            fetch the model from the LiteLLM API. If a base_model.OpikBaseModel is
+            provided, it will be used directly. Default is None.
+        name: The name of the metric. The default is "user_frustration_score".
+        include_reason: Whether to include the reason for the score in the
+            result. Default is True.
+        track: Whether to track the metric. Default is True.
+        project_name: The name of the project to track the metric in.
+            Default is None.
+        window_size: The window size to use for calculating the score. It defines the
+            maximal number of historical turns to include in each window when assessing
+            the frustration of the current turn in the conversation. Default is 10.
+
+    Example:
+        >>> from opik.evaluation.metrics import UserFrustrationMetric
+        >>> conversation = [
+        >>>     {"role": "user", "content": "How do I center a div using CSS?"},
+        >>>     {"role": "assistant", "content": "There are many ways to center elements in CSS."},
+        >>>     {"role": "user", "content": "Okay... can you show me one?"},
+        >>>     {"role": "assistant", "content": "Sure. It depends on the context — are you centering horizontally, vertically, or both?"},
+        >>>     {"role": "user", "content": "Both. Just give me a basic example."},
+        >>> ]
+        >>> metric = UserFrustrationMetric()
+        >>> result = metric.score(conversation)
+        >>> if result.scoring_failed:
+        >>>     print(f"Scoring failed: {result.reason}")
+        >>> else:
+        >>>     print(result.value)
+    """
+
     def __init__(
         self,
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,

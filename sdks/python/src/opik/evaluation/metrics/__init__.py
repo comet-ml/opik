@@ -1,6 +1,7 @@
 from .aggregated_metric import AggregatedMetric
 from .conversation.session_completeness.metric import SessionCompletenessQuality
 from .conversation.conversational_coherence.metric import ConversationalCoherenceMetric
+from .conversation.user_frustration.metric import UserFrustrationMetric
 from .heuristics.contains import Contains
 from .heuristics.equals import Equals
 from .heuristics.is_json import IsJson
@@ -44,4 +45,5 @@ __all__ = [
     "ROUGE",
     "Sentiment",
     "SessionCompletenessQuality",
+    "UserFrustrationMetric",
 ]
