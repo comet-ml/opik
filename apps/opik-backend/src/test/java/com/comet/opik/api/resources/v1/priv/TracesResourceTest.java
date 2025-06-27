@@ -8470,6 +8470,54 @@ class TracesResourceTest {
     }
 
     @Nested
+    @DisplayName("Get Trace Threads Feedback Score names")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetTraceThreadsFeedbackScoreNames {
+
+        @Test
+        @DisplayName("when get trace threads feedback score names, then return feedback score names")
+        void getTraceThreadsFeedbackScoreNames__whenGetTraceThreadsFeedbackScoreNames__thenReturnFeedbackScoreNames() {
+
+            // given
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = UUID.randomUUID().toString();
+
+            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            Project project = projectResourceClient.getProject(projectId, apiKey, workspaceName);
+
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+            List<String> otherNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            // Create multiple values feedback scores for trace threads
+            List<String> multipleValuesFeedbackScores = names.subList(0, names.size() - 1);
+
+            createMultiValueTraceThreadScores(multipleValuesFeedbackScores, project, apiKey, workspaceName);
+
+            createMultiValueTraceThreadScores(List.of(names.getLast()), project, apiKey, workspaceName);
+
+            // Create unexpected feedback scores for a different project
+            String unexpectedProjectName = RandomStringUtils.secure().nextAlphanumeric(20);
+            UUID unexpectedProjectId = projectResourceClient.createProject(unexpectedProjectName, apiKey,
+                    workspaceName);
+            Project unexpectedProject = projectResourceClient.getProject(unexpectedProjectId, apiKey, workspaceName);
+
+            createMultiValueTraceThreadScores(otherNames, unexpectedProject, apiKey, workspaceName);
+
+            // when
+            FeedbackScoreNames actualNames = traceResourceClient.getTraceThreadsFeedbackScoreNames(projectId, apiKey,
+                    workspaceName);
+
+            // then
+            assertFeedbackScoreNames(actualNames, names);
+        }
+    }
+
+    @Nested
     @DisplayName("Trace threads Delete")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class TraceThreadsDelete {
@@ -9222,4 +9270,43 @@ class TracesResourceTest {
     private void mockGetWorkspaceIdByName(String workspaceName, String workspaceId) {
         AuthTestUtils.mockGetWorkspaceIdByName(wireMock.server(), workspaceName, workspaceId);
     }
+
+    private List<List<FeedbackScoreBatchItem>> createMultiValueTraceThreadScores(
+            List<String> multipleValuesFeedbackScores,
+            Project project, String apiKey, String workspaceName) {
+        return IntStream.range(0, multipleValuesFeedbackScores.size())
+                .mapToObj(i -> {
+
+                    String threadId = UUID.randomUUID().toString();
+
+                    Trace trace1 = createTrace().toBuilder()
+                            .projectName(project.name())
+                            .threadId(threadId)
+                            .build();
+
+                    Trace trace2 = createTrace().toBuilder()
+                            .projectName(project.name())
+                            .threadId(threadId)
+                            .build();
+
+                    traceResourceClient.batchCreateTraces(List.of(trace1, trace2), apiKey, workspaceName);
+
+                    // Close thread
+                    Mono.delay(Duration.ofMillis(500)).block();
+                    traceResourceClient.closeTraceThread(threadId, project.id(), null, apiKey, workspaceName);
+
+                    List<FeedbackScoreBatchItem> scores = multipleValuesFeedbackScores.stream()
+                            .map(name -> initFeedbackScoreItem()
+                                    .name(name)
+                                    .projectName(project.name())
+                                    .threadId(threadId)
+                                    .build())
+                            .toList();
+
+                    traceResourceClient.threadFeedbackScores(scores, apiKey, workspaceName);
+
+                    return scores;
+                }).toList();
+    }
+
 }
