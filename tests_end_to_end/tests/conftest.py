@@ -854,17 +854,42 @@ def pytest_runtest_makereport(item, call):
                     context.tracing.stop(path=trace_path)
 
                     if os.path.exists(trace_path):
-                        # Attach trace to Allure report
-                        allure.attach.file(
-                            trace_path,
-                            name="Playwright Trace on Failure",
-                            attachment_type=allure.attachment_type.ZIP,
-                        )
+                        max_retries = 10
+                        retry_count = 0
+
+                        while retry_count < max_retries:
+                            try:
+                                with open(trace_path, "rb") as f:
+                                    trace_content = f.read()
+
+                                allure.attach(
+                                    trace_content,
+                                    name=f"Playwright Trace - {item.name}",
+                                    attachment_type=allure.attachment_type.ZIP,
+                                )
+                                logging.info(
+                                    f"Playwright trace captured and attached for test: {item.name}"
+                                )
+                                break
+                            except Exception as e:
+                                logging.error(
+                                    f"Failed to read trace file content: {str(e)}"
+                                )
+                                break
+
+                            retry_count += 1
+                            time.sleep(0.5)
+
+                        if retry_count >= max_retries:
+                            logging.warning(
+                                f"Trace file not accessible after waiting: {trace_path}"
+                            )
+
                         # Clean up the file after attaching
-                        os.remove(trace_path)
-                        logging.info(
-                            f"Playwright trace captured and attached for test: {item.name}"
-                        )
+                        try:
+                            os.remove(trace_path)
+                        except Exception as e:
+                            logging.warning(f"Failed to remove trace file: {str(e)}")
 
                     # Restart tracing for potential subsequent tests
                     context.tracing.start(
