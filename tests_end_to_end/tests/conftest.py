@@ -142,8 +142,7 @@ def browser_context(browser: Browser, env_config, video_dir):
     # Store the video info container for access by other fixtures
     context._video_info = video_dir["info"]
 
-    # Start tracing for the entire session
-    context.tracing.start(screenshots=True, snapshots=True, sources=True)
+    # Tracing will be started per test in the page fixture
 
     context.grant_permissions(["clipboard-read", "clipboard-write"])
 
@@ -185,13 +184,6 @@ def browser_context(browser: Browser, env_config, video_dir):
         page.close()
 
     yield context
-
-    # Stop tracing before closing context
-    try:
-        context.tracing.stop()
-    except Exception as e:
-        logging.warning(f"Failed to stop tracing during context cleanup: {str(e)}")
-
     context.close()
 
 
@@ -269,6 +261,12 @@ def page(browser_context, request):
     if hasattr(browser_context, "_video_info"):
         browser_context._video_info[test_id] = {"failed": False, "video_path": None}
 
+    # Start tracing for this specific test
+    try:
+        browser_context.tracing.start(screenshots=True, snapshots=True, sources=True)
+    except Exception as e:
+        logging.warning(f"Failed to start tracing for test {test_name}: {str(e)}")
+
     yield page
 
     failed = False
@@ -286,6 +284,12 @@ def page(browser_context, request):
             video_path = page.video.path()
         except Exception as e:
             logging.error(f"Failed to get video path: {str(e)}")
+
+    # Stop tracing for this test (cleanup)
+    try:
+        browser_context.tracing.stop()
+    except Exception as e:
+        logging.warning(f"Failed to stop tracing for test {test_name}: {str(e)}")
 
     page.close()
 
@@ -892,10 +896,7 @@ def pytest_runtest_makereport(item, call):
                         except Exception as e:
                             logging.warning(f"Failed to remove trace file: {str(e)}")
 
-                    # Restart tracing for potential subsequent tests
-                    context.tracing.start(
-                        screenshots=True, snapshots=True, sources=True
-                    )
+                    # Tracing will be restarted by the next test's page fixture
 
                 except Exception as e:
                     logging.error(f"Failed to capture Playwright trace: {str(e)}")
