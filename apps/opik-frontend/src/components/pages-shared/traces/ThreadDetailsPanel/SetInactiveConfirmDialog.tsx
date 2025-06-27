@@ -44,6 +44,7 @@ const SetInactiveConfirmDialog: React.FunctionComponent<
         <DialogHeader>
           <DialogTitle>Set as inactive</DialogTitle>
           <DialogDescription>
+            {/* TODO: Uncomment once Online eval is ready */}
             {/* Setting this thread as inactive will let you add scores, tags, and
             comments. Online evaluation rules will also run. <br /> <br />
             If you send a new message, the thread will become active again, and

@@ -45,7 +45,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
   return (
     <div className="flex min-h-7 w-full flex-wrap items-center gap-1 overflow-x-hidden">
       <Tag className="mx-1 size-4 text-muted-slate" />
-      {tags.sort().map((tag) => {
+      {[...tags].sort().map((tag) => {
         return (
           <RemovableTag
             label={tag}

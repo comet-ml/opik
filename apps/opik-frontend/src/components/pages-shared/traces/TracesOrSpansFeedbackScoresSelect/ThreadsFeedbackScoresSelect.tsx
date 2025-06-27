@@ -23,14 +23,9 @@ const ThreadsFeedbackScoresSelect: React.FC<
   placeholder = "Select score",
   className,
 }) => {
-  const { data: feedbackScoresNames } = useThreadsFeedbackScoresNames(
-    {
-      projectId,
-    },
-    {
-      enabled: false,
-    },
-  );
+  const { data: feedbackScoresNames } = useThreadsFeedbackScoresNames({
+    projectId,
+  });
 
   const options = useMemo(() => {
     return sortBy(

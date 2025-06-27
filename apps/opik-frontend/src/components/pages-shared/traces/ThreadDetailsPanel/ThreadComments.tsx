@@ -94,11 +94,9 @@ const ThreadComments: React.FC<ThreadCommentsProps> = ({
         onSubmit={(data) => onSubmit(data.commentText)}
         className="mt-4 px-6"
         actions={
-          <>
-            <TooltipWrapper content={"Submit"} hotkeys={["⌘", "⏎"]}>
-              <UserCommentForm.SubmitButton />
-            </TooltipWrapper>
-          </>
+          <TooltipWrapper content={"Submit"} hotkeys={["⌘", "⏎"]}>
+            <UserCommentForm.SubmitButton />
+          </TooltipWrapper>
         }
       >
         <UserCommentForm.TextareaField placeholder="Add a comment..." />

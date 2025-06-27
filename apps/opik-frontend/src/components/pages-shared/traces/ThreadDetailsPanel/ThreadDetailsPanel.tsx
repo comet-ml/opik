@@ -31,6 +31,7 @@ import useThreadBatchDeleteMutation from "@/api/traces/useThreadBatchDeleteMutat
 import TraceMessages from "@/components/pages-shared/traces/ThreadDetailsPanel/TraceMessages";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import {
+  ButtonLayoutSize,
   DetailsActionSection,
   DetailsActionSectionToggle,
   useDetailsActionSectionState,
@@ -72,6 +73,8 @@ type ThreadDetailsPanelProps = {
   onRowChange?: (shift: number) => void;
 };
 
+const DEFAULT_TAB = "messages";
+
 const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   projectId,
   projectName,
@@ -87,7 +90,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
-  const [setInactiveOpen, setSetInactiveOpen] = useState<boolean>(false);
+  const [setInactiveOpen, changeSetInactiveOpen] = useState<boolean>(false);
   const [height, setHeight] = useState<number>(0);
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
     const contentHeight = node.clientHeight;
@@ -103,7 +106,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
 
   const { mutate: threadFeedbackScoreDelete } =
     useThreadFeedbackScoreDeleteMutation();
-  const [activeTab = "messages", setActiveTab] = useQueryParam(
+  const [activeTab = DEFAULT_TAB, setActiveTab] = useQueryParam(
     "threadTab",
     StringParam,
     {
@@ -123,6 +126,11 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   );
   const isInactiveThread = thread?.status === ThreadStatus.INACTIVE;
   const threadFeedbackScores = thread?.feedback_scores ?? [];
+
+  let currentActiveTab = activeTab!;
+  if (activeTab === "feedback_scores" && !isInactiveThread) {
+    currentActiveTab = DEFAULT_TAB;
+  }
 
   const disabledAnnotationExplainer = !isInactiveThread
     ? "Feedback scores are disabled during an ongoing session to avoid conflicts while the thread is still active. "
@@ -219,7 +227,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-60">
-                <DropdownMenuItem onClick={() => setSetInactiveOpen(true)}>
+                <DropdownMenuItem onClick={() => changeSetInactiveOpen(true)}>
                   <MessageCircleOff className="mr-2 size-4" />
                   Set as inactive
                 </DropdownMenuItem>
@@ -288,7 +296,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     return (
       <Tabs
         defaultValue="messages"
-        value={activeTab!}
+        value={currentActiveTab}
         onValueChange={setActiveTab}
       >
         <div className="mx-6" data-panel-tabs="true">
@@ -441,7 +449,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         <DetailsActionSectionToggle
           activeSection={activeSection}
           setActiveSection={setActiveSection}
-          layoutSize="lg"
+          layoutSize={ButtonLayoutSize.Large}
           count={annotationCount}
           type={DetailsActionSection.Annotations}
           disabled={!isInactiveThread}
@@ -498,7 +506,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
 
         <SetInactiveConfirmDialog
           open={setInactiveOpen}
-          setOpen={setSetInactiveOpen}
+          setOpen={changeSetInactiveOpen}
           threadId={threadId}
           projectId={projectId}
         />

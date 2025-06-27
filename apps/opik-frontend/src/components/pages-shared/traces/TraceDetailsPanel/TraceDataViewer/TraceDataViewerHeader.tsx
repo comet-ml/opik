@@ -19,7 +19,7 @@ const TraceDataViewerHeader: React.FC<TraceDataViewerHeaderProps> = ({
   actionsPanel,
 }) => {
   const titleRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState<ButtonLayoutSize>("sm");
+  const [size, setSize] = useState<ButtonLayoutSize>(ButtonLayoutSize.Small);
 
   const { ref: containerRef } = useObserveResizeNode<HTMLDivElement>((node) => {
     if (!titleRef.current) return;
@@ -27,7 +27,8 @@ const TraceDataViewerHeader: React.FC<TraceDataViewerHeaderProps> = ({
     const titleWidth = titleRef.current.clientWidth;
     const availableSpace =
       node.clientWidth - titleWidth - LAYOUT_CONSTANTS.REQUIRED_WIDTH;
-    const newSize: ButtonLayoutSize = availableSpace > 0 ? "lg" : "sm";
+    const newSize: ButtonLayoutSize =
+      availableSpace > 0 ? ButtonLayoutSize.Large : ButtonLayoutSize.Small;
 
     if (newSize !== size) {
       setSize(newSize);

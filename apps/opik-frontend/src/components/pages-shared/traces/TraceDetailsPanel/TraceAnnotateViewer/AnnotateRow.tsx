@@ -55,11 +55,6 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     setEditReason(false);
   }, [feedbackScore?.category_name]);
 
-  // TODO: add traceId and spanId to key or parent component
-  // useEffect(() => {
-  //   setEditReason(false);
-  // }, [traceId]);
-
   const [value, setValue] = useState<number | "">(
     isNumber(feedbackScore?.value) ? feedbackScore?.value : "",
   );
@@ -205,7 +200,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
             className="h-7 min-w-[100px] py-1"
             renderTrigger={(value) => {
               const selectedOption = categoricalOptionList.find(
-                (item) => item.name === value,
+                (item) => item.name.trim() === value.trim(),
               );
 
               if (!selectedOption) {

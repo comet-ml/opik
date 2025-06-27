@@ -25,7 +25,7 @@ const FeedbackScoreTableNoData: React.FC<FeedbackScoreTableNoDataProps> = ({
         {entityCopy[entityType]}, or manually annotate your{" "}
         {entityCopy[entityType]} with human review.
       </span>
-      <div className="flex gap-2 pt-3">
+      <div className="flex flex-wrap justify-center gap-2 pt-3">
         <Button variant="outline" size="sm" onClick={onAddHumanReview}>
           <PenLine className="mr-2 size-4" />
           Add human review

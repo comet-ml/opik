@@ -7,9 +7,13 @@ import {
 import { MessageSquareMore, PenLine } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type ButtonLayoutSize = "lg" | "sm";
+export enum ButtonLayoutSize {
+  Large = "lg",
+  Small = "sm",
+}
 
-const isLargeLayout = (layoutSize: ButtonLayoutSize) => layoutSize === "lg";
+const isLargeLayout = (layoutSize: ButtonLayoutSize) =>
+  layoutSize === ButtonLayoutSize.Large;
 const formatCounter = (
   layoutSize: ButtonLayoutSize,
   count?: number | string,
