@@ -789,4 +789,27 @@ public class TracesResource {
         return Response.noContent().build();
     }
 
+    @GET
+    @Path("/threads/feedback-scores/names")
+    @Operation(operationId = "findTraceThreadsFeedbackScoreNames", summary = "Find Trace Threads Feedback Score names", description = "Find Trace Threads Feedback Score names", responses = {
+            @ApiResponse(responseCode = "200", description = "Find Trace Threads Feedback Score names", content = @Content(array = @ArraySchema(schema = @Schema(implementation = String.class))))
+    })
+    @JsonView({FeedbackDefinition.View.Public.class})
+    public Response findTraceThreadsFeedbackScoreNames(@QueryParam("project_id") @NotNull UUID projectId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Find trace threads feedback score names by project_id '{}', on workspaceId '{}'",
+                projectId, workspaceId);
+
+        FeedbackScoreNames feedbackScoreNames = feedbackScoreService
+                .getTraceThreadsFeedbackScoreNames(projectId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Found trace threads feedback score names '{}' by project_id '{}', on workspaceId '{}'",
+                feedbackScoreNames.scores().size(), projectId, workspaceId);
+
+        return Response.ok(feedbackScoreNames).build();
+    }
 }
