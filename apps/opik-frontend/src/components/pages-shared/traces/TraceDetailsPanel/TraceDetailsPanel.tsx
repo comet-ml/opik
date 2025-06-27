@@ -29,6 +29,7 @@ import {
   DetailsActionSection,
   useDetailsActionSectionState,
 } from "@/components/pages-shared/traces/DetailsActionSection";
+import useTreeDetailsStore from "@/components/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
 
 type TraceDetailsPanelProps = {
   projectId?: string;
@@ -58,6 +59,8 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastSection");
+  const { getNextRowId, getPreviousRosId, flattenedTree } =
+    useTreeDetailsStore();
 
   const { data: trace, isPending: isTracePending } = useTraceById(
     {
@@ -123,6 +126,34 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
         : undefined,
     [hasNextRow, hasPreviousRow, onRowChange],
   );
+
+  const verticalNavigation = useMemo(() => {
+    const id = spanId || traceId;
+    const previousRowId = getPreviousRosId(id);
+    const nextRowId = getNextRowId(id);
+    // TODO lala remove neet to rerender
+    const x = flattenedTree.findIndex((node) => node.id === id);
+    if (x === -1) {
+      console.warn(
+        `Row with id ${id} not found in flattened tree. This may cause navigation issues.`,
+      );
+    }
+    return {
+      onChange: (shift: 1 | -1) => {
+        const rowId = shift > 0 ? nextRowId : previousRowId;
+        rowId && handleRowSelect(rowId);
+      },
+      hasNext: Boolean(nextRowId),
+      hasPrevious: Boolean(previousRowId),
+    };
+  }, [
+    spanId,
+    traceId,
+    getPreviousRosId,
+    getNextRowId,
+    handleRowSelect,
+    flattenedTree,
+  ]);
 
   const renderContent = () => {
     if (isTracePending || isSpansPending) {
@@ -241,6 +272,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       headerContent={renderHeaderContent()}
       onClose={onClose}
       horizontalNavigation={horizontalNavigation}
+      verticalNavigation={verticalNavigation}
     >
       {renderContent()}
     </ResizableSidePanel>
