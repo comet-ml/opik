@@ -81,6 +81,7 @@ Call opik api on http://localhost:5173/api
 | https://charts.bitnami.com/bitnami | mysql | 11.1.9 |
 | https://charts.bitnami.com/bitnami | redis | 18.19.2 |
 | https://charts.bitnami.com/bitnami | zookeeper | 13.8.3 |
+| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.0 |
 | oci://registry-1.docker.io/bitnamicharts | common | 2.x.x |
 
 ## Values
@@ -94,31 +95,78 @@ Call opik api on http://localhost:5173/api
 | clickhouse.adminUser.password | string | `"opik"` |  |
 | clickhouse.adminUser.useSecret.enabled | bool | `false` |  |
 | clickhouse.adminUser.username | string | `"opik"` |  |
+| clickhouse.backup.backupCronJob.command[0] | string | `"/bin/bash"` |  |
+| clickhouse.backup.backupCronJob.command[1] | string | `"-cx"` |  |
+| clickhouse.backup.backupCronJob.command[2] | string | `"if [ $(date +%j) -eq 1 ]; then\n  echo \"Running backup for the first day of the year\"\n  export BACKUP_PREFIX=yearly/\nelif [ $(date +%d) -eq 1 ]; then\n  echo \"Skipping backup, not the first day of the year\"\n  export BACKUP_PREFIX=monthly/\nelse\n  echo \"Running backup for the current day\"\n  export BACKUP_PREFIX=\"\"\nfi\nexport BACKUP_NAME=${BACKUP_PREFIX}backup$(date +'%Y%m%d%H%M')\nBACKUP_QUERY_FILE=$(mktemp --suffix .sql /tmp/clickhouse-backup-query.XXXXXX)\ncat << BACKUP_SQL | tee \"${BACKUP_QUERY_FILE}\"\n  BACKUP ALL EXCEPT DATABASE system \n    TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${BACKUP_NAME}/', '${AWS_ACCESS_KEY_ID}', '${AWS_SECRET_ACCESS_KEY}');\nBACKUP_SQL\nclickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=\"${BACKUP_QUERY_FILE}\"\n"` |  |
+| clickhouse.backup.backupCronJob.enabled | bool | `false` |  |
+| clickhouse.backup.backupCronJob.schedule | string | `"0 0 * * *"` |  |
+| clickhouse.backup.backupCronJob.successfulJobsHistoryLimit | int | `1` |  |
+| clickhouse.backup.backupServer.enabled | bool | `false` |  |
+| clickhouse.backup.backupServer.env.ALLOW_EMPTY_BACKUPS | bool | `true` |  |
+| clickhouse.backup.backupServer.env.API_CREATE_INTEGRATION_TABLES | bool | `true` |  |
+| clickhouse.backup.backupServer.env.API_LISTEN | string | `"0.0.0.0:7171"` |  |
+| clickhouse.backup.backupServer.env.BACKUPS_TO_KEEP_REMOTE | int | `3` |  |
+| clickhouse.backup.backupServer.env.LOG_LEVEL | string | `"info"` |  |
+| clickhouse.backup.backupServer.env.REMOTE_STORAGE | string | `"s3"` |  |
+| clickhouse.backup.backupServer.env.S3_ACCESS_KEY | string | `""` |  |
+| clickhouse.backup.backupServer.env.S3_ACL | string | `"private"` |  |
+| clickhouse.backup.backupServer.env.S3_BUCKET | string | `"clickhouse-backup"` |  |
+| clickhouse.backup.backupServer.env.S3_FORCE_PATH_STYLE | bool | `true` |  |
+| clickhouse.backup.backupServer.env.S3_PATH | string | `"backup/shard-{shard}"` |  |
+| clickhouse.backup.backupServer.env.S3_SECRET_KEY | string | `""` |  |
+| clickhouse.backup.backupServer.image | string | `"altinity/clickhouse-backup:2.6.23"` |  |
+| clickhouse.backup.backupServer.port | int | `7171` |  |
 | clickhouse.backup.enabled | bool | `false` |  |
-| clickhouse.backup.env.ALLOW_EMPTY_BACKUPS | bool | `true` |  |
-| clickhouse.backup.env.API_CREATE_INTEGRATION_TABLES | bool | `true` |  |
-| clickhouse.backup.env.API_LISTEN | string | `"0.0.0.0:7171"` |  |
-| clickhouse.backup.env.BACKUPS_TO_KEEP_REMOTE | int | `3` |  |
-| clickhouse.backup.env.REMOTE_STORAGE | string | `"s3"` |  |
-| clickhouse.backup.env.S3_ACCESS_KEY | string | `""` |  |
-| clickhouse.backup.env.S3_ACL | string | `"private"` |  |
-| clickhouse.backup.env.S3_BUCKET | string | `"clickhouse-backup"` |  |
-| clickhouse.backup.env.S3_FORCE_PATH_STYLE | bool | `true` |  |
-| clickhouse.backup.env.S3_PATH | string | `"backup/shard-{shard}"` |  |
-| clickhouse.backup.env.S3_SECRET_KEY | string | `""` |  |
-| clickhouse.backup.image | string | `"altinity/clickhouse-backup:2.6.23"` |  |
-| clickhouse.backup.imagePullPolicy | string | `"Always"` |  |
-| clickhouse.backup.port | int | `7171` |  |
+| clickhouse.backup.monitoring.additionalLabels | object | `{}` |  |
+| clickhouse.backup.monitoring.annotations | object | `{}` |  |
+| clickhouse.backup.monitoring.enabled | bool | `false` |  |
+| clickhouse.backup.monitoring.service.ports[0].name | string | `"ch-backup-rest"` |  |
+| clickhouse.backup.monitoring.service.ports[0].port | int | `80` |  |
+| clickhouse.backup.monitoring.service.ports[0].targetPort | int | `7171` |  |
+| clickhouse.backup.monitoring.service.type | string | `"ClusterIP"` |  |
+| clickhouse.backup.monitoring.serviceMonitor.additionalLabels | object | `{}` |  |
+| clickhouse.backup.monitoring.serviceMonitor.annotations | object | `{}` |  |
+| clickhouse.backup.monitoring.serviceMonitor.enabled | bool | `false` |  |
+| clickhouse.backup.monitoring.serviceMonitor.honorLabels | bool | `false` |  |
+| clickhouse.backup.monitoring.serviceMonitor.interval | string | `"60s"` |  |
+| clickhouse.backup.monitoring.serviceMonitor.metricRelabelings | list | `[]` |  |
+| clickhouse.backup.monitoring.serviceMonitor.namespace | string | `""` |  |
+| clickhouse.backup.monitoring.serviceMonitor.podTargetLabels | list | `[]` |  |
+| clickhouse.backup.monitoring.serviceMonitor.portName | string | `""` |  |
+| clickhouse.backup.monitoring.serviceMonitor.relabelings | list | `[]` |  |
+| clickhouse.backup.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
 | clickhouse.backup.serviceAccount.annotations | object | `{}` |  |
-| clickhouse.backup.successfulJobsHistoryLimit | int | `1` |  |
+| clickhouse.backup.serviceAccount.create | bool | `false` |  |
+| clickhouse.backup.serviceAccount.name | string | `""` |  |
 | clickhouse.enabled | bool | `true` |  |
 | clickhouse.image | string | `"altinity/clickhouse-server:24.3.5.47.altinitystable"` |  |
 | clickhouse.logsLevel | string | `"information"` |  |
+| clickhouse.monitoring.additionalLabels | object | `{}` |  |
+| clickhouse.monitoring.annotations | object | `{}` |  |
 | clickhouse.monitoring.enabled | bool | `false` |  |
 | clickhouse.monitoring.password | string | `"opikmon"` |  |
+| clickhouse.monitoring.service.ports[0].name | string | `"prometheus-metrics"` |  |
+| clickhouse.monitoring.service.ports[0].port | int | `80` |  |
+| clickhouse.monitoring.service.ports[0].targetPort | int | `9363` |  |
+| clickhouse.monitoring.service.type | string | `"ClusterIP"` |  |
+| clickhouse.monitoring.serviceMonitor.additionalLabels | object | `{}` |  |
+| clickhouse.monitoring.serviceMonitor.annotations | object | `{}` |  |
+| clickhouse.monitoring.serviceMonitor.enabled | bool | `false` |  |
+| clickhouse.monitoring.serviceMonitor.honorLabels | bool | `false` |  |
+| clickhouse.monitoring.serviceMonitor.interval | string | `"60s"` |  |
+| clickhouse.monitoring.serviceMonitor.metricRelabelings | list | `[]` |  |
+| clickhouse.monitoring.serviceMonitor.namespace | string | `""` |  |
+| clickhouse.monitoring.serviceMonitor.podTargetLabels | list | `[]` |  |
+| clickhouse.monitoring.serviceMonitor.portName | string | `""` |  |
+| clickhouse.monitoring.serviceMonitor.relabelings | list | `[]` |  |
+| clickhouse.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
+| clickhouse.monitoring.useSecret.enabled | bool | `false` |  |
 | clickhouse.monitoring.username | string | `"opikmon"` |  |
 | clickhouse.replicasCount | int | `1` |  |
 | clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
+| clickhouse.serviceAccount.annotations | object | `{}` |  |
+| clickhouse.serviceAccount.create | bool | `false` |  |
+| clickhouse.serviceAccount.name | string | `""` |  |
 | clickhouse.shardsCount | int | `1` |  |
 | clickhouse.storage | string | `"50Gi"` |  |
 | clickhouse.zookeeper.host | string | `"opik-zookeeper"` |  |
@@ -263,7 +311,6 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.service.ports[0].targetPort | int | `8000` |  |
 | component.python-backend.service.type | string | `"ClusterIP"` |  |
 | component.python-backend.serviceAccount.create | bool | `true` |  |
-| component.python-backend.serviceAccount.enabled | bool | `true` |  |
 | component.python-backend.serviceAccount.name | string | `"opik-python-backend"` |  |
 | demoDataJob | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
