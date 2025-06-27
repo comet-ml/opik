@@ -1,6 +1,6 @@
 import pytest
 from playwright.sync_api import Page
-from sdk_helpers import (
+from tests.sdk_helpers import (
     find_project_by_name_sdk,
     delete_project_by_name_sdk,
     wait_for_project_to_be_visible,
@@ -18,6 +18,8 @@ class TestProjectsCrud:
         "project_fixture", ["create_project_api", "create_project_ui"]
     )
     @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.projects
     @allure.title("Basic project creation - {project_fixture}")
     @allure.description("Test project visibility after creation in both UI and SDK")
     def test_project_visibility(self, request, page: Page, project_fixture):
@@ -75,6 +77,8 @@ class TestProjectsCrud:
                 f"Note: This could be due to project not visible or page load issues"
             ) from e
 
+    @pytest.mark.regression
+    @pytest.mark.projects
     @pytest.mark.parametrize(
         "project_fixture",
         ["create_project_api", "create_project_ui"],
@@ -163,6 +167,8 @@ class TestProjectsCrud:
             else:
                 delete_project_by_name_sdk(project_name)
 
+    @pytest.mark.regression
+    @pytest.mark.projects
     @pytest.mark.parametrize(
         "project_fixture",
         ["create_project_api", "create_project_ui"],
@@ -225,6 +231,8 @@ class TestProjectsCrud:
                 f"Error: {str(e)}"
             ) from e
 
+    @pytest.mark.regression
+    @pytest.mark.projects
     @pytest.mark.parametrize(
         "project_fixture",
         ["create_project_api", "create_project_ui"],

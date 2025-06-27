@@ -28,11 +28,9 @@ import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
-import java.sql.SQLException;
 import java.util.Random;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.github.tomakehurst.wiremock.client.WireMock.exactly;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -88,19 +86,8 @@ class OpikGuiceyLifecycleEventListenerTest {
             var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                     CLICK_HOUSE_CONTAINER, DATABASE_NAME);
 
-            try {
-                MigrationUtils.runDbMigration(MYSQL_CONTAINER.createConnection(""),
-                        MySQLContainerUtils.migrationParameters());
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
-
-            try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
-                MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                        ClickHouseContainerUtils.migrationParameters());
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
+            MigrationUtils.runMysqlDbMigration(MYSQL_CONTAINER);
+            MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
 
             wireMock.server().stubFor(
                     post(urlPathEqualTo("/v1/notify/event"))
@@ -150,19 +137,8 @@ class OpikGuiceyLifecycleEventListenerTest {
             var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                     CLICK_HOUSE_CONTAINER, DATABASE_NAME);
 
-            try {
-                MigrationUtils.runDbMigration(MYSQL_CONTAINER.createConnection(""),
-                        MySQLContainerUtils.migrationParameters());
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
-
-            try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
-                MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                        ClickHouseContainerUtils.migrationParameters());
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
+            MigrationUtils.runMysqlDbMigration(MYSQL_CONTAINER);
+            MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
 
             wireMock.server().stubFor(
                     post(urlPathEqualTo("/v1/notify/event"))

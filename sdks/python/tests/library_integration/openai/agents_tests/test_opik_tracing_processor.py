@@ -51,7 +51,7 @@ def test_opik_tracing_processor__happy_flow(fake_backend):
         last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "openai-agents",
-            "agents-trace-id": ANY_STRING(startswith="trace"),
+            "agents-trace-id": ANY_STRING.starting_with("trace"),
         },
         spans=[
             SpanModel(
@@ -82,7 +82,7 @@ def test_opik_tracing_processor__happy_flow(fake_backend):
                         usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
-                        model=ANY_STRING(startswith=MODEL_FOR_TESTS),
+                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider=LLMProvider.OPENAI,
                     )
                 ],
@@ -133,7 +133,7 @@ def test_opik_tracing_processor__happy_flow_conversation(fake_backend):
         last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "openai-agents",
-            "agents-trace-id": ANY_STRING(startswith="trace"),
+            "agents-trace-id": ANY_STRING.starting_with("trace"),
         },
         thread_id=thread_id,
         spans=[
@@ -165,7 +165,7 @@ def test_opik_tracing_processor__happy_flow_conversation(fake_backend):
                         usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
-                        model=ANY_STRING(startswith=MODEL_FOR_TESTS),
+                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider=LLMProvider.OPENAI,
                     )
                 ],
@@ -220,7 +220,7 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
         last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "openai-agents",
-            "agents-trace-id": ANY_STRING(startswith="trace"),
+            "agents-trace-id": ANY_STRING.starting_with("trace"),
         },
         spans=[
             SpanModel(
@@ -244,7 +244,7 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
                         usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
-                        model=ANY_STRING(startswith=MODEL_FOR_TESTS),
+                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider=LLMProvider.OPENAI,
                     ),
                     SpanModel(
@@ -289,7 +289,7 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
                         usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
-                        model=ANY_STRING(startswith=MODEL_FOR_TESTS),
+                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider=LLMProvider.OPENAI,
                     )
                 ],
@@ -336,7 +336,7 @@ async def test_opik_tracing_processor__functions(fake_backend):
         last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "openai-agents",
-            "agents-trace-id": ANY_STRING(startswith="trace"),
+            "agents-trace-id": ANY_STRING.starting_with("trace"),
         },
         spans=[
             SpanModel(
@@ -366,7 +366,7 @@ async def test_opik_tracing_processor__functions(fake_backend):
                         usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
-                        model=ANY_STRING(startswith=MODEL_FOR_TESTS),
+                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider=LLMProvider.OPENAI,
                     ),
                     SpanModel(
@@ -395,7 +395,7 @@ async def test_opik_tracing_processor__functions(fake_backend):
                         usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
-                        model=ANY_STRING(startswith=MODEL_FOR_TESTS),
+                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider=LLMProvider.OPENAI,
                     ),
                 ],
@@ -451,7 +451,7 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
         last_updated_at=ANY_BUT_NONE,
         metadata={
             "created_from": "openai-agents",
-            "agents-trace-id": ANY_STRING(startswith="trace"),
+            "agents-trace-id": ANY_STRING.starting_with("trace"),
         },
         spans=[
             SpanModel(
@@ -481,7 +481,7 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
                         usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
-                        model=ANY_STRING(startswith=MODEL_FOR_TESTS),
+                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider=LLMProvider.OPENAI,
                     ),
                     SpanModel(
@@ -503,7 +503,7 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
                                 id=ANY_BUT_NONE,
                                 start_time=ANY_BUT_NONE,
                                 name="is_known_city",
-                                input={"city": ANY_STRING()},
+                                input={"city": ANY_STRING},
                                 output={"output": ANY_BUT_NONE},
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
@@ -521,7 +521,7 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
                         usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
-                        model=ANY_STRING(startswith=MODEL_FOR_TESTS),
+                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider=LLMProvider.OPENAI,
                     ),
                 ],
@@ -592,7 +592,7 @@ def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent
                         output={"output": ANY_LIST},
                         metadata={
                             "created_from": "openai-agents",
-                            "agents-trace-id": ANY_STRING(startswith="trace"),
+                            "agents-trace-id": ANY_STRING.starting_with("trace"),
                         },
                         end_time=ANY_BUT_NONE,
                         project_name=parent_decorator_project_name,
@@ -624,7 +624,7 @@ def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent
                                         usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                                         end_time=ANY_BUT_NONE,
                                         project_name=parent_decorator_project_name,
-                                        model=ANY_STRING(startswith=MODEL_FOR_TESTS),
+                                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                                         provider=LLMProvider.OPENAI,
                                     )
                                 ],

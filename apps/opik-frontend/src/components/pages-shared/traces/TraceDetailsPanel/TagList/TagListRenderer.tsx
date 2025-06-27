@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Plus, Tag } from "lucide-react";
-import RemovableTag from "./RemovableTag";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -9,6 +8,7 @@ import {
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
+import RemovableTag from "@/components/shared/RemovableTag/RemovableTag";
 
 export type TagListRendererProps = {
   tags: string[];

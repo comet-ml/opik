@@ -73,6 +73,29 @@ class SystemUsageClient:
         _response = self._raw_client.get_experiment_bi_info(request_options=request_options)
         return _response.data
 
+    def get_spans_bi_info(self, *, request_options: typing.Optional[RequestOptions] = None) -> BiInformationResponse:
+        """
+        Get spans information for BI events per user per workspace
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        BiInformationResponse
+            Spans BiInformationResponse resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.system_usage.get_spans_bi_info()
+        """
+        _response = self._raw_client.get_spans_bi_info(request_options=request_options)
+        return _response.data
+
     def get_spans_count_for_workspaces(
         self, *, request_options: typing.Optional[RequestOptions] = None
     ) -> SpansCountResponse:
@@ -216,6 +239,34 @@ class AsyncSystemUsageClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_experiment_bi_info(request_options=request_options)
+        return _response.data
+
+    async def get_spans_bi_info(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> BiInformationResponse:
+        """
+        Get spans information for BI events per user per workspace
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        BiInformationResponse
+            Spans BiInformationResponse resource
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.system_usage.get_spans_bi_info()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_spans_bi_info(request_options=request_options)
         return _response.data
 
     async def get_spans_count_for_workspaces(

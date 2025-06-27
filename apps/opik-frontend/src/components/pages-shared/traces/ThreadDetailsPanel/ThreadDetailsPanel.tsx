@@ -15,6 +15,9 @@ import {
   Trash,
 } from "lucide-react";
 import copy from "clipboard-copy";
+import isBoolean from "lodash/isBoolean";
+import isFunction from "lodash/isFunction";
+
 import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
 import { Trace } from "@/types/traces";
 import { formatDate, formatDuration } from "@/lib/date";
@@ -193,6 +196,20 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       projectId,
     });
   };
+
+  const horizontalNavigation = useMemo(
+    () =>
+      isBoolean(hasNextRow) &&
+      isBoolean(hasPreviousRow) &&
+      isFunction(onRowChange)
+        ? {
+            onChange: onRowChange,
+            hasNext: hasNextRow,
+            hasPrevious: hasPreviousRow,
+          }
+        : undefined,
+    [hasNextRow, hasPreviousRow, onRowChange],
+  );
 
   const bodyStyle = {
     ...(height && { height: `${height}px` }),
@@ -521,11 +538,9 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       open={open}
       headerContent={renderHeaderContent()}
       navigationContent={renderNavigationContent()}
-      hasPreviousRow={hasPreviousRow}
-      hasNextRow={hasNextRow}
       onClose={onClose}
-      onRowChange={onRowChange}
       initialWidth={0.5}
+      horizontalNavigation={horizontalNavigation}
     >
       {renderContent()}
     </ResizableSidePanel>

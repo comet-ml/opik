@@ -11,6 +11,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.sorting.SortableFields;
@@ -101,7 +102,7 @@ interface TraceDAO {
 
     Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId, Connection connection);
 
-    Mono<UUID> getProjectIdFromTrace(@NonNull UUID traceId);
+    Mono<UUID> getProjectIdFromTrace(UUID traceId);
 
     Flux<BiInformation> getTraceBIInformation(Connection connection);
 
@@ -117,11 +118,13 @@ interface TraceDAO {
 
     Mono<TraceThread> findThreadById(UUID projectId, String threadId);
 
-    Mono<Trace> getPartialById(@NonNull UUID id);
+    Mono<Trace> getPartialById(UUID id);
 
-    Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria);
+    Flux<Trace> search(int limit, TraceSearchCriteria criteria);
 
     Mono<Long> countTraces(Set<UUID> projectIds);
+
+    Flux<TraceThread> threadsSearch(int limit, TraceSearchCriteria criteria);
 }
 
 @Slf4j
@@ -552,9 +555,12 @@ class TraceDAOImpl implements TraceDAO {
                 <if(sort_has_feedback_scores)>
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
                 <endif>
+                <if(sort_has_span_statistics)>
+                LEFT JOIN spans_agg s ON t.id = s.trace_id
+                <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(last_received_trace_id)> AND id \\< :last_received_trace_id <endif>
+                <if(last_received_id)> AND id \\< :last_received_id <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(feedback_scores_filters)>
                  AND id IN (
@@ -1059,63 +1065,17 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     /***
-     * When treating a list of traces as threads, a number of aggregation are performed to get the thread details.
+     * When treating a list of traces as threads, many aggregations are performed to get the thread details.
      * <p>
      * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
      ***/
     private static final String SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS = """
-            SELECT
-                countDistinct(id) as count
-            FROM (
-                SELECT
-                    t.thread_id as id,
-                    t.workspace_id as workspace_id,
-                    t.project_id as project_id
-                    <if(trace_thread_filters)>,
-                    min(t.start_time) as start_time,
-                    max(t.end_time) as end_time,
-                    if(end_time IS NOT NULL AND start_time IS NOT NULL
-                               AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                           (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                           NULL) AS duration,
-                    <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
-                    <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
-                    count(DISTINCT t.id) * 2 as number_of_messages,
-                    max(t.last_updated_at) as last_updated_at,
-                    argMin(t.created_by, t.created_at) as created_by,
-                    min(t.created_at) as created_at
-                    <endif>
-                 FROM (
-                     SELECT
-                         *
-                     FROM traces t
-                     WHERE workspace_id = :workspace_id
-                     AND project_id = :project_id
-                     AND thread_id IS NOT NULL
-                     AND thread_id \\<> ''
-                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                     LIMIT 1 BY id
-                 ) AS t
-                 GROUP BY
-                    t.workspace_id, t.project_id, t.thread_id
-                 <if(trace_thread_filters)> HAVING <trace_thread_filters> <endif>
-             )
-            ;
-            """;
-
-    /***
-     * When treating a list of traces as threads, a number of aggregation are performed to get the thread details.
-     * <p>
-     * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
-     ***/
-    private static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH traces_final AS (
                 SELECT
                     *
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
-                  AND thread_id IS NOT NULL
                   AND thread_id \\<> ''
             ), spans_agg AS (
                 SELECT
@@ -1127,32 +1087,308 @@ class TraceDAOImpl implements TraceDAO {
                   AND project_id = :project_id
                   AND trace_id IN (SELECT DISTINCT id FROM traces_final)
                 GROUP BY workspace_id, project_id, trace_id
+            ), feedback_scores_agg AS (
+                SELECT
+                    project_id,
+                    entity_id,
+                    entity_type,
+                    mapFromArrays(
+                        groupArray(name),
+                        groupArray(value)
+                    ) as feedback_scores,
+                    groupArray(tuple(
+                         name,
+                         category_name,
+                         value,
+                         reason,
+                         source,
+                         created_at,
+                         last_updated_at,
+                         created_by,
+                         last_updated_by
+                    )) as feedback_scores_list
+                FROM feedback_scores final
+                WHERE entity_type = 'thread'
+                AND workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                GROUP BY workspace_id, project_id, entity_type, entity_id
+            ), trace_threads_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    thread_id,
+                    id as thread_model_id,
+                    status,
+                    created_by,
+                    last_updated_by,
+                    created_at,
+                    last_updated_at
+                FROM trace_threads final
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND thread_id IN (SELECT thread_id FROM traces_final)
             )
+            <if(feedback_scores_empty_filters)>
+            , fsc AS (
+                 SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM feedback_scores
+                    WHERE entity_type = 'thread'
+                    AND workspace_id = :workspace_id
+                    AND project_id IN :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+                 HAVING <feedback_scores_empty_filters>
+            )
+            <endif>
             SELECT
-                t.thread_id as id,
+                count(DISTINCT t.id) AS count
+            FROM (
+                SELECT
+                    t.workspace_id as workspace_id,
+                    t.project_id as project_id,
+                    t.id as id,
+                    t.start_time as start_time,
+                    t.end_time as end_time,
+                    t.duration as duration,
+                    t.first_message as first_message,
+                    t.last_message as last_message,
+                    t.number_of_messages as number_of_messages,
+                    t.total_estimated_cost as total_estimated_cost,
+                    t.usage as usage,
+                    if(tt.created_by = '', t.created_by, tt.created_by) as created_by,
+                    if(tt.last_updated_by = '', t.last_updated_by, tt.last_updated_by) as last_updated_by,
+                    if(tt.last_updated_at == toDateTime64(0, 6, 'UTC'), t.last_updated_at, tt.last_updated_at) as last_updated_at,
+                    if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
+                    if(tt.status = 'unknown', 'active', tt.status) as status,
+                    if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
+                    fsagg.feedback_scores_list as feedback_scores_list,
+                    fsagg.feedback_scores as feedback_scores
+                FROM (
+                    SELECT
+                        t.thread_id as id,
+                        t.workspace_id as workspace_id,
+                        t.project_id as project_id,
+                        min(t.start_time) as start_time,
+                        max(t.end_time) as end_time,
+                        if(end_time IS NOT NULL AND start_time IS NOT NULL
+                               AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                           (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                           NULL) AS duration,
+                        <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
+                        <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
+                        count(DISTINCT t.id) * 2 as number_of_messages,
+                        sum(s.total_estimated_cost) as total_estimated_cost,
+                        sumMap(s.usage) as usage,
+                        max(t.last_updated_at) as last_updated_at,
+                        argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
+                        argMin(t.created_by, t.created_at) as created_by,
+                        min(t.created_at) as created_at
+                    FROM traces_final AS t
+                        LEFT JOIN spans_agg AS s ON t.id = s.trace_id
+                    GROUP BY
+                        t.workspace_id, t.project_id, t.thread_id
+                ) AS t
+                LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
+                    AND t.project_id = tt.project_id
+                    AND t.id = tt.thread_id
+                LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
+                WHERE workspace_id = :workspace_id
+                <if(feedback_scores_filters)>
+                AND thread_model_id IN (
+                    SELECT
+                        entity_id
+                    FROM (
+                        SELECT *
+                        FROM feedback_scores
+                        WHERE entity_type = 'thread'
+                        AND workspace_id = :workspace_id
+                        AND project_id = :project_id
+                        ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                        LIMIT 1 BY entity_id, name
+                    )
+                    GROUP BY entity_id
+                    HAVING <feedback_scores_filters>
+                )
+                <endif>
+                <if(feedback_scores_empty_filters)>
+                AND (
+                    thread_model_id IN (SELECT entity_id FROM fsc WHERE fsc.feedback_scores_count = 0)
+                        OR
+                    thread_model_id NOT IN (SELECT entity_id FROM fsc)
+                )
+                <endif>
+                <if(trace_thread_filters)>AND<trace_thread_filters><endif>
+            ) AS t
+            """;
+
+    /***
+     * When treating a list of traces as threads, many aggregations are performed to get the thread details.
+     * <p>
+     * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
+     ***/
+    private static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
+            WITH traces_final AS (
+                SELECT
+                    *
+                FROM traces final
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND thread_id \\<> ''
+            ), spans_agg AS (
+                SELECT
+                    trace_id,
+                    sumMap(usage) as usage,
+                    sum(total_estimated_cost) as total_estimated_cost
+                FROM spans final
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND trace_id IN (SELECT DISTINCT id FROM traces_final)
+                GROUP BY workspace_id, project_id, trace_id
+            ), feedback_scores_agg AS (
+                SELECT
+                    project_id,
+                    entity_id,
+                    entity_type,
+                    mapFromArrays(
+                        groupArray(name),
+                        groupArray(value)
+                    ) as feedback_scores,
+                    groupArray(tuple(
+                         name,
+                         category_name,
+                         value,
+                         reason,
+                         source,
+                         created_at,
+                         last_updated_at,
+                         created_by,
+                         last_updated_by
+                    )) as feedback_scores_list
+                FROM feedback_scores final
+                WHERE entity_type = 'thread'
+                AND workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                GROUP BY workspace_id, project_id, entity_type, entity_id
+            ), trace_threads_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    thread_id,
+                    id as thread_model_id,
+                    status,
+                    created_by,
+                    last_updated_by,
+                    created_at,
+                    last_updated_at
+                FROM trace_threads final
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND thread_id IN (SELECT thread_id FROM traces_final)
+            )
+            <if(feedback_scores_empty_filters)>
+            , fsc AS (
+                 SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM feedback_scores
+                    WHERE entity_type = 'thread'
+                    AND workspace_id = :workspace_id
+                    AND project_id IN :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+                 HAVING <feedback_scores_empty_filters>
+            )
+            <endif>
+            SELECT
                 t.workspace_id as workspace_id,
                 t.project_id as project_id,
-                min(t.start_time) as start_time,
-                max(t.end_time) as end_time,
-                if(end_time IS NOT NULL AND start_time IS NOT NULL
-                       AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                   (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                   NULL) AS duration,
-                <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
-                <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
-                count(DISTINCT t.id) * 2 as number_of_messages,
-                sum(s.total_estimated_cost) as total_estimated_cost,
-                sumMap(s.usage) as usage,
-                max(t.last_updated_at) as last_updated_at,
-                argMin(t.created_by, t.created_at) as created_by,
-                min(t.created_at) as created_at
-            FROM traces_final AS t
-                LEFT JOIN spans_agg AS s ON t.id = s.trace_id
-            GROUP BY
-                t.workspace_id, t.project_id, t.thread_id
-             <if(trace_thread_filters)> HAVING <trace_thread_filters> <endif>
-             <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC <else> ORDER BY last_updated_at DESC, start_time ASC, end_time DESC <endif>
-             LIMIT :limit OFFSET :offset
+                t.id as id,
+                t.start_time as start_time,
+                t.end_time as end_time,
+                t.duration as duration,
+                t.first_message as first_message,
+                t.last_message as last_message,
+                t.number_of_messages as number_of_messages,
+                t.total_estimated_cost as total_estimated_cost,
+                t.usage as usage,
+                if(tt.created_by = '', t.created_by, tt.created_by) as created_by,
+                if(tt.last_updated_by = '', t.last_updated_by, tt.last_updated_by) as last_updated_by,
+                if(tt.last_updated_at == toDateTime64(0, 6, 'UTC'), t.last_updated_at, tt.last_updated_at) as last_updated_at,
+                if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
+                if(tt.status = 'unknown', 'active', tt.status) as status,
+                if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
+                fsagg.feedback_scores_list as feedback_scores_list,
+                fsagg.feedback_scores as feedback_scores
+            FROM (
+                SELECT
+                    t.thread_id as id,
+                    t.workspace_id as workspace_id,
+                    t.project_id as project_id,
+                    min(t.start_time) as start_time,
+                    max(t.end_time) as end_time,
+                    if(end_time IS NOT NULL AND start_time IS NOT NULL
+                           AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                       (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                       NULL) AS duration,
+                    <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
+                    <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
+                    count(DISTINCT t.id) * 2 as number_of_messages,
+                    sum(s.total_estimated_cost) as total_estimated_cost,
+                    sumMap(s.usage) as usage,
+                    max(t.last_updated_at) as last_updated_at,
+                    argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
+                    argMin(t.created_by, t.created_at) as created_by,
+                    min(t.created_at) as created_at
+                FROM traces_final AS t
+                    LEFT JOIN spans_agg AS s ON t.id = s.trace_id
+                GROUP BY
+                    t.workspace_id, t.project_id, t.thread_id
+            ) AS t
+            LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
+                AND t.project_id = tt.project_id
+                AND t.id = tt.thread_id
+            LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
+            WHERE workspace_id = :workspace_id
+            <if(feedback_scores_filters)>
+            AND thread_model_id IN (
+                SELECT
+                    entity_id
+                FROM (
+                    SELECT *
+                    FROM feedback_scores
+                    WHERE entity_type = 'thread'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                )
+                GROUP BY entity_id
+                HAVING <feedback_scores_filters>
+            )
+            <endif>
+            <if(feedback_scores_empty_filters)>
+            AND (
+                thread_model_id IN (SELECT entity_id FROM fsc WHERE fsc.feedback_scores_count = 0)
+                    OR
+                thread_model_id NOT IN (SELECT entity_id FROM fsc)
+            )
+            <endif>
+            <if(trace_thread_filters)>AND<trace_thread_filters><endif>
+            <if(last_retrieved_id)> AND thread_model_id > :last_retrieved_id<endif>
+            <if(stream)>
+            ORDER BY workspace_id, project_id, thread_model_id DESC
+            <else>
+            <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC <else> ORDER BY last_updated_at DESC, start_time ASC, end_time DESC <endif>
+            <endif>
+            LIMIT :limit <if(offset)>OFFSET :offset<endif>
             ;
             """;
 
@@ -1193,30 +1429,94 @@ class TraceDAOImpl implements TraceDAO {
                   AND project_id = :project_id
                   AND trace_id IN (SELECT DISTINCT id FROM traces_final)
                 GROUP BY workspace_id, project_id, trace_id
+            ), feedback_scores_agg AS (
+                SELECT
+                    project_id,
+                    entity_id,
+                    entity_type,
+                    mapFromArrays(
+                        groupArray(name),
+                        groupArray(value)
+                    ) as feedback_scores,
+                    groupArray(tuple(
+                         name,
+                         category_name,
+                         value,
+                         reason,
+                         source,
+                         created_at,
+                         last_updated_at,
+                         created_by,
+                         last_updated_by
+                    )) as feedback_scores_list
+                FROM feedback_scores final
+                WHERE entity_type = 'thread'
+                AND workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                GROUP BY workspace_id, project_id, entity_type, entity_id
+            ), trace_threads_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    thread_id,
+                    id as thread_model_id,
+                    status,
+                    created_by,
+                    last_updated_by,
+                    created_at,
+                    last_updated_at
+                FROM trace_threads final
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND thread_id = :thread_id
             )
             SELECT
-                t.thread_id as id,
                 t.workspace_id as workspace_id,
                 t.project_id as project_id,
-                min(t.start_time) as start_time,
-                max(t.end_time) as end_time,
-                if(end_time IS NOT NULL AND start_time IS NOT NULL
-                       AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                   (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                   NULL) AS duration,
-                argMin(t.input, t.start_time) as first_message,
-                argMax(t.output, t.end_time) as last_message,
-                count(DISTINCT t.id) * 2 as number_of_messages,
-                sum(s.total_estimated_cost) as total_estimated_cost,
-                sumMap(s.usage) as usage,
-                max(t.last_updated_at) as last_updated_at,
-                argMin(t.created_by, t.created_at) as created_by,
-                min(t.created_at) as created_at
-            FROM traces_final AS t
-                     LEFT JOIN spans_agg AS s ON t.id = s.trace_id
-            GROUP BY
-                t.workspace_id, t.project_id, t.thread_id
-            SETTINGS join_algorithm = 'full_sorting_merge';
+                t.thread_id as id,
+                t.start_time as start_time,
+                t.end_time as end_time,
+                t.duration as duration,
+                t.first_message as first_message,
+                t.last_message as last_message,
+                t.number_of_messages as number_of_messages,
+                t.total_estimated_cost as total_estimated_cost,
+                t.usage as usage,
+                if(tt.created_by = '', t.created_by, tt.created_by) as created_by,
+                if(tt.last_updated_by = '', t.last_updated_by, tt.last_updated_by) as last_updated_by,
+                if(tt.last_updated_at == toDateTime64(0, 6, 'UTC'), t.last_updated_at, tt.last_updated_at) as last_updated_at,
+                if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
+                if(tt.status = 'unknown', 'active', tt.status) as status,
+                if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
+                fsagg.feedback_scores_list as feedback_scores_list,
+                fsagg.feedback_scores as feedback_scores
+            FROM (
+                SELECT
+                    t.thread_id as thread_id,
+                    t.workspace_id as workspace_id,
+                    t.project_id as project_id,
+                    min(t.start_time) as start_time,
+                    max(t.end_time) as end_time,
+                    if(end_time IS NOT NULL AND start_time IS NOT NULL
+                           AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                       (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                       NULL) AS duration,
+                    argMin(t.input, t.start_time) as first_message,
+                    argMax(t.output, t.end_time) as last_message,
+                    count(DISTINCT t.id) * 2 as number_of_messages,
+                    sum(s.total_estimated_cost) as total_estimated_cost,
+                    sumMap(s.usage) as usage,
+                    max(t.last_updated_at) as last_updated_at,
+                    argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
+                    argMin(t.created_by, t.created_at) as created_by,
+                    min(t.created_at) as created_at
+                FROM traces_final AS t
+                LEFT JOIN spans_agg AS s ON t.id = s.trace_id
+                GROUP BY t.workspace_id, t.project_id, t.thread_id
+            ) AS t
+            LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id AND t.project_id = tt.project_id AND t.thread_id = tt.thread_id
+            LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
             """;
 
     public static final String SELECT_COUNT_TRACES_BY_PROJECT_IDS = """
@@ -1603,6 +1903,15 @@ class TraceDAOImpl implements TraceDAO {
                 .then();
     }
 
+    private boolean hasSpanStatistics(String sortFields) {
+        if (sortFields == null) {
+            return false;
+        }
+        return sortFields.contains("usage")
+                || sortFields.contains("span_count")
+                || sortFields.contains("total_estimated_cost");
+    }
+
     private Mono<? extends Result> getTracesByProjectId(
             int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection) {
 
@@ -1620,6 +1929,10 @@ class TraceDAOImpl implements TraceDAO {
 
                     if (sortFields.contains("feedback_scores")) {
                         finalTemplate.add("sort_has_feedback_scores", true);
+                    }
+
+                    if (hasSpanStatistics(sortFields)) {
+                        finalTemplate.add("sort_has_span_statistics", true);
                     }
 
                     finalTemplate.add("sort_fields", sortFields);
@@ -1724,8 +2037,8 @@ class TraceDAOImpl implements TraceDAO {
                             .ifPresent(feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
                                     feedbackScoreIsEmptyFilters));
                 });
-        Optional.ofNullable(traceSearchCriteria.lastReceivedTraceId())
-                .ifPresent(lastReceivedTraceId -> template.add("last_received_trace_id", lastReceivedTraceId));
+        Optional.ofNullable(traceSearchCriteria.lastReceivedId())
+                .ifPresent(lastReceivedTraceId -> template.add("last_received_id", lastReceivedTraceId));
         return template;
     }
 
@@ -1738,8 +2051,8 @@ class TraceDAOImpl implements TraceDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
                 });
-        Optional.ofNullable(traceSearchCriteria.lastReceivedTraceId())
-                .ifPresent(lastReceivedTraceId -> statement.bind("last_received_trace_id", lastReceivedTraceId));
+        Optional.ofNullable(traceSearchCriteria.lastReceivedId())
+                .ifPresent(lastReceivedTraceId -> statement.bind("last_received_id", lastReceivedTraceId));
     }
 
     @Override
@@ -1950,14 +2263,18 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
+    @WithSpan
     public Mono<TraceThreadPage> findThreads(int size, int page, @NonNull TraceSearchCriteria criteria) {
 
         return asyncTemplate.nonTransaction(connection -> countThreadTotal(criteria, connection)
                 .flatMap(count -> {
 
+                    int offset = (page - 1) * size;
+
                     ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
 
                     template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+                    template = template.add("offset", offset);
 
                     var finalTemplate = template;
                     Optional.ofNullable(sortingQueryBuilder.toOrderBySql(criteria.sortingFields()))
@@ -1968,7 +2285,7 @@ class TraceDAOImpl implements TraceDAO {
                     var statement = connection.createStatement(template.render())
                             .bind("project_id", criteria.projectId())
                             .bind("limit", size)
-                            .bind("offset", (page - 1) * size);
+                            .bind("offset", offset);
 
                     if (hasDynamicKeys) {
                         statement = sortingQueryBuilder.bindDynamicKeys(statement, criteria.sortingFields());
@@ -1986,6 +2303,37 @@ class TraceDAOImpl implements TraceDAO {
                                     traceThreadSortingFactory.getSortableFields()))
                             .defaultIfEmpty(TraceThreadPage.empty(page, traceThreadSortingFactory.getSortableFields()));
                 }));
+    }
+
+    @Override
+    @WithSpan
+    public Flux<TraceThread> threadsSearch(int limit, @NonNull TraceSearchCriteria criteria) {
+        Preconditions.checkArgument(limit > 0, "limit must be greater than 0");
+
+        return asyncTemplate.stream(connection -> {
+
+            ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
+            template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+
+            template.add("limit", limit)
+                    .add("stream", true);
+
+            var statement = connection.createStatement(template.render())
+                    .bind("project_id", criteria.projectId())
+                    .bind("limit", limit);
+
+            bindSearchCriteria(criteria, statement);
+
+            Segment segment = startSegment("traces", "Clickhouse", "threadsSearch");
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment));
+        })
+                .flatMap(this::mapThreadToDto)
+                .buffer(limit > 100 ? limit / 2 : limit)
+                .concatWith(Mono.just(List.of()))
+                .filter(CollectionUtils::isNotEmpty)
+                .flatMap(Flux::fromIterable);
     }
 
     private Publisher<TraceThread> mapThreadToDto(Result result) {
@@ -2010,6 +2358,15 @@ class TraceDAOImpl implements TraceDAO {
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
                 .createdAt(row.get("created_at", Instant.class))
+                .status(TraceThreadStatus.fromValue(row.get("status", String.class)).orElse(TraceThreadStatus.ACTIVE))
+                .threadModelId(Optional.ofNullable(row.get("thread_model_id", String.class))
+                        .filter(StringUtils::isNotBlank)
+                        .map(UUID::fromString)
+                        .orElse(null))
+                .feedbackScores(Optional.ofNullable(row.get("feedback_scores_list", List.class))
+                        .filter(not(List::isEmpty))
+                        .map(this::mapFeedbackScores)
+                        .orElse(null))
                 .build());
     }
 

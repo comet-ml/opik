@@ -17,6 +17,8 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesUpdated;
+import com.comet.opik.api.sorting.TraceSortingFactory;
+import com.comet.opik.api.sorting.TraceThreadSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -96,6 +98,8 @@ public interface TraceService {
     Flux<Trace> search(int limit, TraceSearchCriteria searchCriteria);
 
     Mono<Long> countTraces(Set<UUID> projectIds);
+
+    Flux<TraceThread> threadsSearch(int limit, @NonNull TraceSearchCriteria criteria);
 }
 
 @Slf4j
@@ -115,6 +119,8 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull LockService lockService;
     private final @NonNull EventBus eventBus;
+    private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
+    private final @NonNull TraceSortingFactory traceSortingFactory;
 
     @Override
     @WithSpan
@@ -292,11 +298,11 @@ class TraceServiceImpl implements TraceService {
         });
     }
 
-    private TraceSearchCriteria findProjectAndVerifyVisibility(TraceSearchCriteria criteria) {
-        return criteria.toBuilder()
-                .projectId(projectService.resolveProjectIdAndVerifyVisibility(criteria.projectId(),
-                        criteria.projectName()))
-                .build();
+    private Mono<TraceSearchCriteria> findProjectAndVerifyVisibility(TraceSearchCriteria criteria) {
+        return projectService.resolveProjectIdAndVerifyVisibility(criteria.projectId(), criteria.projectName())
+                .map(projectId -> criteria.toBuilder()
+                        .projectId(projectId)
+                        .build());
     }
 
     private <T> Mono<T> failWithConflict(String error) {
@@ -344,9 +350,10 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<TracePage> find(int page, int size, @NonNull TraceSearchCriteria criteria) {
-        TraceSearchCriteria resolvedCriteria = findProjectAndVerifyVisibility(criteria);
-
-        return template.nonTransaction(connection -> dao.find(size, page, resolvedCriteria, connection));
+        return findProjectAndVerifyVisibility(criteria)
+                .flatMap(resolvedCriteria -> template
+                        .nonTransaction(connection -> dao.find(size, page, resolvedCriteria, connection)))
+                .switchIfEmpty(Mono.just(TracePage.empty(page, traceSortingFactory.getSortableFields())));
     }
 
     @Override
@@ -390,9 +397,8 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
-        criteria = findProjectAndVerifyVisibility(criteria);
-
-        return dao.getStats(criteria)
+        return findProjectAndVerifyVisibility(criteria)
+                .flatMap(dao::getStats)
                 .switchIfEmpty(Mono.just(ProjectStats.empty()));
     }
 
@@ -417,9 +423,9 @@ class TraceServiceImpl implements TraceService {
 
     @Override
     public Mono<TraceThreadPage> getTraceThreads(int page, int size, @NonNull TraceSearchCriteria criteria) {
-        criteria = findProjectAndVerifyVisibility(criteria);
-
-        return dao.findThreads(size, page, criteria);
+        return findProjectAndVerifyVisibility(criteria)
+                .flatMap(it -> dao.findThreads(size, page, it))
+                .switchIfEmpty(Mono.just(TraceThreadPage.empty(page, traceThreadSortingFactory.getSortableFields())));
     }
 
     @Override
@@ -447,14 +453,19 @@ class TraceServiceImpl implements TraceService {
 
     @Override
     public Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria) {
-        criteria = findProjectAndVerifyVisibility(criteria);
-
-        return dao.search(limit, criteria);
+        return findProjectAndVerifyVisibility(criteria)
+                .flatMapMany(it -> dao.search(limit, it));
     }
 
     @Override
-    public Mono<Long> countTraces(Set<UUID> projectIds) {
+    public Mono<Long> countTraces(@NonNull Set<UUID> projectIds) {
         return dao.countTraces(projectIds);
+    }
+
+    @Override
+    public Flux<TraceThread> threadsSearch(int limit, @NonNull TraceSearchCriteria criteria) {
+        return findProjectAndVerifyVisibility(criteria)
+                .flatMapMany(it -> dao.threadsSearch(limit, it));
     }
 
 }

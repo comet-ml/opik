@@ -45,6 +45,7 @@ public class FilterQueryBuilder {
     private static final String MODEL_ANALYTICS_DB = "model";
     private static final String PROVIDER_ANALYTICS_DB = "provider";
     private static final String TOTAL_ESTIMATED_COST_ANALYTICS_DB = "total_estimated_cost";
+    private static final String TYPE_ANALYTICS_DB = "type";
     private static final String TAGS_ANALYTICS_DB = "tags";
     private static final String USAGE_COMPLETION_TOKENS_ANALYTICS_DB = "usage['completion_tokens']";
     private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
@@ -60,6 +61,8 @@ public class FilterQueryBuilder {
     private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
     private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
     private static final String VISIBILITY_MODE_DB = "visibility_mode";
+    private static final String ERROR_INFO_DB = "error_info";
+    private static final String STATUS_DB = "status";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -119,10 +122,14 @@ public class FilterQueryBuilder {
                             "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 <= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")))
                     .put(Operator.IS_EMPTY, new EnumMap<>(Map.of(
                             FieldType.FEEDBACK_SCORES_NUMBER,
-                            "empty(arrayFilter(element -> (element = lower(:filterKey%2$d)), groupArray(lower(name)))) = 0")))
+                            "empty(arrayFilter(element -> (element = lower(:filterKey%2$d)), groupArray(lower(name)))) = 0",
+                            FieldType.ERROR_CONTAINER,
+                            "empty(%1$s)")))
                     .put(Operator.IS_NOT_EMPTY, new EnumMap<>(Map.of(
                             FieldType.FEEDBACK_SCORES_NUMBER,
-                            "empty(arrayFilter(element -> (element.1 = lower(:filterKey%2$d)), groupArray(tuple(lower(name), %1$s)))) = 0")))
+                            "empty(arrayFilter(element -> (element.1 = lower(:filterKey%2$d)), groupArray(tuple(lower(name), %1$s)))) = 0",
+                            FieldType.ERROR_CONTAINER,
+                            "notEmpty(%1$s)")))
                     .build());
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(
@@ -144,6 +151,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.THREAD_ID, THREAD_ID_ANALYTICS_DB)
                     .put(TraceField.GUARDRAILS, GUARDRAILS_RESULT_DB)
                     .put(TraceField.VISIBILITY_MODE, VISIBILITY_MODE_DB)
+                    .put(TraceField.ERROR_INFO, ERROR_INFO_DB)
                     .build());
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
@@ -155,6 +163,8 @@ public class FilterQueryBuilder {
                     .put(TraceThreadField.DURATION, DURATION_ANALYTICS_DB)
                     .put(TraceThreadField.CREATED_AT, CREATED_AT_ANALYTICS_DB)
                     .put(TraceThreadField.LAST_UPDATED_AT, LAST_UPDATED_AT_ANALYTICS_DB)
+                    .put(TraceThreadField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
+                    .put(TraceThreadField.STATUS, STATUS_DB)
                     .build());
 
     private static final Map<SpanField, String> SPAN_FIELDS_MAP = new EnumMap<>(
@@ -175,6 +185,8 @@ public class FilterQueryBuilder {
                     .put(SpanField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(SpanField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(SpanField.DURATION, DURATION_ANALYTICS_DB)
+                    .put(SpanField.ERROR_INFO, ERROR_INFO_DB)
+                    .put(SpanField.TYPE, TYPE_ANALYTICS_DB)
                     .build());
 
     private static final Map<ExperimentField, String> EXPERIMENT_FIELDS_MAP = new EnumMap<>(
@@ -202,6 +214,7 @@ public class FilterQueryBuilder {
                     .add(TraceField.THREAD_ID)
                     .add(TraceField.GUARDRAILS)
                     .add(TraceField.VISIBILITY_MODE)
+                    .add(TraceField.ERROR_INFO)
                     .build()),
             FilterStrategy.TRACE_AGGREGATION, EnumSet.copyOf(ImmutableSet.<TraceField>builder()
                     .add(TraceField.USAGE_COMPLETION_TOKENS)
@@ -225,11 +238,14 @@ public class FilterQueryBuilder {
                     .add(SpanField.USAGE_PROMPT_TOKENS)
                     .add(SpanField.USAGE_TOTAL_TOKENS)
                     .add(SpanField.DURATION)
+                    .add(SpanField.ERROR_INFO)
+                    .add(SpanField.TYPE)
                     .build()),
             FilterStrategy.FEEDBACK_SCORES, ImmutableSet.<Field>builder()
                     .add(TraceField.FEEDBACK_SCORES)
                     .add(SpanField.FEEDBACK_SCORES)
                     .add(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES)
+                    .add(TraceThreadField.FEEDBACK_SCORES)
                     .build(),
             FilterStrategy.EXPERIMENT_ITEM, EnumSet.copyOf(ImmutableSet.<ExperimentsComparisonValidKnownField>builder()
                     .add(ExperimentsComparisonValidKnownField.OUTPUT)
@@ -245,6 +261,7 @@ public class FilterQueryBuilder {
                     .add(TraceThreadField.DURATION)
                     .add(TraceThreadField.CREATED_AT)
                     .add(TraceThreadField.LAST_UPDATED_AT)
+                    .add(TraceThreadField.STATUS)
                     .build())));
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
@@ -292,11 +309,16 @@ public class FilterQueryBuilder {
         // we want to apply the is empty filter only in the case below
         if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.FEEDBACK_SCORES));
-        } else if (filter.operator() == Operator.IS_EMPTY) {
+        } else if (filter.operator() == Operator.IS_EMPTY && isFeedBackScore(filter)) {
             return Optional.empty();
         }
 
         return Optional.ofNullable(FILTER_STRATEGY_MAP.get(filterStrategy));
+    }
+
+    private static boolean isFeedBackScore(Filter filter) {
+        return Set.of(TraceField.FEEDBACK_SCORES, SpanField.FEEDBACK_SCORES, TraceThreadField.FEEDBACK_SCORES,
+                ExperimentsComparisonValidKnownField.FEEDBACK_SCORES).contains(filter.field());
     }
 
     private String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {

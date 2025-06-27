@@ -517,8 +517,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         : []),
       {
         id: "error_info",
-        label: "Error",
-        type: COLUMN_TYPE.string,
+        label: "Errors",
+        statisticKey: "error_count",
+        type: COLUMN_TYPE.errors,
         cell: ErrorCell as never,
       },
       {
@@ -566,6 +567,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             },
           ]
         : []),
+      {
+        id: "error_info",
+        label: "Errors",
+        type: COLUMN_TYPE.errors,
+      },
       {
         id: COLUMN_FEEDBACK_SCORES_ID,
         label: "Feedback scores",

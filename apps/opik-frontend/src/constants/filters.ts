@@ -1,6 +1,11 @@
 import { FilterOperator } from "@/types/filters";
 import { COLUMN_TYPE, DropdownOption } from "@/types/shared";
 
+export const NO_VALUE_OPERATORS: FilterOperator[] = [
+  "is_empty",
+  "is_not_empty",
+];
+
 export const DEFAULT_OPERATORS: DropdownOption<FilterOperator>[] = [
   { label: "contains", value: "contains" },
 ];
@@ -16,6 +21,7 @@ export const DEFAULT_OPERATOR_MAP: Record<COLUMN_TYPE, FilterOperator> = {
   [COLUMN_TYPE.duration]: "<=",
   [COLUMN_TYPE.guardrails]: "=",
   [COLUMN_TYPE.threadStatus]: "=",
+  [COLUMN_TYPE.errors]: "is_not_empty",
 };
 
 export const OPERATORS_MAP: Record<
@@ -196,6 +202,16 @@ export const OPERATORS_MAP: Record<
     {
       label: "=",
       value: "=",
+    },
+  ],
+  [COLUMN_TYPE.errors]: [
+    {
+      label: "is empty",
+      value: "is_empty",
+    },
+    {
+      label: "is not empty",
+      value: "is_not_empty",
     },
   ],
 };

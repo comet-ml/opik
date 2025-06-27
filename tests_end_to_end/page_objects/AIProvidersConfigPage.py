@@ -26,7 +26,7 @@ class AIProvidersConfigPage(BasePage):
 
         self.page.get_by_label("API key").fill(api_key)
 
-        self.page.get_by_role("button", name="Save configuration").click()
+        self.page.get_by_role("button", name="Add configuration").click()
 
     def edit_provider(self, name: str, api_key: Optional[str] = None):
         """Edit an existing AI provider configuration"""

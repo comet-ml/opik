@@ -1,4 +1,3 @@
-import React from "react";
 import useTraceUpdateMutation from "@/api/traces/useTraceUpdateMutation";
 import useSpanUpdateMutation from "@/api/traces/useSpanUpdateMutation";
 import useAppStore from "@/store/AppStore";

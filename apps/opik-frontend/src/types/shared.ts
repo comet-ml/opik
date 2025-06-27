@@ -36,6 +36,7 @@ export enum COLUMN_TYPE {
   cost = "cost",
   guardrails = "guardrails",
   threadStatus = "thread_status",
+  errors = "errors",
 }
 
 export enum DYNAMIC_COLUMN_TYPE {
