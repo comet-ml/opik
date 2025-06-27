@@ -5,7 +5,6 @@ import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.TraceThreadStatus;
-import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.domain.threads.TraceThreadCriteria;
 import com.comet.opik.domain.threads.TraceThreadModel;
 import com.comet.opik.domain.threads.TraceThreadService;
@@ -14,8 +13,11 @@ import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.validation.constraints.NotNull;
+import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.core.Response;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -317,13 +319,18 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                         return Mono.just(dto); // All threads are closed, proceed with scoring
                     }
 
-                    return Mono.error(
-                            new ConflictException(
-                                    "Threads must be closed before scoring. Thread IDs are active: '[%s]'".formatted(
-                                            String.join(", ", openedThreads.isEmpty()
-                                                    ? expectedCloseThreadIds.stream().sorted().toList()
-                                                    : openedThreads.stream().sorted().toList()))));
+                    return Mono.error(new ClientErrorException(buildError(openedThreads, expectedCloseThreadIds)));
                 });
+    }
+
+    private Response buildError(List<String> openedThreads, Set<String> expectedCloseThreadIds) {
+        return Response.status(Response.Status.CONFLICT).entity(
+                new ErrorMessage(Response.Status.CONFLICT.getStatusCode(),
+                        "Threads must be closed before scoring. Thread IDs are active: '[%s]'".formatted(
+                                String.join(", ", openedThreads.isEmpty()
+                                        ? expectedCloseThreadIds.stream().sorted().toList()
+                                        : openedThreads.stream().sorted().toList()))))
+                .build();
     }
 
     private Mono<Map.Entry<String, UUID>> getOrCreateThread(ProjectDto projectDto, String threadId) {
