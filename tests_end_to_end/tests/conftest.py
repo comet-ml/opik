@@ -865,7 +865,8 @@ def pytest_runtest_makereport(item, call):
                                 allure.attach(
                                     trace_content,
                                     name=f"Playwright Trace - {item.name}",
-                                    attachment_type=allure.attachment_type.ZIP,
+                                    attachment_type="application/zip",
+                                    extension=".zip",
                                 )
                                 logging.info(
                                     f"Playwright trace captured and attached for test: {item.name}"
