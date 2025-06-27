@@ -435,7 +435,7 @@ def log_traces_with_spans_low_level(client: opik.Opik):
         "metadata": {"d-md1": "val1", "d-md2": "val2"},
         "feedback_scores": [
             {"name": "s-score1", "value": 0.93},
-            {"name": "s-score2", "value": 2},
+            {"name": "s-score2", "value": 5},
         ],
     }
 
@@ -492,7 +492,7 @@ def log_traces_with_spans_decorator():
         "metadata": {"d-md1": "val1", "d-md2": "val2"},
         "feedback_scores": [
             {"name": "s-score1", "value": 0.93},
-            {"name": "s-score2", "value": 2},
+            {"name": "s-score2", "value": 5},
         ],
     }
 

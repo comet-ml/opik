@@ -159,7 +159,6 @@ class TestTraceSpans:
                 f"Project name: {project_name}\n"
                 f"Error: {str(e)}"
             ) from e
-
         # Verify details for each trace
         for trace in trace_names:
             logger.info(f"Checking details for trace '{trace}'")
