@@ -1,0 +1,50 @@
+---
+subtitle: Step-by-step guide on how to evaluate conversation threads
+---
+When you are running multi-turn conversations using frameworks that support LLM agents, the Opik integration will
+automatically group related traces into conversation threads using parameters suitable for each framework.
+
+This guide will walk you through the process of evaluating and optimizing conversation threads in Opik using
+the `evaluate_threads` function in the Python SDK.
+
+## Using the Python SDK
+
+The Python SDK provides a simple and efficient way to evaluate and optimize conversation threads using the
+`evaluate_threads` function. This function allows you to specify a filter string to select specific threads for
+evaluation, a list of metrics to apply to each thread, and it returns a `ThreadsEvaluationResult` object
+containing the evaluation results and feedback scores.
+
+To run the threads evaluation, you can use the following code:
+
+```python
+from opik.evaluation import evaluate_threads
+from opik.evaluation.metrics import ConversationalCoherenceMetric, UserFrustrationMetric
+
+# Initialize the evaluation metrics
+conversation_coherence_metric = ConversationalCoherenceMetric()
+user_frustration_metric = UserFrustrationMetric()
+
+# Run the threads evaluation
+results = evaluate_threads(
+    project_name="ai_team",
+    filter_string="thread_id=0197ad2a-cf5c-75af-be8b-20e8a23304fe",
+    eval_project_name="ai_team_evaluation",
+    metrics=[
+        conversation_coherence_metric,
+        user_frustration_metric,
+    ],
+    trace_input_transform=lambda x: x["input"],
+    trace_output_transform=lambda x: x["output"],
+)
+```
+
+Once the evaluation is complete, you can access the evaluation results in the Opik UI.
+
+<Frame>
+  <img src="/img/evaluation/threads_user_frustration_score.png" />
+</Frame>
+
+## Next steps
+
+For more details on what metrics can be used to score conversational threads, refer to
+the [conversational metrics](/evaluation/metrics/conversation_threads_metrics) page.

@@ -1,16 +1,17 @@
 from concurrent import futures
-from typing import List
+from typing import List, TypeVar
 
 from ...environment import get_tqdm_for_current_environment
-from .. import test_result
 from .types import EvaluationTask
 
 _tqdm = get_tqdm_for_current_environment()
 
+T = TypeVar("T")
+
 
 def execute(
-    evaluation_tasks: List[EvaluationTask], workers: int, verbose: int
-) -> List[test_result.TestResult]:
+    evaluation_tasks: List[EvaluationTask[T]], workers: int, verbose: int
+) -> List[T]:
     if workers == 1:
         test_results = [
             evaluation_task()

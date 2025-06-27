@@ -256,6 +256,9 @@ navigation:
           - page: Evaluate agents
             path: docs/evaluation/evaluate_agents.mdx
             slug: evaluate_agents
+          - page: Evaluate threads
+            path: docs/evaluation/evaluate_threads.mdx
+            slug: evaluate_threads
           - page: Log experiments with REST API
             path: docs/evaluation/log_experiments_with_rest_api.mdx
             slug: log_experiments_with_rest_api
@@ -295,6 +298,9 @@ navigation:
               - page: Context recall
                 path: docs/evaluation/metrics/context_recall.mdx
                 slug: context_recall
+              - page: Conversational threads
+                path: docs/evaluation/metrics/conversation_threads_metrics.mdx
+                slug: conversation_threads_metrics
               - page: Custom model
                 path: docs/evaluation/metrics/custom_model.mdx
                 slug: custom_model

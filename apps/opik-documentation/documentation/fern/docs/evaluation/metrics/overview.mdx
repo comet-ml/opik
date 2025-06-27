@@ -27,6 +27,9 @@ Opik provides the following built-in evaluation metrics:
 | Usefulness       | LLM as a Judge | Check if the output is useful to the question                                                     | [Usefulness](/evaluation/metrics/usefulness)                          |
 | ContextRecall    | LLM as a Judge | Check if the output contains any hallucinations                                                   | [ContextRecall](/evaluation/metrics/context_recall)                   |
 | ContextPrecision | LLM as a Judge | Check if the output contains any hallucinations                                                   | [ContextPrecision](/evaluation/metrics/context_precision)             |
+| Conversational Coherence | LLM as a Judge |  Calculates the conversational coherence score for a given conversation thread. | [ConversationalCoherence](/evaluation/metrics/conversation_threads_metrics#conversationalcoherencemetric) |
+| Session Completeness Quality | LLM as a Judge |  Evaluates the completeness of a session within a conversational thread. | [SessionCompleteness](/evaluation/metrics/conversation_threads_metrics#sessioncompletenessquality) |
+| User Frustration | LLM as a Judge |  Calculates the user frustration score for a given conversational thread. | [UserFrustration](/evaluation/metrics/conversation_threads_metrics#userfrustrationmetric) |
 
 You can also create your own custom metric, learn more about it in the [Custom Metric](/evaluation/metrics/custom_metric) section.
 
