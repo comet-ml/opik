@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Comment;
+import com.comet.opik.domain.threads.TraceThreadDAO;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
@@ -37,6 +38,7 @@ class CommentServiceImpl implements CommentService {
     private final @NonNull CommentDAO commentDAO;
     private final @NonNull TraceDAO traceDAO;
     private final @NonNull SpanDAO spanDAO;
+    private final @NonNull TraceThreadDAO traceThreadDAO;
     private final @NonNull IdGenerator idGenerator;
 
     @Override
@@ -45,6 +47,7 @@ class CommentServiceImpl implements CommentService {
         var monoProjectId = switch (entityType) {
             case TRACE -> traceDAO.getProjectIdFromTrace(entityId);
             case SPAN -> spanDAO.getProjectIdFromSpan(entityId);
+            case THREAD -> traceThreadDAO.getProjectIdFromThread(entityId);
         };
 
         return monoProjectId
