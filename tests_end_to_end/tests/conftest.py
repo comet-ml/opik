@@ -88,16 +88,21 @@ def browser(playwright: Playwright, request) -> Browser:
 
 @pytest.fixture(scope="session")
 def video_dir():
-    """Create a temporary directory for videos"""
+    """Create a temporary directory for videos and traces"""
     # Create a temp directory for videos
     video_path = tempfile.mkdtemp(prefix="playwright_videos_")
     logging.info(f"Created video directory: {video_path}")
+
+    # Create a traces subdirectory
+    traces_path = os.path.join(video_path, "traces")
+    os.makedirs(traces_path, exist_ok=True)
+    logging.info(f"Created traces directory: {traces_path}")
 
     # Dictionary to track test status and video paths
     video_info = {}
 
     # Store the video path and info dictionary in a container that can be accessed by other fixtures
-    container = {"path": video_path, "info": video_info}
+    container = {"path": video_path, "traces_path": traces_path, "info": video_info}
 
     yield container
 
@@ -136,6 +141,9 @@ def browser_context(browser: Browser, env_config, video_dir):
 
     # Store the video info container for access by other fixtures
     context._video_info = video_dir["info"]
+
+    # Start tracing for the entire session
+    context.tracing.start(screenshots=True, snapshots=True, sources=True)
 
     context.grant_permissions(["clipboard-read", "clipboard-write"])
 
@@ -177,6 +185,13 @@ def browser_context(browser: Browser, env_config, video_dir):
         page.close()
 
     yield context
+
+    # Stop tracing before closing context
+    try:
+        context.tracing.stop()
+    except Exception as e:
+        logging.warning(f"Failed to stop tracing during context cleanup: {str(e)}")
+
     context.close()
 
 
@@ -794,7 +809,7 @@ def create_moderation_rule_fixture(
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     """
-    Capture screenshots and videos when tests fail and attach them to Allure reports.
+    Capture screenshots, videos, and traces when tests fail and attach them to Allure reports.
     This hook runs around each test phase (setup, call, teardown).
     """
     outcome = yield
@@ -828,6 +843,36 @@ def pytest_runtest_makereport(item, call):
                         os.remove(screenshot_path)
                 except Exception as e:
                     logging.error(f"Failed to capture screenshot: {str(e)}")
+
+                # Capture Playwright trace
+                try:
+                    context = page.context
+                    trace_name = f"failure_{item.name}_{int(time.time())}.zip"
+                    trace_path = os.path.join(os.getcwd(), trace_name)
+
+                    # Stop tracing and save the trace file
+                    context.tracing.stop(path=trace_path)
+
+                    if os.path.exists(trace_path):
+                        # Attach trace to Allure report
+                        allure.attach.file(
+                            trace_path,
+                            name="Playwright Trace on Failure",
+                            attachment_type=allure.attachment_type.ZIP,
+                        )
+                        # Clean up the file after attaching
+                        os.remove(trace_path)
+                        logging.info(
+                            f"Playwright trace captured and attached for test: {item.name}"
+                        )
+
+                    # Restart tracing for potential subsequent tests
+                    context.tracing.start(
+                        screenshots=True, snapshots=True, sources=True
+                    )
+
+                except Exception as e:
+                    logging.error(f"Failed to capture Playwright trace: {str(e)}")
 
                 # Capture HTML source
                 try:
