@@ -4,6 +4,10 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.TraceThreadStatus;
+import com.comet.opik.api.error.ConflictException;
+import com.comet.opik.domain.threads.TraceThreadCriteria;
+import com.comet.opik.domain.threads.TraceThreadModel;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.WorkspaceUtils;
@@ -11,6 +15,7 @@ import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
+import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +31,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
+import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.groupingBy;
 
 @ImplementedBy(FeedbackScoreServiceImpl.class)
@@ -51,6 +57,8 @@ public interface FeedbackScoreService {
     Mono<Void> scoreBatchOfThreads(List<FeedbackScoreBatchItem> scores);
 
     Mono<Void> deleteThreadScores(String projectName, String threadId, Set<String> names);
+
+    Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(UUID projectId);
 }
 
 @Slf4j
@@ -215,6 +223,13 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .then();
     }
 
+    @Override
+    public Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(@NotNull UUID projectId) {
+        return dao.getProjectsTraceThreadsFeedbackScoreNames(List.of(projectId))
+                .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
+                .map(FeedbackScoreNames::new);
+    }
+
     private Mono<UUID> getProject(String projectName) {
         return Mono.deferContextual(context -> Mono.fromCallable(() -> {
             String workspaceId = context.get(RequestContext.WORKSPACE_ID);
@@ -270,9 +285,45 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                             .map(threadIdMap -> bindThreadModelId(projectDto, threadIdMap))
                             .filter(projectDtoWithThreads -> !projectDtoWithThreads.scores().isEmpty())
                             // score the batch of threads with resolved thread model IDs
+                            .flatMap(this::validateThreadStatus)
                             .flatMap(score -> dao.scoreBatchOfThreads(score.scores()));
                 })
                 .reduce(0L, Long::sum);
+    }
+
+    private Mono<ProjectDto> validateThreadStatus(ProjectDto dto) {
+        Set<String> expectedCloseThreadIds = dto.scores.stream()
+                .map(FeedbackScoreBatchItem::threadId)
+                .collect(Collectors.toSet());
+
+        Set<UUID> ids = dto.scores.stream()
+                .map(FeedbackScoreBatchItem::id)
+                .collect(Collectors.toSet());
+
+        var criteria = TraceThreadCriteria.builder()
+                .projectId(dto.project().id())
+                .ids(List.copyOf(ids))
+                .status(TraceThreadStatus.INACTIVE)
+                .build();
+
+        return traceThreadService.getThreadsByProject(1, ids.size(), criteria)
+                .flatMap(threads -> {
+                    List<String> openedThreads = threads.stream()
+                            .map(TraceThreadModel::threadId)
+                            .filter(not(expectedCloseThreadIds::contains))
+                            .toList();
+
+                    if (!threads.isEmpty() && openedThreads.isEmpty()) {
+                        return Mono.just(dto); // All threads are closed, proceed with scoring
+                    }
+
+                    return Mono.error(
+                            new ConflictException(
+                                    "Threads must be closed before scoring. Thread IDs are active: '[%s]'".formatted(
+                                            String.join(", ", openedThreads.isEmpty()
+                                                    ? expectedCloseThreadIds.stream().sorted().toList()
+                                                    : openedThreads.stream().sorted().toList()))));
+                });
     }
 
     private Mono<Map.Entry<String, UUID>> getOrCreateThread(ProjectDto projectDto, String threadId) {

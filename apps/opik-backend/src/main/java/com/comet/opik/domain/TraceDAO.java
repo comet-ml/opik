@@ -102,7 +102,7 @@ interface TraceDAO {
 
     Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId, Connection connection);
 
-    Mono<UUID> getProjectIdFromTrace(@NonNull UUID traceId);
+    Mono<UUID> getProjectIdFromTrace(UUID traceId);
 
     Flux<BiInformation> getTraceBIInformation(Connection connection);
 
@@ -118,11 +118,13 @@ interface TraceDAO {
 
     Mono<TraceThread> findThreadById(UUID projectId, String threadId);
 
-    Mono<Trace> getPartialById(@NonNull UUID id);
+    Mono<Trace> getPartialById(UUID id);
 
-    Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria);
+    Flux<Trace> search(int limit, TraceSearchCriteria criteria);
 
     Mono<Long> countTraces(Set<UUID> projectIds);
+
+    Flux<TraceThread> threadsSearch(int limit, TraceSearchCriteria criteria);
 }
 
 @Slf4j
@@ -558,7 +560,7 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(last_received_trace_id)> AND id \\< :last_received_trace_id <endif>
+                <if(last_received_id)> AND id \\< :last_received_id <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(feedback_scores_filters)>
                  AND id IN (
@@ -1074,7 +1076,6 @@ class TraceDAOImpl implements TraceDAO {
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
-                  AND thread_id IS NOT NULL
                   AND thread_id \\<> ''
             ), spans_agg AS (
                 SELECT
@@ -1128,6 +1129,22 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id = :project_id
                 AND thread_id IN (SELECT thread_id FROM traces_final)
             )
+            <if(feedback_scores_empty_filters)>
+            , fsc AS (
+                 SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM feedback_scores
+                    WHERE entity_type = 'thread'
+                    AND workspace_id = :workspace_id
+                    AND project_id IN :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+                 HAVING <feedback_scores_empty_filters>
+            )
+            <endif>
             SELECT
                 count(DISTINCT t.id) AS count
             FROM (
@@ -1180,7 +1197,32 @@ class TraceDAOImpl implements TraceDAO {
                     AND t.project_id = tt.project_id
                     AND t.id = tt.thread_id
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
-                <if(trace_thread_filters)>WHERE <trace_thread_filters><endif>
+                WHERE workspace_id = :workspace_id
+                <if(feedback_scores_filters)>
+                AND thread_model_id IN (
+                    SELECT
+                        entity_id
+                    FROM (
+                        SELECT *
+                        FROM feedback_scores
+                        WHERE entity_type = 'thread'
+                        AND workspace_id = :workspace_id
+                        AND project_id = :project_id
+                        ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                        LIMIT 1 BY entity_id, name
+                    )
+                    GROUP BY entity_id
+                    HAVING <feedback_scores_filters>
+                )
+                <endif>
+                <if(feedback_scores_empty_filters)>
+                AND (
+                    thread_model_id IN (SELECT entity_id FROM fsc WHERE fsc.feedback_scores_count = 0)
+                        OR
+                    thread_model_id NOT IN (SELECT entity_id FROM fsc)
+                )
+                <endif>
+                <if(trace_thread_filters)>AND<trace_thread_filters><endif>
             ) AS t
             """;
 
@@ -1196,7 +1238,6 @@ class TraceDAOImpl implements TraceDAO {
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
-                  AND thread_id IS NOT NULL
                   AND thread_id \\<> ''
             ), spans_agg AS (
                 SELECT
@@ -1250,6 +1291,22 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id = :project_id
                 AND thread_id IN (SELECT thread_id FROM traces_final)
             )
+            <if(feedback_scores_empty_filters)>
+            , fsc AS (
+                 SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM feedback_scores
+                    WHERE entity_type = 'thread'
+                    AND workspace_id = :workspace_id
+                    AND project_id IN :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+                 HAVING <feedback_scores_empty_filters>
+            )
+            <endif>
             SELECT
                 t.workspace_id as workspace_id,
                 t.project_id as project_id,
@@ -1299,9 +1356,39 @@ class TraceDAOImpl implements TraceDAO {
                 AND t.project_id = tt.project_id
                 AND t.id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
-            <if(trace_thread_filters)>WHERE <trace_thread_filters><endif>
+            WHERE workspace_id = :workspace_id
+            <if(feedback_scores_filters)>
+            AND thread_model_id IN (
+                SELECT
+                    entity_id
+                FROM (
+                    SELECT *
+                    FROM feedback_scores
+                    WHERE entity_type = 'thread'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                )
+                GROUP BY entity_id
+                HAVING <feedback_scores_filters>
+            )
+            <endif>
+            <if(feedback_scores_empty_filters)>
+            AND (
+                thread_model_id IN (SELECT entity_id FROM fsc WHERE fsc.feedback_scores_count = 0)
+                    OR
+                thread_model_id NOT IN (SELECT entity_id FROM fsc)
+            )
+            <endif>
+            <if(trace_thread_filters)>AND<trace_thread_filters><endif>
+            <if(last_retrieved_id)> AND thread_model_id > :last_retrieved_id<endif>
+            <if(stream)>
+            ORDER BY workspace_id, project_id, thread_model_id DESC
+            <else>
             <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC <else> ORDER BY last_updated_at DESC, start_time ASC, end_time DESC <endif>
-            LIMIT :limit OFFSET :offset
+            <endif>
+            LIMIT :limit <if(offset)>OFFSET :offset<endif>
             ;
             """;
 
@@ -1950,8 +2037,8 @@ class TraceDAOImpl implements TraceDAO {
                             .ifPresent(feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
                                     feedbackScoreIsEmptyFilters));
                 });
-        Optional.ofNullable(traceSearchCriteria.lastReceivedTraceId())
-                .ifPresent(lastReceivedTraceId -> template.add("last_received_trace_id", lastReceivedTraceId));
+        Optional.ofNullable(traceSearchCriteria.lastReceivedId())
+                .ifPresent(lastReceivedTraceId -> template.add("last_received_id", lastReceivedTraceId));
         return template;
     }
 
@@ -1964,8 +2051,8 @@ class TraceDAOImpl implements TraceDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
                 });
-        Optional.ofNullable(traceSearchCriteria.lastReceivedTraceId())
-                .ifPresent(lastReceivedTraceId -> statement.bind("last_received_trace_id", lastReceivedTraceId));
+        Optional.ofNullable(traceSearchCriteria.lastReceivedId())
+                .ifPresent(lastReceivedTraceId -> statement.bind("last_received_id", lastReceivedTraceId));
     }
 
     @Override
@@ -2176,14 +2263,18 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
+    @WithSpan
     public Mono<TraceThreadPage> findThreads(int size, int page, @NonNull TraceSearchCriteria criteria) {
 
         return asyncTemplate.nonTransaction(connection -> countThreadTotal(criteria, connection)
                 .flatMap(count -> {
 
+                    int offset = (page - 1) * size;
+
                     ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
 
                     template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+                    template = template.add("offset", offset);
 
                     var finalTemplate = template;
                     Optional.ofNullable(sortingQueryBuilder.toOrderBySql(criteria.sortingFields()))
@@ -2194,7 +2285,7 @@ class TraceDAOImpl implements TraceDAO {
                     var statement = connection.createStatement(template.render())
                             .bind("project_id", criteria.projectId())
                             .bind("limit", size)
-                            .bind("offset", (page - 1) * size);
+                            .bind("offset", offset);
 
                     if (hasDynamicKeys) {
                         statement = sortingQueryBuilder.bindDynamicKeys(statement, criteria.sortingFields());
@@ -2212,6 +2303,37 @@ class TraceDAOImpl implements TraceDAO {
                                     traceThreadSortingFactory.getSortableFields()))
                             .defaultIfEmpty(TraceThreadPage.empty(page, traceThreadSortingFactory.getSortableFields()));
                 }));
+    }
+
+    @Override
+    @WithSpan
+    public Flux<TraceThread> threadsSearch(int limit, @NonNull TraceSearchCriteria criteria) {
+        Preconditions.checkArgument(limit > 0, "limit must be greater than 0");
+
+        return asyncTemplate.stream(connection -> {
+
+            ST template = newFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
+            template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+
+            template.add("limit", limit)
+                    .add("stream", true);
+
+            var statement = connection.createStatement(template.render())
+                    .bind("project_id", criteria.projectId())
+                    .bind("limit", limit);
+
+            bindSearchCriteria(criteria, statement);
+
+            Segment segment = startSegment("traces", "Clickhouse", "threadsSearch");
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment));
+        })
+                .flatMap(this::mapThreadToDto)
+                .buffer(limit > 100 ? limit / 2 : limit)
+                .concatWith(Mono.just(List.of()))
+                .filter(CollectionUtils::isNotEmpty)
+                .flatMap(Flux::fromIterable);
     }
 
     private Publisher<TraceThread> mapThreadToDto(Result result) {
@@ -2236,7 +2358,7 @@ class TraceDAOImpl implements TraceDAO {
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
                 .createdAt(row.get("created_at", Instant.class))
-                .status(TraceThreadStatus.fromValue(row.get("status", String.class)))
+                .status(TraceThreadStatus.fromValue(row.get("status", String.class)).orElse(TraceThreadStatus.ACTIVE))
                 .threadModelId(Optional.ofNullable(row.get("thread_model_id", String.class))
                         .filter(StringUtils::isNotBlank)
                         .map(UUID::fromString)
