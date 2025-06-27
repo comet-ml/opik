@@ -68,6 +68,8 @@ public interface FeedbackScoreDAO {
     Mono<List<String>> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
 
     Mono<List<String>> getProjectsTraceThreadsFeedbackScoreNames(List<UUID> projectId);
+
+    Mono<Long> deleteThreadManualScores(Set<UUID> threadModelIds, UUID projectId);
 }
 
 @Singleton
@@ -154,6 +156,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             AND entity_type = :entity_type
             AND workspace_id = :workspace_id
             <if(names)>AND name IN :names <endif>
+            <if(project_id)>AND project_id = :project_id<endif>
+            <if(sources)>AND source IN :sources<endif>
             ;
             """;
 
@@ -512,6 +516,31 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             bindStatementParam(projectIds, null, statement, EntityType.THREAD);
 
             return getNames(statement);
+        });
+    }
+
+    @Override
+    public Mono<Long> deleteThreadManualScores(@NonNull Set<UUID> threadModelIds, @NonNull UUID projectId) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(threadModelIds),
+                "Argument 'threadModelIds' must not be empty");
+
+        return asyncTemplate.nonTransaction(connection -> {
+
+            List<String> sources = List.of(ScoreSource.UI.getValue(), ScoreSource.SDK.getValue());
+
+            var template = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+
+            template.add("project_id", projectId);
+            template.add("sources", sources);
+
+            var statement = connection.createStatement(template.render())
+                    .bind("entity_ids", threadModelIds)
+                    .bind("entity_type", EntityType.THREAD.getType())
+                    .bind("sources", sources)
+                    .bind("project_id", projectId);
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
         });
     }
 
