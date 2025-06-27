@@ -40,7 +40,7 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
     private final @NonNull TransactionTemplate transactionTemplate;
 
     @Override
-    @Cacheable(name = "GET_THREAD_ID", key = "$workspaceId +'-'+ $projectId +'-'+ $threadId", returnType = UUID.class)
+    @Cacheable(name = "GET_OR_CREATE_TRACE_THREAD_ID", key = "$workspaceId +'-'+ $projectId +'-'+ $threadId", returnType = TraceThreadIdModel.class)
     public Mono<TraceThreadIdModel> getOrCreateTraceThreadId(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull String threadId) {
         Preconditions.checkArgument(!StringUtils.isBlank(workspaceId), "Workspace ID cannot be blank");
@@ -52,7 +52,7 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
                 .switchIfEmpty(Mono.error(new NotFoundException("Project not found: " + projectId)));
     }
 
-    @Cacheable(name = "GET_THREAD_ID", key = "$workspaceId +'-'+ $projectId +'-'+ $threadId", returnType = UUID.class)
+    @Cacheable(name = "GET_TRACE_THREAD_ID", key = "$workspaceId +'-'+ $projectId +'-'+ $threadId", returnType = UUID.class)
     public Mono<UUID> getThreadModelId(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull String threadId) {
         Preconditions.checkArgument(!StringUtils.isBlank(workspaceId), "Workspace ID cannot be blank");

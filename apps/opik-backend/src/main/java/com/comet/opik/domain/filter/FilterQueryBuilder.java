@@ -261,7 +261,6 @@ public class FilterQueryBuilder {
                     .add(TraceThreadField.DURATION)
                     .add(TraceThreadField.CREATED_AT)
                     .add(TraceThreadField.LAST_UPDATED_AT)
-                    .add(TraceThreadField.FEEDBACK_SCORES)
                     .add(TraceThreadField.STATUS)
                     .build())));
 
