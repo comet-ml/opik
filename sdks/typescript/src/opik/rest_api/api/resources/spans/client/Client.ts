@@ -1239,13 +1239,12 @@ export class Spans {
     /**
      * Batch feedback scoring for spans
      *
-     * @param {OpikApi.FeedbackScoreBatch} request
+     * @param {OpikApi.FeedbackScoreBatchTracing} request
      * @param {Spans.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
      *     await client.spans.scoreBatchOfSpans({
      *         scores: [{
-     *                 id: "id",
      *                 name: "name",
      *                 value: 1.1,
      *                 source: "ui"
@@ -1253,14 +1252,14 @@ export class Spans {
      *     })
      */
     public scoreBatchOfSpans(
-        request: OpikApi.FeedbackScoreBatch,
+        request: OpikApi.FeedbackScoreBatchTracing,
         requestOptions?: Spans.RequestOptions,
     ): core.HttpResponsePromise<void> {
         return core.HttpResponsePromise.fromPromise(this.__scoreBatchOfSpans(request, requestOptions));
     }
 
     private async __scoreBatchOfSpans(
-        request: OpikApi.FeedbackScoreBatch,
+        request: OpikApi.FeedbackScoreBatchTracing,
         requestOptions?: Spans.RequestOptions,
     ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
@@ -1284,7 +1283,7 @@ export class Spans {
             },
             contentType: "application/json",
             requestType: "json",
-            body: serializers.FeedbackScoreBatch.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            body: serializers.FeedbackScoreBatchTracing.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
             withCredentials: true,

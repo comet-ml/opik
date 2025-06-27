@@ -4,11 +4,14 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .feedback_score_batch_item import FeedbackScoreBatchItem
+from .trace_thread_filter_operator import TraceThreadFilterOperator
 
 
-class FeedbackScoreBatch(UniversalBaseModel):
-    scores: typing.List[FeedbackScoreBatchItem]
+class TraceThreadFilter(UniversalBaseModel):
+    field: typing.Optional[str] = None
+    operator: typing.Optional[TraceThreadFilterOperator] = None
+    key: typing.Optional[str] = None
+    value: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
