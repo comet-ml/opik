@@ -76,3 +76,13 @@ Create the name of the service account to use
 {{- default "default" (include "clickhouse.serviceAccountName" .) }}
 {{- end }}
 {{- end }}
+{{/*
+Create the name of the service account to use
+*/}}
+{{- define "service.serviceAccountName" -}}
+{{- if .serviceAccount.create }}
+{{- default ( cat .serviceName "-sa" | nospace ) .serviceAccount.name }}
+{{- else }}
+{{- default "default" .serviceAccount.name }}
+{{- end }}
+{{- end }}

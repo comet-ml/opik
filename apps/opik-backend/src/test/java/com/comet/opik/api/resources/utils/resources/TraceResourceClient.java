@@ -6,6 +6,7 @@ import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatch;
 import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
@@ -13,6 +14,7 @@ import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadIdentifier;
+import com.comet.opik.api.TraceThreadSearchStreamRequest;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
@@ -347,6 +349,18 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
     }
 
+    public Response getTraceThreads(String projectName, String apiKey, String workspaceName,
+            List<TraceThreadFilter> filters) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .queryParam("project_name", projectName)
+                .queryParam("filters", toURLEncodedQueryParam(filters))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
     public TraceThread getTraceThread(String threadId, UUID projectId, String apiKey, String workspaceName) {
 
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
@@ -505,6 +519,64 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                         .threadId(threadId).build()))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public List<TraceThread> searchTraceThreadsStream(String projectName, UUID projectId, String apiKey,
+            String workspaceName, List<TraceThreadFilter> filters) {
+        try (var actualResponse = callSearchTraceThreadStream(projectName, projectId, apiKey, workspaceName, filters)) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+            return getStreamedTraceThreads(actualResponse);
+        }
+    }
+
+    public Response callSearchTraceThreadStream(String projectName, UUID projectId, String apiKey, String workspaceName,
+            List<TraceThreadFilter> filters) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("search")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(TraceThreadSearchStreamRequest.builder()
+                        .filters(filters)
+                        .projectName(projectName)
+                        .projectId(projectId)
+                        .build()));
+    }
+
+    private List<TraceThread> getStreamedTraceThreads(Response response) {
+        var items = new ArrayList<TraceThread>();
+        try (var inputStream = response.readEntity(CHUNKED_INPUT_STRING_GENERIC_TYPE)) {
+            String stringItem;
+            while ((stringItem = inputStream.read()) != null) {
+                items.add(JsonUtils.readValue(stringItem, new TypeReference<>() {
+                }));
+            }
+        }
+        return items;
+    }
+
+    public FeedbackScoreNames getTraceThreadsFeedbackScoreNames(UUID projectId, String apiKey, String workspaceName) {
+
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("feedback-scores")
+                .path("names");
+
+        webTarget = webTarget.queryParam("project_id", projectId);
+
+        try (var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            // then
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return actualResponse.readEntity(FeedbackScoreNames.class);
         }
     }
 
