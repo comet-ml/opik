@@ -50,6 +50,27 @@ def evaluate_threads(
     Raises:
         ValueError: If no metrics are provided.
         MetricComputationError: If no threads are found or if evaluation fails.
+
+    Example:
+        >>> from opik.evaluation import evaluate_threads
+        >>> from opik.evaluation.metrics import ConversationalCoherenceMetric, UserFrustrationMetric
+        >>>
+        >>> # Initialize the evaluation metrics
+        >>> conversation_coherence_metric = ConversationalCoherenceMetric()
+        >>> user_frustration_metric = UserFrustrationMetric()
+        >>>
+        >>> # Run the threads evaluation
+        >>> results = evaluate_threads(
+        >>>     project_name="ai_team",
+        >>>     filter_string="thread_id=0197ad2a-cf5c-75af-be8b-20e8a23304fe",
+        >>>     eval_project_name="ai_team_evaluation",
+        >>>     metrics=[
+        >>>         conversation_coherence_metric,
+        >>>         user_frustration_metric,
+        >>>     ],
+        >>>     trace_input_transform=lambda x: x["input"],
+        >>>     trace_output_transform=lambda x: x["output"],
+        >>> )
     """
     client = opik_client.get_client_cached()
     threads_client_ = threads_client.ThreadsClient(client)
