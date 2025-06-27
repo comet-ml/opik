@@ -6,6 +6,7 @@ from . import (
     chat_completion_chunks_aggregator,
     openai_chat_completions_decorator,
 )
+from opik import semantic_version
 
 OpenAIClient = TypeVar("OpenAIClient", openai.OpenAI, openai.AsyncOpenAI)
 
@@ -66,17 +67,39 @@ def _patch_openai_chat_completions(
         generations_aggregator=chat_completion_chunks_aggregator.aggregate,
         project_name=project_name,
     )
+    completions_stream_decorator = chat_completions_decorator_factory.track(
+        type="llm",
+        name="chat_completion_stream",
+        generations_aggregator=chat_completion_chunks_aggregator.aggregate,
+        project_name=project_name,
+    )
 
-    # OpenAI implemented beta.chat.completions.stream() in a way that it
-    # calls chat.completions.create(stream=True) under the hood.
-    # So decorating `create` will automatically work for tracking `stream`.
     openai_client.chat.completions.create = completions_create_decorator(
         openai_client.chat.completions.create
     )
+    if semantic_version.SemanticVersion.parse(openai.__version__) < "1.92.0":  # type: ignore
+        # beta.chat.completions.stream() calls chat.completions.create(stream=True)
+        # under the hood.
+        # So decorating `create` will automatically work for tracking `stream`.
+        openai_client.beta.chat.completions.parse = completions_parse_decorator(
+            openai_client.beta.chat.completions.parse
+        )
+    else:
+        # OpenAI reworked beta API.
+        # * chat.completion.stream calls chat.completion.create under the hood, so
+        #   it doesn't need to be decorated again.
+        # * But beta.chat.completion.stream does not call chat.completion.create, so
+        #   it needs to be decorated!
+        openai_client.beta.chat.completions.stream = completions_stream_decorator(
+            openai_client.beta.chat.completions.stream
+        )
 
-    openai_client.beta.chat.completions.parse = completions_parse_decorator(
-        openai_client.beta.chat.completions.parse
-    )
+        openai_client.chat.completions.parse = completions_parse_decorator(
+            openai_client.chat.completions.parse
+        )
+        openai_client.beta.chat.completions.parse = completions_parse_decorator(
+            openai_client.beta.chat.completions.parse
+        )
 
 
 def _patch_openai_responses(
