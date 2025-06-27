@@ -19,7 +19,7 @@ from ..errors.not_implemented_error import NotImplementedError
 from ..types.comment import Comment
 from ..types.error_info import ErrorInfo
 from ..types.error_info_write import ErrorInfoWrite
-from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
+from ..types.feedback_score_batch_item_tracing import FeedbackScoreBatchItemTracing
 from ..types.feedback_score_source import FeedbackScoreSource
 from ..types.json_list_string import JsonListString
 from ..types.json_list_string_write import JsonListStringWrite
@@ -882,7 +882,7 @@ class RawSpansClient:
     def score_batch_of_spans(
         self,
         *,
-        scores: typing.Sequence[FeedbackScoreBatchItem],
+        scores: typing.Sequence[FeedbackScoreBatchItemTracing],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -890,7 +890,7 @@ class RawSpansClient:
 
         Parameters
         ----------
-        scores : typing.Sequence[FeedbackScoreBatchItem]
+        scores : typing.Sequence[FeedbackScoreBatchItemTracing]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -904,7 +904,7 @@ class RawSpansClient:
             method="PUT",
             json={
                 "scores": convert_and_respect_annotation_metadata(
-                    object_=scores, annotation=typing.Sequence[FeedbackScoreBatchItem], direction="write"
+                    object_=scores, annotation=typing.Sequence[FeedbackScoreBatchItemTracing], direction="write"
                 ),
             },
             headers={
@@ -1932,7 +1932,7 @@ class AsyncRawSpansClient:
     async def score_batch_of_spans(
         self,
         *,
-        scores: typing.Sequence[FeedbackScoreBatchItem],
+        scores: typing.Sequence[FeedbackScoreBatchItemTracing],
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1940,7 +1940,7 @@ class AsyncRawSpansClient:
 
         Parameters
         ----------
-        scores : typing.Sequence[FeedbackScoreBatchItem]
+        scores : typing.Sequence[FeedbackScoreBatchItemTracing]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1954,7 +1954,7 @@ class AsyncRawSpansClient:
             method="PUT",
             json={
                 "scores": convert_and_respect_annotation_metadata(
-                    object_=scores, annotation=typing.Sequence[FeedbackScoreBatchItem], direction="write"
+                    object_=scores, annotation=typing.Sequence[FeedbackScoreBatchItemTracing], direction="write"
                 ),
             },
             headers={
