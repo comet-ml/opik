@@ -7,7 +7,10 @@ import java.util.Map;
 import java.util.function.BiFunction;
 
 public record ModelPrice(
-        @NonNull BigDecimal inputPrice,
+        @NonNull BigDecimal inputTextPrice,
+        @NonNull BigDecimal inputImagePrice,
+        @NonNull BigDecimal inputAudioPrice,
+        @NonNull BigDecimal inputVideoPrice,
         @NonNull BigDecimal outputPrice,
         @NonNull BigDecimal cacheCreationInputTokenPrice,
         @NonNull BigDecimal cacheReadInputTokenPrice,
