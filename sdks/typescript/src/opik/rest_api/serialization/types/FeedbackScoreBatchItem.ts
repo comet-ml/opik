@@ -11,7 +11,8 @@ export const FeedbackScoreBatchItem: core.serialization.ObjectSchema<
     serializers.FeedbackScoreBatchItem.Raw,
     OpikApi.FeedbackScoreBatchItem
 > = core.serialization.object({
-    id: core.serialization.string(),
+    id: core.serialization.string().optional(),
+    threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
     projectName: core.serialization.property("project_name", core.serialization.string().optional()),
     name: core.serialization.string(),
     categoryName: core.serialization.property("category_name", core.serialization.string().optional()),
@@ -22,7 +23,8 @@ export const FeedbackScoreBatchItem: core.serialization.ObjectSchema<
 
 export declare namespace FeedbackScoreBatchItem {
     export interface Raw {
-        id: string;
+        id?: string | null;
+        thread_id?: string | null;
         project_name?: string | null;
         name: string;
         category_name?: string | null;
