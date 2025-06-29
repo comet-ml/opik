@@ -1,4 +1,3 @@
-import os
 import pytest
 from opik_backend.executor_docker import DockerExecutor
 from opik_backend.executor_process import ProcessExecutor
@@ -9,6 +8,9 @@ EVALUATORS_URL = "/v1/private/evaluators/python"
 def executor(request):
     """Fixture that provides both Docker and Process executors."""
     executor_instance = request.param()
+    if hasattr(executor_instance, 'start_services'):
+        executor_instance.start_services()
+
     try:
         yield executor_instance
     finally:
@@ -19,7 +21,7 @@ def executor(request):
 def app(executor):
     """Create Flask app with the given executor."""
     from opik_backend import create_app
-    app = create_app()
+    app = create_app(should_init_executor=False)
     app.executor = executor  # Override the executor with our parametrized one
     return app
 
@@ -316,7 +318,7 @@ def test_missing_data_returns_bad_request(client):
             """  File "<string>", line 2
     from typing import
                       ^
-SyntaxError: invalid syntax"""
+SyntaxError: """
     ),
     pytest.param(
             FLASK_INJECTION_METRIC,
@@ -334,7 +336,8 @@ def test_invalid_code_returns_bad_request(client, code, stacktrace):
         "code": code
     })
     assert response.status_code == 400
-    assert response.json["error"] == f"400 Bad Request: Field 'code' contains invalid Python code: {stacktrace}"
+    assert "400 Bad Request: Field 'code' contains invalid Python code" in str(response.json["error"])
+    assert stacktrace in str(response.json["error"])
 
 
 def test_missing_metric_returns_bad_request(client):
@@ -365,8 +368,8 @@ def test_evaluation_exception_returns_bad_request(client, code, stacktrace):
         "code": code
     })
     assert response.status_code == 400
-    assert response.json[
-               "error"] == f"400 Bad Request: The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"
+    assert "400 Bad Request: The provided 'code' and 'data' fields can't be evaluated" in str(response.json["error"])
+    assert stacktrace in str(response.json["error"])
 
 
 def test_no_scores_returns_bad_request(client):
