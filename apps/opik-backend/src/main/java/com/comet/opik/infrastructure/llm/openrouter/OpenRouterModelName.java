@@ -1,5 +1,7 @@
 package com.comet.opik.infrastructure.llm.openrouter;
 
+import com.comet.opik.api.LlmProvider;
+import com.comet.opik.infrastructure.llm.ModelDefinition;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -14,7 +16,7 @@ import java.util.Optional;
  */
 @Slf4j
 @RequiredArgsConstructor
-public enum OpenRouterModelName {
+public enum OpenRouterModelName implements ModelDefinition {
     AETHERWIING_MN_STARCANNON_12B("aetherwiing/mn-starcannon-12b"),
     AI21_JAMBA_1_5_LARGE("ai21/jamba-1-5-large"),
     AI21_JAMBA_1_5_MINI("ai21/jamba-1-5-mini"),
@@ -342,6 +344,16 @@ public enum OpenRouterModelName {
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenRouterModelName with value '{}'";
 
     private final String value;
+
+    @Override
+    public LlmProvider getProvider() {
+        return LlmProvider.OPEN_ROUTER;
+    }
+
+    @Override
+    public boolean isStructuredOutputSupported() {
+        return true;
+    }
 
     public static Optional<OpenRouterModelName> byValue(String value) {
         var response = Arrays.stream(OpenRouterModelName.values())
