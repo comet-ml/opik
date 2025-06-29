@@ -36,6 +36,7 @@ export enum LLM_JUDGE {
   moderation = "moderation",
   answer_relevance = "answer_relevance",
   context_precision = "context_precision",
+  syceval = "syceval",
 }
 
 export type LLMPromptTemplate = {
