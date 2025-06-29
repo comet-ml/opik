@@ -5,14 +5,12 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
-import com.comet.opik.domain.threads.TraceThreadModel;
 import jakarta.ws.rs.core.Response;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-import java.util.Objects;
 
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,7 +25,7 @@ public class TraceAssertions {
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     private static final String[] IGNORED_FIELDS_THREADS = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
-            "threadModelId", "status", "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt"};
+            "threadModelId", "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt"};
 
     public static void assertErrorResponse(Response actualResponse, String message, int expectedStatus) {
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
@@ -162,39 +160,6 @@ public class TraceAssertions {
                 .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                 .ignoringCollectionOrderInFields("feedbackScores")
                 .isEqualTo(expectedThreads);
-    }
-
-    public static void assertClosedThreads(List<TraceThreadModel> actualTraceThreadModels,
-            List<TraceThreadModel> expectedTraceThreadModels, Instant expectedCreatedAt,
-            Instant expectedTraceLastUpdateAt) {
-
-        assertThat(actualTraceThreadModels).hasSize(expectedTraceThreadModels.size());
-
-        assertThat(actualTraceThreadModels)
-                .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id", "createdAt", "lastUpdatedAt")
-                .containsExactlyInAnyOrderElementsOf(expectedTraceThreadModels);
-
-        assertThat(actualTraceThreadModels.stream().map(TraceThreadModel::createdAt))
-                .allMatch(createdAt -> createdAt.isAfter(expectedCreatedAt));
-        assertThat(actualTraceThreadModels.stream().map(TraceThreadModel::lastUpdatedAt))
-                .allMatch(lastUpdatedAt -> lastUpdatedAt.isAfter(expectedTraceLastUpdateAt));
-        assertThat(actualTraceThreadModels.stream().map(TraceThreadModel::id))
-                .allMatch(Objects::nonNull);
-    }
-
-    public static void assertOpenThreads(List<TraceThreadModel> actualTraceThreadModels,
-            List<TraceThreadModel> expectedTraceThreadModels, Instant expectedCreatedAt) {
-
-        assertThat(actualTraceThreadModels).hasSize(expectedTraceThreadModels.size());
-
-        assertThat(actualTraceThreadModels)
-                .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id", "createdAt")
-                .containsExactlyInAnyOrderElementsOf(expectedTraceThreadModels);
-
-        assertThat(actualTraceThreadModels.stream().map(TraceThreadModel::createdAt))
-                .allMatch(createdAt -> createdAt.isAfter(expectedCreatedAt));
-        assertThat(actualTraceThreadModels.stream().map(TraceThreadModel::id))
-                .allMatch(Objects::nonNull);
     }
 
 }

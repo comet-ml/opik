@@ -32,6 +32,7 @@ public record TraceThread(
         BigDecimal totalEstimatedCost,
         Map<String, Long> usage,
         Instant lastUpdatedAt,
+        String lastUpdatedBy,
         String createdBy,
         Instant createdAt) {
 
