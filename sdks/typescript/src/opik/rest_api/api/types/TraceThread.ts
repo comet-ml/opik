@@ -7,11 +7,14 @@ import * as OpikApi from "../index";
 export interface TraceThread {
     id?: string;
     projectId?: string;
+    threadModelId?: string;
     startTime?: Date;
     endTime?: Date;
     duration?: number;
     firstMessage?: OpikApi.JsonNode;
     lastMessage?: OpikApi.JsonNode;
+    feedbackScores?: OpikApi.FeedbackScore[];
+    status?: OpikApi.TraceThreadStatus;
     numberOfMessages?: number;
     totalEstimatedCost?: number;
     usage?: Record<string, number>;

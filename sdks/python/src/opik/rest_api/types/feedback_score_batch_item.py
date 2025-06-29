@@ -8,7 +8,8 @@ from .feedback_score_batch_item_source import FeedbackScoreBatchItemSource
 
 
 class FeedbackScoreBatchItem(UniversalBaseModel):
-    id: str
+    id: typing.Optional[str] = None
+    thread_id: typing.Optional[str] = None
     project_name: typing.Optional[str] = pydantic.Field(default=None)
     """
     If null, the default project is used
