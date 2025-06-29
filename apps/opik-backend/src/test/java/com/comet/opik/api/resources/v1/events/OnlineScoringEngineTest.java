@@ -416,8 +416,7 @@ class OnlineScoringEngineTest {
         var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
         var trace = createTrace(generator.generate(), generator.generate());
 
-        var request = OnlineScoringEngine.prepareLlmRequest(
-                evaluatorCode, trace, new ToolCallingStrategy());
+        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new ToolCallingStrategy());
 
         assertThat(request.responseFormat()).isNotNull();
         var expectedSchema = createTestSchema();
@@ -451,6 +450,21 @@ class OnlineScoringEngineTest {
         assertThat(userMessage.singleText()).contains("Literal: some literal value");
     }
 
+    private static Stream<Arguments> feedbackParsingArguments() {
+        var validAiMsgTxt = "{\"Relevance\":{\"score\":5,\"reason\":\"The summary directly addresses the approach taken in the study by mentioning the systematic experimentation with varying data mixtures and the manipulation of proportions and sources.\"},"
+                + "\"Conciseness\":{\"score\":4.0,\"reason\":\"The summary is mostly concise but could be slightly more streamlined by removing redundant phrases.\"},"
+                + "\"Technical Accuracy\":{\"score\":false,\"reason\":\"The summary accurately describes the experimental approach involving data mixtures, proportions, and sources, reflecting the technical details of the study.\"}}";
+        var invalidAiMsgTxt = "a" + validAiMsgTxt;
+        var emptyAiMsgTxt = "{}";
+        var emptyJson = "";
+
+        return Stream.of(
+                arguments(validAiMsgTxt, 3),
+                arguments(invalidAiMsgTxt, 0),
+                arguments(emptyAiMsgTxt, 0),
+                arguments(emptyJson, 0));
+    }
+
     @ParameterizedTest
     @MethodSource("feedbackParsingArguments")
     @DisplayName("parse feedback scores from AI response")
@@ -479,21 +493,6 @@ class OnlineScoringEngineTest {
             assertThat(techAccuracy.value()).isEqualTo(BigDecimal.ZERO);
             assertThat(techAccuracy.source()).isEqualTo(ScoreSource.ONLINE_SCORING);
         }
-    }
-
-    private static Stream<Arguments> feedbackParsingArguments() {
-        var validAiMsgTxt = "{\"Relevance\":{\"score\":5,\"reason\":\"The summary directly addresses the approach taken in the study by mentioning the systematic experimentation with varying data mixtures and the manipulation of proportions and sources.\"},"
-                + "\"Conciseness\":{\"score\":4.0,\"reason\":\"The summary is mostly concise but could be slightly more streamlined by removing redundant phrases.\"},"
-                + "\"Technical Accuracy\":{\"score\":false,\"reason\":\"The summary accurately describes the experimental approach involving data mixtures, proportions, and sources, reflecting the technical details of the study.\"}}";
-        var invalidAiMsgTxt = "a" + validAiMsgTxt;
-        var emptyAiMsgTxt = "{}";
-        var emptyJson = "";
-
-        return Stream.of(
-                arguments(validAiMsgTxt, 3),
-                arguments(invalidAiMsgTxt, 0),
-                arguments(emptyAiMsgTxt, 0),
-                arguments(emptyJson, 0));
     }
 
     private JsonObjectSchema createTestSchema() {
