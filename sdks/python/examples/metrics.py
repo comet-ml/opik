@@ -93,3 +93,42 @@ if True:
         ],
     )
     print("context_recall_score:", context_recall_score)
+
+# StructuredOutputCompliance metric example
+if True:
+    print("\n\nStructuredOutputCompliance metric example:")
+
+    class User(BaseModel):
+        name: str = Field(description="The name of the user")
+        age: int = Field(description="The age of the user")
+
+    structured_output_compliance_metric = metrics.StructuredOutputCompliance()
+
+    # Example 1: Valid JSON, but not compliant with schema
+    structured_output_compliance_score = structured_output_compliance_metric.score(
+        output='{"name": "John Doe"}',
+        pydantic_schema=User,
+    )
+    print(
+        "structured_output_compliance_score (invalid schema):",
+        structured_output_compliance_score,
+    )
+
+    # Example 2: Valid JSON and compliant with schema
+    structured_output_compliance_score = structured_output_compliance_metric.score(
+        output='{"name": "John Doe", "age": 30}',
+        pydantic_schema=User,
+    )
+    print(
+        "structured_output_compliance_score (valid schema):",
+        structured_output_compliance_score,
+    )
+
+    # Example 3: Invalid JSON
+    structured_output_compliance_score = structured_output_compliance_metric.score(
+        output='{"name": "John Doe", "age": }',
+    )
+    print(
+        "structured_output_compliance_score (invalid json):",
+        structured_output_compliance_score,
+    )
