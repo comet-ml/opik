@@ -721,7 +721,9 @@ public class TracesResource {
     @PUT
     @Path("/threads/close")
     @Operation(operationId = "closeTraceThread", summary = "Close trace thread", description = "Close trace thread", responses = {
-            @ApiResponse(responseCode = "204", description = "No Content")})
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
     public Response closeTraceThread(
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadIdentifier.class))) @NotNull @Valid TraceThreadIdentifier identifier) {
 
