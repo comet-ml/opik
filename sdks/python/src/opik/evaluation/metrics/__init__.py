@@ -17,6 +17,7 @@ from .llm_judges.g_eval.metric import GEval
 from .llm_judges.hallucination.metric import Hallucination
 from .llm_judges.moderation.metric import Moderation
 from .llm_judges.trajectory_accuracy import TrajectoryAccuracy
+from .llm_judges.syc_eval.metric import SycEval
 from .llm_judges.usefulness.metric import Usefulness
 from .base_metric import BaseMetric
 from .ragas_metric import RagasMetricWrapper
@@ -41,6 +42,8 @@ __all__ = [
     "MetricComputationError",
     "Moderation",
     "RagasMetricWrapper",
+    "SycEval",
+    "Usefulness",
     "RegexMatch",
     "ROUGE",
     "SentenceBLEU",
