@@ -50,6 +50,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.Project.Configuration;
 import static com.comet.opik.api.ProjectStats.ProjectStatItem;
 import static com.comet.opik.api.ProjectStatsSummary.ProjectStatsSummaryItem;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -99,6 +100,8 @@ public interface ProjectService {
     ProjectStatsSummary getStats(int page, int size, @NonNull ProjectCriteria criteria,
             @NonNull List<SortingField> sortingFields);
 
+    void updateConfiguration(UUID projectId, Configuration configuration);
+
     static Map<String, Project> groupByName(List<Project> projects) {
         return projects.stream().collect(Collectors.toMap(
                 Project::name,
@@ -124,6 +127,7 @@ class ProjectServiceImpl implements ProjectService {
     private final @NonNull TransactionTemplateAsync transactionTemplateAsync;
     private final @NonNull SortingFactoryProjects sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull ProjectConfigDAO projectConfigDAO;
 
     private NotFoundException createNotFoundError() {
         String message = "Project not found";
@@ -138,7 +142,16 @@ class ProjectServiceImpl implements ProjectService {
         String userName = requestContext.get().getUserName();
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        return createProject(project, projectId, userName, workspaceId);
+        project = createProject(project, projectId, userName, workspaceId);
+
+        if (project.configuration() != null) {
+            projectConfigDAO.upsertConfigurations(project)
+                    .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                            .put(RequestContext.USER_NAME, userName))
+                    .block();
+        }
+
+        return project;
     }
 
     private Project createProject(Project project, UUID projectId, String userName, String workspaceId) {
@@ -226,12 +239,19 @@ class ProjectServiceImpl implements ProjectService {
             return repository.fetch(id, workspaceId).orElseThrow(this::createNotFoundError);
         });
 
+        //TODO: make it async
         Map<UUID, Instant> lastUpdatedTraceAt = transactionTemplateAsync
                 .nonTransaction(connection -> traceDAO.getLastUpdatedTraceAt(Set.of(id), workspaceId, connection))
                 .block();
 
+        Configuration configuration = projectConfigDAO.getConfigurations(id)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, "unused")) // userName is not used in this context
+                .block();
+
         return project.toBuilder()
                 .lastUpdatedTraceAt(lastUpdatedTraceAt.get(project.id()))
+                .configuration(configuration)
                 .build();
     }
 
@@ -255,6 +275,21 @@ class ProjectServiceImpl implements ProjectService {
                                 .map(projectId -> getStats(projectId, projectStats.get(projectId)))
                                 .toList())
                 .build();
+    }
+
+    @Override
+    public void updateConfiguration(@NonNull UUID projectId, @NonNull Configuration configuration) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        Project project = get(projectId).toBuilder()
+                .configuration(configuration)
+                .build();
+
+        projectConfigDAO.upsertConfigurations(project)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName))
+                .block();
     }
 
     private ProjectStatsSummaryItem getStats(UUID projectId, Map<String, Object> projectStats) {
@@ -290,6 +325,10 @@ class ProjectServiceImpl implements ProjectService {
             // Void return
             return null;
         });
+
+        projectConfigDAO.deleteConfigurationsByProjectId(List.of(id))
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
     }
 
     @Override
@@ -305,6 +344,10 @@ class ProjectServiceImpl implements ProjectService {
             handle.attach(ProjectDAO.class).delete(ids, workspaceId);
             return null;
         });
+
+        projectConfigDAO.deleteConfigurationsByProjectId(List.copyOf(ids))
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
     }
 
     @Override
@@ -313,6 +356,7 @@ class ProjectServiceImpl implements ProjectService {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         Visibility visibility = requestContext.get().getVisibility();
+        String userName = requestContext.get().getUserName();
 
         if (!sortingFields.isEmpty() && sortingFields.getFirst().field().equals(SortableFields.LAST_UPDATED_TRACE_AT)) {
             return findWithLastTraceSorting(page, size, criteria, sortingFields.getFirst());
@@ -334,17 +378,26 @@ class ProjectServiceImpl implements ProjectService {
             return ProjectPage.empty(page);
         }
 
-        Map<UUID, Instant> projectLastUpdatedTraceAtMap = transactionTemplateAsync.nonTransaction(connection -> {
-            Set<UUID> projectIds = projectRecordSet.content().stream().map(Project::id).collect(toSet());
-            return traceDAO.getLastUpdatedTraceAt(projectIds, workspaceId, connection);
-        }).block();
+        Set<UUID> projectIds = projectRecordSet.content().stream().map(Project::id).collect(toSet());
+
+        Map<UUID, Instant> projectLastUpdatedTraceAtMap = transactionTemplateAsync
+                .nonTransaction(connection -> traceDAO.getLastUpdatedTraceAt(projectIds, workspaceId, connection))
+                .block();
+
+        Map<UUID, Configuration> projectsConfigurations = projectConfigDAO
+                .getConfigurationsByIds(projectRecordSet.content().stream().map(Project::id).collect(toSet()))
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName))
+                .block();
 
         List<Project> projects = projectRecordSet.content()
                 .stream()
                 .map(project -> {
                     Instant lastUpdatedTraceAt = projectLastUpdatedTraceAtMap.get(project.id());
+                    Configuration configuration = projectsConfigurations.get(project.id());
                     return project.toBuilder()
                             .lastUpdatedTraceAt(lastUpdatedTraceAt)
+                            .configuration(configuration)
                             .build();
                 })
                 .toList();
@@ -519,6 +572,8 @@ class ProjectServiceImpl implements ProjectService {
                         Map<UUID, Map<String, Object>> projectStats = getProjectStats(List.of(project.id()),
                                 workspaceId);
 
+                        Configuration configuration = projectConfigDAO.getConfigurations(project.id()).block();
+
                         return project.toBuilder()
                                 .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(project.id()))
                                 .feedbackScores(StatsMapper.getStatsFeedbackScores(projectStats.get(project.id())))
@@ -532,6 +587,7 @@ class ProjectServiceImpl implements ProjectService {
                                 .guardrailsFailedCount(
                                         StatsMapper.getStatsGuardrailsFailedCount(projectStats.get(project.id())))
                                 .errorCount(StatsMapper.getStatsErrorCount(projectStats.get(project.id())))
+                                .configuration(configuration)
                                 .build();
                     })
                     .orElseThrow(this::createNotFoundError);

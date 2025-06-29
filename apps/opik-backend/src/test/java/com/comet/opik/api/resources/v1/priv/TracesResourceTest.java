@@ -4655,6 +4655,7 @@ class TracesResourceTest {
                     .usage(aggregateSpansUsage(spans))
                     .createdAt(trace.createdAt())
                     .lastUpdatedAt(trace.lastUpdatedAt())
+                    .status(TraceThreadStatus.ACTIVE)
                     .build());
 
             Map<String, String> queryParams = Map.of("page", "1", "size", "5", "truncate", String.valueOf(truncate));
@@ -5241,7 +5242,9 @@ class TracesResourceTest {
                                 .endTime())
                         .numberOfMessages(expectedTraces.size() * 2L)
                         .id(threadId)
-                        .totalEstimatedCost(getTotalEstimatedCost(spans))
+                        .totalEstimatedCost(Optional.ofNullable(getTotalEstimatedCost(spans))
+                                .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
+                                .orElse(null))
                         .usage(getUsage(spans))
                         .status(status)
                         .feedbackScores(feedbackScores)
