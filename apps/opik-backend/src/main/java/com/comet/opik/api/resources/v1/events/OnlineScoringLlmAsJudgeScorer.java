@@ -9,6 +9,11 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
+import com.comet.opik.infrastructure.llm.StructuredOutputSupported;
+import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
+import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
+import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -73,8 +78,20 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
             ChatRequest scoreRequest;
             try {
-                var llmProvider = llmProviderFactory.getLlmProvider(message.llmAsJudgeCode().model().name());
-                var strategy = llmProvider.isSupportsStructuredOutput()
+                String modelName = message.llmAsJudgeCode().model().name();
+                var llmProvider = llmProviderFactory.getLlmProvider(modelName);
+                boolean isSupported = switch (llmProvider) {
+                    case OPEN_AI -> OpenaiModelName.byValue(modelName)
+                            .map(StructuredOutputSupported::isStructuredOutputSupported).orElse(false);
+                    case ANTHROPIC -> AnthropicModelName.byValue(modelName)
+                            .map(StructuredOutputSupported::isStructuredOutputSupported).orElse(false);
+                    case GEMINI -> GeminiModelName.byValue(modelName)
+                            .map(StructuredOutputSupported::isStructuredOutputSupported).orElse(false);
+                    case OPEN_ROUTER -> OpenRouterModelName.byValue(modelName)
+                            .map(StructuredOutputSupported::isStructuredOutputSupported).orElse(true);
+                    case VERTEX_AI, VLLM -> false;
+                };
+                var strategy = isSupported
                         ? new ToolCallingStrategy()
                         : new InstructionStrategy();
                 scoreRequest = OnlineScoringEngine.prepareLlmRequest(message.llmAsJudgeCode(), trace, strategy);
