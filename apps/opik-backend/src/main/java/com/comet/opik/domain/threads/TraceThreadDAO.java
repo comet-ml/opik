@@ -25,6 +25,7 @@ import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -46,6 +47,8 @@ interface TraceThreadDAO {
     Mono<Long> openThread(UUID projectId, String threadId);
 
     Mono<Long> closeThread(UUID projectId, String threadId);
+
+    Mono<TraceThreadModel> findByThreadModelId(UUID threadModelId, UUID projectId);
 }
 
 @Singleton
@@ -238,6 +241,27 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
+        });
+    }
+
+    @Override
+    public Mono<TraceThreadModel> findByThreadModelId(@NonNull UUID threadModelId, @NonNull UUID projectId) {
+        return asyncTemplate.nonTransaction(connection -> {
+            var template = new ST(FIND_THREADS_BY_PROJECT_SQL);
+
+            List<UUID> threadModelIds = List.of(threadModelId);
+            List<UUID> projectIds = List.of(projectId);
+
+            template.add("ids", threadModelIds);
+            template.add("project_ids", projectIds);
+
+            var statement = connection.createStatement(template.render())
+                    .bind("ids", threadModelIds)
+                    .bind("project_ids", projectIds);
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMap(result -> Mono
+                            .from(result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE.mapFromRow(row))));
         });
     }
 

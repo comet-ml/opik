@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.AutomationRuleEvaluatorType;
-import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -22,6 +21,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.List;
 import java.util.Map;
 
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 @EagerSingleton
@@ -93,8 +93,8 @@ public class OnlineScoringUserDefinedMetricPythonScorer
             }
 
             try {
-                var scores = scoreResults.stream()
-                        .map(scoreResult -> FeedbackScoreBatchItem.builder()
+                List<FeedbackScoreBatchItem> scores = scoreResults.stream()
+                        .map(scoreResult -> (FeedbackScoreBatchItem) FeedbackScoreBatchItem.builder()
                                 .id(trace.id())
                                 .projectName(trace.projectName())
                                 .projectId(trace.projectId())
@@ -104,6 +104,7 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                                 .source(ScoreSource.ONLINE_SCORING)
                                 .build())
                         .toList();
+
                 var loggedScores = storeScores(scores, trace, message.userName(), message.workspaceId());
                 userFacingLogger.info("Scores for traceId '{}' stored successfully:\n\n{}", trace.id(), loggedScores);
             } catch (Exception exception) {
