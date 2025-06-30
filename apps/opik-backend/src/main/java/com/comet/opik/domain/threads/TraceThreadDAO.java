@@ -25,6 +25,7 @@ import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -32,7 +33,7 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
 @ImplementedBy(TraceThreadDAOImpl.class)
-interface TraceThreadDAO {
+public interface TraceThreadDAO {
 
     Mono<Long> save(List<TraceThreadModel> traceThreads);
 
@@ -46,6 +47,10 @@ interface TraceThreadDAO {
     Mono<Long> openThread(UUID projectId, String threadId);
 
     Mono<Long> closeThread(UUID projectId, String threadId);
+
+    Mono<TraceThreadModel> findByThreadModelId(UUID threadModelId, UUID projectId);
+
+    Mono<UUID> getProjectIdFromThread(UUID id);
 }
 
 @Singleton
@@ -109,6 +114,15 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             AND status != :status
             <if(last_updated_at)>AND last_updated_at \\< parseDateTime64BestEffort(:last_updated_at, 6)<endif>
             <if(thread_id)>AND thread_id = :thread_id<endif>
+            """;
+
+    private static final String SELECT_PROJECT_ID_FROM_THREAD = """
+            SELECT
+                DISTINCT project_id
+            FROM trace_threads
+            WHERE id = :id
+            AND workspace_id = :workspace_id
+            ;
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -241,6 +255,40 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         });
     }
 
+    @Override
+    public Mono<TraceThreadModel> findByThreadModelId(@NonNull UUID threadModelId, @NonNull UUID projectId) {
+        return asyncTemplate.nonTransaction(connection -> {
+            var template = new ST(FIND_THREADS_BY_PROJECT_SQL);
+
+            List<UUID> threadModelIds = List.of(threadModelId);
+            List<UUID> projectIds = List.of(projectId);
+
+            template.add("ids", threadModelIds);
+            template.add("project_ids", projectIds);
+
+            var statement = connection.createStatement(template.render())
+                    .bind("ids", threadModelIds)
+                    .bind("project_ids", projectIds);
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMap(result -> Mono
+                            .from(result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE.mapFromRow(row))));
+        });
+    }
+
+    @Override
+    public Mono<UUID> getProjectIdFromThread(@NonNull UUID id) {
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_PROJECT_ID_FROM_THREAD)
+                    .bind("id", id);
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))
+                    .singleOrEmpty();
+        });
+    }
+
     private void bindTemplateParam(TraceThreadCriteria criteria, ST template) {
         if (CollectionUtils.isNotEmpty(criteria.ids())) {
             template.add("ids", criteria.ids());
@@ -276,5 +324,4 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             statement.bind("status", criteria.status().getValue());
         }
     }
-
 }

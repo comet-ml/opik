@@ -217,6 +217,8 @@ export class Traces {
      * @param {OpikApi.TraceThreadIdentifier} request
      * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
      *
+     * @throws {@link OpikApi.NotFoundError}
+     *
      * @example
      *     await client.traces.closeTraceThread({
      *         threadId: "thread_id"
@@ -265,11 +267,16 @@ export class Traces {
         }
 
         if (_response.error.reason === "status-code") {
-            throw new errors.OpikApiError({
-                statusCode: _response.error.statusCode,
-                body: _response.error.body,
-                rawResponse: _response.rawResponse,
-            });
+            switch (_response.error.statusCode) {
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
         }
 
         switch (_response.error.reason) {
@@ -802,6 +809,88 @@ export class Traces {
     }
 
     /**
+     * Delete thread feedback scores
+     *
+     * @param {OpikApi.DeleteThreadFeedbackScores} request
+     * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.traces.deleteThreadFeedbackScores({
+     *         projectName: "project_name",
+     *         threadId: "thread_id",
+     *         names: ["names"]
+     *     })
+     */
+    public deleteThreadFeedbackScores(
+        request: OpikApi.DeleteThreadFeedbackScores,
+        requestOptions?: Traces.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteThreadFeedbackScores(request, requestOptions));
+    }
+
+    private async __deleteThreadFeedbackScores(
+        request: OpikApi.DeleteThreadFeedbackScores,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/traces/threads/feedback-scores/delete",
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.DeleteThreadFeedbackScores.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/traces/threads/feedback-scores/delete.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Delete trace comments
      *
      * @param {OpikApi.BatchDelete} request
@@ -1205,6 +1294,97 @@ export class Traces {
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
                     "Timeout exceeded when calling GET /v1/private/traces/feedback-scores/names.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
+     * Find Trace Threads Feedback Score names
+     *
+     * @param {OpikApi.FindTraceThreadsFeedbackScoreNamesRequest} request
+     * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.traces.findTraceThreadsFeedbackScoreNames({
+     *         projectId: "project_id"
+     *     })
+     */
+    public findTraceThreadsFeedbackScoreNames(
+        request: OpikApi.FindTraceThreadsFeedbackScoreNamesRequest,
+        requestOptions?: Traces.RequestOptions,
+    ): core.HttpResponsePromise<string[]> {
+        return core.HttpResponsePromise.fromPromise(this.__findTraceThreadsFeedbackScoreNames(request, requestOptions));
+    }
+
+    private async __findTraceThreadsFeedbackScoreNames(
+        request: OpikApi.FindTraceThreadsFeedbackScoreNamesRequest,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<string[]>> {
+        const { projectId } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        _queryParams["project_id"] = projectId;
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/traces/threads/feedback-scores/names",
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.traces.findTraceThreadsFeedbackScoreNames.Response.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling GET /v1/private/traces/threads/feedback-scores/names.",
                 );
             case "unknown":
                 throw new errors.OpikApiError({
@@ -1697,6 +1877,91 @@ export class Traces {
     }
 
     /**
+     * Batch feedback scoring for threads
+     *
+     * @param {OpikApi.FeedbackScoreBatchThread} request
+     * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.traces.scoreBatchOfThreads({
+     *         scores: [{
+     *                 threadId: "thread_id",
+     *                 name: "name",
+     *                 value: 1.1,
+     *                 source: "ui"
+     *             }]
+     *     })
+     */
+    public scoreBatchOfThreads(
+        request: OpikApi.FeedbackScoreBatchThread,
+        requestOptions?: Traces.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__scoreBatchOfThreads(request, requestOptions));
+    }
+
+    private async __scoreBatchOfThreads(
+        request: OpikApi.FeedbackScoreBatchThread,
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/traces/threads/feedback-scores",
+            ),
+            method: "PUT",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.FeedbackScoreBatchThread.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling PUT /v1/private/traces/threads/feedback-scores.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Batch feedback scoring for traces
      *
      * @param {OpikApi.FeedbackScoreBatch} request
@@ -1772,6 +2037,85 @@ export class Traces {
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
                     "Timeout exceeded when calling PUT /v1/private/traces/feedback-scores.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
+     * Search trace threads
+     * @throws {@link OpikApi.BadRequestError}
+     */
+    public searchTraceThreads(
+        request: OpikApi.TraceThreadSearchStreamRequest = {},
+        requestOptions?: Traces.RequestOptions,
+    ): core.HttpResponsePromise<stream.Readable> {
+        return core.HttpResponsePromise.fromPromise(this.__searchTraceThreads(request, requestOptions));
+    }
+
+    private async __searchTraceThreads(
+        request: OpikApi.TraceThreadSearchStreamRequest = {},
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<stream.Readable>> {
+        const _response = await core.fetcher<stream.Readable>({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/traces/threads/search",
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.TraceThreadSearchStreamRequest.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            responseType: "streaming",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return { data: _response.body, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/traces/threads/search.",
                 );
             case "unknown":
                 throw new errors.OpikApiError({
