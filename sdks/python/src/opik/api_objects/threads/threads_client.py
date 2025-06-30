@@ -1,11 +1,18 @@
+import logging
 from typing import List, Optional
 
 import opik
 from opik.rest_api import TraceThread
 from opik.types import FeedbackScoreDict
 
-from .. import helpers, rest_stream_parser
+from .. import helpers, rest_stream_parser, constants
+from ... import config
+from ...message_processing import messages
+from ...message_processing.batching import sequence_splitter
 from ...rest_api.types import trace_thread_filter
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class ThreadsClient:
@@ -66,6 +73,8 @@ class ThreadsClient:
             filter_string, parsed_item_class=trace_thread_filter.TraceThreadFilter
         )
 
+        project_name = project_name or self._opik_client.project_name
+
         threads = rest_stream_parser.read_and_parse_full_stream(
             read_source=lambda current_batch_size,
             last_retrieved_id: self._opik_client.rest_client.traces.search_trace_threads(
@@ -90,11 +99,34 @@ class ThreadsClient:
 
         Args:
             scores: A list of dictionaries containing feedback scores
-                for threads to be logged.
+                for threads to be logged. Specifying a thread id via `id` key for each score is mandatory.
             project_name: The name of the project to associate with the logged
                 scores. If not provided, the scores won't be associated with any specific project.
         """
-        raise NotImplementedError
+        project_name = project_name or self._opik_client.project_name
+
+        score_messages = helpers.parse_feedback_score_messages(
+            scores=scores,
+            project_name=project_name,
+            parsed_item_class=messages.ThreadsFeedbackScoreMessage,
+            logger=LOGGER,
+        )
+        if score_messages is None:
+            LOGGER.error(
+                f"No valid threads feedback scores to log from provided ones: {scores}"
+            )
+            return
+
+        for batch in sequence_splitter.split_into_batches(
+            score_messages,
+            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
+            max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
+        ):
+            add_threads_feedback_scores_batch_message = (
+                messages.AddThreadsFeedbackScoresBatchMessage(batch=batch)
+            )
+
+            self._opik_client._streamer.put(add_threads_feedback_scores_batch_message)
 
     @property
     def opik_client(self) -> "opik.Opik":

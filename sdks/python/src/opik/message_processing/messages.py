@@ -163,11 +163,6 @@ class AddFeedbackScoresBatchMessage(BaseMessage):
     batch: List[FeedbackScoreMessage]
     supports_batching: bool = True
 
-    def as_payload_dict(self) -> Dict[str, Any]:
-        data = super().as_payload_dict()
-        data.pop("supports_batching")
-        return data
-
 
 @dataclasses.dataclass
 class AddTraceFeedbackScoresBatchMessage(AddFeedbackScoresBatchMessage):
@@ -177,6 +172,25 @@ class AddTraceFeedbackScoresBatchMessage(AddFeedbackScoresBatchMessage):
 @dataclasses.dataclass
 class AddSpanFeedbackScoresBatchMessage(AddFeedbackScoresBatchMessage):
     pass
+
+
+@dataclasses.dataclass
+class ThreadsFeedbackScoreMessage(FeedbackScoreMessage):
+    """
+    There is no handler for that in the message processor, it exists
+    only as an item of AddThreadsFeedbackScoresBatchMessage
+    """
+
+    def as_payload_dict(self) -> Dict[str, Any]:
+        data = super().as_payload_dict()
+        data["thread_id"] = data.pop("id")
+        return data
+
+
+@dataclasses.dataclass
+class AddThreadsFeedbackScoresBatchMessage(BaseMessage):
+    batch: List[ThreadsFeedbackScoreMessage]
+    supports_batching: bool = True
 
 
 @dataclasses.dataclass

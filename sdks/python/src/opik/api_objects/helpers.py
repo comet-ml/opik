@@ -1,16 +1,38 @@
 import datetime
 import logging
-from typing import Optional, Dict, Any, List, TypeVar, Type
+from typing import Optional, Dict, Any, List, TypeVar, Type, Union
 
 from opik import llm_usage
-from . import opik_query_language
+from . import opik_query_language, validation_helpers, constants
 
 from .. import config, datetime_helpers, logging_messages
 from ..id_helpers import generate_id  # noqa: F401 , keep it here for backward compatibility with external dependants
+from ..message_processing import messages
+from ..rest_api.types import (
+    span_filter_public,
+    trace_filter_public,
+    trace_thread_filter,
+)
+from ..types import FeedbackScoreDict
 
 LOGGER = logging.getLogger(__name__)
 
-T = TypeVar("T")
+
+FilterParsedItemT = TypeVar(
+    "FilterParsedItemT",
+    bound=Union[
+        span_filter_public.SpanFilterPublic,
+        trace_filter_public.TraceFilterPublic,
+        trace_thread_filter.TraceThreadFilter,
+    ],
+)
+OptionalFilterParsedItemList = Optional[List[FilterParsedItemT]]
+
+ScoreMessageT = TypeVar(
+    "ScoreMessageT",
+    bound=Union[messages.FeedbackScoreMessage, messages.ThreadsFeedbackScoreMessage],
+)
+OptionalScoreMessageList = Optional[List[ScoreMessageT]]
 
 
 def datetime_to_iso8601_if_not_None(
@@ -77,8 +99,8 @@ def add_usage_to_metadata(
 
 def parse_filter_expressions(
     filter_string: Optional[str],
-    parsed_item_class: Type[T],
-) -> Optional[List[T]]:
+    parsed_item_class: Type[FilterParsedItemT],
+) -> OptionalFilterParsedItemList:
     """
     Parses filter expressions from a filter string using a specified class for parsed items.
 
@@ -109,9 +131,36 @@ def parse_filter_expressions(
 
 def parse_search_expressions(
     filter_expressions: Optional[List[Dict[str, Any]]],
-    parsed_item_class: Type[T],
-) -> Optional[List[T]]:
+    parsed_item_class: Type[FilterParsedItemT],
+) -> OptionalFilterParsedItemList:
     if filter_expressions is None:
         return None
 
     return [parsed_item_class(**expression) for expression in filter_expressions]
+
+
+def parse_feedback_score_messages(
+    scores: List[FeedbackScoreDict],
+    project_name: str,
+    parsed_item_class: Type[ScoreMessageT],
+    logger: logging.Logger,
+) -> OptionalScoreMessageList:
+    valid_scores = [
+        score
+        for score in scores
+        if validation_helpers.validate_feedback_score(score, logger) is not None
+    ]
+
+    if len(valid_scores) == 0:
+        return None
+
+    score_messages = [
+        parsed_item_class(
+            source=constants.FEEDBACK_SCORE_SOURCE_SDK,
+            project_name=project_name,
+            **score_dict,
+        )
+        for score_dict in valid_scores
+    ]
+
+    return score_messages

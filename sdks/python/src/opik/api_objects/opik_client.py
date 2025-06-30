@@ -38,7 +38,6 @@ from . import (
     helpers,
     span,
     trace,
-    validation_helpers,
 )
 from .attachment import converters as attachment_converters
 from .attachment import Attachment
@@ -131,6 +130,17 @@ class Opik:
             OpikApi: The REST client used by the Opik client.
         """
         return self._rest_client
+
+    @property
+    def project_name(self) -> str:
+        """
+        This property retrieves the name of the project associated with the instance.
+        It is a read-only property.
+
+        Returns:
+            str: The name of the project.
+        """
+        return self._project_name
 
     def _initialize_streamer(
         self,
@@ -480,28 +490,22 @@ class Opik:
             scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a span id via `id` key for each score is mandatory.
             project_name: The name of the project in which the spans are logged. If not set, the project name
-                which was configured when Opik instance was created will be used.
+                which was configured when the Opik instance was created will be used.
 
         Returns:
             None
         """
-        valid_scores = [
-            score
-            for score in scores
-            if validation_helpers.validate_feedback_score(score, LOGGER) is not None
-        ]
-
-        if len(valid_scores) == 0:
-            return None
-
-        score_messages = [
-            messages.FeedbackScoreMessage(
-                source=constants.FEEDBACK_SCORE_SOURCE_SDK,
-                project_name=project_name or self._project_name,
-                **score_dict,
+        score_messages = helpers.parse_feedback_score_messages(
+            scores=scores,
+            project_name=project_name or self._project_name,
+            parsed_item_class=messages.FeedbackScoreMessage,
+            logger=LOGGER,
+        )
+        if score_messages is None:
+            LOGGER.error(
+                f"No valid spans feedback scores to log from provided ones: {scores}"
             )
-            for score_dict in valid_scores
-        ]
+            return
 
         for batch in sequence_splitter.split_into_batches(
             score_messages,
@@ -524,38 +528,34 @@ class Opik:
             scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a trace id via `id` key for each score is mandatory.
             project_name: The name of the project in which the traces are logged. If not set, the project name
-                which was configured when Opik instance was created will be used.
+                which was configured when the Opik instance was created will be used.
 
         Returns:
             None
         """
-        valid_scores = [
-            score
-            for score in scores
-            if validation_helpers.validate_feedback_score(score, LOGGER) is not None
-        ]
+        score_messages = helpers.parse_feedback_score_messages(
+            scores=scores,
+            project_name=project_name or self._project_name,
+            parsed_item_class=messages.FeedbackScoreMessage,
+            logger=LOGGER,
+        )
 
-        if len(valid_scores) == 0:
-            return None
-
-        score_messages = [
-            messages.FeedbackScoreMessage(
-                source=constants.FEEDBACK_SCORE_SOURCE_SDK,
-                project_name=project_name or self._project_name,
-                **score_dict,
+        if score_messages is None:
+            LOGGER.error(
+                f"No valid traces feedback scores to log from provided ones: {scores}"
             )
-            for score_dict in valid_scores
-        ]
+            return
+
         for batch in sequence_splitter.split_into_batches(
             score_messages,
             max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
             max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
         ):
-            add_span_feedback_scores_batch_message = (
+            add_trace_feedback_scores_batch_message = (
                 messages.AddTraceFeedbackScoresBatchMessage(batch=batch)
             )
 
-            self._streamer.put(add_span_feedback_scores_batch_message)
+            self._streamer.put(add_trace_feedback_scores_batch_message)
 
     def delete_trace_feedback_score(self, trace_id: str, name: str) -> None:
         """
