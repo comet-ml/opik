@@ -48,6 +48,7 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
+import com.comet.opik.api.resources.utils.traces.TraceDBUtils;
 import com.comet.opik.api.resources.utils.traces.TracePageTestAssertion;
 import com.comet.opik.api.resources.utils.traces.TraceStatsAssertion;
 import com.comet.opik.api.resources.utils.traces.TraceStreamTestAssertion;
@@ -64,6 +65,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.InRangeStrategy;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -9418,6 +9420,7 @@ class TracesResourceTest {
             });
 
             // When: Manually close the thread
+            Mono.delay(Duration.ofMillis(500)).block();
             traceResourceClient.closeTraceThread(threadId, projectId, null, apiKey, workspaceName);
 
             // Then: Assert that the thread is closed using getTraceThreads API
@@ -9440,6 +9443,48 @@ class TracesResourceTest {
                     TraceThreadStatus.ACTIVE);
 
             TraceAssertions.assertThreads(expectedReopenedThreads, reopenedThreadPage.content());
+        }
+
+        @Test
+        @DisplayName("when trace thread was created before the entity was introduced, then it should be created as inactive")
+        void manualCloseAndReopeningTraceThread__whenThreadCreatedBeforeEntityIntroduced__thenInactive(
+                TransactionTemplateAsync templateAsync) {
+
+            // Given: Ingestion of a trace with a thread
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            String threadId = randomUUID().toString();
+
+            // Create a trace with the thread
+            Trace trace = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .projectId(projectId)
+                    .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+
+            // Create the trace via DB to simulate the scenario where the thread was created before the entity was introduced
+            TraceDBUtils.createTraceViaDB(trace, workspaceId, templateAsync);
+
+            // When: Manually close the thread
+            traceResourceClient.closeTraceThread(threadId, projectId, null, apiKey, workspaceName);
+
+            // Then: Assert that the thread is closed using getTraceThreads API
+            var closedThreadPage = traceResourceClient.getTraceThreads(projectId, projectName, apiKey, workspaceName,
+                    List.of(), List.of(), Map.of());
+
+            var expectedClosedThreads = getExpectedThreads(List.of(trace), projectId, threadId, List.of(),
+                    TraceThreadStatus.INACTIVE);
+
+            TraceAssertions.assertThreads(expectedClosedThreads, closedThreadPage.content());
         }
     }
 
