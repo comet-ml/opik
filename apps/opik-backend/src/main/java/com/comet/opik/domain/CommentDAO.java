@@ -30,7 +30,8 @@ public interface CommentDAO {
     @RequiredArgsConstructor
     enum EntityType {
         TRACE("trace", "traces"),
-        SPAN("span", "spans");
+        SPAN("span", "spans"),
+        THREAD("thread", "trace_threads");
 
         private final String type;
         private final String tableName;

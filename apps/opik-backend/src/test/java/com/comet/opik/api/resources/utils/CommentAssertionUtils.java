@@ -12,7 +12,7 @@ public class CommentAssertionUtils {
     public static final String[] IGNORED_FIELDS_COMMENTS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy"};
 
-    public static void assertTraceComment(Comment expected, Comment actual) {
+    public static void assertComment(Comment expected, Comment actual) {
         assertThat(actual)
                 .usingRecursiveComparison()
                 .ignoringFields(IGNORED_FIELDS_COMMENTS)
@@ -30,7 +30,7 @@ public class CommentAssertionUtils {
     public static void assertUpdatedComment(Comment initial, Comment updated, String expectedText) {
         assertThat(initial.text()).isNotEqualTo(expectedText);
 
-        assertTraceComment(initial.toBuilder().text(expectedText).build(), updated);
+        assertComment(initial.toBuilder().text(expectedText).build(), updated);
 
         assertThat(updated.createdAt()).isEqualTo(initial.createdAt());
         assertThat(updated.lastUpdatedAt()).isNotEqualTo(initial.lastUpdatedAt());

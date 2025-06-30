@@ -33,7 +33,7 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
 @ImplementedBy(TraceThreadDAOImpl.class)
-interface TraceThreadDAO {
+public interface TraceThreadDAO {
 
     Mono<Long> save(List<TraceThreadModel> traceThreads);
 
@@ -49,6 +49,8 @@ interface TraceThreadDAO {
     Mono<Long> closeThread(UUID projectId, String threadId);
 
     Mono<TraceThreadModel> findByThreadModelId(UUID threadModelId, UUID projectId);
+
+    Mono<UUID> getProjectIdFromThread(UUID id);
 }
 
 @Singleton
@@ -112,6 +114,15 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             AND status != :status
             <if(last_updated_at)>AND last_updated_at \\< parseDateTime64BestEffort(:last_updated_at, 6)<endif>
             <if(thread_id)>AND thread_id = :thread_id<endif>
+            """;
+
+    private static final String SELECT_PROJECT_ID_FROM_THREAD = """
+            SELECT
+                DISTINCT project_id
+            FROM trace_threads
+            WHERE id = :id
+            AND workspace_id = :workspace_id
+            ;
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -265,6 +276,19 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         });
     }
 
+    @Override
+    public Mono<UUID> getProjectIdFromThread(@NonNull UUID id) {
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_PROJECT_ID_FROM_THREAD)
+                    .bind("id", id);
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))
+                    .singleOrEmpty();
+        });
+    }
+
     private void bindTemplateParam(TraceThreadCriteria criteria, ST template) {
         if (CollectionUtils.isNotEmpty(criteria.ids())) {
             template.add("ids", criteria.ids());
@@ -300,5 +324,4 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             statement.bind("status", criteria.status().getValue());
         }
     }
-
 }
