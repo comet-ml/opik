@@ -404,8 +404,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
             QWEN_QWEN_2_5_72B_INSTRUCT,
             QWEN_QWEN_2_5_CODER_32B_INSTRUCT,
             QWEN_QWQ_32B_PREVIEW,
-            ZERO_ONE_AI_YI_LARGE
-    );
+            ZERO_ONE_AI_YI_LARGE);
 
     private final String value;
 

@@ -92,7 +92,7 @@ public class OnlineScoringEngine {
                     };
                 })
                 .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     public static Map<String, String> toReplacements(Map<String, String> variables, Trace trace) {
