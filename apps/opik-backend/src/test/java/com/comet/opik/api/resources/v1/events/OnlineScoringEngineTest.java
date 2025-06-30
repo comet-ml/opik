@@ -2,7 +2,7 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.AutomationRuleEvaluatorType;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
@@ -72,6 +72,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeOutputSchema;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.LogItem.LogLevel;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
@@ -274,7 +275,7 @@ class OnlineScoringEngineTest {
         assertThat(processed).hasSize(event.traces().size() * 3);
 
         // test if all 3 feedbacks are generated with the expected value
-        var resultMap = processed.stream().collect(Collectors.toMap(FeedbackScoreBatchItem::name, Function.identity()));
+        var resultMap = processed.stream().collect(Collectors.toMap(FeedbackScoreItem::name, Function.identity()));
         assertThat(resultMap.get("Relevance").value()).isEqualTo(new BigDecimal(4));
         assertThat(resultMap.get("Technical Accuracy").value()).isEqualTo(new BigDecimal("4.5"));
         assertThat(resultMap.get("Conciseness").value()).isEqualTo(BigDecimal.ONE);

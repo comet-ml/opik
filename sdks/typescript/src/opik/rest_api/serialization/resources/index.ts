@@ -30,5 +30,3 @@ export * from "./projects/client/requests";
 export * from "./prompts/client/requests";
 export * from "./spans/client/requests";
 export * from "./traces/client/requests";
-export * as workspaces from "./workspaces";
-export * from "./workspaces/client/requests";

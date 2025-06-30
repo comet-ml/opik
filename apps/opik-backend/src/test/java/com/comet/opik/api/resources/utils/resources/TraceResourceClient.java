@@ -4,8 +4,6 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatch;
-import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
@@ -42,8 +40,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatchThread;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -88,7 +91,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(new FeedbackScoreBatch(score)))) {
+                .put(Entity.json(FeedbackScoreBatch.builder().scores(score).build()))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
@@ -100,17 +103,17 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(new FeedbackScoreBatch(score)));
+                .put(Entity.json(FeedbackScoreBatch.builder().scores(score).build()));
     }
 
-    public void threadFeedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
+    public void threadFeedbackScores(List<FeedbackScoreBatchItemThread> score, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
                 .path("feedback-scores")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(FeedbackScoreBatch.builder()
+                .put(Entity.json(FeedbackScoreBatchThread.builder()
                         .scores(score)
                         .build()))) {
 
@@ -118,14 +121,15 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
     }
 
-    public Response callThreadFeedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
+    public Response callThreadFeedbackScores(List<FeedbackScoreBatchItemThread> score, String apiKey,
+            String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
                 .path("feedback-scores")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(FeedbackScoreBatch.builder()
+                .put(Entity.json(FeedbackScoreBatchThread.builder()
                         .scores(score)
                         .build()));
     }
@@ -234,7 +238,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                                     .projectName(project.name())
                                     .id(trace.id())
                                     .build())
-                            .toList();
+                            .collect(Collectors.toList());
 
                     feedbackScores(scores, apiKey, workspaceName);
 

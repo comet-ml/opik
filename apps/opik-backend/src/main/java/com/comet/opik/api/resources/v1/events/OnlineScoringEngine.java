@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem.FeedbackScoreBatchItemBuilder;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
@@ -43,6 +43,7 @@ import java.util.stream.StreamSupport;
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeMessage;
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeOutputSchema;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 
 @UtilityClass
 @Slf4j
@@ -230,7 +231,7 @@ public class OnlineScoringEngine {
                         log.info("No score found for '{}' score in {}", scoreName, scoreNested);
                         return null;
                     }
-                    var resultBuilder = FeedbackScoreBatchItem.builder()
+                    FeedbackScoreBatchItemBuilder resultBuilder = FeedbackScoreBatchItem.builder()
                             .name(scoreName)
                             .reason(scoreNested.path(REASON_FIELD_NAME).asText())
                             .source(ScoreSource.ONLINE_SCORING);
