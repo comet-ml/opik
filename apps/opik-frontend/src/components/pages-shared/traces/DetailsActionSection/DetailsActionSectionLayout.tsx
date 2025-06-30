@@ -2,42 +2,42 @@ import React from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { LastSectionValue } from "./TraceDetailsPanel";
+import { DetailsActionSectionValue } from "@/components/pages-shared/traces/DetailsActionSection";
 import { Explainer } from "@/types/shared";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 
-type LastSectionLayoutProps = {
+type DetailsActionSectionLayoutProps = {
   title: string;
   closeTooltipContent?: string;
   closeText?: string;
-  lastSection?: LastSectionValue | null;
-  setLastSection: (v: LastSectionValue | null) => void;
+  activeSection?: DetailsActionSectionValue | null;
+  setActiveSection: (v: DetailsActionSectionValue | null) => void;
   children: React.ReactNode;
   explainer?: Explainer;
 };
 
 const HOTKEYS = ["Esc"];
 
-const LastSectionLayout: React.FC<LastSectionLayoutProps> = ({
+const DetailsActionSectionLayout: React.FC<DetailsActionSectionLayoutProps> = ({
   title,
   closeTooltipContent = "Close",
   closeText = "Close",
-  lastSection,
-  setLastSection,
+  activeSection,
+  setActiveSection,
   children,
   explainer,
 }) => {
   useHotkeys(
     "Escape",
     (keyboardEvent: KeyboardEvent) => {
-      if (!lastSection) return;
+      if (!activeSection) return;
       keyboardEvent.stopPropagation();
 
       if (keyboardEvent.code === "Escape") {
-        setLastSection(null);
+        setActiveSection(null);
       }
     },
-    [lastSection],
+    [activeSection],
   );
 
   return (
@@ -53,7 +53,7 @@ const LastSectionLayout: React.FC<LastSectionLayoutProps> = ({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setLastSection(null)}
+            onClick={() => setActiveSection(null)}
           >
             {closeText}
           </Button>
@@ -64,4 +64,4 @@ const LastSectionLayout: React.FC<LastSectionLayoutProps> = ({
   );
 };
 
-export default LastSectionLayout;
+export default DetailsActionSectionLayout;

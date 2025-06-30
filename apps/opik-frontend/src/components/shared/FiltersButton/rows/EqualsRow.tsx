@@ -2,16 +2,20 @@ import React from "react";
 import { Filter } from "@/types/filters";
 import OperatorSelector from "@/components/shared/FiltersButton/OperatorSelector";
 import SelectBox from "../../SelectBox/SelectBox";
-import { GuardrailResult } from "@/types/guardrails";
+import { DropdownOption } from "@/types/shared";
 
-type GuardrailsRowProps = {
+type EqualsRowProps = {
   filter: Filter;
   onChange: (filter: Filter) => void;
+  placeholder: string;
+  options: DropdownOption<string>[];
 };
 
-export const GuardrailsRow: React.FunctionComponent<GuardrailsRowProps> = ({
+export const EqualsRow: React.FunctionComponent<EqualsRowProps> = ({
   filter,
   onChange,
+  placeholder,
+  options,
 }) => {
   const value = `${filter.value}`;
   return (
@@ -26,11 +30,8 @@ export const GuardrailsRow: React.FunctionComponent<GuardrailsRowProps> = ({
       <td className="p-1">
         <SelectBox
           value={value}
-          options={[
-            { value: GuardrailResult.FAILED, label: "Failed" },
-            { value: GuardrailResult.PASSED, label: "Passed" },
-          ]}
-          placeholder={value || "Status"}
+          options={options}
+          placeholder={value || placeholder}
           onChange={(value) => onChange({ ...filter, value })}
         />
       </td>
@@ -38,4 +39,4 @@ export const GuardrailsRow: React.FunctionComponent<GuardrailsRowProps> = ({
   );
 };
 
-export default GuardrailsRow;
+export default EqualsRow;
