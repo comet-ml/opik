@@ -13,13 +13,17 @@ registry: &registry ghcr.io/comet-ml/opik
 localFEAddress: "host.minikube.internal:5174"
 localFE: false
 
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
+
 demoDataJob: true
 
 component:
   backend:
     enabled: true
     serviceAccount:
-      enabled: true 
       create: true
       name: opik-backend
     metrics:
@@ -105,7 +109,6 @@ component:
   python-backend:
     enabled: true
     serviceAccount:
-      enabled: true 
       create: true
       name: opik-python-backend
     metrics:
@@ -172,7 +175,6 @@ component:
   frontend:
     enabled: true
     serviceAccount:
-      enabled: true
       create: true
       name: opik-frontend
     metrics:
@@ -348,41 +350,31 @@ clickhouse:
       enabled: false
     username: opik
     password: opik
+  serviceAccount:
+    annotations: {}
+    create: false
+    name: ""
   zookeeper:
       host: opik-zookeeper
   backup: 
-    enabled: true
+    enabled: false
     successfulJobsHistoryLimit: 1
     serviceAccount:
       annotations: {}
       create: false
-      name: clickhouse-backup
-    # bucketURL: ""
+      name: ""
+    # bucketURL: "s3://opik-clickhouse-backup"
     # secretName: ""
     # schedule: ""
     # baseBackup: ""
+    schedule: "0 0 * * *" # daily at midnight
     command:
       - /bin/bash
       - '-cx'
-      - |
-        if [ $(date +%j) -eq 1 ]; then
-          echo "Running backup for the first day of the year"
-          export BACKUP_PREFIX=yearly/
-        elif [ $(date +%d) -eq 1 ]; then
-          echo "Skipping backup, not the first day of the year"
-          export BACKUP_PREFIX=monthly/
-        else
-          echo "Running backup for the current day"
-          export BACKUP_PREFIX=""
-        fi
-        export BACKUP_NAME=${BACKUP_PREFIX}backup$(date +'%Y%m%d%H%M')
-        BACKUP_QUERY_FILE=$(mktemp --suffix .sql /tmp/clickhouse-backup-query.XXXXXX)
-        cat << BACKUP_SQL | tee "${BACKUP_QUERY_FILE}"
-          BACKUP ALL EXCEPT DATABASE system 
-            TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${BACKUP_NAME}/', '${ACCESS_KEY}', '${SECRET_KEY}');
-        BACKUP_SQL
-        clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file="${BACKUP_QUERY_FILE}"
-            
+      - |-
+        export backupname=backup$(date +'%Y%m%d%H%M')
+        echo "BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');" > /tmp/backQuery.sql
+        clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql
   monitoring:
     enabled: false
     username: opikmon # readonly user

@@ -5,7 +5,7 @@ import isNumber from "lodash/isNumber";
 
 import { formatNumericData } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import PercentageTrend from "@/components/pages/CompareOptimizationsPage/PercentageTrend";
+import PercentageTrend from "@/components/shared/PercentageTrend/PercentageTrend";
 
 type CustomMeta = {
   scoreMap: Record<string, { score: number; percentage?: number }>;

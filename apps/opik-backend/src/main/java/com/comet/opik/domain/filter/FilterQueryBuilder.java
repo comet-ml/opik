@@ -45,6 +45,7 @@ public class FilterQueryBuilder {
     private static final String MODEL_ANALYTICS_DB = "model";
     private static final String PROVIDER_ANALYTICS_DB = "provider";
     private static final String TOTAL_ESTIMATED_COST_ANALYTICS_DB = "total_estimated_cost";
+    private static final String TYPE_ANALYTICS_DB = "type";
     private static final String TAGS_ANALYTICS_DB = "tags";
     private static final String USAGE_COMPLETION_TOKENS_ANALYTICS_DB = "usage['completion_tokens']";
     private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
@@ -185,6 +186,7 @@ public class FilterQueryBuilder {
                     .put(SpanField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(SpanField.DURATION, DURATION_ANALYTICS_DB)
                     .put(SpanField.ERROR_INFO, ERROR_INFO_DB)
+                    .put(SpanField.TYPE, TYPE_ANALYTICS_DB)
                     .build());
 
     private static final Map<ExperimentField, String> EXPERIMENT_FIELDS_MAP = new EnumMap<>(
@@ -237,6 +239,7 @@ public class FilterQueryBuilder {
                     .add(SpanField.USAGE_TOTAL_TOKENS)
                     .add(SpanField.DURATION)
                     .add(SpanField.ERROR_INFO)
+                    .add(SpanField.TYPE)
                     .build()),
             FilterStrategy.FEEDBACK_SCORES, ImmutableSet.<Field>builder()
                     .add(TraceField.FEEDBACK_SCORES)
@@ -258,7 +261,6 @@ public class FilterQueryBuilder {
                     .add(TraceThreadField.DURATION)
                     .add(TraceThreadField.CREATED_AT)
                     .add(TraceThreadField.LAST_UPDATED_AT)
-                    .add(TraceThreadField.FEEDBACK_SCORES)
                     .add(TraceThreadField.STATUS)
                     .build())));
 

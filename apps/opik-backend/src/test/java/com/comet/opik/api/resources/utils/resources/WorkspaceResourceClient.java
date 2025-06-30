@@ -52,4 +52,34 @@ public class WorkspaceResourceClient {
             return response.readEntity(WorkspaceMetricResponse.class);
         }
     }
+
+    public WorkspaceMetricsSummaryResponse.Result getCostsSummary(WorkspaceMetricsSummaryRequest request, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("/costs/summaries")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+            return response.readEntity(WorkspaceMetricsSummaryResponse.Result.class);
+        }
+    }
+
+    public WorkspaceMetricResponse getCostsDaily(WorkspaceMetricRequest request, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("/costs")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+            return response.readEntity(WorkspaceMetricResponse.class);
+        }
+    }
 }

@@ -4,8 +4,7 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatch;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
@@ -13,6 +12,7 @@ import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadIdentifier;
+import com.comet.opik.api.TraceThreadSearchStreamRequest;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
@@ -40,8 +40,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatchThread;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -86,7 +91,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(new FeedbackScoreBatch(score)))) {
+                .put(Entity.json(FeedbackScoreBatch.builder().scores(score).build()))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
@@ -98,17 +103,17 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(new FeedbackScoreBatch(score)));
+                .put(Entity.json(FeedbackScoreBatch.builder().scores(score).build()));
     }
 
-    public void threadFeedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
+    public void threadFeedbackScores(List<FeedbackScoreBatchItemThread> score, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
                 .path("feedback-scores")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(FeedbackScoreBatch.builder()
+                .put(Entity.json(FeedbackScoreBatchThread.builder()
                         .scores(score)
                         .build()))) {
 
@@ -116,14 +121,15 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
     }
 
-    public Response callThreadFeedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
+    public Response callThreadFeedbackScores(List<FeedbackScoreBatchItemThread> score, String apiKey,
+            String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
                 .path("feedback-scores")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(FeedbackScoreBatch.builder()
+                .put(Entity.json(FeedbackScoreBatchThread.builder()
                         .scores(score)
                         .build()));
     }
@@ -232,7 +238,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                                     .projectName(project.name())
                                     .id(trace.id())
                                     .build())
-                            .toList();
+                            .collect(Collectors.toList());
 
                     feedbackScores(scores, apiKey, workspaceName);
 
@@ -345,6 +351,18 @@ public class TraceResourceClient extends BaseCommentResourceClient {
             assertThat(response.hasEntity()).isTrue();
             return response.readEntity(TraceThreadPage.class);
         }
+    }
+
+    public Response getTraceThreads(String projectName, String apiKey, String workspaceName,
+            List<TraceThreadFilter> filters) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .queryParam("project_name", projectName)
+                .queryParam("filters", toURLEncodedQueryParam(filters))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
     }
 
     public TraceThread getTraceThread(String threadId, UUID projectId, String apiKey, String workspaceName) {
@@ -505,6 +523,64 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                         .threadId(threadId).build()))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public List<TraceThread> searchTraceThreadsStream(String projectName, UUID projectId, String apiKey,
+            String workspaceName, List<TraceThreadFilter> filters) {
+        try (var actualResponse = callSearchTraceThreadStream(projectName, projectId, apiKey, workspaceName, filters)) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+            return getStreamedTraceThreads(actualResponse);
+        }
+    }
+
+    public Response callSearchTraceThreadStream(String projectName, UUID projectId, String apiKey, String workspaceName,
+            List<TraceThreadFilter> filters) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("search")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(TraceThreadSearchStreamRequest.builder()
+                        .filters(filters)
+                        .projectName(projectName)
+                        .projectId(projectId)
+                        .build()));
+    }
+
+    private List<TraceThread> getStreamedTraceThreads(Response response) {
+        var items = new ArrayList<TraceThread>();
+        try (var inputStream = response.readEntity(CHUNKED_INPUT_STRING_GENERIC_TYPE)) {
+            String stringItem;
+            while ((stringItem = inputStream.read()) != null) {
+                items.add(JsonUtils.readValue(stringItem, new TypeReference<>() {
+                }));
+            }
+        }
+        return items;
+    }
+
+    public FeedbackScoreNames getTraceThreadsFeedbackScoreNames(UUID projectId, String apiKey, String workspaceName) {
+
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("feedback-scores")
+                .path("names");
+
+        webTarget = webTarget.queryParam("project_id", projectId);
+
+        try (var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            // then
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return actualResponse.readEntity(FeedbackScoreNames.class);
         }
     }
 

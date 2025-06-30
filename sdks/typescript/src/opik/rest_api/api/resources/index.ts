@@ -39,5 +39,4 @@ export * from "./projects/client/requests";
 export * from "./prompts/client/requests";
 export * from "./spans/client/requests";
 export * from "./traces/client/requests";
-export * from "./workspaces/client/requests";
 export * from "./redirect/client/requests";
