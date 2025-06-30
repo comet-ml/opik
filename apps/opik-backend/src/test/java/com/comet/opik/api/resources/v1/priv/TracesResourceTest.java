@@ -9651,8 +9651,8 @@ class TracesResourceTest {
             // Wait for thread to be closed
 
             // Add manual scores to the closed thread
-            List<FeedbackScoreBatchItem> manualScores = PodamFactoryUtils
-                    .manufacturePojoList(factory, FeedbackScoreBatchItem.class)
+            List<FeedbackScoreBatchItemThread> manualScores = PodamFactoryUtils
+                    .manufacturePojoList(factory, FeedbackScoreBatchItemThread.class)
                     .stream()
                     .map(item -> item.toBuilder()
                             .threadId(threadId)
@@ -9729,8 +9729,8 @@ class TracesResourceTest {
             // Wait for thread to be closed
 
             // Add mixed scores to the closed thread (manual and automatic)
-            List<FeedbackScoreBatchItem> mixedScores = PodamFactoryUtils
-                    .manufacturePojoList(factory, FeedbackScoreBatchItem.class)
+            List<FeedbackScoreBatchItemThread> mixedScores = PodamFactoryUtils
+                    .manufacturePojoList(factory, FeedbackScoreBatchItemThread.class)
                     .stream()
                     .map(item -> item.toBuilder()
                             .threadId(threadId)
