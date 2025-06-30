@@ -58,7 +58,7 @@ gemini_client = track_genai(client)
 
 prompt = "Hello world"
 
-response = client.models.generate_content(model="gemini-2.0-flash-001", contents=prompt)
+response = gemini_client.models.generate_content(model="gemini-2.0-flash-001", contents=prompt)
 print(response.text)
 ```
 
