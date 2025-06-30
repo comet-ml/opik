@@ -1,15 +1,16 @@
 import datetime
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TypeVar, Type
 
 from opik import llm_usage
+from . import opik_query_language
 
 from .. import config, datetime_helpers, logging_messages
 from ..id_helpers import generate_id  # noqa: F401 , keep it here for backward compatibility with external dependants
-from ..rest_api import types as rest_api_types
-from ..rest_api import core as rest_api_core
 
 LOGGER = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 
 def datetime_to_iso8601_if_not_None(
@@ -74,19 +75,43 @@ def add_usage_to_metadata(
     return metadata
 
 
-def parse_search_span_expressions(
+def parse_filter_expressions(
+    filter_string: Optional[str],
+    parsed_item_class: Type[T],
+) -> Optional[List[T]]:
+    """
+    Parses filter expressions from a filter string using a specified class for parsed items.
+
+    This function takes a filter string and a class type for parsed items, parses the
+    filter string into filter expressions using the OpikQueryLanguage, and then converts
+    those filter expressions into a list of parsed items of the specified class. If the
+    filter string does not contain any valid expressions, the function may return None.
+
+    Args:
+        filter_string: A string representing the filter expressions to be parsed.
+        parsed_item_class: The class type to which the parsed filter expressions are mapped.
+
+    Returns:
+        Optional[List[T]]: A list of objects of type T created from the parsed filter
+        expressions, or None if no valid expressions are found.
+    """
+    if filter_string is None:
+        return None
+
+    filter_expressions = opik_query_language.OpikQueryLanguage(
+        filter_string
+    ).get_filter_expressions()
+
+    return parse_search_expressions(
+        filter_expressions, parsed_item_class=parsed_item_class
+    )
+
+
+def parse_search_expressions(
     filter_expressions: Optional[List[Dict[str, Any]]],
-) -> Optional[List[rest_api_types.SpanFilterPublic]]:
+    parsed_item_class: Type[T],
+) -> Optional[List[T]]:
     if filter_expressions is None:
         return None
 
-    if rest_api_core.IS_PYDANTIC_V2:
-        return [
-            rest_api_types.SpanFilterPublic.model_validate(expression)
-            for expression in filter_expressions
-        ]
-    else:
-        return [
-            rest_api_types.SpanFilterPublic.parse_obj(expression)
-            for expression in filter_expressions
-        ]
+    return [parsed_item_class(**expression) for expression in filter_expressions]

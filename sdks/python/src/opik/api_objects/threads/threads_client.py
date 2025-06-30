@@ -4,6 +4,9 @@ import opik
 from opik.rest_api import TraceThread
 from opik.types import FeedbackScoreDict
 
+from .. import helpers, rest_stream_parser
+from ...rest_api.types import trace_thread_filter
+
 
 class ThreadsClient:
     """
@@ -25,6 +28,7 @@ class ThreadsClient:
         project_name: Optional[str] = None,
         filter_string: Optional[str] = None,
         max_results: int = 1000,
+        truncate: bool = True,
     ) -> List[TraceThread]:
         """Search for threads in a given project based on specific criteria.
 
@@ -42,6 +46,8 @@ class ThreadsClient:
             max_results:
                 The maximum number of threads to retrieve. The default value is 1000
                 if not specified.
+            truncate:
+                Whether to truncate image data stored in input, output, or metadata
 
         Returns:
             List[TraceThread]: A list of TraceThread objects that match the search
@@ -56,7 +62,23 @@ class ThreadsClient:
             >>>     filter_string=f'id = {thread_id}',
             >>>     max_results=10)
         """
-        raise NotImplementedError
+        filters = helpers.parse_filter_expressions(
+            filter_string, parsed_item_class=trace_thread_filter.TraceThreadFilter
+        )
+
+        threads = rest_stream_parser.read_and_parse_full_stream(
+            read_source=lambda current_batch_size,
+            last_retrieved_id: self._opik_client.rest_client.traces.search_trace_threads(
+                project_name=project_name,
+                filters=filters,
+                limit=current_batch_size,
+                truncate=truncate,
+                last_retrieved_thread_model_id=last_retrieved_id,
+            ),
+            max_results=max_results,
+            parsed_item_class=TraceThread,
+        )
+        return threads
 
     def log_threads_feedback_scores(
         self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None

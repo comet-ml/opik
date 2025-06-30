@@ -8,7 +8,9 @@ import json
 from typing import Any, Dict, Optional, Tuple, List
 
 COLUMNS = {
+    "id": "string",
     "name": "string",
+    "status": "string",
     "start_time": "date_time",
     "end_time": "date_time",
     "input": "string",

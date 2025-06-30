@@ -20,7 +20,14 @@ from ..message_processing import messages, streamer_constructors, message_queue
 from ..message_processing.batching import sequence_splitter
 from ..rest_api import client as rest_api_client
 from ..rest_api.core.api_error import ApiError
-from ..rest_api.types import dataset_public, project_public, span_public, trace_public
+from ..rest_api.types import (
+    dataset_public,
+    project_public,
+    span_public,
+    trace_public,
+    span_filter_public,
+    trace_filter_public,
+)
 from ..types import ErrorInfoDict, FeedbackScoreDict, LLMProvider, SpanType
 from . import (
     constants,
@@ -28,7 +35,6 @@ from . import (
     experiment,
     optimization,
     helpers,
-    opik_query_language,
     span,
     trace,
     validation_helpers,
@@ -388,11 +394,11 @@ class Opik:
             input: The input data for the span. This can be any valid JSON serializable object.
             output: The output data for the span. This can be any valid JSON serializable object.
             tags: Tags associated with the span.
-            feedback_scores: The list of feedback score dicts associated with the span. Dicts don't require to have an `id` value.
+            feedback_scores: The list of feedback score dicts associated with the span. Dicts don't require having an `id` value.
             project_name: The name of the project. If not set, the project name which was configured when the Opik instance
                 was created will be used.
-            usage: Usage data for the span. In order for input, output and total tokens to be visible in the UI,
-                the usage must contain OpenAI-formatted keys (they can be passed additionally to the original usage on the top level of the dict): prompt_tokens, completion_tokens and total_tokens.
+            usage: Usage data for the span. In order for input, output, and total tokens to be visible in the UI,
+                the usage must contain OpenAI-formatted keys (they can be passed additionally to the original usage on the top level of the dict): prompt_tokens, completion_tokens, and total_tokens.
                 If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
                 format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
             model: The name of LLM (in this case `type` parameter should be == `llm`)
@@ -888,12 +894,11 @@ class Opik:
             project_name: The name of the project to search traces in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
             filter_string: A filter string to narrow down the search. If not provided, all traces in the project will be returned up to the limit.
             max_results: The maximum number of traces to return.
-            truncate: Whether to truncate image data stored in input, output or metadata
+            truncate: Whether to truncate image data stored in input, output, or metadata
         """
-        filter_expressions = opik_query_language.OpikQueryLanguage(
-            filter_string
-        ).get_filter_expressions()
-        filters_ = helpers.parse_search_span_expressions(filter_expressions)
+        filters_ = helpers.parse_filter_expressions(
+            filter_string, parsed_item_class=trace_filter_public.TraceFilterPublic
+        )
 
         traces = rest_stream_parser.read_and_parse_full_stream(
             read_source=lambda current_batch_size,
@@ -927,12 +932,11 @@ class Opik:
             trace_id: The ID of the trace to search spans in. If provided, the search will be limited to the spans in the given trace.
             filter_string: A filter string to narrow down the search.
             max_results: The maximum number of spans to return.
-            truncate: Whether to truncate image data stored in input, output or metadata
+            truncate: Whether to truncate image data stored in input, output, or metadata
         """
-        filter_expressions = opik_query_language.OpikQueryLanguage(
-            filter_string
-        ).get_filter_expressions()
-        filters = helpers.parse_search_span_expressions(filter_expressions)
+        filters = helpers.parse_filter_expressions(
+            filter_string, parsed_item_class=span_filter_public.SpanFilterPublic
+        )
 
         spans = rest_stream_parser.read_and_parse_full_stream(
             read_source=lambda current_batch_size,
