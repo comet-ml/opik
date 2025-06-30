@@ -6,17 +6,19 @@ import { FeedbackDefinition } from "@/types/feedback-definitions";
 import { sortBy } from "lodash";
 import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, InfoIcon } from "lucide-react";
 import AnnotateRow from "../TraceDetailsPanel/TraceAnnotateViewer/AnnotateRow";
 import { cn } from "@/lib/utils";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { UpdateFeedbackScoreData } from "../TraceDetailsPanel/TraceAnnotateViewer/types";
 
 type FeedbackScoresEditorProps = {
   feedbackScores: TraceFeedbackScore[];
-  traceId: string;
-  spanId?: string;
   className?: string;
+  onUpdateFeedbackScore: (update: UpdateFeedbackScoreData) => void;
+  onDeleteFeedbackScore: (name: string) => void;
+  entityCopy: string;
 };
 
 type FeebackScoreRow = {
@@ -27,9 +29,10 @@ type FeebackScoreRow = {
 
 const FeedbackScoresEditor = ({
   feedbackScores,
-  traceId,
-  spanId,
+  onUpdateFeedbackScore,
+  onDeleteFeedbackScore,
   className,
+  entityCopy,
 }: FeedbackScoresEditorProps) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { data: feedbackDefinitionsData } = useFeedbackDefinitionsList({
@@ -84,33 +87,38 @@ const FeedbackScoresEditor = ({
               name={row.name}
               feedbackDefinition={row.feedbackDefinition}
               feedbackScore={row.feedbackScore}
-              spanId={spanId}
-              traceId={traceId}
+              onUpdateFeedbackScore={onUpdateFeedbackScore}
+              onDeleteFeedbackScore={onDeleteFeedbackScore}
             />
           ))}
         </div>
-        <div className="comet-body-xs pt-2 text-light-slate">
-          Set up
-          <Button
-            size="sm"
-            variant="link"
-            className="comet-body-xs inline-flex h-auto gap-0.5 px-1"
-            asChild
-          >
-            <Link
-              to="/$workspaceName/configuration"
-              params={{ workspaceName }}
-              search={{
-                tab: "feedback-definitions",
-              }}
-              target="_blank"
-              rel="noopener noreferrer"
+        <div className="comet-body-xs flex gap-1.5 pt-4 text-light-slate">
+          <div className="pt-[3px]">
+            <InfoIcon className="size-3" />
+          </div>
+          <div className="leading-relaxed">
+            Set up
+            <Button
+              size="sm"
+              variant="link"
+              className="comet-body-xs inline-flex h-auto gap-0.5 px-1"
+              asChild
             >
-              custom human review scores
-              <ExternalLink className="size-3" />
-            </Link>
-          </Button>
-          to annotate your traces.
+              <Link
+                to="/$workspaceName/configuration"
+                params={{ workspaceName }}
+                search={{
+                  tab: "feedback-definitions",
+                }}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                custom human review scores
+                <ExternalLink className="size-3" />
+              </Link>
+            </Button>
+            to annotate your {entityCopy}.
+          </div>
         </div>
       </div>
     </div>
