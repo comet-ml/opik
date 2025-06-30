@@ -15,22 +15,23 @@ import java.util.Optional;
 @Accessors(fluent = true)
 public enum VertexAIModelName implements StructuredOutputSupported {
 
-    GEMINI_2_5_PRO_PREVIEW_04_17("vertex_ai/gemini-2.5-flash-preview-04-17", "gemini-2.5-flash-preview-04-17"),
-    GEMINI_2_5_PRO_PREVIEW_05_06("vertex_ai/gemini-2.5-pro-preview-05-06", "gemini-2.5-pro-preview-05-06"),
-    GEMINI_2_5_PRO_PREVIEW_03_25("vertex_ai/gemini-2.5-pro-preview-03-25", "gemini-2.5-pro-preview-03-25"),
-    GEMINI_2_5_PRO_EXP_03_25("vertex_ai/gemini-2.5-pro-exp-03-25", "gemini-2.5-pro-exp-03-25"),
-    GEMINI_2_0_FLASH("vertex_ai/gemini-2.0-flash-001", "gemini-2.0-flash-001"),
-    GEMINI_2_0_FLASH_LITE("vertex_ai/gemini-2.0-flash-lite-001", "gemini-2.0-flash-lite-001"),
+    GEMINI_2_5_PRO_PREVIEW_04_17("vertex_ai/gemini-2.5-flash-preview-04-17", "gemini-2.5-flash-preview-04-17", true),
+    GEMINI_2_5_PRO_PREVIEW_05_06("vertex_ai/gemini-2.5-pro-preview-05-06", "gemini-2.5-pro-preview-05-06", true),
+    GEMINI_2_5_PRO_PREVIEW_03_25("vertex_ai/gemini-2.5-pro-preview-03-25", "gemini-2.5-pro-preview-03-25", true),
+    GEMINI_2_5_PRO_EXP_03_25("vertex_ai/gemini-2.5-pro-exp-03-25", "gemini-2.5-pro-exp-03-25", true),
+    GEMINI_2_0_FLASH("vertex_ai/gemini-2.0-flash-001", "gemini-2.0-flash-001", true),
+    GEMINI_2_0_FLASH_LITE("vertex_ai/gemini-2.0-flash-lite-001", "gemini-2.0-flash-lite-001", false),
     ;
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find VertexAIModelName with name '{}'";
 
     private final String qualifiedName;
     private final String value;
+    private final boolean structuredOutputSupported;
 
     @Override
     public boolean isStructuredOutputSupported() {
-        return false;
+        return this.structuredOutputSupported;
     }
 
     public static Optional<VertexAIModelName> byQualifiedName(String qualifiedName) {

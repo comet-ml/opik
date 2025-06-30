@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * This information is taken from <a href="https://openrouter.ai/models">OpenRouter docs</a>
@@ -342,11 +343,49 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenRouterModelName with value '{}'";
 
+    private static final Set<OpenRouterModelName> STRUCTURED_OUTPUT_SUPPORTED_MODELS = Set.of(
+            COHERE_COMMAND_R,
+            COHERE_COMMAND_R_PLUS,
+            DATABRICKS_DBRX_INSTRUCT,
+            DEEPSEEK_DEEPSEEK_CHAT,
+            DEEPSEEK_DEEPSEEK_CODER,
+            GOOGLE_GEMINI_FLASH_1_5,
+            GOOGLE_GEMINI_PRO_1_5,
+            GOOGLE_GEMMA_2_27B_IT,
+            GOOGLE_GEMMA_2_9B_IT,
+            META_LLAMA_CODELLAMA_34B_INSTRUCT,
+            META_LLAMA_CODELLAMA_70B_INSTRUCT,
+            META_LLAMA_LLAMA_3_1_405B_INSTRUCT,
+            META_LLAMA_LLAMA_3_1_70B_INSTRUCT,
+            META_LLAMA_LLAMA_3_1_8B_INSTRUCT,
+            META_LLAMA_LLAMA_3_70B_INSTRUCT,
+            META_LLAMA_LLAMA_3_8B_INSTRUCT,
+            MICROSOFT_PHI_3_MEDIUM_128K_INSTRUCT,
+            MICROSOFT_PHI_3_MINI_128K_INSTRUCT,
+            MICROSOFT_WIZARDLM_2_7B,
+            MICROSOFT_WIZARDLM_2_8X22B,
+            MISTRALAI_MISTRAL_LARGE,
+            MISTRALAI_MISTRAL_NEMO,
+            MISTRALAI_MIXTRAL_8X22B_INSTRUCT,
+            MISTRALAI_MIXTRAL_8X7B_INSTRUCT,
+            NOUSRESEARCH_HERMES_2_PRO_LLAMA_3_8B,
+            NOUSRESEARCH_HERMES_3_LLAMA_3_1_70B,
+            NOUSRESEARCH_HERMES_3_LLAMA_3_1_405B,
+            OPENAI_GPT_4O,
+            OPENAI_GPT_4O_MINI,
+            OPENAI_GPT_4_TURBO,
+            QWEN_QWEN_2_72B_INSTRUCT,
+            QWEN_QWEN_PLUS,
+            QWEN_QWEN_MAX,
+            SNOWFLAKE_SNOWFLAKE_ARCTIC_INSTRUCT,
+            ZERO_ONE_AI_YI_LARGE_TURBO
+    );
+
     private final String value;
 
     @Override
     public boolean isStructuredOutputSupported() {
-        return true;
+        return STRUCTURED_OUTPUT_SUPPORTED_MODELS.contains(this);
     }
 
     public static Optional<OpenRouterModelName> byValue(String value) {

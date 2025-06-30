@@ -17,8 +17,8 @@ import java.util.Optional;
 public enum GeminiModelName implements StructuredOutputSupported {
     GEMINI_1_5_PRO_LATEST("gemini-1.5-pro-latest", true),
     GEMINI_1_5_FLASH_LATEST("gemini-1.5-flash-latest", true),
-    GEMINI_1_0_PRO("gemini-1.0-pro", true),
-    GEMINI_PRO_VISION("gemini-pro-vision", true);
+    GEMINI_1_0_PRO("gemini-1.0-pro", false),
+    GEMINI_PRO_VISION("gemini-pro-vision", false);
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find GeminiModelName with value '{}'";
 

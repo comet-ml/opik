@@ -15,11 +15,11 @@ import java.util.Optional;
 @Getter
 @RequiredArgsConstructor
 public enum AnthropicModelName implements StructuredOutputSupported {
-    CLAUDE_1_0("claude-1.0", true),
-    CLAUDE_3_OPUS("claude-3-opus-20240229", true),
-    CLAUDE_3_5_SONNET("claude-3-5-sonnet-20240620", true),
-    CLAUDE_3_SONNET("claude-3-sonnet-20240229", true),
-    CLAUDE_3_HAIKU("claude-3-haiku-20240307", true),
+    CLAUDE_1_0("claude-1.0", false),
+    CLAUDE_3_OPUS("claude-3-opus-20240229", false),
+    CLAUDE_3_5_SONNET("claude-3-5-sonnet-20240620", false),
+    CLAUDE_3_SONNET("claude-3-sonnet-20240229", false),
+    CLAUDE_3_HAIKU("claude-3-haiku-20240307", false),
     CLAUDE_2_1("claude-2.1", false),
     CLAUDE_2_0("claude-2.0", false),
     CLAUDE_INSTANT_1_2("claude-instant-1.2", false);
