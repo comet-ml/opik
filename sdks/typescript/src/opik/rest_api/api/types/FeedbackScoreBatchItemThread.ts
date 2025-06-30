@@ -5,7 +5,7 @@
 import * as OpikApi from "../index";
 
 export interface FeedbackScoreBatchItemThread {
-    threadId?: string;
+    threadId: string;
     /** If null, the default project is used */
     projectName?: string;
     name: string;

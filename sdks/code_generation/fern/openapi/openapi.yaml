@@ -3352,7 +3352,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/FeedbackScoreBatch_Thread"
+              $ref: "#/components/schemas/FeedbackScoreBatchThread"
       responses:
         "204":
           description: No Content
@@ -4007,15 +4007,15 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -4163,15 +4163,15 @@ components:
         sampling_rate:
           type: number
           format: float
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -4317,15 +4317,15 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -4474,15 +4474,15 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -4547,15 +4547,15 @@ components:
         project_id:
           type: string
           format: uuid
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9036,14 +9036,16 @@ components:
           type: array
           items:
             type: string
-    FeedbackScoreBatchItem_Thread:
+    FeedbackScoreBatchItemThread:
       required:
       - name
       - source
+      - thread_id
       - value
       type: object
       properties:
         thread_id:
+          minLength: 1
           type: string
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
@@ -9068,7 +9070,7 @@ components:
           - ui
           - sdk
           - online_scoring
-    FeedbackScoreBatch_Thread:
+    FeedbackScoreBatchThread:
       required:
       - scores
       type: object
@@ -9078,7 +9080,7 @@ components:
           minItems: 1
           type: array
           items:
-            $ref: "#/components/schemas/FeedbackScoreBatchItem_Thread"
+            $ref: "#/components/schemas/FeedbackScoreBatchItemThread"
     TraceThreadFilter:
       type: object
       properties:

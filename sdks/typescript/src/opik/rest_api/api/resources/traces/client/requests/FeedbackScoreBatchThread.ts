@@ -8,6 +8,7 @@ import * as OpikApi from "../../../../index";
  * @example
  *     {
  *         scores: [{
+ *                 threadId: "thread_id",
  *                 name: "name",
  *                 value: 1.1,
  *                 source: "ui"

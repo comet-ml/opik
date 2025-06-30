@@ -151,8 +151,6 @@ from .feedback_score_batch_item import FeedbackScoreBatchItem
 from .feedback_score_batch_item_source import FeedbackScoreBatchItemSource
 from .feedback_score_batch_item_thread import FeedbackScoreBatchItemThread
 from .feedback_score_batch_item_thread_source import FeedbackScoreBatchItemThreadSource
-from .feedback_score_batch_item_tracing import FeedbackScoreBatchItemTracing
-from .feedback_score_batch_item_tracing_source import FeedbackScoreBatchItemTracingSource
 from .feedback_score_compare import FeedbackScoreCompare
 from .feedback_score_compare_source import FeedbackScoreCompareSource
 from .feedback_score_experiment_item_bulk_write_view import FeedbackScoreExperimentItemBulkWriteView
@@ -453,8 +451,6 @@ __all__ = [
     "FeedbackScoreBatchItemSource",
     "FeedbackScoreBatchItemThread",
     "FeedbackScoreBatchItemThreadSource",
-    "FeedbackScoreBatchItemTracing",
-    "FeedbackScoreBatchItemTracingSource",
     "FeedbackScoreCompare",
     "FeedbackScoreCompareSource",
     "FeedbackScoreExperimentItemBulkWriteView",

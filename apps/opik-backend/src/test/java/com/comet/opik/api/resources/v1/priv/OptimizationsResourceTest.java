@@ -7,7 +7,6 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreAverage;
-import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.OptimizationUpdate;
@@ -66,9 +65,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -327,7 +328,7 @@ class OptimizationsResourceTest {
                                     .id(trace.id())
                                     .name(score.name())
                                     .build()))
-                    .toList();
+                    .collect(Collectors.toList());
 
             traceResourceClient.feedbackScores(scoreBatchItems, API_KEY, TEST_WORKSPACE_NAME);
 
@@ -660,7 +661,7 @@ class OptimizationsResourceTest {
                                     .id(trace.id())
                                     .name(score.name())
                                     .build()))
-                    .toList();
+                    .collect(Collectors.toList());
 
             traceResourceClient.feedbackScores(scoreBatchItems, apiKey, workspaceName);
 
