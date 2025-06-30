@@ -74,7 +74,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             try {
                 String modelName = message.llmAsJudgeCode().model().name();
                 var llmProvider = llmProviderFactory.getLlmProvider(modelName);
-                var strategy = StructuredOutputStrategy.getJsonOutputStrategy(llmProvider, modelName);
+                var strategy = StructuredOutputStrategy.getStrategy(llmProvider, modelName);
                 scoreRequest = OnlineScoringEngine.prepareLlmRequest(message.llmAsJudgeCode(), trace, strategy);
             } catch (Exception exception) {
                 userFacingLogger.error("Error preparing LLM request for traceId '{}': \n\n{}",

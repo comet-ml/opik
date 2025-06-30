@@ -32,7 +32,7 @@ public interface StructuredOutputStrategy {
             List<ChatMessage> messages,
             List<LlmAsJudgeOutputSchema> schema);
 
-    static StructuredOutputStrategy getJsonOutputStrategy(LlmProvider provider, String modelName) {
+    static StructuredOutputStrategy getStrategy(LlmProvider provider, String modelName) {
         boolean isStructuredOutputSupported = switch (provider) {
             case OPEN_AI -> OpenaiModelName.byValue(modelName)
                     .map(StructuredOutputSupported::isStructuredOutputSupported).orElse(false);
