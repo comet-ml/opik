@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemBulkRecord;
-import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
@@ -27,6 +26,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 
 @ImplementedBy(ExperimentItemBulkIngestionServiceImpl.class)
 public interface ExperimentItemBulkIngestionService {
