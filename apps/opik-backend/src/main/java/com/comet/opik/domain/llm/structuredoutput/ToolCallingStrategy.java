@@ -9,6 +9,7 @@ import dev.langchain4j.model.chat.request.json.JsonBooleanSchema;
 import dev.langchain4j.model.chat.request.json.JsonIntegerSchema;
 import dev.langchain4j.model.chat.request.json.JsonNumberSchema;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
+import dev.langchain4j.model.chat.request.json.JsonSchema;
 import dev.langchain4j.model.chat.request.json.JsonSchemaElement;
 import dev.langchain4j.model.chat.request.json.JsonStringSchema;
 import jakarta.validation.constraints.NotNull;
@@ -21,6 +22,7 @@ public class ToolCallingStrategy implements StructuredOutputStrategy {
 
     static final String SCORE_FIELD_NAME = "score";
     static final String REASON_FIELD_NAME = "reason";
+    private static final String DEFAULT_SCHEMA_NAME = "scoring_schema";
     private static final String SCORE_FIELD_DESCRIPTION = "the score for ";
     private static final String REASON_FIELD_DESCRIPTION = "the reason for the score for ";
 
@@ -66,7 +68,8 @@ public class ToolCallingStrategy implements StructuredOutputStrategy {
                 .required(allPropertyNames)
                 .build();
 
-        var jsonSchema = dev.langchain4j.model.chat.request.json.JsonSchema.builder()
+        var jsonSchema = JsonSchema.builder()
+                .name(DEFAULT_SCHEMA_NAME)
                 .rootElement(jsonObjectSchema)
                 .build();
 
