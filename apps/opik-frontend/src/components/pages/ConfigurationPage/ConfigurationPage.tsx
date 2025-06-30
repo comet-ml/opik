@@ -7,6 +7,7 @@ import FeedbackDefinitionsTab from "@/components/pages/ConfigurationPage/Feedbac
 enum CONFIGURATION_TABS {
   FEEDBACK_DEFINITIONS = "feedback-definitions",
   AI_PROVIDER = "ai-provider",
+  // WORKSPACE_PREFERENCES = "workspace-preferences",
 }
 
 const DEFAULT_TAB = CONFIGURATION_TABS.FEEDBACK_DEFINITIONS;
@@ -43,6 +44,12 @@ const ConfigurationPage = () => {
             >
               AI Providers
             </TabsTrigger>
+            {/* <TabsTrigger
+              variant="underline"
+              value={CONFIGURATION_TABS.WORKSPACE_PREFERENCES}
+            >
+              Workspace preferences
+            </TabsTrigger> */}
           </TabsList>
 
           <TabsContent value={CONFIGURATION_TABS.FEEDBACK_DEFINITIONS}>
@@ -52,6 +59,10 @@ const ConfigurationPage = () => {
           <TabsContent value={CONFIGURATION_TABS.AI_PROVIDER}>
             <AIProvidersTab />
           </TabsContent>
+
+          {/* <TabsContent value={CONFIGURATION_TABS.WORKSPACE_PREFERENCES}>
+            <WorkspacePreferencesTab />
+          </TabsContent> */}
         </Tabs>
       </div>
     </div>
