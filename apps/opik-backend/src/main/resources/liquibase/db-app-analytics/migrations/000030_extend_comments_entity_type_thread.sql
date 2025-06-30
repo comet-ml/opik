@@ -4,4 +4,4 @@
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments ON CLUSTER '{cluster}'
     MODIFY COLUMN `entity_type` ENUM('trace', 'span', 'thread');
 
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments MODIFY COLUMN `entity_type` ENUM('trace', 'span');
+-- rollback empty
