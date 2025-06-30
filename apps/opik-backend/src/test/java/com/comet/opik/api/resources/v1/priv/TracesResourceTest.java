@@ -9612,4 +9612,169 @@ class TracesResourceTest {
                 }).toList();
     }
 
+    @Nested
+    @DisplayName("Thread Reopening and Manual Score Deletion")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ThreadReopeningManualScoreDeletion {
+
+        @Test
+        @DisplayName("When thread is closed, manually scored, and reopened, then manual scores are deleted")
+        void whenThreadIsClosedManuallyScored_andReopened_thenManualScoresAreDeleted() {
+            // Given
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var threadId = UUID.randomUUID().toString();
+
+            // Create initial traces for the thread
+            List<Trace> initialTraces = IntStream.range(0, 3)
+                    .mapToObj(i -> createTrace().toBuilder()
+                            .projectName(projectName)
+                            .threadId(threadId)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(initialTraces, apiKey, workspaceName);
+
+            // Wait for thread processing
+            Mono.delay(Duration.ofMillis(500)).block();
+
+            // Close the thread
+            traceResourceClient.closeTraceThread(threadId, projectId, null, apiKey, workspaceName);
+
+            // Wait for thread to be closed
+
+            // Add manual scores to the closed thread
+            List<FeedbackScoreBatchItemThread> manualScores = PodamFactoryUtils
+                    .manufacturePojoList(factory, FeedbackScoreBatchItemThread.class)
+                    .stream()
+                    .map(item -> item.toBuilder()
+                            .threadId(threadId)
+                            .projectName(projectName)
+                            .source(ScoreSource.UI)
+                            .build())
+                    .collect(Collectors.toList());
+
+            manualScores.set(0, manualScores.get(0)
+                    .toBuilder()
+                    .source(ScoreSource.SDK)
+                    .build());
+
+            traceResourceClient.threadFeedbackScores(manualScores, apiKey, workspaceName);
+
+            // Create new traces to reopen the thread
+            List<Trace> newTraces = IntStream.range(0, 2)
+                    .mapToObj(i -> createTrace().toBuilder()
+                            .projectName(projectName)
+                            .threadId(threadId)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(newTraces, apiKey, workspaceName);
+
+            // Wait for thread to be reopened and manual scores to be deleted
+            Awaitility.await()
+                    .atMost(10, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actualThreads = traceResourceClient.getTraceThreads(projectId, null, apiKey, workspaceName,
+                                null, null, null);
+
+                        List<Trace> allTraces = Stream.concat(initialTraces.stream(), newTraces.stream()).toList();
+
+                        var expectedReopenedThreads = getExpectedThreads(allTraces, projectId, threadId, List.of(),
+                                TraceThreadStatus.ACTIVE);
+
+                        // Verify manual scores have been deleted
+                        TraceAssertions.assertThreads(expectedReopenedThreads, actualThreads.content());
+                    });
+        }
+
+        @Test
+        @DisplayName("When thread is closed, manually scored, and reopened, then only manual scores are deleted (not automatic scores)")
+        void whenThreadIsClosedWithMixedScores_andReopened_thenOnlyManualScoresAreDeleted() {
+            // Given
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var threadId = UUID.randomUUID().toString();
+
+            // Create initial traces for the thread
+            List<Trace> initialTraces = IntStream.range(0, 2)
+                    .mapToObj(i -> createTrace().toBuilder()
+                            .projectName(projectName)
+                            .threadId(threadId)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(initialTraces, apiKey, workspaceName);
+
+            // Wait for thread processing
+            Mono.delay(Duration.ofMillis(500)).block();
+
+            // Close the thread
+            traceResourceClient.closeTraceThread(threadId, projectId, null, apiKey, workspaceName);
+
+            // Wait for thread to be closed
+
+            // Add mixed scores to the closed thread (manual and automatic)
+            List<FeedbackScoreBatchItemThread> mixedScores = PodamFactoryUtils
+                    .manufacturePojoList(factory, FeedbackScoreBatchItemThread.class)
+                    .stream()
+                    .map(item -> item.toBuilder()
+                            .threadId(threadId)
+                            .projectName(projectName)
+                            .source(ScoreSource.SDK)
+                            .build())
+                    .collect(Collectors.toList());
+
+            mixedScores.set(0, mixedScores.getFirst()
+                    .toBuilder()
+                    .source(ScoreSource.ONLINE_SCORING)
+                    .build());
+
+            Instant createdAt = Instant.now();
+            traceResourceClient.threadFeedbackScores(mixedScores, apiKey, workspaceName);
+
+            // Create new traces to reopen the thread
+            List<Trace> newTraces = IntStream.range(0, 2)
+                    .mapToObj(i -> createTrace().toBuilder()
+                            .projectName(projectName)
+                            .threadId(threadId)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(newTraces, apiKey, workspaceName);
+
+            // Wait for thread to be reopened and manual scores to be deleted
+            Awaitility.await()
+                    .atMost(10, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+
+                        var actualThreads = traceResourceClient.getTraceThreads(projectId, null, apiKey, workspaceName,
+                                null, null, null);
+
+                        List<Trace> allTraces = Stream.concat(initialTraces.stream(), newTraces.stream()).toList();
+
+                        var expectedReopenedThreads = getExpectedThreads(allTraces, projectId, threadId, List.of(),
+                                TraceThreadStatus.ACTIVE,
+                                List.of(createExpectedFeedbackScore(mixedScores.getFirst(), createdAt)));
+
+                        // Verify manual scores have been deleted, but automatic scores remain
+                        TraceAssertions.assertThreads(expectedReopenedThreads, actualThreads.content());
+                    });
+        }
+    }
+
 }
