@@ -2907,6 +2907,12 @@ paths:
       responses:
         "204":
           description: No Content
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/traces:
     get:
       tags:

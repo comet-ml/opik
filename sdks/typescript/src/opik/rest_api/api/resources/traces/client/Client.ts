@@ -217,6 +217,8 @@ export class Traces {
      * @param {OpikApi.TraceThreadIdentifier} request
      * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
      *
+     * @throws {@link OpikApi.NotFoundError}
+     *
      * @example
      *     await client.traces.closeTraceThread({
      *         threadId: "thread_id"
@@ -265,11 +267,16 @@ export class Traces {
         }
 
         if (_response.error.reason === "status-code") {
-            throw new errors.OpikApiError({
-                statusCode: _response.error.statusCode,
-                body: _response.error.body,
-                rawResponse: _response.rawResponse,
-            });
+            switch (_response.error.statusCode) {
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
         }
 
         switch (_response.error.reason) {
