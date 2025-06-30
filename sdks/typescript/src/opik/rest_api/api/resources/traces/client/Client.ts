@@ -1970,6 +1970,7 @@ export class Traces {
      * @example
      *     await client.traces.scoreBatchOfTraces({
      *         scores: [{
+     *                 id: "id",
      *                 name: "name",
      *                 value: 1.1,
      *                 source: "ui"

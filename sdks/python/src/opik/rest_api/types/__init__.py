@@ -147,6 +147,7 @@ from .feedback_score import FeedbackScore
 from .feedback_score_average import FeedbackScoreAverage
 from .feedback_score_average_detailed import FeedbackScoreAverageDetailed
 from .feedback_score_average_public import FeedbackScoreAveragePublic
+from .feedback_score_batch import FeedbackScoreBatch
 from .feedback_score_batch_item import FeedbackScoreBatchItem
 from .feedback_score_batch_item_source import FeedbackScoreBatchItemSource
 from .feedback_score_batch_item_thread import FeedbackScoreBatchItemThread
@@ -447,6 +448,7 @@ __all__ = [
     "FeedbackScoreAverage",
     "FeedbackScoreAverageDetailed",
     "FeedbackScoreAveragePublic",
+    "FeedbackScoreBatch",
     "FeedbackScoreBatchItem",
     "FeedbackScoreBatchItemSource",
     "FeedbackScoreBatchItemThread",

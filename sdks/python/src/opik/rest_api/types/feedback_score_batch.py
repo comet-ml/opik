@@ -4,21 +4,11 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .feedback_score_batch_item_source import FeedbackScoreBatchItemSource
+from .feedback_score_batch_item import FeedbackScoreBatchItem
 
 
-class FeedbackScoreBatchItem(UniversalBaseModel):
-    id: str
-    project_name: typing.Optional[str] = pydantic.Field(default=None)
-    """
-    If null, the default project is used
-    """
-
-    name: str
-    category_name: typing.Optional[str] = None
-    value: float
-    reason: typing.Optional[str] = None
-    source: FeedbackScoreBatchItemSource
+class FeedbackScoreBatch(UniversalBaseModel):
+    scores: typing.List[FeedbackScoreBatchItem]
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

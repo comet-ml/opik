@@ -2782,7 +2782,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/FeedbackScoreBatch_Tracing"
+              $ref: "#/components/schemas/FeedbackScoreBatch"
       responses:
         "204":
           description: No Content
@@ -8519,41 +8519,7 @@ components:
             $ref: "#/components/schemas/FeedbackScoreBatchItem"
     FeedbackScoreBatchItem:
       required:
-      - name
-      - source
-      - value
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        thread_id:
-          type: string
-        project_name:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-          description: "If null, the default project is used"
-        name:
-          minLength: 1
-          type: string
-        category_name:
-          type: string
-        value:
-          maximum: 999999999.999999999
-          exclusiveMaximum: false
-          minimum: -999999999.999999999
-          exclusiveMinimum: false
-          type: number
-        reason:
-          type: string
-        source:
-          type: string
-          enum:
-          - ui
-          - sdk
-          - online_scoring
-    FeedbackScoreBatchItem_Tracing:
-      required:
+      - id
       - name
       - source
       - value
@@ -8585,17 +8551,6 @@ components:
           - ui
           - sdk
           - online_scoring
-    FeedbackScoreBatch_Tracing:
-      required:
-      - scores
-      type: object
-      properties:
-        scores:
-          maxItems: 1000
-          minItems: 1
-          type: array
-          items:
-            $ref: "#/components/schemas/FeedbackScoreBatchItem_Tracing"
     SpanFilter_Public:
       type: object
       properties:
