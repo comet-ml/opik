@@ -8997,7 +8997,20 @@ class TracesResourceTest {
                 traceResourceClient.batchCreateTraces(threadTraces, apiKey, workspaceName);
 
                 threadTraces.forEach(trace -> {
-                    List<Span> spans = createSpans(trace, projectName, null, null);
+                    List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                            .map(span -> span.toBuilder()
+                                    .projectName(projectName)
+                                    .traceId(trace.id())
+                                    .usage(spanResourceClient.getTokenUsage())
+                                    .totalEstimatedCost(null)
+                                    .model(spanResourceClient.randomModel().toString())
+                                    .provider(spanResourceClient.provider())
+                                    .feedbackScores(null)
+                                    .comments(null)
+                                    .errorInfo(null)
+                                    .build())
+                            .toList();
+
                     spansByThread.computeIfAbsent(threadId, k -> new ArrayList<>()).addAll(spans);
                 });
 
@@ -9012,12 +9025,30 @@ class TracesResourceTest {
             UUID projectId = getProjectId(projectName, workspaceName, apiKey);
 
             // Build expected threads from our created traces
-            List<TraceThread> expectedThreads = threadIds.stream()
-                    .map(threadId -> getExpectedThreads(tracesByThread.get(threadId), projectId, threadId,
-                            spansByThread.get(threadId), TraceThreadStatus.ACTIVE))
+            List<TraceThread> threads = threadIds.stream()
+                    .map(threadId -> {
+
+                        List<Span> spansWithTotalEstimatedCost = spansByThread.get(threadId).stream()
+                                .map(span -> span.toBuilder()
+                                        .totalEstimatedCost(calculateEstimatedCost(List.of(span)))
+                                        .build())
+                                .toList();
+
+                        return getExpectedThreads(tracesByThread.get(threadId), projectId, threadId,
+                                spansWithTotalEstimatedCost, TraceThreadStatus.ACTIVE);
+                    })
                     .flatMap(List::stream)
+                    .toList();
+
+            List<TraceThread> expectedThreads = threads
+                    .stream()
                     .sorted(comparator)
                     .toList();
+
+            // mark threads are opened
+            threads.forEach(thread -> {
+                traceResourceClient.openTraceThread(thread.id(), thread.projectId(), null, apiKey, workspaceName);
+            });
 
             // Get trace threads with sorting
             TraceThreadPage traceThreadPage = traceResourceClient.getTraceThreads(projectId, null,
