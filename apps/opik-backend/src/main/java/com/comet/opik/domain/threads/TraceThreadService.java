@@ -3,10 +3,12 @@ package com.comet.opik.domain.threads;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
+import com.comet.opik.api.events.ThreadsReopened;
 import com.comet.opik.api.resources.v1.events.TraceThreadBufferConfig;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
@@ -62,6 +64,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
     private final @NonNull TraceThreadIdService traceThreadIdService;
     private final @NonNull TraceService traceService;
     private final @NonNull LockService lockService;
+    private final @NonNull EventBus eventBus;
 
     public Mono<Void> processTraceThreads(@NonNull Map<String, Instant> threadIdAndLastUpdateAts,
             @NonNull UUID projectId) {
@@ -119,12 +122,26 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 .ids(ids)
                 .build();
 
-        return getReopenedThreads(traceThreads, criteria)
+        return Mono.deferContextual(context -> getReopenedThreads(traceThreads, criteria)
                 .flatMap(reopenedThreads -> traceThreadDAO.save(traceThreads)
                         .doOnSuccess(
-                                count -> log.info("Saved '{}' trace threads for projectId: '{}'", count, projectId)))
-                //TODO: Next we will publish the event to notify about reopened threads
-                .then();
+                                count -> log.info("Saved '{}' trace threads for projectId: '{}'", count, projectId))
+                        .flatMap(count -> Mono.fromCallable(() -> {
+                            if (reopenedThreads.isEmpty()) {
+                                return Mono.empty();
+                            }
+                            log.info("Reopened '{}' trace threads for projectId: '{}'", reopenedThreads.size(),
+                                    projectId);
+
+                            eventBus.post(new ThreadsReopened(
+                                    reopenedThreads,
+                                    projectId,
+                                    context.get(RequestContext.WORKSPACE_ID),
+                                    context.get(RequestContext.USER_NAME)));
+
+                            return null;
+                        })))
+                .then());
     }
 
     private Mono<Set<UUID>> getReopenedThreads(List<TraceThreadModel> traceThreads,
