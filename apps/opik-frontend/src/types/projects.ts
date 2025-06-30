@@ -20,6 +20,7 @@ export interface Project {
 export type ProjectErrorCount = {
   count: number;
   deviation: number;
+  deviation_percentage: number;
 };
 
 export interface ProjectStatistic {
