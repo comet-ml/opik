@@ -10,7 +10,7 @@ from ...rest_api.types import trace_thread_filter
 
 class ThreadsClient:
     """
-    Client for managing and interacting with conversation threads.
+    Client for managing and interacting with conversational threads.
 
     This class provides methods for searching threads and logging feedback scores
     related to threads using an underlying client instance. It is intended to be

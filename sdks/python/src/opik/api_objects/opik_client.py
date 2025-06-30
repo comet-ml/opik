@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, TypeVar, Union, Literal
 
 import httpx
 
+from .threads import threads_client
 from .. import (
     config,
     datetime_helpers,
@@ -1012,6 +1013,18 @@ class Opik:
         return url_helpers.get_project_url_by_workspace(
             workspace=dereferenced_workspace, project_name=project_name
         )
+
+    def get_threads_client(self) -> threads_client.ThreadsClient:
+        """
+        Creates and provides an instance of the ``ThreadsClient`` tied to the current context.
+
+        The ``ThreadsClient`` can be used to interact with the threads API to manage and interact with conversational threads.
+
+        Returns:
+            ThreadsClient: An instance of ``threads_client.ThreadsClient`` initialized
+            with the current context.
+        """
+        return threads_client.ThreadsClient(self)
 
     def create_prompt(
         self,

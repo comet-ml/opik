@@ -3,7 +3,6 @@ import uuid
 import pytest
 
 from .conftest import OPIK_E2E_TESTS_PROJECT_NAME
-from opik.api_objects.threads import threads_client
 
 
 @pytest.fixture
@@ -32,11 +31,11 @@ def active_threads(opik_client):
 
 
 def test_threads_client__search_threads__happy_path(opik_client, active_threads):
-    threads_client_ = threads_client.ThreadsClient(opik_client)
+    threads_client = opik_client.get_threads_client()
 
     # Search for the first thread by ID filter
     filter_string = f'id = "{active_threads[0]}"'
-    threads = threads_client_.search_threads(
+    threads = threads_client.search_threads(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME, filter_string=filter_string
     )
     assert len(threads) == 1
@@ -44,7 +43,7 @@ def test_threads_client__search_threads__happy_path(opik_client, active_threads)
 
     # Search for all threads with active status
     filter_string = 'status = "active"'
-    threads = threads_client_.search_threads(
+    threads = threads_client.search_threads(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME, filter_string=filter_string
     )
     assert len(threads) == 2
