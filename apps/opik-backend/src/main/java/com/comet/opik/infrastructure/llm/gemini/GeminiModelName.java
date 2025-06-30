@@ -1,7 +1,6 @@
 package com.comet.opik.infrastructure.llm.gemini;
 
-import com.comet.opik.api.LlmProvider;
-import com.comet.opik.infrastructure.llm.ModelDefinition;
+import com.comet.opik.infrastructure.llm.StructuredOutputSupported;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,7 +14,7 @@ import java.util.Optional;
 @Slf4j
 @Getter
 @RequiredArgsConstructor
-public enum GeminiModelName implements ModelDefinition {
+public enum GeminiModelName implements StructuredOutputSupported {
     GEMINI_1_5_PRO_LATEST("gemini-1.5-pro-latest", true),
     GEMINI_1_5_FLASH_LATEST("gemini-1.5-flash-latest", true),
     GEMINI_1_0_PRO("gemini-1.0-pro", true),
@@ -29,11 +28,6 @@ public enum GeminiModelName implements ModelDefinition {
     @Override
     public boolean isStructuredOutputSupported() {
         return this.structuredOutputSupported;
-    }
-
-    @Override
-    public LlmProvider getProvider() {
-        return LlmProvider.GEMINI;
     }
 
     public static Optional<GeminiModelName> byValue(String value) {

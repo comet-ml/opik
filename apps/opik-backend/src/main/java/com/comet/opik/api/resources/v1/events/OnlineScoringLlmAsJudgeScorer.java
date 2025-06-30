@@ -6,6 +6,7 @@ import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -73,7 +74,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             try {
                 String modelName = message.llmAsJudgeCode().model().name();
                 var llmProvider = llmProviderFactory.getLlmProvider(modelName);
-                var strategy = LlmProviderFactory.getJsonOutputStrategy(llmProvider, modelName);
+                var strategy = StructuredOutputStrategy.getJsonOutputStrategy(llmProvider, modelName);
                 scoreRequest = OnlineScoringEngine.prepareLlmRequest(message.llmAsJudgeCode(), trace, strategy);
             } catch (Exception exception) {
                 userFacingLogger.error("Error preparing LLM request for traceId '{}': \n\n{}",

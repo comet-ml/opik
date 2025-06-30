@@ -1,7 +1,6 @@
 package com.comet.opik.infrastructure.llm.vertexai;
 
-import com.comet.opik.api.LlmProvider;
-import com.comet.opik.infrastructure.llm.ModelDefinition;
+import com.comet.opik.infrastructure.llm.StructuredOutputSupported;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.Accessors;
@@ -14,7 +13,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 @Getter
 @Accessors(fluent = true)
-public enum VertexAIModelName implements ModelDefinition {
+public enum VertexAIModelName implements StructuredOutputSupported {
 
     GEMINI_2_5_PRO_PREVIEW_04_17("vertex_ai/gemini-2.5-flash-preview-04-17", "gemini-2.5-flash-preview-04-17"),
     GEMINI_2_5_PRO_PREVIEW_05_06("vertex_ai/gemini-2.5-pro-preview-05-06", "gemini-2.5-pro-preview-05-06"),
@@ -32,11 +31,6 @@ public enum VertexAIModelName implements ModelDefinition {
     @Override
     public boolean isStructuredOutputSupported() {
         return false;
-    }
-
-    @Override
-    public LlmProvider getProvider() {
-        return LlmProvider.VERTEX_AI;
     }
 
     public static Optional<VertexAIModelName> byQualifiedName(String qualifiedName) {

@@ -1,7 +1,6 @@
 package com.comet.opik.infrastructure.llm.openai;
 
-import com.comet.opik.api.LlmProvider;
-import com.comet.opik.infrastructure.llm.ModelDefinition;
+import com.comet.opik.infrastructure.llm.StructuredOutputSupported;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -13,7 +12,7 @@ import java.util.Optional;
  */
 @Slf4j
 @RequiredArgsConstructor
-public enum OpenaiModelName implements ModelDefinition {
+public enum OpenaiModelName implements StructuredOutputSupported {
     CHATGPT_4O_LATEST("chatgpt-4o-latest", true),
     GPT_4O("gpt-4o", true),
     GPT_4O_2024_05_13("gpt-4o-2024-05-13", true),
@@ -58,11 +57,6 @@ public enum OpenaiModelName implements ModelDefinition {
             log.warn(WARNING_UNKNOWN_MODEL, value);
         }
         return response;
-    }
-
-    @Override
-    public LlmProvider getProvider() {
-        return LlmProvider.OPEN_AI;
     }
 
     @Override

@@ -1,7 +1,6 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
-import com.comet.opik.api.LlmProvider;
-import com.comet.opik.infrastructure.llm.ModelDefinition;
+import com.comet.opik.infrastructure.llm.StructuredOutputSupported;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,7 +14,8 @@ import java.util.Optional;
 @Slf4j
 @Getter
 @RequiredArgsConstructor
-public enum AnthropicModelName implements ModelDefinition {
+public enum AnthropicModelName implements StructuredOutputSupported {
+    CLAUDE_1_0("claude-1.0", true),
     CLAUDE_3_OPUS("claude-3-opus-20240229", true),
     CLAUDE_3_5_SONNET("claude-3-5-sonnet-20240620", true),
     CLAUDE_3_SONNET("claude-3-sonnet-20240229", true),
@@ -32,11 +32,6 @@ public enum AnthropicModelName implements ModelDefinition {
     @Override
     public boolean isStructuredOutputSupported() {
         return this.structuredOutputSupported;
-    }
-
-    @Override
-    public LlmProvider getProvider() {
-        return LlmProvider.ANTHROPIC;
     }
 
     public static Optional<AnthropicModelName> byValue(String value) {
