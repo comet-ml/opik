@@ -46,7 +46,7 @@ public enum VertexAIModelName implements StructuredOutputSupported {
 
     @Override
     public String toString() {
-        return qualifiedName;
+        return value;
     }
 
 }
