@@ -1290,6 +1290,28 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND thread_id IN (SELECT thread_id FROM traces_final)
+            ), comments_final AS (
+              SELECT
+                   entity_id,
+                   groupArray(tuple(*)) AS comments
+              FROM (
+                SELECT
+                    id,
+                    text,
+                    created_at,
+                    last_updated_at,
+                    created_by,
+                    last_updated_by,
+                    entity_id,
+                    workspace_id,
+                    project_id
+                FROM comments final
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
+              )
+              GROUP BY workspace_id, project_id, entity_id
             )
             <if(feedback_scores_empty_filters)>
             , fsc AS (
@@ -1326,7 +1348,8 @@ class TraceDAOImpl implements TraceDAO {
                 if(tt.status = 'unknown', 'active', tt.status) as status,
                 if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
                 fsagg.feedback_scores_list as feedback_scores_list,
-                fsagg.feedback_scores as feedback_scores
+                fsagg.feedback_scores as feedback_scores,
+                c.comments AS comments
             FROM (
                 SELECT
                     t.thread_id as id,
@@ -1356,6 +1379,7 @@ class TraceDAOImpl implements TraceDAO {
                 AND t.project_id = tt.project_id
                 AND t.id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
+            LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
             WHERE workspace_id = :workspace_id
             <if(feedback_scores_filters)>
             AND thread_model_id IN (
@@ -1470,6 +1494,28 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND thread_id = :thread_id
+            ), comments_final AS (
+              SELECT
+                   entity_id,
+                   groupArray(tuple(*)) AS comments
+              FROM (
+                SELECT
+                    id,
+                    text,
+                    created_at,
+                    last_updated_at,
+                    created_by,
+                    last_updated_by,
+                    entity_id,
+                    workspace_id,
+                    project_id
+                FROM comments final
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
+              )
+              GROUP BY workspace_id, project_id, entity_id
             )
             SELECT
                 t.workspace_id as workspace_id,
@@ -1490,7 +1536,8 @@ class TraceDAOImpl implements TraceDAO {
                 if(tt.status = 'unknown', 'active', tt.status) as status,
                 if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
                 fsagg.feedback_scores_list as feedback_scores_list,
-                fsagg.feedback_scores as feedback_scores
+                fsagg.feedback_scores as feedback_scores,
+                c.comments AS comments
             FROM (
                 SELECT
                     t.thread_id as thread_id,
@@ -1517,6 +1564,7 @@ class TraceDAOImpl implements TraceDAO {
             ) AS t
             LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id AND t.project_id = tt.project_id AND t.thread_id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
+            LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
             """;
 
     public static final String SELECT_COUNT_TRACES_BY_PROJECT_IDS = """
@@ -2369,6 +2417,10 @@ class TraceDAOImpl implements TraceDAO {
                 .feedbackScores(Optional.ofNullable(row.get("feedback_scores_list", List.class))
                         .filter(not(List::isEmpty))
                         .map(this::mapFeedbackScores)
+                        .orElse(null))
+                .comments(Optional
+                        .ofNullable(row.get("comments", List[].class))
+                        .map(CommentResultMapper::getComments)
                         .orElse(null))
                 .build());
     }

@@ -31,6 +31,7 @@ public record TraceThread(
         long numberOfMessages,
         BigDecimal totalEstimatedCost,
         Map<String, Long> usage,
+        List<Comment> comments,
         Instant lastUpdatedAt,
         String lastUpdatedBy,
         String createdBy,
