@@ -65,6 +65,15 @@ class OpikMessageProcessor(BaseMessageProcessor):
             if exception.status_code == 409:
                 # sometimes a retry mechanism works in a way that it sends the same request 2 times.
                 # if the backend rejects the second request, we don't want users to see an error.
+                if isinstance(message, messages.AddThreadsFeedbackScoresBatchMessage):
+                    # In the case of AddThreadsFeedbackScoresBatchMessage, the backend will reject the request
+                    # if thread is not closed which can happen if the user is unaware of this fact.
+                    # Thus, we display the warning message.
+                    LOGGER.warning(
+                        "Message '%s' was rejected by the backend, reason: %s",
+                        message_type.__name__,
+                        exception,
+                    )
                 return
             elif exception.status_code == 429:
                 if exception.headers is not None:

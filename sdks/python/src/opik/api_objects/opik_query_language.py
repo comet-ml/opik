@@ -24,7 +24,9 @@ COLUMNS = {
 }
 
 SUPPORTED_OPERATORS = {
+    "id": ["="],
     "name": ["=", "contains", "not_contains"],
+    "status": ["="],
     "start_time": ["=", ">", "<", ">=", "<="],
     "end_time": ["=", ">", "<", ">=", "<="],
     "input": ["=", "contains", "not_contains"],
