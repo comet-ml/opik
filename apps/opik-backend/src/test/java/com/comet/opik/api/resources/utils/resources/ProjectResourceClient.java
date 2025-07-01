@@ -124,4 +124,25 @@ public class ProjectResourceClient {
 
         return actualResponse.readEntity(ProjectStatsSummary.class);
     }
+
+    public void updateConfigurations(Project.Configuration configuration, UUID projectId, String apiKey,
+            String workspaceName) {
+        try (var actualResponse = callUpdateConfigurations(configuration, projectId, apiKey, workspaceName)) {
+
+            // Then
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public Response callUpdateConfigurations(Project.Configuration configuration, UUID projectId, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(projectId.toString())
+                .path("configurations")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(configuration));
+    }
 }
