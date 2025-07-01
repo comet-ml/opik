@@ -3,7 +3,7 @@ package com.comet.opik.infrastructure.llm;
 import com.comet.opik.infrastructure.llm.gemini.GeminiErrorObject;
 import com.comet.opik.infrastructure.llm.openai.OpenAiErrorMessage;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterErrorMessage;
-import com.comet.opik.infrastructure.llm.vllm.VllmErrorMessage;
+import com.comet.opik.infrastructure.llm.customllm.CustomLlmErrorMessage;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -115,8 +115,8 @@ public interface LlmProviderLangChainMapper {
         return getErrorMessage(throwable, log, GeminiErrorObject.class);
     }
 
-    default Optional<ErrorMessage> getVllmErrorObject(@NonNull Throwable throwable, @NonNull Logger log) {
-        return getErrorMessage(throwable, log, VllmErrorMessage.class);
+    default Optional<ErrorMessage> getCustomLlmErrorObject(@NonNull Throwable throwable, @NonNull Logger log) {
+        return getErrorMessage(throwable, log, CustomLlmErrorMessage.class);
     }
 
     private <E, T extends LlmProviderError<E>> Optional<ErrorMessage> getErrorMessage(Throwable throwable, Logger log,

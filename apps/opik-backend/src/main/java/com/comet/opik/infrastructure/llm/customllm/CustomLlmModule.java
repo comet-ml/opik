@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.llm.vllm;
+package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
@@ -10,19 +10,19 @@ import jakarta.inject.Named;
 import lombok.NonNull;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-public class VllmModule extends AbstractModule {
+public class CustomLlmModule extends AbstractModule {
     @Provides
     @Singleton
-    @Named("vllmGenerator")
-    public VllmClientGenerator clientGenerator(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
-        return new VllmClientGenerator(config);
+    @Named("customLlmGenerator")
+    public CustomLlmClientGenerator clientGenerator(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
+        return new CustomLlmClientGenerator(config);
     }
 
     @Provides
     @Singleton
-    @Named("vllm")
+    @Named("customLlm")
     public LlmServiceProvider llmServiceProvider(@NonNull LlmProviderFactory llmProviderFactory,
-            @NonNull @Named("vllmGenerator") VllmClientGenerator clientGenerator) {
-        return new VllmLlmServiceProvider(clientGenerator, llmProviderFactory);
+            @NonNull @Named("customLlmGenerator") CustomLlmClientGenerator clientGenerator) {
+        return new CustomLlmServiceProvider(clientGenerator, llmProviderFactory);
     }
 }

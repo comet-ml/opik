@@ -15,7 +15,7 @@ public enum LlmProvider {
     GEMINI("gemini"),
     OPEN_ROUTER("openrouter"),
     VERTEX_AI("vertex-ai"),
-    VLLM("vllm"),
+    CUSTOM_LLM("custom-llm"),
     ;
 
     @JsonValue

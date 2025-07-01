@@ -1,31 +1,28 @@
-package com.comet.opik.infrastructure.llm.vllm;
+package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.infrastructure.llm.LlmProviderError;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import org.apache.commons.lang3.StringUtils;
 
-import static com.comet.opik.infrastructure.llm.vllm.VllmErrorMessage.VllmError;
+import static com.comet.opik.infrastructure.llm.customllm.CustomLlmErrorMessage.CustomProviderError;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record VllmErrorMessage(VllmError error, String object, String message, String type, String param,
-        Integer code) implements LlmProviderError<VllmError> {
+public record CustomLlmErrorMessage(
+        CustomProviderError error, String object, String message, String type, String param, Integer code)
+        implements LlmProviderError<CustomProviderError> {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record VllmError(String message, String code, String type) {
+    public record CustomProviderError(String message, String code, String type) {
     }
 
     public ErrorMessage toErrorMessage() {
-        String errorMessage = null;
+        String errorMessage = "unknown error occurred";
 
-        if (error != null && error.message() != null) {
+        if (error != null && StringUtils.isNotEmpty(error.message())) {
             errorMessage = error.message();
-        } else if (message != null) {
+        } else if (StringUtils.isNotEmpty(message)) {
             errorMessage = message;
-        }
-
-        if (errorMessage == null || errorMessage.trim().isEmpty()) {
-            errorMessage = "Unknown vLLM error";
         }
 
         Integer errorCode = getErrorCode();
@@ -38,13 +35,13 @@ public record VllmErrorMessage(VllmError error, String object, String message, S
     }
 
     @Override
-    public VllmError error() {
+    public CustomProviderError error() {
         if (error != null) {
             return error;
         }
 
         if (message != null || type != null || (code != null && code > 0)) {
-            return new VllmError(
+            return new CustomProviderError(
                     message != null ? message : "Unknown error",
                     code != null ? String.valueOf(code) : "unknown",
                     type != null ? type : "unknown");
@@ -82,6 +79,6 @@ public record VllmErrorMessage(VllmError error, String object, String message, S
         if (error != null && error.type() != null) {
             return error.type();
         }
-        return type != null ? type : "VllmError";
+        return type != null ? type : "CustomLlmError";
     }
 }

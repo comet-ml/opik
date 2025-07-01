@@ -21,9 +21,6 @@ public class LlmProviderClientConfig {
     public record VertexAIClientConfig(String scope) {
     }
 
-    public record VllmClientConfig(String url) {
-    }
-
     @Min(1) private Integer maxAttempts;
 
     @Min(1) private int delayMillis = 500;
@@ -53,8 +50,6 @@ public class LlmProviderClientConfig {
     @Valid private LlmProviderClientConfig.AnthropicClientConfig anthropicClient;
 
     @Valid private LlmProviderClientConfig.VertexAIClientConfig vertexAIClient;
-
-    @Valid private LlmProviderClientConfig.VllmClientConfig vllmClient;
 
     private String openRouterUrl;
 }

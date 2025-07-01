@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.llm.vllm;
+package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.LlmProvider;
@@ -10,24 +10,24 @@ import dev.langchain4j.model.chat.ChatModel;
 import jakarta.inject.Named;
 import lombok.NonNull;
 
-class VllmLlmServiceProvider implements LlmServiceProvider {
+class CustomLlmServiceProvider implements LlmServiceProvider {
 
-    private final VllmClientGenerator clientGenerator;
+    private final CustomLlmClientGenerator clientGenerator;
 
-    VllmLlmServiceProvider(
-            @Named("vllmGenerator") VllmClientGenerator clientGenerator, LlmProviderFactory factory) {
+    CustomLlmServiceProvider(
+            @Named("customLlmGenerator") CustomLlmClientGenerator clientGenerator, LlmProviderFactory factory) {
         this.clientGenerator = clientGenerator;
-        factory.register(LlmProvider.VLLM, this);
+        factory.register(LlmProvider.CUSTOM_LLM, this);
     }
 
     @Override
     public LlmProviderService getService(@NonNull LlmProviderClientApiConfig apiKey) {
-        return new LlmProviderVllm(clientGenerator.newVllmClient(apiKey));
+        return new CustomLlmProvider(clientGenerator.newCustomLlmClient(apiKey));
     }
 
     @Override
     public ChatModel getLanguageModel(@NonNull LlmProviderClientApiConfig config,
             AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters) {
-        return clientGenerator.newVllmChatLanguageModel(config, modelParameters);
+        return clientGenerator.newCustomProviderChatLanguageModel(config, modelParameters);
     }
 }

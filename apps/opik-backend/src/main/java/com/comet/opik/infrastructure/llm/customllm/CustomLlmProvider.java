@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.llm.vllm;
+package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
@@ -13,10 +13,12 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.Optional;
 import java.util.function.Consumer;
 
+import static com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker.CUSTOM_LLM_MODEL_PREFIX;
+
 @RequiredArgsConstructor
 @Slf4j
-public class LlmProviderVllm implements LlmProviderService {
-    // VLLM is compatible with OpenAI API, so we can use the OpenAiClient to interact with it.
+public class CustomLlmProvider implements LlmProviderService {
+    // assume that the provider is compatible with OpenAI API, so we use the OpenAiClient to interact with it
     private final @NonNull OpenAiClient openAiClient;
 
     @Override
@@ -47,11 +49,12 @@ public class LlmProviderVllm implements LlmProviderService {
 
     @Override
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
-        return LlmProviderLangChainMapper.INSTANCE.getVllmErrorObject(throwable, log);
+        return LlmProviderLangChainMapper.INSTANCE.getCustomLlmErrorObject(throwable, log);
     }
 
     private ChatCompletionRequest cleanModelName(@NonNull ChatCompletionRequest request) {
-        String cleanedModel = request.model().startsWith("vllm/") ? request.model().substring(5) : request.model();
+        String cleanedModel = request.model().startsWith(CUSTOM_LLM_MODEL_PREFIX) ?
+                request.model().replace(CUSTOM_LLM_MODEL_PREFIX, "") : request.model();
 
         // Is there a way to make this less verbose to somehow only modify the model name?
         return ChatCompletionRequest.builder()

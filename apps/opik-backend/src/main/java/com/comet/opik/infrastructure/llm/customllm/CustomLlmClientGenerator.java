@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.llm.vllm;
+package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
@@ -8,7 +8,6 @@ import dev.langchain4j.http.client.jdk.JdkHttpClientBuilder;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
-import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,34 +21,27 @@ import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeMod
 
 @RequiredArgsConstructor
 @Slf4j
-public class VllmClientGenerator implements LlmProviderClientGenerator<OpenAiClient> {
+public class CustomLlmClientGenerator implements LlmProviderClientGenerator<OpenAiClient> {
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
 
-    public OpenAiClient newVllmClient(@NonNull LlmProviderClientApiConfig config) {
-        if (StringUtils.isBlank(config.baseUrl())) {
-            throw new BadRequestException("vLLM baseUrl is not configured");
-        }
-
-        // Force HTTP/1.1 to avoid upgrade. vLLM is built on FastAPI and explicitly uses
-        // HTTP/1.1.
+    public OpenAiClient newCustomLlmClient(@NonNull LlmProviderClientApiConfig config) {
+        // Force HTTP/1.1 to avoid upgrade. For example, vLLM is built on FastAPI and explicitly uses HTTP/1.1
         HttpClient.Builder httpClientBuilder = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1);
 
         JdkHttpClientBuilder jdkHttpClientBuilder = JdkHttpClient.builder()
                 .httpClientBuilder(httpClientBuilder);
 
+        var baseUrl = Optional.ofNullable(config.baseUrl())
+                .filter(StringUtils::isNotBlank)
+                .orElseThrow(() -> new IllegalArgumentException("custom provider client not configured properly, missing url"));
+
         var openAiClientBuilder = OpenAiClient.builder()
+                .baseUrl(baseUrl)
                 .httpClientBuilder(jdkHttpClientBuilder)
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
-
-        Optional.ofNullable(llmProviderClientConfig.getVllmClient())
-                .map(LlmProviderClientConfig.VllmClientConfig::url)
-                .filter(StringUtils::isNotBlank)
-                .ifPresent(openAiClientBuilder::baseUrl);
-
-        openAiClientBuilder.baseUrl(config.baseUrl());
 
         Optional.ofNullable(config.headers())
                 .filter(MapUtils::isNotEmpty)
@@ -60,21 +52,18 @@ public class VllmClientGenerator implements LlmProviderClientGenerator<OpenAiCli
         Optional.ofNullable(llmProviderClientConfig.getReadTimeout())
                 .ifPresent(readTimeout -> openAiClientBuilder.readTimeout(readTimeout.toJavaDuration()));
 
-        var client = openAiClientBuilder
+        return openAiClientBuilder
                 .apiKey(config.apiKey())
                 .build();
-
-        return client;
     }
 
-    public ChatModel newVllmChatLanguageModel(@NonNull LlmProviderClientApiConfig config,
-            @NonNull LlmAsJudgeModelParameters modelParameters) {
-        if (StringUtils.isBlank(config.baseUrl())) {
-            throw new BadRequestException("vLLM baseUrl is not configured");
-        }
+    public ChatModel newCustomProviderChatLanguageModel(
+            @NonNull LlmProviderClientApiConfig config, @NonNull LlmAsJudgeModelParameters modelParameters) {
+        var baseUrl = Optional.ofNullable(config.baseUrl())
+                .filter(StringUtils::isNotBlank)
+                .orElseThrow(() -> new IllegalArgumentException("custom provider client not configured properly, missing url"));
 
-        // Force HTTP/1.1 to avoid upgrade. vLLM is built on FastAPI and explicitly uses
-        // HTTP/1.1.
+        // Force HTTP/1.1 to avoid upgrade. For example, vLLM is built on FastAPI and explicitly uses HTTP/1.1
         HttpClient.Builder httpClientBuilder = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1);
 
@@ -82,6 +71,7 @@ public class VllmClientGenerator implements LlmProviderClientGenerator<OpenAiCli
                 .httpClientBuilder(httpClientBuilder);
 
         var builder = OpenAiChatModel.builder()
+                .baseUrl(baseUrl)
                 .httpClientBuilder(jdkHttpClientBuilder)
                 .modelName(modelParameters.name())
                 .apiKey(config.apiKey())
@@ -90,13 +80,6 @@ public class VllmClientGenerator implements LlmProviderClientGenerator<OpenAiCli
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
-
-        Optional.ofNullable(llmProviderClientConfig.getVllmClient())
-                .map(LlmProviderClientConfig.VllmClientConfig::url)
-                .filter(StringUtils::isNotBlank)
-                .ifPresent(builder::baseUrl);
-
-        builder.baseUrl(config.baseUrl());
 
         Optional.ofNullable(config.headers())
                 .filter(MapUtils::isNotEmpty)
@@ -109,12 +92,12 @@ public class VllmClientGenerator implements LlmProviderClientGenerator<OpenAiCli
 
     @Override
     public OpenAiClient generate(@NonNull LlmProviderClientApiConfig config, Object... params) {
-        return newVllmClient(config);
+        return newCustomLlmClient(config);
     }
 
     @Override
     public ChatModel generateChat(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
-        return newVllmChatLanguageModel(config, modelParameters);
+        return newCustomProviderChatLanguageModel(config, modelParameters);
     }
 }
