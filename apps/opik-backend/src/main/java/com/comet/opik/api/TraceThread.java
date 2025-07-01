@@ -33,6 +33,7 @@ public record TraceThread(
         Map<String, Long> usage,
         List<Comment> comments,
         Instant lastUpdatedAt,
+        String lastUpdatedBy,
         String createdBy,
         Instant createdAt) {
 
