@@ -1940,7 +1940,8 @@ class ExperimentsResourceTest {
         int tracesNumber = PodamUtils.getIntegerInRange(1, 10);
 
         List<Trace> traces = IntStream.range(0, tracesNumber)
-                .mapToObj(i -> podamFactory.manufacturePojo(Trace.class))
+                .mapToObj(i -> podamFactory.manufacturePojo(Trace.class).toBuilder()
+                        .endTime(Instant.now().plus(2, ChronoUnit.SECONDS)).build())
                 .toList();
 
         traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
