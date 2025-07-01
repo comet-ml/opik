@@ -129,19 +129,27 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   );
   const isInactiveThread = thread?.status === ThreadStatus.INACTIVE;
   const threadFeedbackScores = thread?.feedback_scores ?? [];
+  const threadComments = thread?.comments ?? [];
 
   let currentActiveTab = activeTab!;
   if (activeTab === "feedback_scores" && !isInactiveThread) {
     currentActiveTab = DEFAULT_TAB;
   }
 
+  let currentActiveSection = activeSection;
+  if (!isInactiveThread) {
+    currentActiveSection = null;
+  }
+
   const disabledAnnotationExplainer = !isInactiveThread
     ? "Feedback scores are disabled during an ongoing session to avoid conflicts while the thread is still active. "
     : "";
+  const disabledCommentsExplainer = !isInactiveThread
+    ? "Comments are disabled during an ongoing session to avoid conflicts while the thread is still active. "
+    : "";
 
-  // TODO update once BE will send this data
   const annotationCount = threadFeedbackScores.length;
-  // const commentsCount = thread?.comments?.length ?? 0;
+  const commentsCount = threadComments.length;
 
   const { data: tracesData, isPending: isTracesPending } = useTracesList(
     {
@@ -385,7 +393,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
               <div data-panel-body="true">{renderBody()}</div>
             </div>
           </ResizablePanel>
-          {Boolean(activeSection) && (
+          {Boolean(currentActiveSection) && (
             <>
               <ResizableHandle />
               <ResizablePanel
@@ -393,7 +401,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                 defaultSize={30}
                 minSize={30}
               >
-                {activeSection === DetailsActionSection.Annotations && (
+                {currentActiveSection === DetailsActionSection.Annotations && (
                   <ThreadAnnotations
                     threadId={threadId}
                     projectId={projectId}
@@ -403,10 +411,13 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                     feedbackScores={threadFeedbackScores}
                   />
                 )}
-                {activeSection === DetailsActionSection.Comments && (
+                {currentActiveSection === DetailsActionSection.Comments && (
                   <ThreadComments
                     activeSection={activeSection}
                     setActiveSection={setActiveSection}
+                    comments={threadComments}
+                    threadId={thread.thread_model_id}
+                    projectId={projectId}
                   />
                 )}
               </ResizablePanel>
@@ -455,16 +466,18 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   const renderHeaderContent = () => {
     return (
       <div className="flex gap-2">
-        {/* <DetailsActionSectionToggle
-          activeSection={activeSection}
+        <DetailsActionSectionToggle
+          activeSection={currentActiveSection}
           setActiveSection={setActiveSection}
-          layoutSize="sm"
+          layoutSize={ButtonLayoutSize.Large}
           count={commentsCount}
           type={DetailsActionSection.Comments}
-        /> */}
+          disabled={!isInactiveThread}
+          tooltipContent={disabledCommentsExplainer}
+        />
 
         <DetailsActionSectionToggle
-          activeSection={activeSection}
+          activeSection={currentActiveSection}
           setActiveSection={setActiveSection}
           layoutSize={ButtonLayoutSize.Large}
           count={annotationCount}

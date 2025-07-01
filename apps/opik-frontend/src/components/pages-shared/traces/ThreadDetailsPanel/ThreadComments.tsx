@@ -9,78 +9,54 @@ import {
   DetailsActionSectionLayout,
 } from "@/components/pages-shared/traces/DetailsActionSection";
 import { CommentItem } from "@/types/comment";
+import useCreateThreadCommentMutation from "@/api/traces/useCreateThreadCommentMutation";
+import useThreadCommentsBatchDeleteMutation from "@/api/traces/useThreadCommentsBatchDeleteMutation";
+import useUpdateThreadCommentMutation from "@/api/traces/useUpdateThreadCommentMutation";
 
 export type ThreadCommentsProps = {
   activeSection?: DetailsActionSectionValue | null;
   setActiveSection: (v: DetailsActionSectionValue | null) => void;
+  comments: CommentItem[];
+  threadId: string;
+  projectId: string;
 };
 
 const ThreadComments: React.FC<ThreadCommentsProps> = ({
   activeSection,
   setActiveSection,
+  comments,
+  threadId,
+  projectId,
 }) => {
-  //   const traceDeleteMutation = useTraceCommentsBatchDeleteMutation();
-  //   const spanDeleteMutation = useSpanCommentsBatchDeleteMutation();
-
-  //   const createSpanMutation = useCreateSpanCommentMutation();
-  //   const createTraceMutation = useCreateTraceCommentMutation();
-
-  //   const updateSpanMutation = useUpdateSpanCommentMutation();
-  //   const updateTraceMutation = useUpdateTraceCommentMutation();
-
-  const comments: CommentItem[] = [];
+  const threadCommentsBatchDeleteMutation =
+    useThreadCommentsBatchDeleteMutation();
+  const createThreadCommentMutation = useCreateThreadCommentMutation();
+  const updateThreadCommentMutation = useUpdateThreadCommentMutation();
 
   const userName = useLoggedInUserName();
 
   const onSubmit = (text: string) => {
-    console.log("submit", text);
-    // if (!spanId) {
-    //   createTraceMutation.mutate({
-    //     text,
-    //     traceId,
-    //   });
-    //   return;
-    // }
-
-    // createSpanMutation.mutate({
-    //   text,
-    //   spanId,
-    //   projectId,
-    // });
+    createThreadCommentMutation.mutate({
+      text,
+      threadId,
+      projectId,
+    });
   };
 
   const onEditSubmit = (commentId: string, text: string) => {
-    console.log("edit submit", text, commentId);
-    // if (!spanId) {
-    //   updateTraceMutation.mutate({
-    //     text,
-    //     commentId,
-    //     traceId,
-    //   });
-    //   return;
-    // }
-
-    // updateSpanMutation.mutate({
-    //   text,
-    //   commentId,
-    //   projectId,
-    // });
+    updateThreadCommentMutation.mutate({
+      text,
+      commentId,
+      projectId,
+    });
   };
 
   const onDelete = (commentId: string) => {
-    console.log("delete", commentId);
-    // if (!spanId) {
-    //   traceDeleteMutation.mutate({
-    //     ids: [commentId],
-    //     traceId,
-    //   });
-    //   return;
-    // }
-
-    // spanDeleteMutation.mutate({
-    //   ids: [commentId],
-    //   projectId,
-    // });
+    threadCommentsBatchDeleteMutation.mutate({
+      ids: [commentId],
+      projectId,
+      threadId,
+    });
   };
 
   return (
