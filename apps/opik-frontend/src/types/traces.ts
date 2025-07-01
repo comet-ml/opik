@@ -88,6 +88,7 @@ export interface AgentGraphData {
 
 export interface Thread {
   id: string;
+  thread_model_id: string;
   project_id: string;
   start_time: string;
   end_time: string;
@@ -102,4 +103,5 @@ export interface Thread {
   created_at: string;
   status: ThreadStatus;
   feedback_scores?: TraceFeedbackScore[];
+  comments?: CommentItems;
 }
