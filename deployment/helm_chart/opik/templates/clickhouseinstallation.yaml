@@ -116,15 +116,15 @@ spec:
             - name: ch-backup-rest
               containerPort: {{ .Values.clickhouse.backup.backupServer.port }}
           {{- end }}
-          {{- with ( default .Values.clickhouse.nodeSelector .Values.clickhouse.backup.nodeSelector ) }}
+          {{- with ( .Values.clickhouse.backup.nodeSelector | default .Values.clickhouse.nodeSelector | default .Values.nodeSelector ) }}
           nodeSelector:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with ( default .Values.clickhouse.affinity .Values.clickhouse.backup.affinity ) }}
+          {{- with ( .Values.clickhouse.backup.affinity | default .Values.clickhouse.affinity | default .Values.affinity ) }}
           affinity:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with ( default .Values.clickhouse.tolerations .Values.clickhouse.backup.tolerations ) }}
+          {{- with ( .Values.clickhouse.backup.tolerations | default .Values.clickhouse.tolerations | default .Values.tolerations ) }}
           tolerations:
             {{- toYaml . | nindent 12 }}
           {{- end }}

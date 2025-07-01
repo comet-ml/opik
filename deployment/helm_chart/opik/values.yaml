@@ -19,6 +19,9 @@ serviceAccount:
   annotations: {}
 
 demoDataJob: true
+nodeSelector: {}
+tolerations: []
+affinity: {}
 
 component:
   backend:
@@ -54,7 +57,6 @@ component:
       path: /health-check?name=all&type=ready
       port:  8080
       initialDelaySeconds: 20
-
     env:
       STATE_DB_PROTOCOL: "jdbc:mysql://"
       STATE_DB_URL: "opik-mysql:3306/opik?rewriteBatchedStatements=true"
@@ -83,7 +85,6 @@ component:
     envFrom:
       - configMapRef:
           name: opik-backend
-
     service:
       type: ClusterIP
       ports:
@@ -95,7 +96,6 @@ component:
         port:  3003
         protocol: TCP
         targetPort:  3003
-
     ingress:
       enabled: false
       ingressClassName: ""
