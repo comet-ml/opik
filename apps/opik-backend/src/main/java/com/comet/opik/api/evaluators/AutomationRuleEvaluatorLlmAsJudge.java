@@ -39,8 +39,9 @@ public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvalu
 
     @ConstructorProperties({"id", "projectId", "projectName", "name", "samplingRate", "code", "createdAt", "createdBy",
             "lastUpdatedAt", "lastUpdatedBy"})
-    public AutomationRuleEvaluatorLlmAsJudge(UUID id, UUID projectId, String projectName, @NotBlank String name,
-            Float samplingRate,
+    public AutomationRuleEvaluatorLlmAsJudge(UUID id, @NotNull UUID projectId, String projectName,
+            @NotBlank String name,
+            float samplingRate,
             @NotNull LlmAsJudgeCode code, Instant createdAt, String createdBy, Instant lastUpdatedAt,
             String lastUpdatedBy) {
         super(id, projectId, projectName, name, samplingRate, code, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);

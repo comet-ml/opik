@@ -28,7 +28,6 @@ import java.util.UUID;
 @JsonSubTypes({
         @JsonSubTypes.Type(value = AutomationRuleEvaluatorLlmAsJudge.class, name = AutomationRuleEvaluatorType.Constants.LLM_AS_JUDGE),
         @JsonSubTypes.Type(value = AutomationRuleEvaluatorUserDefinedMetricPython.class, name = AutomationRuleEvaluatorType.Constants.USER_DEFINED_METRIC_PYTHON),
-
         @JsonSubTypes.Type(value = AutomationRuleEvaluatorTraceThreadLlmAsJudge.class, name = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_LLM_AS_JUDGE),
         @JsonSubTypes.Type(value = AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class, name = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON),
 })
@@ -50,7 +49,7 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
     private final UUID id;
 
     @JsonView({View.Public.class, View.Write.class})
-    private final UUID projectId;
+    @NotNull private final UUID projectId;
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
@@ -85,7 +84,7 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
     public abstract AutomationRuleEvaluatorType getType();
 
     @Override
-    public AutomationRuleAction getAction() {
+    @NotNull public AutomationRuleAction getAction() {
         return AutomationRuleAction.EVALUATOR;
     }
 

@@ -53,7 +53,7 @@ public abstract sealed class AutomationRuleEvaluatorUpdate<T> implements Automat
     public abstract <C extends AutomationRuleEvaluatorUpdate<T>, B extends AutomationRuleEvaluatorUpdate.AutomationRuleEvaluatorUpdateBuilder<T, C, B>> AutomationRuleEvaluatorUpdate.AutomationRuleEvaluatorUpdateBuilder<T, C, B> toBuilder();
 
     @Override
-    public AutomationRule.AutomationRuleAction getAction() {
+    @NotNull public AutomationRule.AutomationRuleAction getAction() {
         return AutomationRule.AutomationRuleAction.EVALUATOR;
     }
 }

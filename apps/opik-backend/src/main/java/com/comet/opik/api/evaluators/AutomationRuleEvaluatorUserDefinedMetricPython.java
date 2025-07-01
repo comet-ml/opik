@@ -37,29 +37,11 @@ public final class AutomationRuleEvaluatorUserDefinedMetricPython
             @JsonView({View.Public.class, View.Write.class}) @NotEmpty Map<String, String> arguments){
     }
 
-    @ConstructorProperties({
-            "id",
-            "projectId",
-            "projectName",
-            "name",
-            "samplingRate",
-            "code",
-            "createdAt",
-            "createdBy",
-            "lastUpdatedAt",
-            "lastUpdatedBy"
-    })
-    public AutomationRuleEvaluatorUserDefinedMetricPython(
-            UUID id,
-            UUID projectId,
-            String projectName,
-            @NotBlank String name,
-            Float samplingRate,
-            @NotNull UserDefinedMetricPythonCode code,
-            Instant createdAt,
-            String createdBy,
-            Instant lastUpdatedAt,
-            String lastUpdatedBy) {
+    @ConstructorProperties({"id", "projectId", "projectName", "name", "samplingRate", "code", "createdAt", "createdBy",
+            "lastUpdatedAt", "lastUpdatedBy"})
+    public AutomationRuleEvaluatorUserDefinedMetricPython(UUID id, @NotNull UUID projectId, String projectName,
+            @NotBlank String name, float samplingRate, @NotNull UserDefinedMetricPythonCode code, Instant createdAt,
+            String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
         super(id, projectId, projectName, name, samplingRate, code, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
     }
 

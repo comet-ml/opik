@@ -1,7 +1,7 @@
 package com.comet.opik.api.evaluators;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.validation.constraints.NotBlank;
@@ -33,7 +33,7 @@ public final class AutomationRuleEvaluatorUpdateLlmAsJudge extends AutomationRul
      * - Makes the polymorphic T code available for serialization.
      * - Provides the specific type T for Open API and Fern.
      */
-    @JsonView
+    @JsonProperty
     @Override
     public LlmAsJudgeCode getCode() {
         return super.getCode();
