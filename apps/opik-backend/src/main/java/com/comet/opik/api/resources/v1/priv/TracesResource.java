@@ -19,6 +19,7 @@ import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceThreadSearchStreamRequest;
+import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.filter.FiltersFactory;
@@ -742,6 +743,27 @@ public class TracesResource {
 
         log.info("Close trace thread by id '{}' and project id '{}' on workspace_id '{}'", identifier.threadId(),
                 projectId, workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @PATCH
+    @Path("/threads/{threadModelId}")
+    @Operation(operationId = "updateThread", summary = "Update thread", description = "Update thread", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "404", description = "Not found")})
+    public Response updateThread(@PathParam("threadModelId") UUID threadModelId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid TraceThreadUpdate threadUpdate) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Update thread with threadModelId '{}' on workspaceId '{}'", threadModelId, workspaceId);
+
+        traceThreadService.update(threadModelId, threadUpdate)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Updated thread with threadModelId '{}' on workspaceId '{}'", threadModelId, workspaceId);
 
         return Response.noContent().build();
     }

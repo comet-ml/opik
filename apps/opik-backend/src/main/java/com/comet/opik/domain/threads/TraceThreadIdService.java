@@ -29,6 +29,8 @@ interface TraceThreadIdService {
 
     Mono<UUID> getThreadModelId(String workspaceId, UUID projectId, String threadId);
 
+    Mono<TraceThreadIdModel> getTraceThreadIdByThreadModelId(UUID threadModelId);
+
 }
 
 @Singleton
@@ -69,6 +71,14 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
                     return Mono.empty();
                 });
 
+    }
+
+    @Override
+    @Cacheable(name = "GET_TRACE_THREAD_ID_BY_THREAD_MODEL_ID", key = "$threadModelId", returnType = TraceThreadIdModel.class)
+    public Mono<TraceThreadIdModel> getTraceThreadIdByThreadModelId(@NonNull UUID threadModelId) {
+        return Mono.fromCallable(() -> transactionTemplate.inTransaction(TransactionTemplateAsync.READ_ONLY,
+                handle -> handle.attach(TraceThreadIdDAO.class).findByThreadModelId(threadModelId)))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     private Mono<TraceThreadIdModel> getTraceThreadId(String threadId, UUID projectId) {

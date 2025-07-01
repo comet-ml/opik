@@ -2,6 +2,7 @@ package com.comet.opik.domain.threads;
 
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadStatus;
+import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.api.events.ThreadsReopened;
 import com.comet.opik.api.resources.v1.events.TraceThreadBufferConfig;
@@ -28,6 +29,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
+
 @ImplementedBy(TraceThreadServiceImpl.class)
 public interface TraceThreadService {
 
@@ -53,6 +56,8 @@ public interface TraceThreadService {
     Mono<UUID> getOrCreateThreadId(UUID projectId, String threadId);
 
     Mono<UUID> getThreadModelId(UUID projectId, String threadId);
+
+    Mono<Void> update(UUID threadModelId, TraceThreadUpdate threadUpdate);
 }
 
 @Slf4j
@@ -103,6 +108,14 @@ class TraceThreadServiceImpl implements TraceThreadService {
     public Mono<UUID> getThreadModelId(@NonNull UUID projectId, @NonNull String threadId) {
         return Mono.deferContextual(context -> traceThreadIdService
                 .getThreadModelId(context.get(RequestContext.WORKSPACE_ID), projectId, threadId));
+    }
+
+    @Override
+    public Mono<Void> update(@NonNull UUID threadModelId, @NonNull TraceThreadUpdate threadUpdate) {
+        return traceThreadIdService.getTraceThreadIdByThreadModelId(threadModelId)
+                .switchIfEmpty(Mono.error(failWithNotFound("Thread", threadModelId)))
+                .flatMap(traceThreadIdModel -> traceThreadDAO.updateThread(threadModelId,
+                        traceThreadIdModel.projectId(), threadUpdate));
     }
 
     private TraceThreadModel mapToModel(TraceThreadIdModel traceThread, String userName, Instant lastUpdatedAt) {
