@@ -1799,6 +1799,17 @@ class ExperimentsResourceTest {
                                     .thenComparing(Comparator.comparing(Experiment::id).reversed())
                                     .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
                             SortingField.builder().field(SortableFields.TRACE_COUNT).direction(Direction.DESC)
+                                    .build()),
+                    arguments(
+                            Comparator.comparing((Experiment e) -> e.duration().p50())
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.DURATION_AVG).direction(Direction.ASC).build()),
+                    arguments(
+                            Comparator.comparing((Experiment e) -> e.duration().p50()).reversed()
+                                    .thenComparing(Comparator.comparing(Experiment::id).reversed())
+                                    .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.DURATION_AVG).direction(Direction.DESC)
                                     .build()));
         }
 
