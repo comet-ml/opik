@@ -102,7 +102,7 @@ First, you'll need to create a dataset containing your test cases. This dataset 
 Structure your evaluation results with the necessary fields. Each experiment item should include:
 
 - `dataset_item_id`: The ID of the dataset item being evaluated
-- `output`: The output from your LLM application
+- `evaluate_task_result`: The output from your LLM application
 - `feedback_scores`: Array of evaluation metrics (optional)
 
 <Tabs>
@@ -137,7 +137,7 @@ Structure your evaluation results with the necessary fields. Each experiment ite
         
         evaluation_items.append({
             "dataset_item_id": item['id'],
-            "output": {
+            "evaluate_task_result": {
                 "prediction": response
             },
             "feedback_scores": [
@@ -160,40 +160,40 @@ Structure your evaluation results with the necessary fields. Each experiment ite
       "items": [
         {
           "dataset_item_id": "dataset-item-id-1",
-          "output": {
+          "evaluate_task_result": {
             "prediction": "The capital of France is Paris."
           },
           "feedback_scores": [
             {
               "name": "accuracy",
               "value": 1.0,
-              "source": "api"
+              "source": "sdk"
             }
           ]
         },
         {
           "dataset_item_id": "dataset-item-id-2",
-          "output": {
+          "evaluate_task_result": {
             "prediction": "Japan's capital is Tokyo."
           },
           "feedback_scores": [
             {
               "name": "accuracy",
               "value": 1.0,
-              "source": "api"
+              "source": "sdk"
             }
           ]
         },
         {
           "dataset_item_id": "dataset-item-id-3",
-          "output": {
+          "evaluate_task_result": {
             "prediction": "The capital of Brazil is Rio de Janeiro."
           },
           "feedback_scores": [
             {
               "name": "accuracy",
               "value": 0.0,
-              "source": "api"
+              "source": "sdk"
             }
           ]
         }
@@ -210,14 +210,15 @@ Use the bulk endpoint to efficiently log multiple evaluation results at once.
 <Tabs>
   <Tab value="Python" title="Python SDK">
     ```python
+    experiment_name = "Bulk experiment upload"
     # Log experiment results using the bulk method
-    rest_client.experiments.experiment_items_bulk(
+    client.rest_client.experiments.experiment_items_bulk(
         experiment_name=experiment_name,
         dataset_name="geography-questions",
         items=[
             {
                 "dataset_item_id": item["dataset_item_id"],
-                "output": item["output"],
+                "evaluate_task_result": item["evaluate_task_result"],
                 "feedback_scores": [
                     {**score, "source": "sdk"} 
                     for score in item["feedback_scores"]
@@ -240,27 +241,27 @@ Use the bulk endpoint to efficiently log multiple evaluation results at once.
         "items": [
           {
             "dataset_item_id": "4a7c2cfb-1234-4321-aaaa-111111111111",
-            "output": {
+            "evaluate_task_result": {
               "prediction": "The capital of France is Paris."
             },
             "feedback_scores": [
               {
                 "name": "accuracy",
                 "value": 1.0,
-                "source": "api"
+                "source": "sdk"
               }
             ]
           },
           {
             "dataset_item_id": "4a7c2cfb-1234-4321-aaaa-222222222222",
-            "output": {
-              "prediction": "Japan\'s capital is Tokyo."
+            "evaluate_task_result": {
+              "prediction": "Japans capital is Tokyo."
             },
             "feedback_scores": [
               {
                 "name": "accuracy",
                 "value": 1.0,
-                "source": "api"
+                "source": "sdk"
               }
             ]
           }
@@ -321,12 +322,12 @@ Here's a complete example that puts all the steps together:
     evaluation_items = [
         {
             "dataset_item_id": get_dataset_item("France")['id'],
-            "output": {"prediction": "The capital of France is Paris."},
+            "evaluate_task_result": {"prediction": "The capital of France is Paris."},
             "feedback_scores": [{"name": "accuracy", "value": 1.0}]
         },
         {
             "dataset_item_id": get_dataset_item("Japan")['id'],
-            "output": {"prediction": "Japan's capital is Tokyo."},
+            "evaluate_task_result": {"prediction": "Japan's capital is Tokyo."},
             "feedback_scores": [{"name": "accuracy", "value": 1.0}]
         }
     ]
@@ -340,7 +341,7 @@ Here's a complete example that puts all the steps together:
         items=[
             {
                 "dataset_item_id": item["dataset_item_id"],
-                "output": item["output"],
+                "evaluate_task_result": item["evaluate_task_result"],
                 "feedback_scores": [
                     {**score, "source": "sdk"}
                     for score in item["feedback_scores"]
@@ -409,27 +410,27 @@ Here's a complete example that puts all the steps together:
             "items": [
                 {
                     "dataset_item_id": "your-dataset-item-id-1",
-                    "output": {
+                    "evaluate_task_result": {
                         "prediction": "The capital of France is Paris."
                     },
                     "feedback_scores": [
                         {
                             "name": "accuracy",
                             "value": 1.0,
-                            "source": "api"
+                            "source": "sdk"
                         }
                     ]
                 },
                 {
                     "dataset_item_id": "your-dataset-item-id-2",
-                    "output": {
+                    "evaluate_task_result": {
                         "prediction": "Japan's capital is Tokyo."
                     },
                     "feedback_scores": [
                         {
                             "name": "accuracy",
                             "value": 1.0,
-                            "source": "api"
+                            "source": "sdk"
                         }
                     ]
                 }
@@ -514,7 +515,7 @@ You can include full execution traces with your experiment items for complete ob
             {
               "name": "accuracy",
               "value": 1,
-              "source": "api"
+              "source": "sdk"
             }
           ]
         }
@@ -524,7 +525,7 @@ You can include full execution traces with your experiment items for complete ob
   </Tab>
 </Tabs>
 
-<Warning>Important: You may supply either `output` or `trace` — not both.</Warning>
+<Warning>Important: You may supply either `evaluate_task_result` or `trace` — not both.</Warning>
 
 ### Java Example
 
@@ -586,7 +587,7 @@ public class OpikExperimentLogger {
                     JsonNode experimentItem = JsonNodeFactory.instance.objectNode()
                             .put("dataset_item_id", datasetItemId.toString())
                             .setAll(Map.of(
-                                "output", llmOutput,
+                                "evaluate_task_result", llmOutput,
                                 "feedback_scores", scoresArray
                             ));
 
