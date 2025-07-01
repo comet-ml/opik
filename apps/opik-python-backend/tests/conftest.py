@@ -5,7 +5,7 @@ from opik_backend import create_app
 
 @pytest.fixture()
 def app():
-    app = create_app()
+    app = create_app(should_init_executor=False)
     app.config.update({
         "TESTING": True,
     })
