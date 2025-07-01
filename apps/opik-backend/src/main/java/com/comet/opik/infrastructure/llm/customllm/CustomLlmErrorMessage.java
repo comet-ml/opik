@@ -5,6 +5,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.Optional;
+
 import static com.comet.opik.infrastructure.llm.customllm.CustomLlmErrorMessage.CustomProviderError;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -42,9 +44,9 @@ public record CustomLlmErrorMessage(
 
         if (message != null || type != null || (code != null && code > 0)) {
             return new CustomProviderError(
-                    message != null ? message : "Unknown error",
-                    code != null ? String.valueOf(code) : "unknown",
-                    type != null ? type : "unknown");
+                    Optional.ofNullable(message).orElse("Unknown error"),
+                    Optional.ofNullable(code).map(String::valueOf).orElse("unknown"),
+                    Optional.ofNullable(type).orElse("unknown"));
         }
 
         return null;
@@ -76,9 +78,9 @@ public record CustomLlmErrorMessage(
     }
 
     private String getErrorType() {
-        if (error != null && error.type() != null) {
-            return error.type();
-        }
-        return type != null ? type : "CustomLlmError";
+        return Optional.ofNullable(error)
+                .map(CustomProviderError::type)
+                .filter(StringUtils::isNotEmpty)
+                .orElse("CustomLlmError");
     }
 }
