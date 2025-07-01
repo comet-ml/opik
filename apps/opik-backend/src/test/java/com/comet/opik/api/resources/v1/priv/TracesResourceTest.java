@@ -9638,10 +9638,7 @@ class TracesResourceTest {
             assertThat(thread.tags()).isNull();
 
             // Update thread
-            var update = factory.manufacturePojo(TraceThreadUpdate.class)
-                    .toBuilder()
-                    .projectId(thread.projectId())
-                    .build();
+            var update = factory.manufacturePojo(TraceThreadUpdate.class);
             traceResourceClient.updateThread(update, thread.threadModelId(), API_KEY, TEST_WORKSPACE, 204);
 
             // Check that update was applied

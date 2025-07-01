@@ -109,10 +109,11 @@ class TraceThreadServiceImpl implements TraceThreadService {
     }
 
     @Override
-    public Mono<Void> update(UUID threadModelId, TraceThreadUpdate threadUpdate) {
-        return traceThreadDAO.findByThreadModelId(threadModelId, threadUpdate.projectId())
+    public Mono<Void> update(@NonNull UUID threadModelId, @NonNull TraceThreadUpdate threadUpdate) {
+        return traceThreadIdService.getTraceThreadIdByThreadModelId(threadModelId)
                 .switchIfEmpty(Mono.error(failWithNotFound("Thread", threadModelId)))
-                .then(Mono.defer(() -> traceThreadDAO.updateThread(threadModelId, threadUpdate)));
+                .flatMap(traceThreadIdModel -> traceThreadDAO.updateThread(threadModelId,
+                        traceThreadIdModel.projectId(), threadUpdate));
     }
 
     private TraceThreadModel mapToModel(TraceThreadIdModel traceThread, String userName, Instant lastUpdatedAt) {

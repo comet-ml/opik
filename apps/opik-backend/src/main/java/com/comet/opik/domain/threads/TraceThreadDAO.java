@@ -53,7 +53,7 @@ public interface TraceThreadDAO {
 
     Mono<UUID> getProjectIdFromThread(UUID id);
 
-    Mono<Void> updateThread(UUID threadModelId, TraceThreadUpdate threadUpdate);
+    Mono<Void> updateThread(UUID threadModelId, UUID projectId, TraceThreadUpdate threadUpdate);
 }
 
 @Singleton
@@ -313,13 +313,14 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     }
 
     @Override
-    public Mono<Void> updateThread(UUID threadModelId, TraceThreadUpdate threadUpdate) {
+    public Mono<Void> updateThread(@NonNull UUID threadModelId, @NonNull UUID projectId,
+            @NonNull TraceThreadUpdate threadUpdate) {
         return asyncTemplate.nonTransaction(connection -> {
 
             var statement = connection.createStatement(UPDATE_THREAD_SQL)
                     .bind("tags", threadUpdate.tags().toArray(String[]::new))
                     .bind("id", threadModelId)
-                    .bind("project_id", threadUpdate.projectId());
+                    .bind("project_id", projectId);
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .then();
