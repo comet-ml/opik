@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset opik:add_project_configs_table
+--changeset thiagohora:000030_add_project_configs_table
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.project_configurations ON CLUSTER '{cluster}' (
     workspace_id                                String,
