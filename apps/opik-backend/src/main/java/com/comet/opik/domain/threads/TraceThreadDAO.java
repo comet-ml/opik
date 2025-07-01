@@ -22,6 +22,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
@@ -92,7 +93,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 thread_id,
                 id,
                 status,
-                :tags AS tags,
+                <if(tags)> :tags <else> tags <endif> as tags,
                 created_by,
                 :user_name as last_updated_by,
                 created_at
@@ -317,10 +318,17 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             @NonNull TraceThreadUpdate threadUpdate) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            var statement = connection.createStatement(UPDATE_THREAD_SQL)
-                    .bind("tags", threadUpdate.tags().toArray(String[]::new))
+            var template = new ST(UPDATE_THREAD_SQL);
+
+            Optional.ofNullable(threadUpdate.tags())
+                    .ifPresent(tags -> template.add("tags", tags.toString()));
+
+            var statement = connection.createStatement(template.render())
                     .bind("id", threadModelId)
                     .bind("project_id", projectId);
+
+            Optional.ofNullable(threadUpdate.tags())
+                    .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .then();
