@@ -1804,12 +1804,12 @@ class ExperimentsResourceTest {
                             Comparator.comparing((Experiment e) -> e.duration().p50())
                                     .thenComparing(Comparator.comparing(Experiment::id).reversed())
                                     .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
-                            SortingField.builder().field(SortableFields.DURATION_AVG).direction(Direction.ASC).build()),
+                            SortingField.builder().field("duration.p50").direction(Direction.ASC).build()),
                     arguments(
                             Comparator.comparing((Experiment e) -> e.duration().p50()).reversed()
                                     .thenComparing(Comparator.comparing(Experiment::id).reversed())
                                     .thenComparing(Comparator.comparing(Experiment::lastUpdatedAt).reversed()),
-                            SortingField.builder().field(SortableFields.DURATION_AVG).direction(Direction.DESC)
+                            SortingField.builder().field("duration.p50").direction(Direction.DESC)
                                     .build()));
         }
 

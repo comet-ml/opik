@@ -157,7 +157,10 @@ class ExperimentDAO {
             ), experiment_durations AS (
                 SELECT
                     experiment_id,
-                    arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration)) AS duration_values,
+                    mapFromArrays(
+                        ['p50', 'p90', 'p99'],
+                        arrayMap(v -> toDecimal64(if(isNaN(v), 0, v), 9), quantiles(0.5, 0.9, 0.99)(duration))
+                    ) AS duration_values,
                     count(DISTINCT trace_id) as trace_count,
                     avgMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost_sum,
@@ -524,13 +527,15 @@ class ExperimentDAO {
     }
 
     private static PercentageValues getDuration(Row row) {
-        return Optional.ofNullable(row.get("duration", List.class))
-                .filter(value -> !value.isEmpty()
-                        && value.stream().anyMatch(it -> BigDecimal.ZERO.compareTo((BigDecimal) it) < 0))
+        return Optional.ofNullable(row.get("duration", Map.class))
+                .map(map -> (Map<String, ? extends Number>) map)
                 .map(durations -> new PercentageValues(
-                        getP(durations, 0),
-                        getP(durations, 1),
-                        getP(durations, 2)))
+                        BigDecimal.valueOf(durations.get("p50").doubleValue()).setScale(SCALE,
+                                RoundingMode.HALF_EVEN),
+                        BigDecimal.valueOf(durations.get("p90").doubleValue()).setScale(SCALE,
+                                RoundingMode.HALF_EVEN),
+                        BigDecimal.valueOf(durations.get("p99").doubleValue()).setScale(SCALE,
+                                RoundingMode.HALF_EVEN)))
                 .orElse(null);
     }
 
