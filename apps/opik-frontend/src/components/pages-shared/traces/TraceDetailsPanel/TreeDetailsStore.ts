@@ -10,10 +10,10 @@ export type SpanWithMetadata = Omit<Span, "type"> & {
   duration: number;
   tokens?: number;
   spanColor?: string;
-  startTimestamp?: number;
-  maxStartTime?: number;
-  maxEndTime?: number;
-  maxDuration?: number;
+  startTimestamp: number;
+  maxStartTime: number;
+  maxEndTime: number;
+  maxDuration: number;
   hasError?: boolean;
   isInSearch?: boolean;
 };
@@ -24,6 +24,20 @@ export interface TreeNode {
   data: SpanWithMetadata;
   children?: TreeNode[];
 }
+
+export enum TREE_DATABLOCK_TYPE {
+  GUARDRAILS = "guardrails",
+  DURATION = "duration",
+  NUMBERS_OF_TOKENS = "tokens",
+  ESTIMATED_COST = "estimatedCost",
+  NUMBER_OF_SCORES = "numberOfScores",
+  NUMBER_OF_COMMENTS = "numberOfComments",
+  NUMBER_OF_TAGS = "numberOfTags",
+  MODEL = "model",
+  DURATION_TIMELINE = "durationTimeline",
+}
+
+export type TreeNodeConfig = Record<TREE_DATABLOCK_TYPE, boolean>;
 
 const traverse = (
   nodes: TreeNode[],
@@ -80,7 +94,8 @@ const detectIsNewTree = (tree: TreeNode[]) => {
   const root = tree[0];
   if (
     (root && treeDetectorCache.id !== root.id) ||
-    (treeDetectorCache.id === root.id &&
+    (root &&
+      treeDetectorCache.id === root.id &&
       treeDetectorCache.lengthMap[root.id] !== root.children?.length)
   ) {
     treeDetectorCache.id = root.id;

@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import isFunction from "lodash/isFunction";
 import UserComment from "./UserComment";
 import { CommentItems } from "@/types/comment";
 import { Button } from "@/components/ui/button";
@@ -11,20 +12,18 @@ import {
 
 type UserCommentHoverListProps = {
   commentsList: CommentItems;
-  onReply: () => void;
+  onReply?: () => void;
   className?: string;
   children: React.ReactNode;
-  showReply: boolean;
 };
 const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
   commentsList,
   onReply,
   className,
   children,
-  showReply,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-
+  const showReply = isFunction(onReply);
   const onRefCreated = useCallback((ref: HTMLDivElement | null) => {
     if (!ref) return;
 
@@ -35,7 +34,7 @@ const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
 
   const handleOnReply = () => {
     setIsOpen(false);
-    onReply();
+    showReply && onReply();
   };
 
   if (!commentsList.length) return <>{children}</>;

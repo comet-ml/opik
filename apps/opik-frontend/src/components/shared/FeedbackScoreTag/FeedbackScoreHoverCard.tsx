@@ -10,14 +10,14 @@ import ColoredTagNew from "../ColoredTag/ColoredTagNew";
 type FeedbackScoreHoverCardProps = {
   name: string;
   isAverageScores?: boolean;
-  tagList: TraceFeedbackScore[];
+  scores: TraceFeedbackScore[];
   children: React.ReactNode;
   hidden?: boolean;
 };
 const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
   name,
   isAverageScores,
-  tagList,
+  scores,
   children,
   hidden,
 }) => {
@@ -25,9 +25,7 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
 
   return (
     <HoverCard openDelay={500}>
-      <HoverCardTrigger asChild>
-        <div className="flex min-w-0 flex-1">{children}</div>
-      </HoverCardTrigger>
+      <HoverCardTrigger asChild>{children}</HoverCardTrigger>
       <HoverCardContent
         side="top"
         align="start"
@@ -47,7 +45,7 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
             )}
           </div>
           <div className="flex flex-col gap-1.5 pb-1 pt-1.5">
-            {tagList.map((tag) => {
+            {scores.map((tag) => {
               return (
                 <div
                   key={tag.name}
