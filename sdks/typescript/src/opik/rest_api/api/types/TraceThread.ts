@@ -18,6 +18,7 @@ export interface TraceThread {
     numberOfMessages?: number;
     totalEstimatedCost?: number;
     usage?: Record<string, number>;
+    comments?: OpikApi.Comment[];
     lastUpdatedAt?: Date;
     createdBy?: string;
     createdAt?: Date;

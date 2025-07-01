@@ -44,6 +44,62 @@ class TracesClient:
         """
         return self._raw_client
 
+    def add_thread_comment(
+        self,
+        id_: str,
+        *,
+        text: str,
+        id: typing.Optional[str] = OMIT,
+        created_at: typing.Optional[dt.datetime] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        created_by: typing.Optional[str] = OMIT,
+        last_updated_by: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Add thread comment
+
+        Parameters
+        ----------
+        id_ : str
+
+        text : str
+
+        id : typing.Optional[str]
+
+        created_at : typing.Optional[dt.datetime]
+
+        last_updated_at : typing.Optional[dt.datetime]
+
+        created_by : typing.Optional[str]
+
+        last_updated_by : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.traces.add_thread_comment(id_='id', text='text', )
+        """
+        _response = self._raw_client.add_thread_comment(
+            id_,
+            text=text,
+            id=id,
+            created_at=created_at,
+            last_updated_at=last_updated_at,
+            created_by=created_by,
+            last_updated_by=last_updated_by,
+            request_options=request_options,
+        )
+        return _response.data
+
     def add_trace_comment(
         self,
         id_: str,
@@ -495,6 +551,32 @@ class TracesClient:
         )
         return _response.data
 
+    def delete_thread_comments(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Delete thread comments
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.traces.delete_thread_comments(ids=['ids'], )
+        """
+        _response = self._raw_client.delete_thread_comments(ids=ids, request_options=request_options)
+        return _response.data
+
     def delete_thread_feedback_scores(
         self,
         *,
@@ -743,6 +825,35 @@ class TracesClient:
         _response = self._raw_client.get_trace_stats(
             project_id=project_id, project_name=project_name, filters=filters, request_options=request_options
         )
+        return _response.data
+
+    def get_thread_comment(
+        self, comment_id: str, thread_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> Comment:
+        """
+        Get thread comment
+
+        Parameters
+        ----------
+        comment_id : str
+
+        thread_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        Comment
+            Comment resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.traces.get_thread_comment(comment_id='commentId', thread_id='threadId', )
+        """
+        _response = self._raw_client.get_thread_comment(comment_id, thread_id, request_options=request_options)
         return _response.data
 
     def get_trace_comment(
@@ -1064,6 +1175,62 @@ class TracesClient:
         ) as r:
             yield from r.data
 
+    def update_thread_comment(
+        self,
+        comment_id: str,
+        *,
+        text: str,
+        id: typing.Optional[str] = OMIT,
+        created_at: typing.Optional[dt.datetime] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        created_by: typing.Optional[str] = OMIT,
+        last_updated_by: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update thread comment by id
+
+        Parameters
+        ----------
+        comment_id : str
+
+        text : str
+
+        id : typing.Optional[str]
+
+        created_at : typing.Optional[dt.datetime]
+
+        last_updated_at : typing.Optional[dt.datetime]
+
+        created_by : typing.Optional[str]
+
+        last_updated_by : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.traces.update_thread_comment(comment_id='commentId', text='text', )
+        """
+        _response = self._raw_client.update_thread_comment(
+            comment_id,
+            text=text,
+            id=id,
+            created_at=created_at,
+            last_updated_at=last_updated_at,
+            created_by=created_by,
+            last_updated_by=last_updated_by,
+            request_options=request_options,
+        )
+        return _response.data
+
     def update_trace_comment(
         self,
         comment_id: str,
@@ -1135,6 +1302,65 @@ class AsyncTracesClient:
         AsyncRawTracesClient
         """
         return self._raw_client
+
+    async def add_thread_comment(
+        self,
+        id_: str,
+        *,
+        text: str,
+        id: typing.Optional[str] = OMIT,
+        created_at: typing.Optional[dt.datetime] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        created_by: typing.Optional[str] = OMIT,
+        last_updated_by: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Add thread comment
+
+        Parameters
+        ----------
+        id_ : str
+
+        text : str
+
+        id : typing.Optional[str]
+
+        created_at : typing.Optional[dt.datetime]
+
+        last_updated_at : typing.Optional[dt.datetime]
+
+        created_by : typing.Optional[str]
+
+        last_updated_by : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.traces.add_thread_comment(id_='id', text='text', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.add_thread_comment(
+            id_,
+            text=text,
+            id=id,
+            created_at=created_at,
+            last_updated_at=last_updated_at,
+            created_by=created_by,
+            last_updated_by=last_updated_by,
+            request_options=request_options,
+        )
+        return _response.data
 
     async def add_trace_comment(
         self,
@@ -1614,6 +1840,35 @@ class AsyncTracesClient:
         )
         return _response.data
 
+    async def delete_thread_comments(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Delete thread comments
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.traces.delete_thread_comments(ids=['ids'], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.delete_thread_comments(ids=ids, request_options=request_options)
+        return _response.data
+
     async def delete_thread_feedback_scores(
         self,
         *,
@@ -1888,6 +2143,38 @@ class AsyncTracesClient:
         _response = await self._raw_client.get_trace_stats(
             project_id=project_id, project_name=project_name, filters=filters, request_options=request_options
         )
+        return _response.data
+
+    async def get_thread_comment(
+        self, comment_id: str, thread_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> Comment:
+        """
+        Get thread comment
+
+        Parameters
+        ----------
+        comment_id : str
+
+        thread_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        Comment
+            Comment resource
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.traces.get_thread_comment(comment_id='commentId', thread_id='threadId', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_thread_comment(comment_id, thread_id, request_options=request_options)
         return _response.data
 
     async def get_trace_comment(
@@ -2228,6 +2515,65 @@ class AsyncTracesClient:
         ) as r:
             async for data in r.data:
                 yield data
+
+    async def update_thread_comment(
+        self,
+        comment_id: str,
+        *,
+        text: str,
+        id: typing.Optional[str] = OMIT,
+        created_at: typing.Optional[dt.datetime] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        created_by: typing.Optional[str] = OMIT,
+        last_updated_by: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update thread comment by id
+
+        Parameters
+        ----------
+        comment_id : str
+
+        text : str
+
+        id : typing.Optional[str]
+
+        created_at : typing.Optional[dt.datetime]
+
+        last_updated_at : typing.Optional[dt.datetime]
+
+        created_by : typing.Optional[str]
+
+        last_updated_by : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.traces.update_thread_comment(comment_id='commentId', text='text', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.update_thread_comment(
+            comment_id,
+            text=text,
+            id=id,
+            created_at=created_at,
+            last_updated_at=last_updated_at,
+            created_by=created_by,
+            last_updated_by=last_updated_by,
+            request_options=request_options,
+        )
+        return _response.data
 
     async def update_trace_comment(
         self,

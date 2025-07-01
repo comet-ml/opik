@@ -5,6 +5,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .comment import Comment
 from .feedback_score import FeedbackScore
 from .json_node import JsonNode
 from .trace_thread_status import TraceThreadStatus
@@ -24,6 +25,7 @@ class TraceThread(UniversalBaseModel):
     number_of_messages: typing.Optional[int] = None
     total_estimated_cost: typing.Optional[float] = None
     usage: typing.Optional[typing.Dict[str, int]] = None
+    comments: typing.Optional[typing.List[Comment]] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
