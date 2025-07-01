@@ -20,10 +20,27 @@ import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import VirtualizedTreeViewer from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/VirtualizedTreeViewer";
 import useTreeDetailsStore, {
+  TREE_DATABLOCK_TYPE,
   TreeNode,
+  TreeNodeConfig,
 } from "@/components/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { FoldVertical, UnfoldVertical } from "lucide-react";
+import useLocalStorageState from "use-local-storage-state";
+import SpanDetailsButton from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/SpanDetailsButton";
+
+const SELECTED_TREE_DATABLOCKS_KEY = "tree-datablocks-config";
+const SELECTED_TREE_DATABLOCKS_DEFAULT_VALUE: TreeNodeConfig = {
+  [TREE_DATABLOCK_TYPE.GUARDRAILS]: true,
+  [TREE_DATABLOCK_TYPE.DURATION]: true,
+  [TREE_DATABLOCK_TYPE.NUMBERS_OF_TOKENS]: true,
+  [TREE_DATABLOCK_TYPE.ESTIMATED_COST]: true,
+  [TREE_DATABLOCK_TYPE.NUMBER_OF_SCORES]: true,
+  [TREE_DATABLOCK_TYPE.NUMBER_OF_COMMENTS]: true,
+  [TREE_DATABLOCK_TYPE.NUMBER_OF_TAGS]: true,
+  [TREE_DATABLOCK_TYPE.MODEL]: true,
+  [TREE_DATABLOCK_TYPE.DURATION_TIMELINE]: true,
+};
 
 type TraceTreeViewerProps = {
   trace: Trace;
@@ -43,6 +60,12 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
   const [search, setSearch] = useState("");
   const traceSpans = useMemo(() => spans ?? [], [spans]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [config, setConfig] = useLocalStorageState(
+    SELECTED_TREE_DATABLOCKS_KEY,
+    {
+      defaultValue: SELECTED_TREE_DATABLOCKS_DEFAULT_VALUE,
+    },
+  );
 
   const noSearch = !search;
 
@@ -107,15 +130,18 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
         name: trace.name,
         data: {
           ...trace,
+          ...sharedData,
           spanColor: SPANS_COLORS_MAP[TRACE_TYPE_FOR_TREE],
           parent_span_id: "",
           trace_id: trace.id,
           type: TRACE_TYPE_FOR_TREE,
           tokens: trace.usage?.total_tokens,
           duration: trace.duration,
+          startTimestamp: new Date(trace.start_time).getTime(),
           name: trace.name,
           hasError: Boolean(trace.error_info),
-          isInSearch: searchIds.has(trace.id),
+          isInSearch:
+            searchIds.size === 0 ? undefined : searchIds.has(trace.id),
         },
         children: [],
       },
@@ -138,7 +164,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
           duration: span.duration,
           startTimestamp: new Date(span.start_time).getTime(),
           hasError: Boolean(span.error_info),
-          isInSearch: searchIds.has(span.id),
+          isInSearch: searchIds.size === 0 ? undefined : searchIds.has(span.id),
         },
         children: [],
       };
@@ -162,12 +188,14 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
       className="relative size-full max-w-full overflow-auto pb-4"
       ref={scrollRef}
     >
-      <div className="min-w-[300px] max-w-full">
+      <div className="min-w-[400px] max-w-full">
         <div className="sticky top-0 z-10 flex flex-row items-center justify-between gap-2 pb-2 pl-6 pr-4 pt-4">
           <div className="flex items-center gap-1">
-            <div className="comet-title-xs">Trace spans</div>
+            <div className="comet-title-xs">
+              {noSearch ? "Trace spans" : "Search results"}
+            </div>
             <div className="comet-body-s text-muted-slate">
-              {traceSpans.length} spans
+              {noSearch ? traceSpans.length : searchIds.size} spans
             </div>
             <ExplainerIcon
               {...EXPLAINERS_MAP[
@@ -176,18 +204,25 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
             />
           </div>
           <div className="flex items-center gap-x-1.5">
-            {noSearch && (
-              <TooltipWrapper
-                content={isAllExpanded ? "Collapse all" : "Expand all"}
-              >
-                <Button
-                  onClick={toggleExpandAll}
-                  variant="outline"
-                  size="icon-xs"
+            {noSearch ? (
+              <>
+                <SpanDetailsButton config={config} onConfigChange={setConfig} />
+                <TooltipWrapper
+                  content={isAllExpanded ? "Collapse all" : "Expand all"}
                 >
-                  {isAllExpanded ? <FoldVertical /> : <UnfoldVertical />}
-                </Button>
-              </TooltipWrapper>
+                  <Button
+                    onClick={toggleExpandAll}
+                    variant="outline"
+                    size="icon-2xs"
+                  >
+                    {isAllExpanded ? <FoldVertical /> : <UnfoldVertical />}
+                  </Button>
+                </TooltipWrapper>
+              </>
+            ) : (
+              <Button variant="ghost" size="sm" onClick={() => setSearch("")}>
+                Clear
+              </Button>
             )}
           </div>
         </div>
@@ -204,6 +239,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
         {tree.length ? (
           <VirtualizedTreeViewer
             scrollRef={scrollRef}
+            config={config}
             rowId={rowId}
             onRowIdChange={onSelectRow}
           />
