@@ -21,6 +21,7 @@ import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThread.TraceThreadPage;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceThreadStatus;
+import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.VisibilityMode;
@@ -9615,23 +9616,59 @@ class TracesResourceTest {
 
             assertComments(expectedComments, threadsPage.content().getFirst().comments().reversed());
         }
+    }
 
-        private TraceThread createThread() {
-            var threadId = UUID.randomUUID().toString();
-            var projectName = UUID.randomUUID().toString();
+    @Nested
+    @DisplayName("Thread Update:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ThreadUpdate {
 
-            var traces = IntStream.range(0, 5)
-                    .mapToObj(i -> createTrace().toBuilder()
-                            .threadId(threadId)
-                            .projectName(projectName)
-                            .build())
-                    .toList();
-
-            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
-            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
-
-            return traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
+        @Test
+        void updateNonExistingThreadFail() {
+            traceResourceClient.updateThread(factory.manufacturePojo(TraceThreadUpdate.class), generator.generate(),
+                    API_KEY, TEST_WORKSPACE, 404);
         }
+
+        @Test
+        void createAndUpdateThread() {
+            // Create comment for existing thread
+            var thread = createThread();
+
+            // Check that it doesn't have tags
+            assertThat(thread.tags()).isNull();
+
+            // Update thread
+            var update = factory.manufacturePojo(TraceThreadUpdate.class)
+                    .toBuilder()
+                    .projectId(thread.projectId())
+                    .build();
+            traceResourceClient.updateThread(update, thread.threadModelId(), API_KEY, TEST_WORKSPACE, 204);
+
+            // Check that update was applied
+            var actualThread = traceResourceClient.getTraceThread(thread.id(), thread.projectId(), API_KEY,
+                    TEST_WORKSPACE);
+            TraceAssertions.assertThreads(List.of(thread.toBuilder()
+                    .tags(update.tags())
+                    .build()), List.of(actualThread));
+
+        }
+    }
+
+    private TraceThread createThread() {
+        var threadId = UUID.randomUUID().toString();
+        var projectName = UUID.randomUUID().toString();
+
+        var traces = IntStream.range(0, 5)
+                .mapToObj(i -> createTrace().toBuilder()
+                        .threadId(threadId)
+                        .projectName(projectName)
+                        .build())
+                .toList();
+
+        traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+        var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+        return traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
     }
 
     private void assertErrorResponse(Response actualResponse, String message, int expected) {

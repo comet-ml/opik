@@ -1,6 +1,7 @@
 package com.comet.opik.domain.threads;
 
 import com.comet.opik.api.TraceThreadStatus;
+import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
@@ -51,6 +52,8 @@ public interface TraceThreadDAO {
     Mono<TraceThreadModel> findByThreadModelId(UUID threadModelId, UUID projectId);
 
     Mono<UUID> getProjectIdFromThread(UUID id);
+
+    Mono<Void> updateThread(UUID threadModelId, TraceThreadUpdate threadUpdate);
 }
 
 @Singleton
@@ -77,6 +80,26 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                         ,
                      <endif>
                 }>
+            ;
+            """;
+
+    private static final String UPDATE_THREAD_SQL = """
+            INSERT INTO trace_threads (
+            	workspace_id, project_id, thread_id, id, status, tags, created_by, last_updated_by, created_at
+            ) SELECT
+                workspace_id,
+                project_id,
+                thread_id,
+                id,
+                status,
+                :tags AS tags,
+                created_by,
+                :user_name as last_updated_by,
+                created_at
+            FROM trace_threads final
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND id = :id
             ;
             """;
 
@@ -286,6 +309,20 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))
                     .singleOrEmpty();
+        });
+    }
+
+    @Override
+    public Mono<Void> updateThread(UUID threadModelId, TraceThreadUpdate threadUpdate) {
+        return asyncTemplate.nonTransaction(connection -> {
+
+            var statement = connection.createStatement(UPDATE_THREAD_SQL)
+                    .bind("tags", threadUpdate.tags().toArray(String[]::new))
+                    .bind("id", threadModelId)
+                    .bind("project_id", threadUpdate.projectId());
+
+            return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
+                    .then();
         });
     }
 
