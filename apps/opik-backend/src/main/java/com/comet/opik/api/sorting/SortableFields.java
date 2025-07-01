@@ -17,6 +17,7 @@ public class SortableFields {
     public static final String START_TIME = "start_time";
     public static final String END_TIME = "end_time";
     public static final String DURATION = "duration";
+    public static final String DURATION_AGG = "duration.*";
     public static final String METADATA = "metadata";
     public static final String USAGE = "usage.*";
     public static final String TAGS = "tags";
