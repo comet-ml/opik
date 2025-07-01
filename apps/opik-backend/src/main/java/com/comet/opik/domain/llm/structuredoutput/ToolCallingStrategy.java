@@ -13,6 +13,7 @@ import dev.langchain4j.model.chat.request.json.JsonSchema;
 import dev.langchain4j.model.chat.request.json.JsonSchemaElement;
 import dev.langchain4j.model.chat.request.json.JsonStringSchema;
 import jakarta.validation.constraints.NotNull;
+import lombok.NonNull;
 
 import java.util.List;
 import java.util.Map;
@@ -28,9 +29,9 @@ public class ToolCallingStrategy implements StructuredOutputStrategy {
 
     @Override
     public ChatRequest.Builder apply(
-            ChatRequest.Builder chatRequestBuilder,
-            List<ChatMessage> messages,
-            List<LlmAsJudgeOutputSchema> schema) {
+            @NonNull ChatRequest.Builder chatRequestBuilder,
+            @NonNull List<ChatMessage> messages,
+            @NonNull List<LlmAsJudgeOutputSchema> schema) {
         var responseFormat = toResponseFormat(schema);
         chatRequestBuilder.responseFormat(responseFormat);
 

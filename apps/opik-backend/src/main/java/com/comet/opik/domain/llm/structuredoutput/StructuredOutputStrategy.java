@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import lombok.NonNull;
 
 import java.util.List;
 
@@ -28,9 +29,9 @@ public interface StructuredOutputStrategy {
      * @return  The builder for the chat request
      */
     ChatRequest.Builder apply(
-            ChatRequest.Builder chatRequestBuilder,
-            List<ChatMessage> messages,
-            List<LlmAsJudgeOutputSchema> schema);
+            @NonNull ChatRequest.Builder chatRequestBuilder,
+            @NonNull List<ChatMessage> messages,
+            @NonNull List<LlmAsJudgeOutputSchema> schema);
 
     static StructuredOutputStrategy getStrategy(LlmProvider provider, String modelName) {
         boolean isStructuredOutputSupported = switch (provider) {

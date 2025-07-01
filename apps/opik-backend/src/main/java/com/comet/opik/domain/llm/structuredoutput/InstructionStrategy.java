@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import lombok.NonNull;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,9 +24,9 @@ public class InstructionStrategy implements StructuredOutputStrategy {
 
     @Override
     public ChatRequest.Builder apply(
-            ChatRequest.Builder chatRequestBuilder,
-            List<ChatMessage> messages,
-            List<LlmAsJudgeOutputSchema> schema) {
+            @NonNull ChatRequest.Builder chatRequestBuilder,
+            @NonNull List<ChatMessage> messages,
+            @NonNull List<LlmAsJudgeOutputSchema> schema) {
         if (messages.isEmpty()) {
             return chatRequestBuilder;
         }
