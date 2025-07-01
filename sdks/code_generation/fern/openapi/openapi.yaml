@@ -2841,6 +2841,35 @@ paths:
           description: No Content
         "404":
           description: Not found
+  /v1/private/traces/threads/{id}/comments:
+    post:
+      tags:
+      - Traces
+      summary: Add thread comment
+      description: Add thread comment
+      operationId: addThreadComment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Comment"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/traces/threads/{threadId}/comments/{commentId}"
   /v1/private/traces/{id}/comments:
     post:
       tags:
@@ -3062,6 +3091,21 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/traces/threads/comments/delete:
+    post:
+      tags:
+      - Traces
+      summary: Delete thread comments
+      description: Delete thread comments
+      operationId: deleteThreadComments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No Content
   /v1/private/traces/threads/feedback-scores/delete:
     post:
       tags:
@@ -3217,6 +3261,39 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProjectStats_Public"
+  /v1/private/traces/threads/{threadId}/comments/{commentId}:
+    get:
+      tags:
+      - Traces
+      summary: Get thread comment
+      description: Get thread comment
+      operationId: getThreadComment
+      parameters:
+      - name: commentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: threadId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Comment resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/traces/{traceId}/comments/{commentId}:
     get:
       tags:
@@ -3439,6 +3516,30 @@ paths:
             application/octet-stream:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/traces/threads/comments/{commentId}:
+    patch:
+      tags:
+      - Traces
+      summary: Update thread comment by id
+      description: Update thread comment by id
+      operationId: updateThreadComment
+      parameters:
+      - name: commentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Comment"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not found
   /v1/private/traces/comments/{commentId}:
     patch:
       tags:
@@ -4007,15 +4108,15 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -4163,15 +4264,15 @@ components:
         sampling_rate:
           type: number
           format: float
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -4317,15 +4418,15 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -4474,15 +4575,15 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -4547,15 +4648,15 @@ components:
         project_id:
           type: string
           format: uuid
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
           - llm_as_judge
           - user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -8943,6 +9044,10 @@ components:
           additionalProperties:
             type: integer
             format: int64
+        comments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Comment"
         last_updated_at:
           type: string
           format: date-time
