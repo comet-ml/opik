@@ -55,9 +55,30 @@ that have a specific ID and have a specific status, you can use the following fi
 filter_string='id = "0197ad2a" AND status = "active"'
 ```
 
-** Supported filter fields and operators **
-| Field | Type |
+**Supported filter fields and operators**
 
+The `evaluate_threads` function supports the following filter fields in the `filter_string` and
+operators to be applied to the corresponding fields:
+
+| Field              | Type     | Operators                     |
+|--------------------|----------|-------------------------------|
+| id                 | string   | ``=, contains, not_contains`` |
+| status             | string   | ``=, contains, not_contains`` |
+| start_time         | datetime | ``=, >, <, >=, <=``           |
+| end_time           | datetime | ``=, >, <, >=, <=``           |
+| feedback_scores    | dict     | ``=, >, <, >=, <=``           |
+| tags               | list     | ``contains``                  |
+| duration           | number   | ``=, >, <, >=, <=``           |
+| number_of_messages | number   | ``=, >, <, >=, <=``           |
+| created_by         | string   | ``=, contains, not_contains`` |
+
+The `feedback_scores` field is a dictionary where the keys are the metric names and the values are the metric values.
+You can use it to filter threads based on their feedback scores. For example, if you want to evaluate only threads
+that have a specific user frustration score, you can use the following filter string:
+
+```python
+filter_string='feedback_scores.user_frustration_score.value >= 0.5'
+```
 
 #### Using Opik UI to view results
 
