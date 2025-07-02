@@ -27,7 +27,7 @@ user_frustration_metric = UserFrustrationMetric()
 # Run the threads evaluation
 results = evaluate_threads(
     project_name="ai_team",
-    filter_string="thread_id=0197ad2a-cf5c-75af-be8b-20e8a23304fe",
+    filter_string='id = "0197ad2a"',
     eval_project_name="ai_team_evaluation",
     metrics=[
         conversation_coherence_metric,
@@ -37,6 +37,29 @@ results = evaluate_threads(
     trace_output_transform=lambda x: x["output"],
 )
 ```
+
+#### Using filter string
+
+The `evaluate_threads` function takes a filter string as an argument. This string is used to select the threads that
+should be evaluated. For example, if you want to evaluate only threads that have a specific ID, you can use the
+following filter string:
+
+```python
+filter_string='id = "0197ad2a"'
+```
+
+You can combine multiple filter strings using the `AND` operator. For example, if you want to evaluate only threads
+that have a specific ID and have a specific status, you can use the following filter string:
+
+```python
+filter_string='id = "0197ad2a" AND status = "active"'
+```
+
+** Supported filter fields and operators **
+| Field | Type |
+
+
+#### Using Opik UI to view results
 
 Once the evaluation is complete, you can access the evaluation results in the Opik UI.
 

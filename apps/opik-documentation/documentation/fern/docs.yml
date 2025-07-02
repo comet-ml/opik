@@ -298,7 +298,7 @@ navigation:
               - page: Context recall
                 path: docs/evaluation/metrics/context_recall.mdx
                 slug: context_recall
-              - page: Conversational threads
+              - page: Conversational metrics
                 path: docs/evaluation/metrics/conversation_threads_metrics.mdx
                 slug: conversation_threads_metrics
               - page: Custom model
