@@ -1,0 +1,111 @@
+---
+description: Describes the TrajectoryAccuracy metric for evaluating ReAct-style agent trajectories
+pytest_codeblocks_skip: true
+---
+
+# TrajectoryAccuracy
+
+The TrajectoryAccuracy metric evaluates the accuracy of ReAct-style agent trajectories by assessing how effectively an agent reasoned through a problem and selected appropriate actions. It uses a language model to analyze the sequence of thought/action/observation steps and provides a score between 0.0 and 1.0 based on reasoning quality, action appropriateness, observation integration, goal achievement, and efficiency.
+
+## How to use the TrajectoryAccuracy metric
+
+You can use the `TrajectoryAccuracy` metric as follows:
+
+```python
+from opik.evaluation.metrics import TrajectoryAccuracy
+
+metric = TrajectoryAccuracy()
+
+result = metric.score(
+    goal="Find the weather in Paris",
+    trajectory=[
+        {
+            "thought": "I need to search for weather information in Paris",
+            "action": "search_weather(location='Paris')",
+            "observation": "Found weather data for Paris: 22°C, sunny"
+        },
+        {
+            "thought": "I have the weather data, now I should summarize it",
+            "action": "summarize_result()",
+            "observation": "Summary created: The weather in Paris is 22°C and sunny"
+        }
+    ],
+    final_result="The weather in Paris is 22°C and sunny"
+)
+
+print(result.value)  # A float between 0.0 and 1.0
+print(result.reason)  # Explanation for the score
+```
+
+Asynchronous scoring is also supported with the `ascore` scoring method.
+
+## Understanding the scores
+
+The TrajectoryAccuracy score ranges from 0.0 to 1.0:
+
+- **0.9-1.0**: Excellent reasoning, appropriate actions, achieves goal efficiently
+- **0.7-0.8**: Good performance with minor issues or inefficiencies  
+- **0.5-0.6**: Adequate but with notable problems in reasoning or actions
+- **0.3-0.4**: Poor performance, significant flaws but some progress
+- **0.0-0.2**: Fundamentally flawed, fails to achieve goal
+
+Each score comes with a detailed explanation (`result.reason`) that analyzes the trajectory across the five evaluation criteria and explains why that particular score was assigned.
+
+## Evaluation Criteria
+
+The TrajectoryAccuracy metric evaluates agent trajectories based on five key criteria:
+
+1. **Reasoning Quality**: Logical, relevant thoughts that guide action selection
+2. **Action Appropriateness**: Actions align with thoughts and progress toward the goal
+3. **Observation Integration**: Effective use of feedback to inform next steps
+4. **Goal Achievement**: Successfully accomplishes the stated objective
+5. **Efficiency**: Reasonable path without unnecessary detours
+
+## TrajectoryAccuracy Prompt
+
+Opik uses an LLM as a Judge to evaluate trajectory accuracy. By default, the `gpt-4o-mini` model is used to evaluate trajectories but you can change this to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers) by setting the `model` parameter. You can learn more about customizing models in the [Customize models for LLM as a Judge metrics](/evaluation/metrics/custom_model) section.
+
+The evaluation prompt analyzes the agent's trajectory step-by-step:
+
+```
+You are an expert evaluator of ReAct-style agent trajectories. Assess how effectively the agent reasoned through the problem and selected appropriate actions.
+
+Evaluation Criteria:
+1. Reasoning Quality: Logical, relevant thoughts that guide action selection
+2. Action Appropriateness: Actions align with thoughts and progress toward the goal  
+3. Observation Integration: Effective use of feedback to inform next steps
+4. Goal Achievement: Successfully accomplishes the stated objective
+5. Efficiency: Reasonable path without unnecessary detours
+
+Scoring Guidelines:
+- 0.9-1.0: Excellent reasoning, appropriate actions, achieves goal efficiently
+- 0.7-0.8: Good performance with minor issues or inefficiencies
+- 0.5-0.6: Adequate but with notable problems in reasoning or actions
+- 0.3-0.4: Poor performance, significant flaws but some progress
+- 0.0-0.2: Fundamentally flawed, fails to achieve goal
+
+GOAL: {goal}
+
+TRAJECTORY:
+{trajectory_steps}
+
+FINAL RESULT: {final_result}
+
+Respond in JSON format:
+{
+    "score": <float between 0.0 and 1.0>,
+    "explanation": "<specific evaluation referencing trajectory steps>"
+}
+```
+
+## Use Cases
+
+TrajectoryAccuracy is particularly useful for:
+
+- **Agent Development**: Evaluating and improving ReAct-style agents
+- **Reasoning Assessment**: Understanding how well agents think through problems
+- **Action Evaluation**: Analyzing whether agents select appropriate actions
+- **Goal Achievement**: Measuring success in completing objectives
+- **Efficiency Analysis**: Identifying unnecessary steps or inefficient paths
+
+This metric is essential for teams building intelligent agents that need to reason through multi-step problems and take appropriate actions based on observations. 
