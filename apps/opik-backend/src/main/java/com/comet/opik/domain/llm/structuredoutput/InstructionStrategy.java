@@ -12,15 +12,22 @@ import lombok.NonNull;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class InstructionStrategy implements StructuredOutputStrategy {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final String INSTRUCTION = "\n\nIMPORTANT:\n" +
-            "You must respond with ONLY a single valid JSON object that conforms to the structure of the example below. "
-            +
-            "Do NOT include any other text, explanation, or markdown formatting. " +
-            "The JSON object should look like this:\n\n%s";
+    private static final String INSTRUCTION = """
+
+            IMPORTANT:
+            You must respond with ONLY a single valid JSON object that conforms to the structure of the example below.
+            Pay attention to the field names and data types (boolean, integer, double).
+            Do NOT include any other text, explanation, or markdown formatting.
+            The JSON object should look like this:
+            %s
+
+            Here are the descriptions for each field:
+            %s""";
 
     @Override
     public ChatRequest.Builder apply(
@@ -31,8 +38,7 @@ public class InstructionStrategy implements StructuredOutputStrategy {
             return chatRequestBuilder;
         }
 
-        String jsonExample = generateJsonExample(schema);
-        String instruction = INSTRUCTION.formatted(jsonExample);
+        String instruction = INSTRUCTION.formatted(generateJsonExample(schema), generateJsonDescriptions(schema));
 
         // Create a mutable copy to work with
         List<ChatMessage> modifiableMessages = new ArrayList<>(messages);
@@ -85,5 +91,14 @@ public class InstructionStrategy implements StructuredOutputStrategy {
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Error generating JSON example", e);
         }
+    }
+
+    private String generateJsonDescriptions(List<LlmAsJudgeOutputSchema> schema) {
+        return schema.stream()
+                .map(scoreDefinition -> String.format(
+                        "- %s: %s",
+                        scoreDefinition.name(),
+                        scoreDefinition.description()))
+                .collect(Collectors.joining("\n"));
     }
 }

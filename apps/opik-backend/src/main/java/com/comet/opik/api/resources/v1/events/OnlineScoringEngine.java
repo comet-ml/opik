@@ -29,6 +29,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -44,6 +46,9 @@ public class OnlineScoringEngine {
     static final String REASON_FIELD_NAME = "reason";
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    private static final Pattern JSON_BLOCK_PATTERN = Pattern.compile(
+            "```(?:json)?\\s*(\\{.*?})\\s*```", Pattern.DOTALL);
 
     /**
      * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering the template messages with
@@ -156,7 +161,7 @@ public class OnlineScoringEngine {
     }
 
     public static List<FeedbackScoreBatchItem> toFeedbackScores(@NotNull ChatResponse chatResponse) {
-        var content = chatResponse.aiMessage().text();
+        var content = extractJson(chatResponse.aiMessage().text());
         JsonNode structuredResponse;
         try {
             structuredResponse = OBJECT_MAPPER.readTree(content);
@@ -192,6 +197,16 @@ public class OnlineScoringEngine {
                 })
                 .filter(Objects::nonNull)
                 .toList();
+    }
+
+    private static String extractJson(String response) {
+        Matcher matcher = JSON_BLOCK_PATTERN.matcher(response);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+
+        // Assume the whole response is raw JSON
+        return response.trim();
     }
 
     @AllArgsConstructor
