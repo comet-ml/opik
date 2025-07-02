@@ -24,7 +24,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import {
+  PROVIDER_LOCATION_TYPE,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import ManageAIProviderDialog from "@/components/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
@@ -37,7 +41,7 @@ interface PromptModelSelectProps {
   provider: PROVIDER_TYPE | "";
   onAddProvider?: (provider: PROVIDER_TYPE) => void;
   onDeleteProvider?: (provider: PROVIDER_TYPE) => void;
-  onlyWithStructuredOutput?: boolean;
+  onlyCloudBase?: boolean;
 }
 
 const STALE_TIME = 1000;
@@ -50,7 +54,7 @@ const PromptModelSelect = ({
   provider,
   onAddProvider,
   onDeleteProvider,
-  onlyWithStructuredOutput,
+  onlyCloudBase,
 }: PromptModelSelectProps) => {
   const resetDialogKeyRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -92,13 +96,19 @@ const PromptModelSelect = ({
     return Object.entries(filteredByConfiguredProviders)
       .map(([pn, providerModels]) => {
         const providerName = pn as PROVIDER_TYPE;
+        const config = PROVIDERS[providerName];
 
-        const options = providerModels
-          .filter((m) => (onlyWithStructuredOutput ? m.structuredOutput : true))
-          .map((providerModel) => ({
-            label: providerModel.label,
-            value: providerModel.value,
-          }));
+        if (
+          onlyCloudBase &&
+          config.locationType !== PROVIDER_LOCATION_TYPE.cloud
+        ) {
+          return null;
+        }
+
+        const options = providerModels.map((providerModel) => ({
+          label: providerModel.label,
+          value: providerModel.value,
+        }));
 
         if (!options.length) {
           return null;
@@ -112,7 +122,7 @@ const PromptModelSelect = ({
         };
       })
       .filter((g): g is NonNullable<typeof g> => !isNull(g));
-  }, [configuredProvidersList, onlyWithStructuredOutput, getProviderModels]);
+  }, [configuredProvidersList, onlyCloudBase, getProviderModels]);
 
   const filteredOptions = useMemo(() => {
     if (filterValue === "") {

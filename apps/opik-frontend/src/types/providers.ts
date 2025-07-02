@@ -379,7 +379,6 @@ export type PROVIDER_MODELS_TYPE = {
   [key in PROVIDER_TYPE]: {
     value: PROVIDER_MODEL_TYPE;
     label: string;
-    structuredOutput?: boolean;
   }[];
 };
 

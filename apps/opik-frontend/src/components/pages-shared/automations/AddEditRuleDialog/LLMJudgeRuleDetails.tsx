@@ -76,9 +76,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
       if (!model) {
         form.setValue(
           "llmJudgeDetails.model",
-          calculateDefaultModel(model, [provider], provider, {
-            structuredOutput: true,
-          }),
+          calculateDefaultModel(model, [provider], provider),
         );
       }
     },
@@ -127,7 +125,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     workspaceName={workspaceName}
                     onAddProvider={handleAddProvider}
                     onDeleteProvider={handleDeleteProvider}
-                    onlyWithStructuredOutput
+                    onlyCloudBase
                   />
 
                   <FormField
