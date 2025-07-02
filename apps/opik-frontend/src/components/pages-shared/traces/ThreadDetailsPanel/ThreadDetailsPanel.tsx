@@ -62,6 +62,7 @@ import { ThreadStatus } from "@/types/thread";
 import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
 import ThreadFeedbackScoresInfo from "./ThreadFeedbackScoresInfo";
 import { Separator } from "@/components/ui/separator";
+import ThreadDetailsTags from "./ThreadDetailsTags";
 
 type ThreadDetailsPanelProps = {
   projectId: string;
@@ -129,19 +130,28 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   );
   const isInactiveThread = thread?.status === ThreadStatus.INACTIVE;
   const threadFeedbackScores = thread?.feedback_scores ?? [];
+  const threadComments = thread?.comments ?? [];
+  const threadTags = thread?.tags ?? [];
 
   let currentActiveTab = activeTab!;
   if (activeTab === "feedback_scores" && !isInactiveThread) {
     currentActiveTab = DEFAULT_TAB;
   }
 
+  let currentActiveSection = activeSection;
+  if (!isInactiveThread) {
+    currentActiveSection = null;
+  }
+
   const disabledAnnotationExplainer = !isInactiveThread
     ? "Feedback scores are disabled during an ongoing session to avoid conflicts while the thread is still active. "
     : "";
+  const disabledCommentsExplainer = !isInactiveThread
+    ? "Comments are disabled during an ongoing session to avoid conflicts while the thread is still active. "
+    : "";
 
-  // TODO update once BE will send this data
   const annotationCount = threadFeedbackScores.length;
-  // const commentsCount = thread?.comments?.length ?? 0;
+  const commentsCount = threadComments.length;
 
   const { data: tracesData, isPending: isTracesPending } = useTracesList(
     {
@@ -215,6 +225,52 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     ...(height && { height: `${height}px` }),
   };
 
+  const renderThreadStatus = () => {
+    if (!thread) {
+      return null;
+    }
+
+    if (isInactiveThread) {
+      return <ThreadStatusTag status={ThreadStatus.INACTIVE} />;
+    }
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="2xs"
+            className="border-[#EBF2F5] bg-[#EBF2F5] hover:bg-[#EBF2F5]/80"
+          >
+            <MessageCircleMore className="mr-1 size-3" /> Active
+            <ChevronDown className="ml-1 size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-60">
+          <DropdownMenuItem onClick={() => changeSetInactiveOpen(true)}>
+            <MessageCircleOff className="mr-2 size-4" />
+            Set as inactive
+          </DropdownMenuItem>
+          {/* <DropdownMenuSeparator />
+          <Button variant="link" className="w-full" asChild>
+            <Link
+              to="/$workspaceName/configuration"
+              params={{ workspaceName }}
+              search={{
+                tab: "workspace-preferences",
+                editPreference: WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
+              }}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Manage session timeout
+            </Link>
+          </Button> */}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
+
   const renderHeader = () => {
     if (isThreadPending) {
       return <Loader />;
@@ -229,43 +285,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           <div className="comet-title-s truncate py-0.5">Thread</div>
           <div className="flex flex-auto"></div>
 
-          {isInactiveThread ? (
-            <ThreadStatusTag status={thread.status} />
-          ) : (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="2xs"
-                  className="border-[#EBF2F5] bg-[#EBF2F5] hover:bg-[#EBF2F5]/80"
-                >
-                  <MessageCircleMore className="mr-1 size-3" /> Active
-                  <ChevronDown className="ml-1 size-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-60">
-                <DropdownMenuItem onClick={() => changeSetInactiveOpen(true)}>
-                  <MessageCircleOff className="mr-2 size-4" />
-                  Set as inactive
-                </DropdownMenuItem>
-                {/* <DropdownMenuSeparator />
-                <Button variant="link" className="w-full" asChild>
-                  <Link
-                    to="/$workspaceName/configuration"
-                    params={{ workspaceName }}
-                    search={{
-                      tab: "workspace-preferences",
-                      editPreference: WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
-                    }}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Manage session timeout
-                  </Link>
-                </Button> */}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          {renderThreadStatus()}
         </div>
         <div className=" flex w-full items-center gap-3 overflow-x-hidden py-1">
           <TooltipWrapper content="Thread start time">
@@ -295,12 +315,13 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             </div>
           </TooltipWrapper>
         </div>
-        {/* <ThreadDetailsTags
-          // TODO implement for thread
-          tags={[]}
-          threadId={threadId}
-          projectId={projectId}
-        /> */}
+        {thread && (
+          <ThreadDetailsTags
+            tags={threadTags}
+            threadId={thread.thread_model_id}
+            projectId={projectId}
+          />
+        )}
       </div>
     );
   };
@@ -385,7 +406,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
               <div data-panel-body="true">{renderBody()}</div>
             </div>
           </ResizablePanel>
-          {Boolean(activeSection) && (
+          {Boolean(currentActiveSection) && (
             <>
               <ResizableHandle />
               <ResizablePanel
@@ -393,7 +414,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                 defaultSize={30}
                 minSize={30}
               >
-                {activeSection === DetailsActionSection.Annotations && (
+                {currentActiveSection === DetailsActionSection.Annotations && (
                   <ThreadAnnotations
                     threadId={threadId}
                     projectId={projectId}
@@ -403,10 +424,13 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                     feedbackScores={threadFeedbackScores}
                   />
                 )}
-                {activeSection === DetailsActionSection.Comments && (
+                {currentActiveSection === DetailsActionSection.Comments && (
                   <ThreadComments
                     activeSection={activeSection}
                     setActiveSection={setActiveSection}
+                    comments={threadComments}
+                    threadId={thread.thread_model_id}
+                    projectId={projectId}
                   />
                 )}
               </ResizablePanel>
@@ -455,16 +479,18 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   const renderHeaderContent = () => {
     return (
       <div className="flex gap-2">
-        {/* <DetailsActionSectionToggle
-          activeSection={activeSection}
+        <DetailsActionSectionToggle
+          activeSection={currentActiveSection}
           setActiveSection={setActiveSection}
-          layoutSize="sm"
+          layoutSize={ButtonLayoutSize.Large}
           count={commentsCount}
           type={DetailsActionSection.Comments}
-        /> */}
+          disabled={!isInactiveThread}
+          tooltipContent={disabledCommentsExplainer}
+        />
 
         <DetailsActionSectionToggle
-          activeSection={activeSection}
+          activeSection={currentActiveSection}
           setActiveSection={setActiveSection}
           layoutSize={ButtonLayoutSize.Large}
           count={annotationCount}

@@ -18,6 +18,7 @@ import isNumber from "lodash/isNumber";
 import get from "lodash/get";
 
 import {
+  COLUMN_COMMENTS_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
@@ -65,6 +66,8 @@ import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackSc
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScoresNames";
 import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
+import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
+import ListCell from "@/components/shared/DataTableCells/ListCell";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -160,6 +163,19 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
     id: "created_by",
     label: "Created by",
     type: COLUMN_TYPE.string,
+  },
+  {
+    id: COLUMN_COMMENTS_ID,
+    label: "Comments",
+    type: COLUMN_TYPE.string,
+    cell: CommentsCell as never,
+  },
+  // TODO: move to shared once filters BE are implemented
+  {
+    id: "tags",
+    label: "Tags",
+    type: COLUMN_TYPE.list,
+    cell: ListCell as never,
   },
 ];
 
