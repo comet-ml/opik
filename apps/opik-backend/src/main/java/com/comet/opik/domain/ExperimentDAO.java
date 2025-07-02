@@ -530,12 +530,9 @@ class ExperimentDAO {
         return Optional.ofNullable(row.get("duration", Map.class))
                 .map(map -> (Map<String, ? extends Number>) map)
                 .map(durations -> new PercentageValues(
-                        BigDecimal.valueOf(durations.get("p50").doubleValue()).setScale(SCALE,
-                                RoundingMode.HALF_EVEN),
-                        BigDecimal.valueOf(durations.get("p90").doubleValue()).setScale(SCALE,
-                                RoundingMode.HALF_EVEN),
-                        BigDecimal.valueOf(durations.get("p99").doubleValue()).setScale(SCALE,
-                                RoundingMode.HALF_EVEN)))
+                        (BigDecimal) durations.get("p50"),
+                        (BigDecimal) durations.get("p90"),
+                        (BigDecimal) durations.get("p99")))
                 .orElse(null);
     }
 
