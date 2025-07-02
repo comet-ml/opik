@@ -81,4 +81,22 @@ public record Experiment(
         public static class Public {
         }
     }
+
+    public record GroupedExperimentResponse(
+            @JsonView(View.Public.class) Dataset dataset,
+            @JsonView(View.Public.class) List<Experiment> experiments,
+            @JsonView(View.Public.class) long total) {
+    }
+
+    @Builder(toBuilder = true)
+    public record GroupedExperimentPage(
+            @JsonView(View.Public.class) int page,
+            @JsonView(View.Public.class) int size,
+            @JsonView(View.Public.class) long total,
+            @JsonView(View.Public.class) List<GroupedExperimentResponse> content,
+            @JsonView(View.Public.class) List<String> sortableBy) {
+        public static GroupedExperimentPage empty(int page, List<String> sortableBy) {
+            return new GroupedExperimentPage(page, 0, 0, List.of(), sortableBy);
+        }
+    }
 }

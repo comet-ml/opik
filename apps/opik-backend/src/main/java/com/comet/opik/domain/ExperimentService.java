@@ -12,7 +12,10 @@ import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
+import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
+import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
@@ -434,5 +437,118 @@ public class ExperimentService {
     @WithSpan
     public Mono<Long> getDailyCreatedCount() {
         return experimentDAO.getDailyCreatedCount();
+    }
+
+    private List<SortingField> getDatasetSortingFields(List<SortingField> userSortingFields) {
+        // If user is sorting by name, apply their direction to dataset sorting
+        // Otherwise use default consistent ordering
+        if (!userSortingFields.isEmpty() && "name".equals(userSortingFields.get(0).field())) {
+            return List.of(SortingField.builder()
+                    .field(SortableFields.NAME)
+                    .direction(userSortingFields.get(0).direction()) // Use user's direction
+                    .build());
+        }
+
+        // Default: consistent ASC ordering for other sorts
+        return List.of(SortingField.builder()
+                .field(SortableFields.NAME)
+                .direction(Direction.ASC)
+                .build());
+    }
+
+    @WithSpan
+    public Mono<Experiment.GroupedExperimentPage> findGrouped(
+            int page, int size, List<SortingField> sortingFields,
+            List<? extends com.comet.opik.api.filter.Filter> experimentFilters, UUID datasetId, UUID promptId,
+            String name) {
+        log.info("Finding grouped experiments: page={}, size={}, sortingFields={}, datasetId={}, promptId={}, name={}",
+                page, size, sortingFields, datasetId, promptId, name);
+
+        // If datasetId is provided, fetch only that specific dataset
+        if (datasetId != null) {
+            return Mono.deferContextual(ctx -> {
+                String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                return Mono.fromCallable(() -> datasetService.getById(datasetId, workspaceId))
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .flatMap(datasetOpt -> {
+                            if (datasetOpt.isEmpty()) {
+                                return Mono.just(Experiment.GroupedExperimentPage.empty(page,
+                                        sortingFactory.getSortableFields()));
+                            }
+                            var dataset = datasetOpt.get();
+
+                            // Fetch experiments for this specific dataset
+                            return experimentDAO
+                                    .find(page, size, com.comet.opik.api.ExperimentSearchCriteria.builder()
+                                            .datasetId(dataset.id())
+                                            .entityType(EntityType.TRACE)
+                                            .filters(experimentFilters)
+                                            .sortingFields(sortingFields)
+                                            .promptId(promptId)
+                                            .name(name)
+                                            .build())
+                                    .flatMap(experimentPage -> enrichExperiments(experimentPage.content())
+                                            .map(experiments -> {
+                                                var groupedResponse = new Experiment.GroupedExperimentResponse(dataset,
+                                                        experiments, experimentPage.total());
+                                                return Experiment.GroupedExperimentPage.builder()
+                                                        .page(page)
+                                                        .size(size)
+                                                        .total(1) // Only one dataset group
+                                                        .content(List.of(groupedResponse))
+                                                        .sortableBy(sortingFactory.getSortableFields())
+                                                        .build();
+                                            }));
+                        });
+            });
+        }
+
+        // Fetch datasets with experiments only
+        return Mono.deferContextual(ctx -> {
+
+            // Build dataset criteria
+            var datasetCriteria = com.comet.opik.api.DatasetCriteria.builder()
+                    .withExperimentsOnly(true)
+                    .promptId(promptId)
+                    .build();
+
+            // Use user-provided sorting for dataset grouping when sorting by dataset fields,
+            // otherwise use default dataset name DESC for consistent grouping
+            var datasetSortingFields = getDatasetSortingFields(sortingFields);
+
+            // Fetch paginated datasets with fixed sorting
+            return Mono
+                    .fromCallable(() -> datasetService.find(page, size, datasetCriteria, datasetSortingFields))
+                    .flatMap(datasetPageObj -> {
+                        var datasets = datasetPageObj.content();
+                        if (datasets.isEmpty()) {
+                            return Mono.just(Experiment.GroupedExperimentPage.empty(page,
+                                    sortingFactory.getSortableFields()));
+                        }
+                        // For each dataset, fetch experiments (first page, default size)
+                        // Use user-provided sorting only for experiments within each group
+                        // Use concatMap to preserve dataset order (deterministic sorting)
+                        return Flux.fromIterable(datasets)
+                                .concatMap(dataset -> experimentDAO
+                                        .find(1, 10, com.comet.opik.api.ExperimentSearchCriteria.builder()
+                                                .datasetId(dataset.id())
+                                                .entityType(EntityType.TRACE)
+                                                .filters(experimentFilters)
+                                                .sortingFields(sortingFields)
+                                                .name(name)
+                                                .build())
+                                        .flatMap(experimentPage -> enrichExperiments(experimentPage.content())
+                                                .map(experiments -> new Experiment.GroupedExperimentResponse(dataset,
+                                                        experiments, experimentPage.total()))))
+                                .collectList()
+                                .map(groupedList -> Experiment.GroupedExperimentPage.builder()
+                                        .page(datasetPageObj.page())
+                                        .size(datasetPageObj.size())
+                                        .total(datasetPageObj.total())
+                                        .content(groupedList)
+                                        .sortableBy(sortingFactory.getSortableFields())
+                                        .build());
+                    });
+        });
     }
 }
