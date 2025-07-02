@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/form";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { Description } from "@/components/ui/description";
 
 type VllmAIProviderDetailsProps = {
   form: UseFormReturn<AIProviderFormType>;
@@ -25,6 +26,7 @@ const VllmAIProviderDetails: React.FC<VllmAIProviderDetailsProps> = ({
   const providerName = PROVIDERS[PROVIDER_TYPE.VLLM].label;
   const urlLabel = `${providerName} URL`;
   const apiKeyLabel = `${providerName} API Key`;
+  const modelsLabel = `${providerName} Models List`;
 
   return (
     <div className="flex flex-col gap-2 pb-4">
@@ -87,6 +89,35 @@ const VllmAIProviderDetails: React.FC<VllmAIProviderDetailsProps> = ({
         configuration. If you do not need an API key, you can enter a dummy
         value.
       </span>
+
+      <FormField
+          control={form.control}
+          name="models"
+          render={({ field, formState }) => {
+            const validationErrors = get(formState.errors, ["models"]);
+
+            return (
+              <FormItem>
+                <Label htmlFor="models">{modelsLabel}</Label>
+                <FormControl>
+                  <Input
+                    id="models"
+                    placeholder="Comma separated models list"
+                    value={field.value}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    className={cn({
+                      "border-destructive": Boolean(validationErrors?.message),
+                    })}
+                  />
+                </FormControl>
+                <FormMessage />
+                <Description>
+                  Comma separated list of available models
+                </Description>
+              </FormItem>
+            );
+          }}
+        />
     </div>
   );
 };

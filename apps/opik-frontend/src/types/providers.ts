@@ -5,7 +5,7 @@ export enum PROVIDER_TYPE {
   OLLAMA = "ollama",
   GEMINI = "gemini",
   VERTEX_AI = "vertex-ai",
-  VLLM = "vllm",
+  VLLM = "custom-llm",
 }
 
 export enum PROVIDER_MODEL_TYPE {
@@ -406,6 +406,7 @@ export interface ProviderKeyWithAPIKey extends ProviderKey {
   apiKey: string;
   location?: string;
   url?: string;
+  models?: string;
 }
 
 export interface LLMOpenAIConfigsType {

@@ -176,6 +176,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     const apiKey = form.getValues("apiKey");
     const url = form.getValues("url");
     const location = form.getValues("location");
+    const models = form.getValues("models");
     const isVertex = provider === PROVIDER_TYPE.VERTEX_AI;
     const isVllm = provider === PROVIDER_TYPE.VLLM;
 
@@ -186,6 +187,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           apiKey,
           url: isVllm ? url : undefined,
           location: isVertex ? location : undefined,
+          models: isVllm ? models : undefined,
         },
       });
     } else if (provider) {
@@ -199,6 +201,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           provider,
           url: isVllm ? url : undefined,
           location: isVertex ? location : undefined,
+          models: isVllm ? models : undefined,
         },
       });
     }

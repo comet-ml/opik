@@ -20,8 +20,15 @@ const useProviderKeysCreateMutation = () => {
     mutationFn: async ({
       providerKey,
     }: UseProviderKeysCreateMutationParams) => {
-      const configuration = providerKey?.location
-        ? { configuration: { location: providerKey.location } }
+      const config: Record<string, unknown> = {};
+      if (providerKey?.location) {
+        config.location = providerKey.location;
+      }
+      if (providerKey?.models) {
+        config.models = providerKey.models;
+      }
+      const configuration = Object.keys(config).length
+        ? { configuration: config }
         : {};
 
       const { data } = await api.post(PROVIDER_KEYS_REST_ENDPOINT, {
