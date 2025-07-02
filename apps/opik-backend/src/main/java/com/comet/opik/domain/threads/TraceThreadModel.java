@@ -22,6 +22,7 @@ public record TraceThreadModel(
         String createdBy,
         String lastUpdatedBy,
         Instant createdAt,
-        Instant lastUpdatedAt) {
+        Instant lastUpdatedAt,
+        boolean sampled) {
 
 }

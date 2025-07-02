@@ -85,6 +85,7 @@ public class TraceThreadListener {
 
     private Flux<Void> processEvent(TracesCreated event,
             Map<UUID, Map<String, Instant>> projectThreadIdAndLastUpdateAts) {
+
         return Flux.fromIterable(projectThreadIdAndLastUpdateAts.entrySet())
                 .flatMap(entry -> {
                     UUID projectId = entry.getKey();

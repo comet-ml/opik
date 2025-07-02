@@ -1,5 +1,6 @@
 package com.comet.opik.domain.threads;
 
+import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -51,6 +52,8 @@ public interface TraceThreadDAO {
     Mono<TraceThreadModel> findByThreadModelId(UUID threadModelId, UUID projectId);
 
     Mono<UUID> getProjectIdFromThread(UUID id);
+
+    Mono<Long> updateThreadSampledValues(UUID projectId, List<TraceThreadSampling> threadSamplingPerRules);
 }
 
 @Singleton
@@ -123,6 +126,37 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             WHERE id = :id
             AND workspace_id = :workspace_id
             ;
+            """;
+    private static final String UPDATE_THREAD_SAMPLING_PER_RULE = """
+                INSERT INTO trace_threads(workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, sampling_per_rule)
+                SELECT
+                    tt.workspace_id,
+                    tt.project_id,
+                    tt.thread_id,
+                    tt.id,
+                    tt.status,
+                    tt.created_by,
+                    :user_name,
+                    tt.created_at,
+                    now64(6),
+                    sd.sampling_per_rule
+                FROM trace_threads tt
+                JOIN (
+                    SELECT
+                        thread_model_id,
+                        sampling_per_rule
+                    FROM (
+                        <items:{item |
+                            SELECT
+                                :thread_model_id<item.index> AS thread_model_id,
+                                mapFromArray(:rule_ids<item.index>, :sampling<item.index>) AS sampling_per_rule
+                            <if(item.hasNext)>UNION ALL<endif>
+                        }>
+                    )
+                ) AS sd ON tt.id = sd.thread_model_id
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND id IN :ids
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -286,6 +320,42 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))
                     .singleOrEmpty();
+        });
+    }
+
+    @Override
+    public Mono<Long> updateThreadSampledValues(@NonNull UUID projectId,
+            @NonNull List<TraceThreadSampling> threadSamplingPerRules) {
+        return asyncTemplate.nonTransaction(connection -> {
+
+            if (threadSamplingPerRules.isEmpty()) {
+                return Mono.just(0L);
+            }
+
+            List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(threadSamplingPerRules.size());
+            ST updateSamplingSql = new ST(UPDATE_THREAD_SAMPLING_PER_RULE);
+
+            updateSamplingSql.add("items", queryItems);
+
+            var statement = connection.createStatement(updateSamplingSql.render())
+                    .bind("project_id", projectId)
+                    .bind("ids", threadSamplingPerRules.stream().map(TraceThreadSampling::threadModelId).toList());
+
+            int i = 0;
+            for (TraceThreadSampling sampling : threadSamplingPerRules) {
+                UUID threadModelId = sampling.threadModelId();
+                UUID[] ruleIds = sampling.samplingPerRule().keySet().toArray(UUID[]::new);
+                Boolean[] samplingValues = sampling.samplingPerRule().keySet().stream()
+                        .map(ruleId -> sampling.samplingPerRule().get(ruleId)).toArray(Boolean[]::new);
+
+                statement.bind("thread_model_id" + i, threadModelId);
+                statement.bind("rule_ids" + i, ruleIds);
+                statement.bind("sampling" + i, samplingValues);
+                i++;
+            }
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
         });
     }
 
