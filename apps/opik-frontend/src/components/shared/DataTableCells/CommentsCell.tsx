@@ -129,7 +129,7 @@ const CommentsCell = <TData,>(context: CellContext<TData, unknown>) => {
           !isSmall && "overflow-y-auto max-h-full",
         )}
         commentsList={commentsList}
-        onReply={tableMeta?.onCommentsReply ? () => onReply : undefined}
+        onReply={tableMeta?.onCommentsReply ? onReply : undefined}
       >
         <CommentsCellContent commentsList={commentsList} isSmall={isSmall} />
       </UserCommentHoverList>

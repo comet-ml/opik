@@ -6,6 +6,7 @@ import {
 import { TraceFeedbackScore } from "@/types/traces";
 import React from "react";
 import ColoredTagNew from "../ColoredTag/ColoredTagNew";
+import { cn } from "@/lib/utils";
 
 type FeedbackScoreHoverCardProps = {
   title?: string;
@@ -33,7 +34,12 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
         collisionPadding={24}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="relative size-full max-h-[40vh] max-w-[320px] overflow-auto p-1 pb-0">
+        <div
+          className={cn(
+            "relative size-full max-h-[40vh] max-w-[320px] overflow-auto",
+            title ? "p-1 pb-0" : "py-0.5",
+          )}
+        >
           {title && (
             <div className="flex flex-col gap-1.5 border-b border-border px-2 pb-2">
               <div className="comet-body-xs-accented truncate leading-none text-foreground">
