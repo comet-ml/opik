@@ -1495,6 +1495,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       structuredOutput: true,
     },
     {
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+      label: "Gemini 2.5 Pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      label: "Gemini 2.5 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      label: "Gemini 2.5 Flash Lite",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GEMINI_1_5_FLASH,
       label: "Gemini 1.5 Flash",
       structuredOutput: true,
@@ -1540,6 +1552,21 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH_LITE,
       label: "Gemini 2.0 Flash Lite",
+      structuredOutput: true,
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
+      label: "Gemini 2.5 Pro",
+      structuredOutput: true,
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      label: "Gemini 2.5 Flash",
+      structuredOutput: true,
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH_LITE,
+      label: "Gemini 2.5 Flash Lite",
       structuredOutput: true,
     },
   ],
