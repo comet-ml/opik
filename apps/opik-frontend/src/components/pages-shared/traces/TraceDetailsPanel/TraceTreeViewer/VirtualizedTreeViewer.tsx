@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useCallback, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useHotkeys } from "react-hotkeys-hook";
 import {
+  Brain,
   ChevronRight,
   Clock,
   Coins,
@@ -41,6 +42,7 @@ const DETAILS_SECTION_COMPONENTS = [
   TREE_DATABLOCK_TYPE.NUMBER_OF_SCORES,
   TREE_DATABLOCK_TYPE.NUMBER_OF_COMMENTS,
   TREE_DATABLOCK_TYPE.NUMBER_OF_TAGS,
+  TREE_DATABLOCK_TYPE.MODEL,
 ];
 
 type VirtualizedTreeViewerProps = {
@@ -56,12 +58,16 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
   rowId,
   onRowIdChange,
 }) => {
-  const { flattenedTree, expandedTreeRows, expandToNode, toggleExpand } =
+  const { flattenedTree, expandedTreeRows, toggleExpand } =
     useTreeDetailsStore();
 
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
+
+  const [scrollToRowId, setScrollToRowId] = React.useState<
+    string | undefined
+  >();
 
   const selectedRowRef = useRef<{ current?: string; previous?: string }>({
     current: undefined,
@@ -84,7 +90,9 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
   const rowVirtualizer = useVirtualizer({
     count: flattenedTree.length,
     getScrollElement: () => scrollRef.current,
+    getItemKey: (index: number) => flattenedTree[index].id ?? index,
     estimateSize: () => estimatedHeight,
+    scrollPaddingEnd: 96,
     overscan: 5,
   });
 
@@ -94,17 +102,13 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
 
   const selectRow = useCallback(
     (id: string) => {
-      console.log("selectRow", id); // TODO lala remove
-      const selectedIndex = flattenedTree.findIndex((node) => node.id === id);
       if (id !== selectedRowRef.current.current) {
         selectedRowRef.current.previous = selectedRowRef.current.current;
         selectedRowRef.current.current = id;
         onRowIdChange(id);
       }
-
-      return selectedIndex;
     },
-    [flattenedTree, onRowIdChange],
+    [onRowIdChange],
   );
 
   useEffect(() => {
@@ -112,20 +116,25 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
       rowId !== selectedRowRef.current.current &&
       rowId !== selectedRowRef.current.previous
     ) {
-      console.log("useEffect selectRow", rowId, selectedRowRef.current); //TODO lala remove
-      expandToNode(rowId);
-      const index = selectRow(rowId);
+      selectRow(rowId);
+      setScrollToRowId(rowId);
+    }
+  }, [rowVirtualizer, selectRow, rowId]);
+
+  useEffect(() => {
+    if (scrollToRowId) {
+      const index = flattenedTree.findIndex(
+        (node) => node.id === scrollToRowId,
+      );
       if (index !== -1) {
-        requestAnimationFrame(() =>
-          rowVirtualizer.scrollToIndex(index, {
-            behavior: "smooth",
-          }),
-        );
+        rowVirtualizer.scrollToIndex(index, {
+          behavior: "smooth",
+        });
+        setScrollToRowId(undefined);
       }
     }
-  }, [expandToNode, rowVirtualizer, selectRow, rowId]);
+  }, [flattenedTree, rowVirtualizer, scrollToRowId]);
 
-  // TODO lala remove
   useHotkeys(
     "enter",
     (e) => {
@@ -171,11 +180,15 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
     const guardrailStatus = get(node.data?.output, "guardrail_result", null);
 
     const duration = formatDuration(node.data.duration);
-    const tokens = node.data.tokens;
-    const estimatedCost = node.data.total_estimated_cost;
-    const feedbackScores = node.data.feedback_scores;
-    const comments = node.data.comments;
-    const tags = node.data.tags;
+    const {
+      tokens,
+      comments,
+      tags,
+      model,
+      provider,
+      feedback_scores: feedbackScores,
+      total_estimated_cost: estimatedCost,
+    } = node.data;
 
     return (
       <div className="flex h-5 items-center gap-3 overflow-x-hidden">
@@ -196,14 +209,14 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
           </TooltipWrapper>
         )}
         {config[TREE_DATABLOCK_TYPE.DURATION] && (
-          <TooltipWrapper content="Duration in seconds">
+          <TooltipWrapper content={`Duration in seconds: ${duration}`}>
             <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
               <Clock className="size-3 shrink-0" /> {duration}
             </div>
           </TooltipWrapper>
         )}
         {config[TREE_DATABLOCK_TYPE.NUMBERS_OF_TOKENS] && isNumber(tokens) && (
-          <TooltipWrapper content="Total amount of tokens">
+          <TooltipWrapper content={`Total amount of tokens: ${tokens}`}>
             <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
               <Hash className="size-3 shrink-0" /> {tokens}
             </div>
@@ -222,7 +235,7 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
           )}
         {config[TREE_DATABLOCK_TYPE.NUMBER_OF_SCORES] &&
           Boolean(feedbackScores?.length) && (
-            <FeedbackScoreHoverCard name={node.name} scores={feedbackScores!}>
+            <FeedbackScoreHoverCard scores={feedbackScores!}>
               <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
                 <PenLine className="size-3 shrink-0" /> {feedbackScores!.length}
               </div>
@@ -245,6 +258,18 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
               </div>
             </TagsHoverCard>
           )}
+        {config[TREE_DATABLOCK_TYPE.MODEL] && (model || provider) && (
+          <TooltipWrapper
+            content={`Model: ${model || "NA"}, Provider: ${provider || "NA"}`}
+          >
+            <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
+              <Brain className="size-3 shrink-0" />{" "}
+              <div className="truncate">
+                {provider} {model}
+              </div>
+            </div>
+          </TooltipWrapper>
+        )}
       </div>
     );
   };

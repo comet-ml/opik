@@ -189,7 +189,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
       ref={scrollRef}
     >
       <div className="min-w-[400px] max-w-full">
-        <div className="sticky top-0 z-10 flex flex-row items-center justify-between gap-2 pb-2 pl-6 pr-4 pt-4">
+        <div className="sticky top-0 z-10 flex flex-row items-center justify-between gap-2 bg-white pb-2 pl-6 pr-4  pt-4">
           <div className="flex items-center gap-1">
             <div className="comet-title-xs">
               {noSearch ? "Trace spans" : "Search results"}
@@ -226,7 +226,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
             )}
           </div>
         </div>
-        <div className="sticky top-0 z-10 flex flex-wrap items-center bg-white py-2 pl-6 pr-4">
+        <div className="sticky top-12 z-10 flex flex-wrap items-center bg-white py-2 pl-6 pr-4">
           <SearchInput
             searchText={search}
             setSearchText={setSearch}

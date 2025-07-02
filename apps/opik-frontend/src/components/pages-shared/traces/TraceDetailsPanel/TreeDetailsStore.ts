@@ -3,8 +3,6 @@ import isFunction from "lodash/isFunction";
 import { OnChangeFn } from "@/types/shared";
 import { BASE_TRACE_DATA_TYPE, Span } from "@/types/traces";
 
-const LEVEL_TO_EXPAND = 3;
-
 export type SpanWithMetadata = Omit<Span, "type"> & {
   type: BASE_TRACE_DATA_TYPE;
   duration: number;
@@ -66,61 +64,6 @@ const generateFullExpandedMap = (nodes: TreeNode[], ids: string[] = []) => {
   return ids;
 };
 
-const getNodePath = (
-  nodes: TreeNode[],
-  targetId: string,
-  path: string[] = [],
-): string[] | null => {
-  for (const node of nodes) {
-    const newPath = [...path, node.id];
-    if (node.id === targetId) {
-      return newPath;
-    }
-    if (node.children) {
-      const foundPath = getNodePath(node.children, targetId, newPath);
-      if (foundPath) return foundPath;
-    }
-  }
-  return null;
-};
-
-// TODO lala need to clean this cache every time we have closed sidebar
-const treeDetectorCache: {
-  id: string;
-  lengthMap: Record<string, number>;
-} = { id: "", lengthMap: {} };
-
-const detectIsNewTree = (tree: TreeNode[]) => {
-  const root = tree[0];
-  if (
-    (root && treeDetectorCache.id !== root.id) ||
-    (root &&
-      treeDetectorCache.id === root.id &&
-      treeDetectorCache.lengthMap[root.id] !== root.children?.length)
-  ) {
-    treeDetectorCache.id = root.id;
-    treeDetectorCache.lengthMap[root.id] = root.children?.length || 0;
-    return true;
-  }
-  return false;
-};
-
-const expandToLevel = (tree: TreeNode[]) => {
-  const expanded = new Set<string>();
-  const traverseToLevel = (nodes: TreeNode[], currentDepth: number) => {
-    nodes.forEach((node) => {
-      if (currentDepth < LEVEL_TO_EXPAND) {
-        expanded.add(node.id);
-        if (node.children) {
-          traverseToLevel(node.children, currentDepth + 1);
-        }
-      }
-    });
-  };
-  traverseToLevel(tree, 0);
-  return expanded;
-};
-
 interface FlattenedNode extends TreeNode {
   depth: number;
 }
@@ -134,10 +77,7 @@ type TreeDetailsStore = {
   expandedTreeRows: Set<string>;
   setExpandedTreeRows: OnChangeFn<Set<string>>;
   toggleExpandAll: () => void;
-  expandToNode: (id: string) => void;
   toggleExpand: (id: string) => void;
-  getNextRowId: (id: string) => string | undefined;
-  getPreviousRosId: (id: string) => string | undefined;
 };
 
 const useTreeDetailsStore = create<TreeDetailsStore>((set, get) => ({
@@ -145,23 +85,15 @@ const useTreeDetailsStore = create<TreeDetailsStore>((set, get) => ({
   setTree: (update) => {
     set((state) => {
       const tree = isFunction(update) ? update(state.tree) : update;
-      const flattenedTree: FlattenedNode[] = traverse(
-        tree,
-        0,
-        state.expandedTreeRows,
-      );
       const fullExpandedSet = new Set<string>(generateFullExpandedMap(tree));
-      let expandedTreeRows = state.expandedTreeRows;
-      if (detectIsNewTree(tree)) {
-        expandedTreeRows = expandToLevel(tree);
-      }
+      const flattenedTree: FlattenedNode[] = traverse(tree, 0, fullExpandedSet);
 
       return {
         ...state,
         tree,
         flattenedTree,
         fullExpandedSet,
-        expandedTreeRows,
+        expandedTreeRows: fullExpandedSet,
       };
     });
   },
@@ -197,15 +129,6 @@ const useTreeDetailsStore = create<TreeDetailsStore>((set, get) => ({
       ),
     );
   },
-  expandToNode: (id: string) => {
-    const state = get();
-    const path = getNodePath(state.tree, id);
-    if (path) {
-      const expanded = new Set(state.expandedTreeRows);
-      path.forEach((nodeId) => expanded.add(nodeId));
-      state.setExpandedTreeRows(expanded);
-    }
-  },
   toggleExpand: (id: string) => {
     const state = get();
     const expanded = new Set(state.expandedTreeRows);
@@ -215,16 +138,6 @@ const useTreeDetailsStore = create<TreeDetailsStore>((set, get) => ({
       expanded.add(id);
     }
     state.setExpandedTreeRows(expanded);
-  },
-  getNextRowId: (id: string) => {
-    const state = get();
-    const index = state.flattenedTree.findIndex((node) => node.id === id);
-    return index !== -1 ? state.flattenedTree[index + 1]?.id : undefined;
-  },
-  getPreviousRosId: (id: string) => {
-    const state = get();
-    const index = state.flattenedTree.findIndex((node) => node.id === id);
-    return index > 0 ? state.flattenedTree[index - 1]?.id : undefined;
   },
 }));
 

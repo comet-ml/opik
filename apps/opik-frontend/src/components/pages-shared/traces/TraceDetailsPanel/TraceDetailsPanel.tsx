@@ -59,8 +59,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastSection");
-  const { getNextRowId, getPreviousRosId, flattenedTree } =
-    useTreeDetailsStore();
+  const { flattenedTree } = useTreeDetailsStore();
 
   const { data: trace, isPending: isTracePending } = useTraceById(
     {
@@ -82,7 +81,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       traceId,
       projectId,
       page: 1,
-      size: 10000,
+      size: 15000,
     },
     {
       placeholderData: keepPreviousData,
@@ -129,15 +128,10 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
 
   const verticalNavigation = useMemo(() => {
     const id = spanId || traceId;
-    const previousRowId = getPreviousRosId(id);
-    const nextRowId = getNextRowId(id);
-    // TODO lala remove neet to rerender
-    const x = flattenedTree.findIndex((node) => node.id === id);
-    if (x === -1) {
-      console.warn(
-        `Row with id ${id} not found in flattened tree. This may cause navigation issues.`,
-      );
-    }
+    const index = flattenedTree.findIndex((node) => node.id === id);
+    const nextRowId = index !== -1 ? flattenedTree[index + 1]?.id : undefined;
+    const previousRowId = index > 0 ? flattenedTree[index - 1]?.id : undefined;
+
     return {
       onChange: (shift: 1 | -1) => {
         const rowId = shift > 0 ? nextRowId : previousRowId;
@@ -146,14 +140,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       hasNext: Boolean(nextRowId),
       hasPrevious: Boolean(previousRowId),
     };
-  }, [
-    spanId,
-    traceId,
-    getPreviousRosId,
-    getNextRowId,
-    handleRowSelect,
-    flattenedTree,
-  ]);
+  }, [spanId, traceId, handleRowSelect, flattenedTree]);
 
   const renderContent = () => {
     if (isTracePending || isSpansPending) {

@@ -100,7 +100,7 @@ const FeedbackScoreListCell = <TData,>(
       ) : (
         <div ref={cellRef} className="w-full min-w-0 flex-1 overflow-hidden">
           <FeedbackScoreHoverCard
-            name={hoverCardName}
+            title={hoverCardName}
             isAverageScores={isAverageScores}
             scores={sortedList}
             hidden={!remainingCount}

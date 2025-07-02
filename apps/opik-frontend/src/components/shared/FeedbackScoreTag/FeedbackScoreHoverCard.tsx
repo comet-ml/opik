@@ -8,14 +8,14 @@ import React from "react";
 import ColoredTagNew from "../ColoredTag/ColoredTagNew";
 
 type FeedbackScoreHoverCardProps = {
-  name: string;
+  title?: string;
   isAverageScores?: boolean;
   scores: TraceFeedbackScore[];
   children: React.ReactNode;
   hidden?: boolean;
 };
 const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
-  name,
+  title,
   isAverageScores,
   scores,
   children,
@@ -34,16 +34,18 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="relative size-full max-h-[40vh] max-w-[320px] overflow-auto p-1 pb-0">
-          <div className="flex flex-col gap-1.5 border-b border-border px-2 pb-2">
-            <div className="comet-body-xs-accented truncate leading-none text-foreground">
-              {name}
-            </div>
-            {isAverageScores && (
-              <div className="comet-body-xs leading-none text-slate-400">
-                Average scores
+          {title && (
+            <div className="flex flex-col gap-1.5 border-b border-border px-2 pb-2">
+              <div className="comet-body-xs-accented truncate leading-none text-foreground">
+                {title}
               </div>
-            )}
-          </div>
+              {isAverageScores && (
+                <div className="comet-body-xs leading-none text-slate-400">
+                  Average scores
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex flex-col gap-1.5 pb-1 pt-1.5">
             {scores.map((tag) => {
               return (

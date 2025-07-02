@@ -17,6 +17,7 @@ import {
 } from "@/components/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const OPTIONS: DropdownOption<TREE_DATABLOCK_TYPE>[] = [
   { label: "Duration", value: TREE_DATABLOCK_TYPE.DURATION },
@@ -28,7 +29,7 @@ const OPTIONS: DropdownOption<TREE_DATABLOCK_TYPE>[] = [
     value: TREE_DATABLOCK_TYPE.NUMBER_OF_COMMENTS,
   },
   { label: "Number of tags", value: TREE_DATABLOCK_TYPE.NUMBER_OF_TAGS },
-  // { label: "Model", value: TREE_DATABLOCK_TYPE.MODEL },
+  { label: "Model", value: TREE_DATABLOCK_TYPE.MODEL },
 ];
 
 type SpanDetailsButtonProps = {
@@ -68,11 +69,13 @@ const SpanDetailsButton: React.FC<SpanDetailsButtonProps> = ({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="icon-2xs">
-          <ScanText />
-        </Button>
-      </DropdownMenuTrigger>
+      <TooltipWrapper content="Span details">
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="icon-2xs">
+            <ScanText />
+          </Button>
+        </DropdownMenuTrigger>
+      </TooltipWrapper>
       <DropdownMenuContent className="relative max-w-72 p-0" align="end">
         <div className="max-h-[calc(var(--radix-popper-available-height)-60px)] overflow-y-auto overflow-x-hidden pb-1">
           {options.map(({ label, value }) => (
