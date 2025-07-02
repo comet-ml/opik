@@ -98,7 +98,28 @@ public class TraceThreadOnlineScoringSamplerListener {
             return;
         }
 
-        List<TraceThreadSampling> samplingPerRule = traceThreadModelIds
+        List<TraceThreadSampling> samplingPerRule = sampleTraceThreads(traceThreadModelIds, rules, workspaceId);
+
+        traceThreadService.updateThreadSampledValue(projectId, samplingPerRule)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, event.userName()))
+                .subscribe(
+                        unused -> log.info(
+                                "Successfully updated trace thread: '[{}]'  sampling values for projectId: '{}', workspaceId: '{}'",
+                                samplingPerRule.stream().map(TraceThreadSampling::threadModelId).toList(), projectId,
+                                workspaceId),
+                        error -> {
+                            log.error(
+                                    "Failed to update trace thread sampling values for projectId: '{}', workspaceId: '{}'",
+                                    projectId, workspaceId);
+                            log.error("Error updating trace thread sampling values", error);
+                        });
+
+    }
+
+    private List<TraceThreadSampling> sampleTraceThreads(List<UUID> traceThreadModelIds,
+            List<AutomationRuleEvaluator<?>> rules, String workspaceId) {
+        return traceThreadModelIds
                 .parallelStream()
                 .flatMap(traceThreadModelId -> {
                     log.info("Processing trace thread model ID: '{}' for online scoring sampling", traceThreadModelId);
@@ -134,22 +155,6 @@ public class TraceThreadOnlineScoringSamplerListener {
                 .stream()
                 .map(sampling -> new TraceThreadSampling(sampling.getKey(), sampling.getValue()))
                 .toList();
-
-        traceThreadService.updateThreadSampledValue(projectId, samplingPerRule)
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
-                        .put(RequestContext.USER_NAME, event.userName()))
-                .subscribe(
-                        unused -> log.info(
-                                "Successfully updated trace thread: '[{}]'  sampling values for projectId: '{}', workspaceId: '{}'",
-                                samplingPerRule.stream().map(TraceThreadSampling::threadModelId).toList(), projectId,
-                                workspaceId),
-                        error -> {
-                            log.error(
-                                    "Failed to update trace thread sampling values for projectId: '{}', workspaceId: '{}'",
-                                    projectId, workspaceId);
-                            log.error("Error updating trace thread sampling values", error);
-                        });
-
     }
 
     private Map<UUID, Boolean> mergeMaps(Map<UUID, Boolean> a, Map<UUID, Boolean> b) {
