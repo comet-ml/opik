@@ -8,6 +8,7 @@ import * as core from "../../core";
 import { JsonNode } from "./JsonNode";
 import { FeedbackScore } from "./FeedbackScore";
 import { TraceThreadStatus } from "./TraceThreadStatus";
+import { Comment } from "./Comment";
 
 export const TraceThread: core.serialization.ObjectSchema<serializers.TraceThread.Raw, OpikApi.TraceThread> =
     core.serialization.object({
@@ -27,7 +28,10 @@ export const TraceThread: core.serialization.ObjectSchema<serializers.TraceThrea
         numberOfMessages: core.serialization.property("number_of_messages", core.serialization.number().optional()),
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
         usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
+        comments: core.serialization.list(Comment).optional(),
+        tags: core.serialization.list(core.serialization.string()).optional(),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
+        lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     });
@@ -47,7 +51,10 @@ export declare namespace TraceThread {
         number_of_messages?: number | null;
         total_estimated_cost?: number | null;
         usage?: Record<string, number> | null;
+        comments?: Comment.Raw[] | null;
+        tags?: string[] | null;
         last_updated_at?: string | null;
+        last_updated_by?: string | null;
         created_by?: string | null;
         created_at?: string | null;
     }

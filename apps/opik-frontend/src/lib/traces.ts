@@ -221,19 +221,39 @@ const prettifyLangGraphLogic = (
     "messages" in message &&
     isArray(message.messages)
   ) {
-    // Get the last AI message
-    const aiMessages = message.messages.filter(
-      (m) =>
-        isObject(m) &&
-        "type" in m &&
-        m.type === "ai" &&
-        "content" in m &&
-        isString(m.content) &&
-        m.content !== "",
-    );
+    // Get the last AI message, and extract the string output from the various supported formats
+    const aiMessages = [];
+
+    // Iterate on all AI messages
+    for (const m of message.messages) {
+      if (isObject(m) && "type" in m && m.type === "ai" && "content" in m) {
+        // The message can either contains a string attribute named `content`
+        if (isString(m.content)) {
+          aiMessages.push(m.content);
+        }
+        // Or content can be an array with text content. For example when using OpenAI chat model with the Responses API
+        // https://python.langchain.com/docs/integrations/chat/openai/#responses-api
+        else if (isArray(m.content)) {
+          const textItems = m.content.filter(
+            (c) =>
+              isObject(c) &&
+              "type" in c &&
+              c.type === "text" &&
+              "text" in c &&
+              isString(c.text) &&
+              c.text !== "",
+          );
+
+          // Check that there is only one text item
+          if (textItems.length === 1) {
+            aiMessages.push(textItems[0].text);
+          }
+        }
+      }
+    }
 
     if (aiMessages.length > 0) {
-      return last(aiMessages).content;
+      return last(aiMessages);
     }
   }
 };
