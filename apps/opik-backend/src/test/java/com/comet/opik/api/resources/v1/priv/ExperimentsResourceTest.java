@@ -158,6 +158,9 @@ import static java.util.stream.Collectors.toSet;
 import static java.util.stream.Collectors.toUnmodifiableSet;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -4312,5 +4315,35 @@ class ExperimentsResourceTest {
             assertThat(trace).isNotNull();
             assertThat(trace.visibilityMode()).isEqualTo(VisibilityMode.HIDDEN);
         }
+    }
+
+    @Test
+    void findGroupedExperiments_returnsGroupedPage() {
+        // Arrange: create datasets and experiments
+        var workspaceName = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+        var dataset = podamFactory.manufacturePojo(com.comet.opik.api.Dataset.class);
+        datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+        var experiment = experimentResourceClient.createPartialExperiment().datasetName(dataset.name()).build();
+        createAndAssert(experiment, apiKey, workspaceName);
+        // Act: call the new endpoint
+        var response = client.target(getExperimentsPath())
+                .path("grouped")
+                .queryParam("page", 1)
+                .queryParam("size", 10)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+        // Assert: check response structure
+        assertEquals(200, response.getStatus());
+        var groupedPage = response.readEntity(com.comet.opik.api.Experiment.GroupedExperimentPage.class);
+        assertNotNull(groupedPage);
+        assertFalse(groupedPage.content().isEmpty());
+        var group = groupedPage.content().get(0);
+        assertNotNull(group.dataset());
+        assertFalse(group.experiments().isEmpty());
     }
 }
