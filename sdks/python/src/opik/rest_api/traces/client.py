@@ -1175,6 +1175,62 @@ class TracesClient:
         ) as r:
             yield from r.data
 
+    def update_thread(
+        self,
+        thread_model_id: str,
+        *,
+        text: str,
+        id: typing.Optional[str] = OMIT,
+        created_at: typing.Optional[dt.datetime] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        created_by: typing.Optional[str] = OMIT,
+        last_updated_by: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update thread
+
+        Parameters
+        ----------
+        thread_model_id : str
+
+        text : str
+
+        id : typing.Optional[str]
+
+        created_at : typing.Optional[dt.datetime]
+
+        last_updated_at : typing.Optional[dt.datetime]
+
+        created_by : typing.Optional[str]
+
+        last_updated_by : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.traces.update_thread(thread_model_id='threadModelId', text='text', )
+        """
+        _response = self._raw_client.update_thread(
+            thread_model_id,
+            text=text,
+            id=id,
+            created_at=created_at,
+            last_updated_at=last_updated_at,
+            created_by=created_by,
+            last_updated_by=last_updated_by,
+            request_options=request_options,
+        )
+        return _response.data
+
     def update_thread_comment(
         self,
         comment_id: str,
@@ -2515,6 +2571,65 @@ class AsyncTracesClient:
         ) as r:
             async for data in r.data:
                 yield data
+
+    async def update_thread(
+        self,
+        thread_model_id: str,
+        *,
+        text: str,
+        id: typing.Optional[str] = OMIT,
+        created_at: typing.Optional[dt.datetime] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        created_by: typing.Optional[str] = OMIT,
+        last_updated_by: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update thread
+
+        Parameters
+        ----------
+        thread_model_id : str
+
+        text : str
+
+        id : typing.Optional[str]
+
+        created_at : typing.Optional[dt.datetime]
+
+        last_updated_at : typing.Optional[dt.datetime]
+
+        created_by : typing.Optional[str]
+
+        last_updated_by : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.traces.update_thread(thread_model_id='threadModelId', text='text', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.update_thread(
+            thread_model_id,
+            text=text,
+            id=id,
+            created_at=created_at,
+            last_updated_at=last_updated_at,
+            created_by=created_by,
+            last_updated_by=last_updated_by,
+            request_options=request_options,
+        )
+        return _response.data
 
     async def update_thread_comment(
         self,

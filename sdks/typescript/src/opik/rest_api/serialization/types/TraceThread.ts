@@ -29,7 +29,9 @@ export const TraceThread: core.serialization.ObjectSchema<serializers.TraceThrea
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
         usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
         comments: core.serialization.list(Comment).optional(),
+        tags: core.serialization.list(core.serialization.string()).optional(),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
+        lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     });
@@ -50,7 +52,9 @@ export declare namespace TraceThread {
         total_estimated_cost?: number | null;
         usage?: Record<string, number> | null;
         comments?: Comment.Raw[] | null;
+        tags?: string[] | null;
         last_updated_at?: string | null;
+        last_updated_by?: string | null;
         created_by?: string | null;
         created_at?: string | null;
     }

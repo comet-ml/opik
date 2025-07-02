@@ -26,7 +26,9 @@ class TraceThread(UniversalBaseModel):
     total_estimated_cost: typing.Optional[float] = None
     usage: typing.Optional[typing.Dict[str, int]] = None
     comments: typing.Optional[typing.List[Comment]] = None
+    tags: typing.Optional[typing.List[str]] = None
     last_updated_at: typing.Optional[dt.datetime] = None
+    last_updated_by: typing.Optional[str] = None
     created_by: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
 
