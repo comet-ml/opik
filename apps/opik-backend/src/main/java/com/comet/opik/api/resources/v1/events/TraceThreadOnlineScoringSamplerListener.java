@@ -150,15 +150,16 @@ public class TraceThreadOnlineScoringSamplerListener {
                             });
                 })
                 .collect(groupingBy(TraceThreadSampling::threadModelId,
-                        mapping(TraceThreadSampling::samplingPerRule, reducing(new HashMap<>(), this::mergeMaps))))
+                        mapping(TraceThreadSampling::samplingPerRule,
+                                reducing(new HashMap<>(), this::groupRuleSampling))))
                 .entrySet()
                 .stream()
                 .map(sampling -> new TraceThreadSampling(sampling.getKey(), sampling.getValue()))
                 .toList();
     }
 
-    private Map<UUID, Boolean> mergeMaps(Map<UUID, Boolean> a, Map<UUID, Boolean> b) {
-        a.putAll(b);
-        return a;
+    private Map<UUID, Boolean> groupRuleSampling(Map<UUID, Boolean> acc, Map<UUID, Boolean> current) {
+        acc.putAll(current);
+        return acc;
     }
 }
