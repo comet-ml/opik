@@ -16,4 +16,5 @@ public interface LlmProviderFactory {
 
     ChatModel getLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters);
 
+    LlmProvider getLlmProvider(String model);
 }
