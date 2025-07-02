@@ -104,4 +104,5 @@ export interface Thread {
   status: ThreadStatus;
   feedback_scores?: TraceFeedbackScore[];
   comments?: CommentItems;
+  tags?: string[];
 }
