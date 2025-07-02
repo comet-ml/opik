@@ -3,7 +3,6 @@ import { keepPreviousData } from "@tanstack/react-query";
 import find from "lodash/find";
 import isBoolean from "lodash/isBoolean";
 import isFunction from "lodash/isFunction";
-import { Trash } from "lucide-react";
 
 import { OnChangeFn } from "@/types/shared";
 import {
@@ -11,7 +10,6 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import { Separator } from "@/components/ui/separator";
 import useTraceById from "@/api/traces/useTraceById";
 import Loader from "@/components/shared/Loader/Loader";
 import TraceDataViewer from "./TraceDataViewer/TraceDataViewer";
@@ -20,9 +18,6 @@ import TraceAnnotateViewer from "./TraceAnnotateViewer/TraceAnnotateViewer";
 import NoData from "@/components/shared/NoData/NoData";
 import { Span } from "@/types/traces";
 import ResizableSidePanel from "@/components/shared/ResizableSidePanel/ResizableSidePanel";
-import useTraceDeleteMutation from "@/api/traces/useTraceDeleteMutation";
-import { Button } from "@/components/ui/button";
-import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import CommentsViewer from "./CommentsViewer/CommentsViewer";
 import useLazySpansList from "@/api/traces/useLazySpansList";
 import {
@@ -30,6 +25,7 @@ import {
   useDetailsActionSectionState,
 } from "@/components/pages-shared/traces/DetailsActionSection";
 import useTreeDetailsStore from "@/components/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
+import TraceDetailsActionsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsActionsPanel";
 
 type TraceDetailsPanelProps = {
   projectId?: string;
@@ -56,9 +52,9 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   open,
   onRowChange,
 }) => {
-  const [popupOpen, setPopupOpen] = useState<boolean>(false);
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastSection");
+  const [search, setSearch] = useState("");
   const { flattenedTree } = useTreeDetailsStore();
 
   const { data: trace, isPending: isTracePending } = useTraceById(
@@ -88,17 +84,6 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       enabled: Boolean(traceId) && Boolean(projectId),
     },
   );
-
-  const traceDeleteMutation = useTraceDeleteMutation();
-
-  const handleTraceDelete = useCallback(() => {
-    onClose();
-    traceDeleteMutation.mutate({
-      traceId,
-      projectId,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [traceId, projectId, onClose]);
 
   const handleRowSelect = useCallback(
     (id: string) => setSpanId(id === traceId ? "" : id),
@@ -139,6 +124,8 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       },
       hasNext: Boolean(nextRowId),
       hasPrevious: Boolean(previousRowId),
+      nextTooltip: "Next span",
+      previousTooltip: "Previous span",
     };
   }, [spanId, traceId, handleRowSelect, flattenedTree]);
 
@@ -160,7 +147,8 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
               spans={spansData?.content}
               rowId={spanId || traceId}
               onSelectRow={handleRowSelect}
-              isSpansLazyLoading={isSpansLazyLoading}
+              search={search}
+              setSearch={setSearch}
             />
           </ResizablePanel>
           <ResizableHandle />
@@ -211,55 +199,28 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     );
   };
 
-  const renderNavigationContent = () => {
-    if (setThreadId && trace?.thread_id) {
-      return (
-        <>
-          <Separator orientation="vertical" className="mx-2 h-8" />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setThreadId(trace.thread_id)}
-          >
-            Go to thread
-          </Button>
-        </>
-      );
-    }
-
-    return null;
-  };
-
-  const renderHeaderContent = () => {
-    return (
-      <div className="flex gap-2">
-        <ConfirmDialog
-          open={popupOpen}
-          setOpen={setPopupOpen}
-          onConfirm={handleTraceDelete}
-          title="Delete trace"
-          description="Deleting a trace will also remove the trace data from related experiment samples. This action can’t be undone. Are you sure you want to continue?"
-          confirmText="Delete trace"
-          confirmButtonVariant="destructive"
-        />
-        <Button variant="outline" size="sm" onClick={() => setPopupOpen(true)}>
-          <Trash className="mr-2 size-4" />
-          Delete
-        </Button>
-      </div>
-    );
-  };
-
   return (
     <ResizableSidePanel
       panelId="traces"
       entity="trace"
       open={open}
-      navigationContent={renderNavigationContent()}
-      headerContent={renderHeaderContent()}
+      headerContent={
+        <TraceDetailsActionsPanel
+          traceId={traceId}
+          spanId={spanId}
+          threadId={trace?.thread_id}
+          setThreadId={setThreadId}
+          projectId={projectId}
+          onClose={onClose}
+          isSpansLazyLoading={isSpansLazyLoading}
+          search={search}
+          setSearch={setSearch}
+        />
+      }
       onClose={onClose}
       horizontalNavigation={horizontalNavigation}
       verticalNavigation={verticalNavigation}
+      minWidth={640}
     >
       {renderContent()}
     </ResizableSidePanel>
