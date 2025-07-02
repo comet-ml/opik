@@ -6,7 +6,7 @@ import api, {
 } from "@/api/api";
 import { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
-import { ProviderKeyWithAPIKey } from "@/types/providers";
+import { ProviderKeyWithAPIKey, PROVIDER_TYPE } from "@/types/providers";
 
 type UseProviderKeysCreateMutationParams = {
   providerKey: Partial<ProviderKeyWithAPIKey>;
@@ -24,9 +24,26 @@ const useProviderKeysCreateMutation = () => {
       if (providerKey?.location) {
         config.location = providerKey.location;
       }
-      if (providerKey?.models) {
+
+      if (
+        providerKey.provider === PROVIDER_TYPE.VLLM &&
+        typeof providerKey.models === 'string'
+      ) {
+        config.models = providerKey.models
+          .split(',')
+          .map((model) => model.trim())
+          .filter(Boolean)
+          .map((model) => {
+            if (model.startsWith(`${PROVIDER_TYPE.VLLM}/`)) {
+              return model;
+            }
+            return `${PROVIDER_TYPE.VLLM}/${model}`;
+          })
+          .join(',');
+      } else if (providerKey?.models) {
         config.models = providerKey.models;
       }
+
       const configuration = Object.keys(config).length
         ? { configuration: config }
         : {};

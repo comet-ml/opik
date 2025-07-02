@@ -26,7 +26,12 @@ const useVllmAIProviderData = () => {
         const _vllmConfig = vllmConfig as ProviderKey & { base_url: string, configuration: {models: string} };
         const models = _vllmConfig.configuration.models
           .split(',')
-          .map((model) => ({ value: model.trim(), label: model.trim() }));
+          .map((model) => {
+            const trimmedModel = model.trim();
+            const prefix = `${PROVIDER_TYPE.VLLM}/`;
+            const label = trimmedModel.startsWith(prefix) ? trimmedModel.replace(prefix, '') : trimmedModel;
+            return { value: trimmedModel, label };
+          });
         setVllmModels({ [PROVIDER_TYPE.VLLM]: models });
       }
     }
@@ -42,6 +47,18 @@ const useVllmAIProviderData = () => {
       if (vllmConfig) {
         // Not using spread, we don't need all the properties
         const _vllmConfig = vllmConfig as ProviderKey & { base_url: string, configuration: {models: string} };
+        const models = _vllmConfig.configuration.models
+          .split(',')
+          .map((model) => model.trim())
+          .filter(Boolean)
+          .map((model) => {
+            if (model.startsWith(`${PROVIDER_TYPE.VLLM}/`)) {
+              return model;
+            }
+            return `${PROVIDER_TYPE.VLLM}/${model}`;
+          })
+          .join(',');
+
         retVal = {
           id: _vllmConfig.id,
           keyName: _vllmConfig.keyName,
@@ -49,7 +66,7 @@ const useVllmAIProviderData = () => {
           created_at: _vllmConfig.created_at,
           url: _vllmConfig.base_url,
           apiKey: "*****",
-          models: _vllmConfig.configuration.models,
+          models: models,
         };
       }
     }

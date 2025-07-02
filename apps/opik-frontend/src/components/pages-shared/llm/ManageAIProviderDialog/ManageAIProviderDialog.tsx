@@ -148,11 +148,28 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     : "Done";
 
   const localConfigHandler = useCallback(() => {
+    const modelsValue = form.getValues("models");
+    let finalModels = modelsValue;
+
+    if (provider === PROVIDER_TYPE.VLLM) {
+      finalModels = modelsValue
+        .split(',')
+        .map((model) => model.trim())
+        .filter(Boolean)
+        .map((model) => {
+          if (model.startsWith(`${PROVIDER_TYPE.VLLM}/`)) {
+            return model;
+          }
+          return `${PROVIDER_TYPE.VLLM}/${model}`;
+        })
+        .join(',');
+    }
+
     const data: LocalAIProviderData = {
       created_at: new Date().toISOString(),
       ...localData,
       url: form.getValues("url"),
-      models: form.getValues("models"),
+      models: finalModels,
     };
 
     if (provider) {
