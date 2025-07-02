@@ -65,15 +65,6 @@ class OpikMessageProcessor(BaseMessageProcessor):
             if exception.status_code == 409:
                 # sometimes a retry mechanism works in a way that it sends the same request 2 times.
                 # if the backend rejects the second request, we don't want users to see an error.
-                if isinstance(message, messages.AddThreadsFeedbackScoresBatchMessage):
-                    # In the case of AddThreadsFeedbackScoresBatchMessage, the backend will reject the request
-                    # if thread is not closed which can happen if the user is unaware of this fact.
-                    # Thus, we display the warning message.
-                    LOGGER.warning(
-                        "Message '%s' was rejected by the backend, reason: %s",
-                        message_type.__name__,
-                        exception,
-                    )
                 return
             elif exception.status_code == 429:
                 if exception.headers is not None:
@@ -215,12 +206,25 @@ class OpikMessageProcessor(BaseMessageProcessor):
             for score_message in message.batch
         ]
 
-        LOGGER.debug("Add threads feedbacks scores request of size %d", len(scores))
-
-        self._rest_client.traces.score_batch_of_threads(
-            scores=scores,
-        )
-        LOGGER.debug("Sent batch of threads feedbacks scores of size %d", len(scores))
+        try:
+            LOGGER.debug("Add threads feedbacks scores request of size %d", len(scores))
+            self._rest_client.traces.score_batch_of_threads(
+                scores=scores,
+            )
+            LOGGER.debug(
+                "Sent batch of threads feedbacks scores of size %d", len(scores)
+            )
+        except rest_api_core.ApiError as exception:
+            # In the case of AddThreadsFeedbackScoresBatchMessage, the backend will reject the request
+            # if thread is not closed which can happen if the user is unaware of this fact.
+            # Thus, we display the warning message.
+            if exception.status_code == 409:
+                LOGGER.warning(
+                    "Threads feedbacks scores batch was rejected by the backend, reason: '%s'",
+                    exception.body,
+                )
+            # propagate further to be handled in a unified error handler
+            raise exception
 
     def _process_create_spans_batch_message(
         self, message: messages.CreateSpansBatchMessage
