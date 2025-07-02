@@ -19,7 +19,9 @@ export interface TraceThread {
     totalEstimatedCost?: number;
     usage?: Record<string, number>;
     comments?: OpikApi.Comment[];
+    tags?: string[];
     lastUpdatedAt?: Date;
+    lastUpdatedBy?: string;
     createdBy?: string;
     createdAt?: Date;
 }
