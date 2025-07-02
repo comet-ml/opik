@@ -17,8 +17,10 @@ import org.slf4j.Logger;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.List;
 import java.util.Map;
 
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
@@ -87,8 +89,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             }
 
             try {
-                var scores = OnlineScoringEngine.toFeedbackScores(chatResponse).stream()
-                        .map(item -> item.toBuilder()
+                List<FeedbackScoreBatchItem> scores = OnlineScoringEngine.toFeedbackScores(chatResponse).stream()
+                        .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
                                 .id(trace.id())
                                 .projectId(trace.projectId())
                                 .projectName(trace.projectName())

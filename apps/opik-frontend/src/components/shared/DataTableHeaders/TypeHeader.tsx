@@ -33,6 +33,7 @@ const COLUMN_TYPE_MAP: Record<
   [COLUMN_TYPE.numberDictionary]: PenLine,
   [COLUMN_TYPE.cost]: Coins,
   [COLUMN_TYPE.guardrails]: Construction,
+  [COLUMN_TYPE.threadStatus]: Text,
   [COLUMN_TYPE.errors]: AlertTriangle,
 };
 
