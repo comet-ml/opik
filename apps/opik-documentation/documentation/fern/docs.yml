@@ -456,6 +456,9 @@ navigation:
           - page: OpenAI
             path: docs/cookbook/openai.mdx
             slug: openai
+          - page: OpenAI Agents
+            path: docs/cookbook/openai-agents.mdx
+            slug: openai-agents
           - page: LiteLLM
             path: docs/cookbook/litellm.mdx
             slug: litellm
