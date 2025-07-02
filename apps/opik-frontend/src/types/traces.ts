@@ -77,6 +77,8 @@ export interface Span extends BaseTraceData {
   trace_id: string;
   project_id: string;
   workspace_name?: string;
+  model?: string;
+  provider?: string;
 }
 
 export type BASE_TRACE_DATA_TYPE = SPAN_TYPE | "trace";

@@ -100,38 +100,40 @@ const FeedbackScoreListCell = <TData,>(
       ) : (
         <div ref={cellRef} className="w-full min-w-0 flex-1 overflow-hidden">
           <FeedbackScoreHoverCard
-            name={hoverCardName}
+            title={hoverCardName}
             isAverageScores={isAverageScores}
-            tagList={sortedList}
+            scores={sortedList}
             hidden={!remainingCount}
           >
-            <div className="flex size-full items-center justify-start gap-1.5 overflow-hidden p-0 py-1 pr-2">
-              <ChildrenWidthMeasurer onMeasure={onMeasure}>
-                {sortedList.map<React.ReactNode>((item) => (
-                  <div key={item.name}>
+            <div className="flex min-w-0 flex-1">
+              <div className="flex size-full items-center justify-start gap-1.5 overflow-hidden p-0 py-1 pr-2">
+                <ChildrenWidthMeasurer onMeasure={onMeasure}>
+                  {sortedList.map<React.ReactNode>((item) => (
+                    <div key={item.name}>
+                      <FeedbackScoreTag
+                        label={item.name}
+                        value={item.value}
+                        reason={item.reason}
+                      />
+                    </div>
+                  ))}
+                </ChildrenWidthMeasurer>
+                {sortedList
+                  .slice(0, visibleCount)
+                  .map<React.ReactNode>((item) => (
                     <FeedbackScoreTag
+                      key={item.name}
                       label={item.name}
                       value={item.value}
-                      reason={item.reason}
+                      className="min-w-0"
                     />
+                  ))}
+                {Boolean(remainingCount) && (
+                  <div className="comet-body-s-accented flex h-6 items-center rounded-md border border-border pl-1 pr-1.5 text-muted-slate">
+                    +{remainingCount}
                   </div>
-                ))}
-              </ChildrenWidthMeasurer>
-              {sortedList
-                .slice(0, visibleCount)
-                .map<React.ReactNode>((item) => (
-                  <FeedbackScoreTag
-                    key={item.name}
-                    label={item.name}
-                    value={item.value}
-                    className="min-w-0"
-                  />
-                ))}
-              {Boolean(remainingCount) && (
-                <div className="comet-body-s-accented flex h-6 items-center rounded-md border border-border pl-1 pr-1.5 text-muted-slate">
-                  +{remainingCount}
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </FeedbackScoreHoverCard>
         </div>
