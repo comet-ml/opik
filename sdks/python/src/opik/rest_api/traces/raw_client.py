@@ -1595,6 +1595,80 @@ class RawTracesClient:
 
             yield stream()
 
+    def update_thread(
+        self,
+        thread_model_id: str,
+        *,
+        text: str,
+        id: typing.Optional[str] = OMIT,
+        created_at: typing.Optional[dt.datetime] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        created_by: typing.Optional[str] = OMIT,
+        last_updated_by: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Update thread
+
+        Parameters
+        ----------
+        thread_model_id : str
+
+        text : str
+
+        id : typing.Optional[str]
+
+        created_at : typing.Optional[dt.datetime]
+
+        last_updated_at : typing.Optional[dt.datetime]
+
+        created_by : typing.Optional[str]
+
+        last_updated_by : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/traces/threads/{jsonable_encoder(thread_model_id)}",
+            method="PATCH",
+            json={
+                "id": id,
+                "text": text,
+                "created_at": created_at,
+                "last_updated_at": last_updated_at,
+                "created_by": created_by,
+                "last_updated_by": last_updated_by,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def update_thread_comment(
         self,
         comment_id: str,
@@ -3302,6 +3376,80 @@ class AsyncRawTracesClient:
                 raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
             yield await stream()
+
+    async def update_thread(
+        self,
+        thread_model_id: str,
+        *,
+        text: str,
+        id: typing.Optional[str] = OMIT,
+        created_at: typing.Optional[dt.datetime] = OMIT,
+        last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        created_by: typing.Optional[str] = OMIT,
+        last_updated_by: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Update thread
+
+        Parameters
+        ----------
+        thread_model_id : str
+
+        text : str
+
+        id : typing.Optional[str]
+
+        created_at : typing.Optional[dt.datetime]
+
+        last_updated_at : typing.Optional[dt.datetime]
+
+        created_by : typing.Optional[str]
+
+        last_updated_by : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/traces/threads/{jsonable_encoder(thread_model_id)}",
+            method="PATCH",
+            json={
+                "id": id,
+                "text": text,
+                "created_at": created_at,
+                "last_updated_at": last_updated_at,
+                "created_by": created_by,
+                "last_updated_by": last_updated_by,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def update_thread_comment(
         self,
