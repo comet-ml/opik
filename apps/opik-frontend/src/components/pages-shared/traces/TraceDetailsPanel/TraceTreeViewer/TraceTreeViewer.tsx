@@ -1,20 +1,14 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 
 import {
   addAllParentIds,
   constructDataMapAndSearchIds,
   searchFunction,
 } from "./helpers";
+import { OnChangeFn } from "@/types/shared";
 import { Span, Trace } from "@/types/traces";
 import { SPANS_COLORS_MAP, TRACE_TYPE_FOR_TREE } from "@/constants/traces";
 import { Button } from "@/components/ui/button";
-import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import NoData from "@/components/shared/NoData/NoData";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -47,7 +41,8 @@ type TraceTreeViewerProps = {
   spans?: Span[];
   rowId: string;
   onSelectRow: (id: string) => void;
-  isSpansLazyLoading: boolean;
+  search: string;
+  setSearch: OnChangeFn<string>;
 };
 
 const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
@@ -55,9 +50,9 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
   spans,
   rowId,
   onSelectRow,
-  isSpansLazyLoading,
+  search,
+  setSearch,
 }) => {
-  const [search, setSearch] = useState("");
   const traceSpans = useMemo(() => spans ?? [], [spans]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [config, setConfig] = useLocalStorageState(
@@ -226,16 +221,6 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
             )}
           </div>
         </div>
-        <div className="sticky top-12 z-10 flex flex-wrap items-center bg-white py-2 pl-6 pr-4">
-          <SearchInput
-            searchText={search}
-            setSearchText={setSearch}
-            placeholder="Search by all fields"
-            dimension="sm"
-            disabled={isSpansLazyLoading}
-          ></SearchInput>
-        </div>
-
         {tree.length ? (
           <VirtualizedTreeViewer
             scrollRef={scrollRef}
