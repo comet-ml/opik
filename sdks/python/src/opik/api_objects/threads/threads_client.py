@@ -43,6 +43,12 @@ class ThreadsClient:
         filter criteria. It takes an optional project name, a filter string to narrow
         down the results, and a maximum number of threads to return.
 
+        The filter string should be a string that represents a filter condition in the
+        form of a string expression. For example, to search for threads with a specific
+        status, you could use the following filter string: `filter_string = 'status = "active"'`.
+        The filter string can include logical operators (AND) to combine
+        multiple conditions, for example, `filter_string = 'status = "active" and id = "{thread_id}"'`.
+
         Args:
             project_name:
                 The name of the project to search the threads for. If None, the search
@@ -66,7 +72,7 @@ class ThreadsClient:
             >>> thread_id = "your_thread_id"
             >>> threads = client.get_threads_client().search_threads(
             >>>     project_name="Demo Project",
-            >>>     filter_string=f'id = {thread_id}',
+            >>>     filter_string=f'id = "{thread_id}"',
             >>>     max_results=10)
         """
         filters = helpers.parse_filter_expressions(
