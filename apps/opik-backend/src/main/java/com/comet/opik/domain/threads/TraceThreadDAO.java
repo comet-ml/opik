@@ -149,7 +149,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                         <items:{item |
                             SELECT
                                 :thread_model_id<item.index> AS thread_model_id,
-                                mapFromArray(:rule_ids<item.index>, :sampling<item.index>) AS sampling_per_rule
+                                mapFromArrays(:rule_ids<item.index>, :sampling<item.index>) AS sampling_per_rule
                             <if(item.hasNext)>UNION ALL<endif>
                         }>
                     )
@@ -354,7 +354,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 i++;
             }
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+            return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
         });
     }
