@@ -5,7 +5,7 @@ from typing import Optional, List, Callable, Dict, Literal
 from opik import exceptions, track, opik_context
 from opik.evaluation.metrics.conversation import conversation_thread_metric
 from opik.rest_api import JsonListStringPublic, TraceThread
-from . import context_helper, evaluation_result, helpers
+from . import evaluation_result, helpers
 from ..engine import evaluation_tasks_executor
 from ..engine import types as engine_types
 from ..metrics import score_result
@@ -114,7 +114,7 @@ class ThreadsEvaluationEngine:
             project_name=eval_project_name,
         )
 
-        with context_helper.evaluate_llm_conversation_context(
+        with opik_context.trace_context(
             trace_data=trace_data,
             client=self._client.opik_client,
         ):
