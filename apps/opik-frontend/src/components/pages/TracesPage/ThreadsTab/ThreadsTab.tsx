@@ -67,6 +67,7 @@ import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreC
 import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScoresNames";
 import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
+import ListCell from "@/components/shared/DataTableCells/ListCell";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -168,6 +169,13 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
     label: "Comments",
     type: COLUMN_TYPE.string,
     cell: CommentsCell as never,
+  },
+  // TODO: move to shared once filters BE are implemented
+  {
+    id: "tags",
+    label: "Tags",
+    type: COLUMN_TYPE.list,
+    cell: ListCell as never,
   },
 ];
 

@@ -4,9 +4,12 @@ import get from "lodash/get";
 
 import api, { THREADS_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
+import { Thread } from "@/types/traces";
+
+type ThreadUpdateData = Pick<Thread, "tags">;
 
 type UseThreadUpdateMutationParams = {
-  tags: string[];
+  data: Partial<ThreadUpdateData>;
   threadId: string;
   projectId: string;
 };
@@ -16,15 +19,13 @@ const useThreadUpdateMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ tags, threadId }: UseThreadUpdateMutationParams) => {
-      const { data } = await api.patch(
+    mutationFn: async ({ data, threadId }: UseThreadUpdateMutationParams) => {
+      const { data: updatedThread } = await api.patch(
         `${TRACES_REST_ENDPOINT}${THREADS_KEY}/${threadId}`,
-        {
-          tags,
-        },
+        data,
       );
 
-      return data;
+      return updatedThread;
     },
     onError: (error: AxiosError) => {
       const message = get(

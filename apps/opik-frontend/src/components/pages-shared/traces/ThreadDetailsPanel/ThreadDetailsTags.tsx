@@ -15,11 +15,13 @@ const ThreadDetailsTags: React.FunctionComponent<ThreadDetailsTagsProps> = ({
 }) => {
   const threadUpdateMutation = useThreadUpdateMutation();
 
-  const mutateTags = (newTags: string[]) => {
+  const mutateTags = (tags: string[]) => {
     threadUpdateMutation.mutate({
       projectId,
       threadId,
-      tags: newTags,
+      data: {
+        tags,
+      },
     });
   };
 

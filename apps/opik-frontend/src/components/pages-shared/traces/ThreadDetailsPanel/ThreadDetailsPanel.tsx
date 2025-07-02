@@ -62,6 +62,7 @@ import { ThreadStatus } from "@/types/thread";
 import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
 import ThreadFeedbackScoresInfo from "./ThreadFeedbackScoresInfo";
 import { Separator } from "@/components/ui/separator";
+import ThreadDetailsTags from "./ThreadDetailsTags";
 
 type ThreadDetailsPanelProps = {
   projectId: string;
@@ -130,6 +131,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   const isInactiveThread = thread?.status === ThreadStatus.INACTIVE;
   const threadFeedbackScores = thread?.feedback_scores ?? [];
   const threadComments = thread?.comments ?? [];
+  const threadTags = thread?.tags ?? [];
 
   let currentActiveTab = activeTab!;
   if (activeTab === "feedback_scores" && !isInactiveThread) {
@@ -223,6 +225,52 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     ...(height && { height: `${height}px` }),
   };
 
+  const renderThreadStatus = () => {
+    if (!thread) {
+      return null;
+    }
+
+    if (isInactiveThread) {
+      return <ThreadStatusTag status={ThreadStatus.INACTIVE} />;
+    }
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="2xs"
+            className="border-[#EBF2F5] bg-[#EBF2F5] hover:bg-[#EBF2F5]/80"
+          >
+            <MessageCircleMore className="mr-1 size-3" /> Active
+            <ChevronDown className="ml-1 size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-60">
+          <DropdownMenuItem onClick={() => changeSetInactiveOpen(true)}>
+            <MessageCircleOff className="mr-2 size-4" />
+            Set as inactive
+          </DropdownMenuItem>
+          {/* <DropdownMenuSeparator />
+          <Button variant="link" className="w-full" asChild>
+            <Link
+              to="/$workspaceName/configuration"
+              params={{ workspaceName }}
+              search={{
+                tab: "workspace-preferences",
+                editPreference: WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
+              }}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Manage session timeout
+            </Link>
+          </Button> */}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
+
   const renderHeader = () => {
     if (isThreadPending) {
       return <Loader />;
@@ -237,43 +285,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           <div className="comet-title-s truncate py-0.5">Thread</div>
           <div className="flex flex-auto"></div>
 
-          {isInactiveThread ? (
-            <ThreadStatusTag status={thread.status} />
-          ) : (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="2xs"
-                  className="border-[#EBF2F5] bg-[#EBF2F5] hover:bg-[#EBF2F5]/80"
-                >
-                  <MessageCircleMore className="mr-1 size-3" /> Active
-                  <ChevronDown className="ml-1 size-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-60">
-                <DropdownMenuItem onClick={() => changeSetInactiveOpen(true)}>
-                  <MessageCircleOff className="mr-2 size-4" />
-                  Set as inactive
-                </DropdownMenuItem>
-                {/* <DropdownMenuSeparator />
-                <Button variant="link" className="w-full" asChild>
-                  <Link
-                    to="/$workspaceName/configuration"
-                    params={{ workspaceName }}
-                    search={{
-                      tab: "workspace-preferences",
-                      editPreference: WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
-                    }}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Manage session timeout
-                  </Link>
-                </Button> */}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          {renderThreadStatus()}
         </div>
         <div className=" flex w-full items-center gap-3 overflow-x-hidden py-1">
           <TooltipWrapper content="Thread start time">
@@ -303,12 +315,13 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             </div>
           </TooltipWrapper>
         </div>
-        {/* <ThreadDetailsTags
-          // TODO implement for thread
-          tags={[]}
-          threadId={threadId}
-          projectId={projectId}
-        /> */}
+        {thread && (
+          <ThreadDetailsTags
+            tags={threadTags}
+            threadId={thread.thread_model_id}
+            projectId={projectId}
+          />
+        )}
       </div>
     );
   };
