@@ -1,29 +1,50 @@
 import React from "react";
 import { Span, Trace } from "@/types/traces";
-import { LastSectionValue } from "../TraceDetailsPanel";
-import LastSectionLayout from "../LastSectionLayout";
 import FeedbackScoresEditor from "../../FeedbackScoresEditor/FeedbackScoresEditor";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import {
+  DetailsActionSectionLayout,
+  DetailsActionSectionValue,
+} from "@/components/pages-shared/traces/DetailsActionSection";
+import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
+import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
+import { UpdateFeedbackScoreData } from "./types";
 
 type TraceAnnotateViewerProps = {
   data: Trace | Span;
   spanId?: string;
   traceId: string;
-  lastSection?: LastSectionValue | null;
-  setLastSection: (v: LastSectionValue | null) => void;
+  activeSection: DetailsActionSectionValue | null;
+  setActiveSection: (v: DetailsActionSectionValue | null) => void;
 };
 
 const TraceAnnotateViewer: React.FunctionComponent<
   TraceAnnotateViewerProps
-> = ({ data, spanId, traceId, lastSection, setLastSection }) => {
+> = ({ data, spanId, traceId, activeSection, setActiveSection }) => {
   const hasFeedbackScores = Boolean(data.feedback_scores?.length);
+
+  const { mutate: setTraceFeedbackScore } = useTraceFeedbackScoreSetMutation();
+  const { mutate: feedbackScoreDelete } = useTraceFeedbackScoreDeleteMutation();
+
+  const onUpdateFeedbackScore = (data: UpdateFeedbackScoreData) => {
+    setTraceFeedbackScore({
+      ...data,
+      traceId,
+      spanId,
+    });
+  };
+
+  const onDeleteFeedbackScore = (name: string) => {
+    feedbackScoreDelete({ name, traceId, spanId });
+  };
+
   return (
-    <LastSectionLayout
+    <DetailsActionSectionLayout
       title="Feedback scores"
       closeTooltipContent="Close annotate"
-      setLastSection={setLastSection}
-      lastSection={lastSection}
+      setActiveSection={setActiveSection}
+      activeSection={activeSection}
       explainer={EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
     >
       {hasFeedbackScores && (
@@ -41,12 +62,14 @@ const TraceAnnotateViewer: React.FunctionComponent<
         </div>
       )}
       <FeedbackScoresEditor
+        key={traceId ?? spanId}
         feedbackScores={data.feedback_scores || []}
-        traceId={traceId}
-        spanId={spanId}
+        onUpdateFeedbackScore={onUpdateFeedbackScore}
+        onDeleteFeedbackScore={onDeleteFeedbackScore}
         className="mt-4"
+        entityCopy="traces"
       />
-    </LastSectionLayout>
+    </DetailsActionSectionLayout>
   );
 };
 

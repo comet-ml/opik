@@ -17,7 +17,7 @@ jobs:
           fetch-depth: 0  # Fetch all history for git diff
 
       - name: Install Fern
-        run: npm install -g fern-api
+        run: npm install -g fern-api@0.64.26
 
       - name: Publish Docs
         env:

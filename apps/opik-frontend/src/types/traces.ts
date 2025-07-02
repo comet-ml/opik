@@ -1,6 +1,7 @@
 import { UsageData } from "@/types/shared";
 import { CommentItems } from "./comment";
 import { GuardrailValidation } from "./guardrails";
+import { ThreadStatus } from "./thread";
 
 export enum USER_FEEDBACK_SCORE {
   dislike,
@@ -87,6 +88,7 @@ export interface AgentGraphData {
 
 export interface Thread {
   id: string;
+  thread_model_id: string;
   project_id: string;
   start_time: string;
   end_time: string;
@@ -99,4 +101,8 @@ export interface Thread {
   last_updated_at: string;
   created_by: string;
   created_at: string;
+  status: ThreadStatus;
+  feedback_scores?: TraceFeedbackScore[];
+  comments?: CommentItems;
+  tags?: string[];
 }

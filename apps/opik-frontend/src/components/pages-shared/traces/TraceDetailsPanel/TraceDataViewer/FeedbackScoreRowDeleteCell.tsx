@@ -6,7 +6,6 @@ import { MoreHorizontal, Trash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { FEEDBACK_SCORE_TYPE, TraceFeedbackScore } from "@/types/traces";
-import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,15 +14,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 type CustomMeta = {
-  traceId: string;
-  spanId?: string;
+  onDelete: (name: string) => void;
+  entityName: string;
 };
 
 const FeedbackScoreRowDeleteCell: React.FunctionComponent<
   CellContext<TraceFeedbackScore, unknown>
 > = ({ column, row }) => {
   const { custom } = column.columnDef.meta ?? {};
-  const { traceId, spanId } = (custom ?? {}) as CustomMeta;
+  const { onDelete, entityName } = (custom ?? {}) as CustomMeta;
   const resetKeyRef = useRef(0);
   const feedbackScore = row.original;
   const actionName =
@@ -31,16 +30,9 @@ const FeedbackScoreRowDeleteCell: React.FunctionComponent<
 
   const [open, setOpen] = useState<boolean | number>(false);
 
-  const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
-
   const deleteFeedbackScore = useCallback(() => {
-    feedbackScoreDeleteMutation.mutate({
-      traceId,
-      spanId,
-      name: feedbackScore.name,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedbackScore.name, traceId, spanId]);
+    onDelete(feedbackScore.name);
+  }, [feedbackScore.name, onDelete]);
 
   return (
     <div
@@ -53,9 +45,7 @@ const FeedbackScoreRowDeleteCell: React.FunctionComponent<
         setOpen={setOpen}
         onConfirm={deleteFeedbackScore}
         title={`${capitalize(actionName)} feedback score`}
-        description={`Are you sure you want to ${actionName} this feedback score from this ${
-          spanId ? "span" : "trace"
-        }?`}
+        description={`Are you sure you want to ${actionName} this feedback score from this ${entityName}?`}
         confirmText={`${capitalize(actionName)} feedback score`}
         confirmButtonVariant="destructive"
       />
