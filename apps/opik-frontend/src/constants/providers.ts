@@ -65,7 +65,7 @@ export const PROVIDERS: PROVIDERS_TYPE = {
   },
   // TODO: check icon and description
   [PROVIDER_TYPE.CUSTOM]: {
-    label: "vLLM / OpenAI-compatible provider",
+    label: "vLLM / custom provider",
     value: PROVIDER_TYPE.CUSTOM,
     icon: CustomIcon,
     apiKeyName: "CUSTOM_PROVIDER_API_KEY",

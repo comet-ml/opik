@@ -1,8 +1,6 @@
 import React from "react";
 import { UseFormReturn } from "react-hook-form";
 import { Label } from "@/components/ui/label";
-import { PROVIDER_TYPE } from "@/types/providers";
-import { PROVIDERS } from "@/constants/providers";
 import EyeInput from "@/components/shared/EyeInput/EyeInput";
 import { AIProviderFormType } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
 import get from "lodash/get";
@@ -24,11 +22,6 @@ type CustomProviderDetailsProps = {
 const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
   form,
 }) => {
-  const providerName = PROVIDERS[PROVIDER_TYPE.CUSTOM].label;
-  const urlLabel = `${providerName} URL`;
-  const apiKeyLabel = `${providerName} API key`;
-  const modelsLabel = `${providerName} models list`;
-
   return (
     <div className="flex flex-col gap-2 pb-4">
       <div className="flex flex-col gap-2">
@@ -40,7 +33,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
 
             return (
               <FormItem>
-                <Label htmlFor="url">{urlLabel}</Label>
+                <Label htmlFor="url">URL</Label>
                 <FormControl>
                   <Input
                     id="url"
@@ -67,11 +60,11 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
 
           return (
             <FormItem>
-              <Label htmlFor="apiKey">{apiKeyLabel}</Label>
+              <Label htmlFor="apiKey">API key</Label>
               <FormControl>
                 <EyeInput
                   id="apiKey"
-                  placeholder={apiKeyLabel}
+                  placeholder="API key"
                   value={field.value}
                   onChange={(e) => field.onChange(e.target.value)}
                   className={cn({
@@ -112,7 +105,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
 
           return (
             <FormItem>
-              <Label htmlFor="models">{modelsLabel}</Label>
+              <Label htmlFor="models">Models list</Label>
               <FormControl>
                 <Input
                   id="models"
