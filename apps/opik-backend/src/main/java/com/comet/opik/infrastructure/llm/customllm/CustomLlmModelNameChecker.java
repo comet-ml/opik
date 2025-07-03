@@ -1,10 +1,11 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
+import com.comet.opik.api.LlmProvider;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class CustomLlmModelNameChecker {
-    public static final String CUSTOM_LLM_MODEL_PREFIX = "custom/";
+    public static final String CUSTOM_LLM_MODEL_PREFIX = LlmProvider.CUSTOM_LLM.getValue() + "/";
 
     public static boolean isCustomLlmModel(String model) {
         try {
