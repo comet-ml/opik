@@ -97,6 +97,6 @@ def test_load_conversation_thread():
     # Verify the search_traces call
     mock_opik_client.search_traces.assert_called_once_with(
         project_name=project_name,
-        filter_string=f"thread_id = {thread.id}",
+        filter_string=f'thread_id = "{thread.id}"',
         max_results=10,
     )

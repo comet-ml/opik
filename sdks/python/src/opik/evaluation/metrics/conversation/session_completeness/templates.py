@@ -119,6 +119,7 @@ Given the completeness score, which is a [0, 1] score indicating how incomplete 
 - You should mention LLM response instead of `actual_output`, and User instead of `input`.
 - Always refer to user goals, but keep it minimal and phrase it in your own words. Explain which are met with supporting reason from the provided negative verdicts.
 - Be confident in your reasoning, as if you’re aware of the `actual_output`s from the messages in a conversation that led to the negative verdicts.
+- You should format <completeness_score> to use 1 decimal place in the reason.
 
 ** Example result JSON: **
 {{

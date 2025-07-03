@@ -26,12 +26,18 @@ def create_conversation_from_traces(
         A Conversation object that contains user and assistant message
         sequences derived from the provided traces.
     """
+    # Sort traces by start time to ensure they are processed in the correct order -
+    # the first user message should be first recorded
+    traces.sort(key=lambda trace_: trace_.start_time)
+
     discussion = conversation_thread.ConversationThread()
     for trace in traces:
         trace_input = input_transform(trace.input)
-        discussion.add_user_message(trace_input)
+        if trace_input is not None:
+            discussion.add_user_message(trace_input)
 
         trace_output = output_transform(trace.output)
-        discussion.add_assistant_message(trace_output)
+        if trace_output is not None:
+            discussion.add_assistant_message(trace_output)
 
     return discussion

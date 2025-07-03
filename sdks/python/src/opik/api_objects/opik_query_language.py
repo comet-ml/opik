@@ -24,6 +24,7 @@ COLUMNS = {
     "duration": "number",
     "number_of_messages": "number",
     "created_by": "string",
+    "thread_id": "string",
 }
 
 SUPPORTED_OPERATORS = {
@@ -43,6 +44,7 @@ SUPPORTED_OPERATORS = {
     "duration": ["=", ">", "<", ">=", "<="],
     "number_of_messages": ["=", ">", "<", ">=", "<="],
     "created_by": ["=", "contains", "not_contains"],
+    "thread_id": ["=", "contains", "not_contains"],
 }
 
 
