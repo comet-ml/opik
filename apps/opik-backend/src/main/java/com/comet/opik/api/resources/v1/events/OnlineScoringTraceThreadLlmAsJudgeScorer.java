@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -88,7 +89,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                 .then(Mono.defer(
                         () -> traceThreadService.setScoredAt(message.projectId(), message.threadIds(), Instant.now())))
                 .contextWrite(context -> context.put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                        .put(RequestContext.USER_NAME, message.userName()))
+                        .put(RequestContext.USER_NAME, message.userName())
+                        .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
                 .thenReturn(message)
                 .subscribe(
                         unused -> log.info("Processed trace threads for projectId '{}', ruleId '{}' for workspace '{}'",

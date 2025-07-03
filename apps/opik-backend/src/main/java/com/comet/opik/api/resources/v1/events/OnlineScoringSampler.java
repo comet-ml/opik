@@ -18,7 +18,6 @@ import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.RedissonReactiveClient;
 import org.slf4j.Logger;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -50,7 +49,6 @@ public class OnlineScoringSampler {
     @Inject
     public OnlineScoringSampler(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
-            @NonNull RedissonReactiveClient redisClient,
             @NonNull AutomationRuleEvaluatorService ruleEvaluatorService,
             @NonNull OnlineScorePublisher onlineScorePublisher) throws NoSuchAlgorithmException {
         this.ruleEvaluatorService = ruleEvaluatorService;

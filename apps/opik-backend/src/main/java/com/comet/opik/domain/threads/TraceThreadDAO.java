@@ -188,7 +188,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                     tt.created_at,
                     now64(6),
                     tt.tags,
-                    tt.sd.sampling_per_rule,
+                    sd.sampling_per_rule,
                     tt.scored_at
                 FROM trace_threads tt final
                 JOIN (
@@ -223,7 +223,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 now64(6),
                 tags,
                 sampling_per_rule,
-                parseDateTime64BestEffort(:scored_at, 6)
+                parseDateTime64BestEffort(:scored_at, 9)
             FROM trace_threads final
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
@@ -486,12 +486,12 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
         }
 
         return asyncTemplate.nonTransaction(connection -> {
-
             var statement = connection.createStatement(UPDATE_THREAD_SCORED_AT)
                     .bind("project_id", projectId)
-                    .bind("thread_ids", threadIds);
+                    .bind("thread_ids", threadIds)
+                    .bind("scored_at", scoredAt.toString());
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+            return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
         });
     }

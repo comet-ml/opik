@@ -277,30 +277,31 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
      *
      * @param threadId the ID of the thread to retrieve context for
      * @param lastReceivedIdRef a reference to store the last received trace ID
-     * @param projectId
+     * @param projectId the ID of the project to which the thread belongs
      * @return a Flux of Trace objects representing the full thread context
      */
     //TODO: Move this to a common service or utility class
     protected Flux<Trace> retrieveFullThreadContext(@NotNull String threadId,
             @NotNull AtomicReference<UUID> lastReceivedIdRef, @NotNull UUID projectId) {
-        return Flux.defer(() -> traceService.search(2000,
-                TraceSearchCriteria.builder()
-                        .projectId(projectId)
-                        .filters(List.of(TraceFilter.builder()
-                                .field(TraceField.THREAD_ID)
-                                .operator(Operator.EQUAL)
-                                .value(threadId)
-                                .build()))
-                        .lastReceivedId(lastReceivedIdRef.get())
-                        .build())
+
+        return Flux.defer(() -> traceService.search(2000, TraceSearchCriteria.builder()
+                .projectId(projectId)
+                .filters(List.of(TraceFilter.builder()
+                        .field(TraceField.THREAD_ID)
+                        .operator(Operator.EQUAL)
+                        .value(threadId)
+                        .build()))
+                .lastReceivedId(lastReceivedIdRef.get())
+                .build())
                 .collectList()
                 .flatMapMany(results -> {
                     if (results.isEmpty()) {
-                        return Flux.empty(); // stop recursion
-                    } else {
-                        lastReceivedIdRef.set(results.getLast().id());
-                        return Flux.fromIterable(results);
+                        return Flux.empty();
                     }
-                })).repeat();
+                    lastReceivedIdRef.set(results.getLast().id());
+                    return Flux.fromIterable(results)
+                            .concatWith(Flux
+                                    .defer(() -> retrieveFullThreadContext(threadId, lastReceivedIdRef, projectId)));
+                }));
     }
 }
