@@ -1120,6 +1120,7 @@ class TraceDAOImpl implements TraceDAO {
                     thread_id,
                     id as thread_model_id,
                     status,
+                    tags,
                     created_by,
                     last_updated_by,
                     created_at,
@@ -1166,6 +1167,7 @@ class TraceDAOImpl implements TraceDAO {
                     if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
                     if(tt.status = 'unknown', 'active', tt.status) as status,
                     if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
+                    tt.tags as tags,
                     fsagg.feedback_scores_list as feedback_scores_list,
                     fsagg.feedback_scores as feedback_scores
                 FROM (
