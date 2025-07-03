@@ -21,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.util.context.ContextView;
 
 import java.time.Duration;
@@ -190,7 +191,8 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                 count -> {
 
                                     Set<UUID> reopenedThreadModelIds = reopenedThreads.stream()
-                                            .map(TraceThreadModel::id).collect(Collectors.toSet());
+                                            .map(TraceThreadModel::id)
+                                            .collect(Collectors.toSet());
 
                                     List<UUID> createdThreadIds = traceThreads
                                             .stream()
@@ -220,7 +222,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                     context.get(RequestContext.USER_NAME)));
 
                             return null;
-                        })))
+                        }).subscribeOn(Schedulers.boundedElastic())))
                 .then());
     }
 

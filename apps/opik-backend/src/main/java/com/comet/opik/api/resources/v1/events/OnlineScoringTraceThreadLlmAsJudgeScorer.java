@@ -36,9 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
-import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE;
 
@@ -170,23 +168,15 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
 
         try {
             List<FeedbackScoreBatchItemThread> scores = OnlineScoringEngine.toFeedbackScores(chatResponse).stream()
-                    .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
-                            .id(threadModelId)
-                            .projectId(message.projectId())
-                            .projectName(project.name())
-                            .source(ScoreSource.ONLINE_SCORING)
-                            .build())
-                    .map(item -> FeedbackScoreBatchItemThread.builder()
-                            .threadId(threadId)
-                            .id(item.id())
-                            .projectId(item.projectId())
-                            .projectName(item.projectName())
-                            .name(item.name())
-                            .value(item.value())
-                            .reason(item.reason())
-                            .source(item.source())
-                            .build())
-                    .collect(Collectors.toList());
+                    .map(item -> FeedbackScoresMapper.INSTANCE.map(
+                            item.toBuilder()
+                                    .id(threadModelId)
+                                    .projectId(message.projectId())
+                                    .projectName(project.name())
+                                    .source(ScoreSource.ONLINE_SCORING)
+                                    .build(),
+                            threadId))
+                    .toList();
 
             var loggedScores = storeThreadScores(scores, threadId, message.userName(), message.workspaceId());
             userFacingLogger.info("Scores for threadId '{}' stored successfully:\n\n{}", threadId, loggedScores);

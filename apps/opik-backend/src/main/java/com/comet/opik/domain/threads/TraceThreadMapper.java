@@ -41,11 +41,12 @@ interface TraceThreadMapper {
                                 .map(entry -> Map.entry(UUID.fromString(entry.getKey()), entry.getValue()))
                                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)))
                         .orElse(Map.of()))
+
                 .scoredAt(row.get("scored_at", Instant.class))
                 .build();
     }
 
-    default ProjectWithPendingClosureTraceThreads mapToProjectWithPendingClosuseThreads(Row row) {
+    default ProjectWithPendingClosureTraceThreads mapToProjectWithPendingClosureThreads(Row row) {
         return ProjectWithPendingClosureTraceThreads.builder()
                 .projectId(row.get("project_id", UUID.class))
                 .workspaceId(row.get("workspace_id", String.class))

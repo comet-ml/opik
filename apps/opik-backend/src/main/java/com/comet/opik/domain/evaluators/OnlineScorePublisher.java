@@ -8,6 +8,7 @@ import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
 import com.comet.opik.api.resources.v1.events.OnlineScoringCodecs;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -58,14 +59,17 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
     private final RedissonReactiveClient redisClient;
     private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
     private final Map<AutomationRuleEvaluatorType, OnlineScoringConfig.StreamConfiguration> streamConfigurations;
+    private final ServiceTogglesConfig serviceTogglesConfig;
 
     @Inject
     public OnlineScorePublisherImpl(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
+            @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
             @NonNull RedissonReactiveClient redisClient,
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService) {
         this.redisClient = redisClient;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
-        streamConfigurations = config.getStreams().stream()
+        this.serviceTogglesConfig = serviceTogglesConfig;
+        this.streamConfigurations = config.getStreams().stream()
                 .map(streamConfiguration -> {
                     var evaluatorType = AutomationRuleEvaluatorType.fromString(streamConfiguration.getScorer());
                     if (evaluatorType != null) {
@@ -105,7 +109,14 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
             case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython definedMetricPython -> {
                 var message = toDefinedMetricPython(threadIds, ruleId, projectId, workspaceId, userName,
                         definedMetricPython.getCode());
-                enqueueMessage(List.of(message), rule.getType());
+
+                if (serviceTogglesConfig.isTraceThreadPythonEvaluatorEnabled()) {
+                    enqueueMessage(List.of(message), rule.getType());
+                } else {
+                    log.warn(
+                            "Trace Thread online scoring python evaluator is disabled, skipping enqueueing for ruleId: '{}'",
+                            ruleId);
+                }
             }
             default -> throw new IllegalStateException("Unknown rule evaluator type: " + rule);
         }

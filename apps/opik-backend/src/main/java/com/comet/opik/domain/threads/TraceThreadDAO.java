@@ -333,7 +333,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE
-                            .mapToProjectWithPendingClosuseThreads(row)));
+                            .mapToProjectWithPendingClosureThreads(row)));
         });
     }
 

@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset BorisTkachenko:000030_extend_comments_entity_type_thread
+--changeset thiagohora:000032_add_trace_thread_sampling_column
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.trace_threads ON CLUSTER '{cluster}'
     ADD COLUMN IF NOT EXISTS sampling_per_rule Map(FixedString(36), Boolean) DEFAULT map();

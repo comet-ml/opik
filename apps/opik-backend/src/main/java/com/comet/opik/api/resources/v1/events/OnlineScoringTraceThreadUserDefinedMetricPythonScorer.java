@@ -34,7 +34,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON;
@@ -77,7 +76,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
 
     @Override
     public void start() {
-        if (serviceTogglesConfig.isPythonEvaluatorEnabled()) {
+        if (serviceTogglesConfig.isTraceThreadPythonEvaluatorEnabled()) {
             super.start();
         } else {
             log.warn("Online Scoring Python evaluator consumer won't start as it is disabled.");
@@ -174,17 +173,14 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
         }
 
         List<FeedbackScoreBatchItemThread> scores = scoreResults.stream()
-                .map(scoreResult -> FeedbackScoreBatchItemThread.builder()
-                        .id(threadModelId)
-                        .threadId(threadId)
-                        .projectId(message.projectId())
-                        .projectName(project.name())
-                        .name(scoreResult.name())
-                        .value(scoreResult.value())
-                        .reason(scoreResult.reason())
-                        .source(ScoreSource.ONLINE_SCORING)
-                        .build())
-                .collect(Collectors.toList());
+                .map(scoreResult -> FeedbackScoresMapper.INSTANCE.map(
+                        scoreResult,
+                        threadModelId,
+                        threadId,
+                        message.projectId(),
+                        project.name(),
+                        ScoreSource.ONLINE_SCORING))
+                .toList();
 
         try {
             var loggedScores = storeThreadScores(scores, threadId, message.userName(), message.workspaceId());
