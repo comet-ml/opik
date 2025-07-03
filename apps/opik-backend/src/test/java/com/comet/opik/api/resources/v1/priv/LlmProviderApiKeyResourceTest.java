@@ -110,8 +110,8 @@ class LlmProviderApiKeyResourceTest {
     }
 
     @Test
-    @DisplayName("Create and update provider Api Key")
-    void createAndUpdateProviderApiKey() {
+    @DisplayName("Create provider Api Key")
+    void testCreateProviderApiKey() {
 
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
@@ -124,8 +124,61 @@ class LlmProviderApiKeyResourceTest {
                 workspaceName, 201);
         getAndAssertProviderApiKey(expectedProviderApiKey, apiKey, workspaceName);
         checkEncryption(expectedProviderApiKey.id(), workspaceId, providerApiKey.apiKey());
+    }
+
+    @Test
+    @DisplayName("Update provider Api Key")
+    void testUpdateProviderApiKey() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        ProviderApiKey providerApiKey = createProviderApiKey();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var expectedProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey,
+                workspaceName, 201);
 
         var providerApiKeyUpdate = factory.manufacturePojo(ProviderApiKeyUpdate.class);
+        llmProviderApiKeyResourceClient.updateProviderApiKey(expectedProviderApiKey.id(), providerApiKeyUpdate, apiKey,
+                workspaceName, 204);
+
+        var expectedUpdatedProviderApiKey = expectedProviderApiKey.toBuilder()
+                .apiKey(providerApiKeyUpdate.apiKey())
+                .name(providerApiKeyUpdate.name())
+                .baseUrl(providerApiKeyUpdate.baseUrl())
+                .configuration(providerApiKeyUpdate.configuration())
+                .headers(providerApiKeyUpdate.headers())
+                .build();
+        getAndAssertProviderApiKey(expectedUpdatedProviderApiKey, apiKey, workspaceName);
+
+        checkEncryption(expectedProviderApiKey.id(), workspaceId, providerApiKeyUpdate.apiKey());
+    }
+
+    @Test
+    @DisplayName("Update provider Api Key - only name and apiKey")
+    void testUpdateProviderApiKeyOnlyNameAndApiKey() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        ProviderApiKey providerApiKey = createProviderApiKey()
+                .toBuilder()
+                .headers(null)
+                .configuration(null)
+                .baseUrl(null)
+                .build();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var expectedProviderApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, apiKey,
+                workspaceName, 201);
+
+        var providerApiKeyUpdate = factory.manufacturePojo(ProviderApiKeyUpdate.class)
+                .toBuilder()
+                .headers(null)
+                .configuration(null)
+                .baseUrl(null)
+                .build();
         llmProviderApiKeyResourceClient.updateProviderApiKey(expectedProviderApiKey.id(), providerApiKeyUpdate, apiKey,
                 workspaceName, 204);
 
