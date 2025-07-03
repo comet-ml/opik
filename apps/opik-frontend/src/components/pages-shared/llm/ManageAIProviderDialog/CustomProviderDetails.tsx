@@ -12,21 +12,22 @@ import {
   FormItem,
   FormMessage,
 } from "@/components/ui/form";
-import { cn } from "@/lib/utils";
+import { buildDocsUrl, cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Description } from "@/components/ui/description";
+import { Button } from "@/components/ui/button";
 
-type VllmAIProviderDetailsProps = {
+type CustomProviderDetailsProps = {
   form: UseFormReturn<AIProviderFormType>;
 };
 
-const VllmAIProviderDetails: React.FC<VllmAIProviderDetailsProps> = ({
+const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
   form,
 }) => {
-  const providerName = PROVIDERS[PROVIDER_TYPE.VLLM].label;
+  const providerName = PROVIDERS[PROVIDER_TYPE.CUSTOM].label;
   const urlLabel = `${providerName} URL`;
-  const apiKeyLabel = `${providerName} API Key`;
-  const modelsLabel = `${providerName} Models List`;
+  const apiKeyLabel = `${providerName} API key`;
+  const modelsLabel = `${providerName} models list`;
 
   return (
     <div className="flex flex-col gap-2 pb-4">
@@ -79,47 +80,60 @@ const VllmAIProviderDetails: React.FC<VllmAIProviderDetailsProps> = ({
                 />
               </FormControl>
               <FormMessage />
+              <Description>
+                You may or may not need an API key for Custom provider,
+                depending on your server configuration. If you do not need an
+                API key, you can enter a dummy value, learn more in the{" "}
+                <Button
+                  variant="link"
+                  size="sm"
+                  asChild
+                  className="inline px-0"
+                >
+                  <a
+                    href={buildDocsUrl("/playground")}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    documentation
+                  </a>
+                </Button>
+                .
+              </Description>
             </FormItem>
           );
         }}
       />
-
-      <span className="comet-body-s text-light-slate mt-1">
-        You may or may not need an API key for vLLM, depending on your server
-        configuration. If you do not need an API key, you can enter a dummy
-        value.
-      </span>
-
       <FormField
-          control={form.control}
-          name="models"
-          render={({ field, formState }) => {
-            const validationErrors = get(formState.errors, ["models"]);
+        control={form.control}
+        name="models"
+        render={({ field, formState }) => {
+          const validationErrors = get(formState.errors, ["models"]);
 
-            return (
-              <FormItem>
-                <Label htmlFor="models">{modelsLabel}</Label>
-                <FormControl>
-                  <Input
-                    id="models"
-                    placeholder="Comma separated models list"
-                    value={field.value}
-                    onChange={(e) => field.onChange(e.target.value)}
-                    className={cn({
-                      "border-destructive": Boolean(validationErrors?.message),
-                    })}
-                  />
-                </FormControl>
-                <FormMessage />
-                <Description>
-                  Comma separated list of available models
-                </Description>
-              </FormItem>
-            );
-          }}
-        />
+          return (
+            <FormItem>
+              <Label htmlFor="models">{modelsLabel}</Label>
+              <FormControl>
+                <Input
+                  id="models"
+                  placeholder="Comma separated models list"
+                  value={field.value}
+                  onChange={(e) => field.onChange(e.target.value)}
+                  className={cn({
+                    "border-destructive": Boolean(validationErrors?.message),
+                  })}
+                />
+              </FormControl>
+              <FormMessage />
+              <Description>
+                Comma separated list of available models
+              </Description>
+            </FormItem>
+          );
+        }}
+      />
     </div>
   );
 };
 
-export default VllmAIProviderDetails;
+export default CustomProviderDetails;

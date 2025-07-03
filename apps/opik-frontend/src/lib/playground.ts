@@ -6,7 +6,7 @@ import {
   DEFAULT_OPEN_AI_CONFIGS,
   DEFAULT_OPEN_ROUTER_CONFIGS,
   DEFAULT_VERTEX_AI_CONFIGS,
-  DEFAULT_VLLM_CONFIGS,
+  DEFAULT_CUSTOM_CONFIGS,
 } from "@/constants/llm";
 import {
   LLMAnthropicConfigsType,
@@ -15,7 +15,7 @@ import {
   LLMOpenRouterConfigsType,
   LLMPromptConfigsType,
   LLMVertexAIConfigsType,
-  LLMVllmConfigsType,
+  LLMCustomConfigsType,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
@@ -76,14 +76,14 @@ export const getDefaultConfigByProvider = (
     } as LLMVertexAIConfigsType;
   }
 
-  if (provider === PROVIDER_TYPE.VLLM) {
+  if (provider === PROVIDER_TYPE.CUSTOM) {
     return {
-      temperature: DEFAULT_VLLM_CONFIGS.TEMPERATURE,
-      maxCompletionTokens: DEFAULT_VLLM_CONFIGS.MAX_COMPLETION_TOKENS,
-      topP: DEFAULT_VLLM_CONFIGS.TOP_P,
-      frequencyPenalty: DEFAULT_VLLM_CONFIGS.FREQUENCY_PENALTY,
-      presencePenalty: DEFAULT_VLLM_CONFIGS.PRESENCE_PENALTY,
-    } as LLMVllmConfigsType;
+      temperature: DEFAULT_CUSTOM_CONFIGS.TEMPERATURE,
+      maxCompletionTokens: DEFAULT_CUSTOM_CONFIGS.MAX_COMPLETION_TOKENS,
+      topP: DEFAULT_CUSTOM_CONFIGS.TOP_P,
+      frequencyPenalty: DEFAULT_CUSTOM_CONFIGS.FREQUENCY_PENALTY,
+      presencePenalty: DEFAULT_CUSTOM_CONFIGS.PRESENCE_PENALTY,
+    } as LLMCustomConfigsType;
   }
 
   return {};

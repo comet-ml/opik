@@ -6,7 +6,7 @@ import api, {
 } from "@/api/api";
 import { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
-import { ProviderKeyWithAPIKey, PROVIDER_TYPE } from "@/types/providers";
+import { ProviderKeyWithAPIKey } from "@/types/providers";
 
 type UseProviderKeysCreateMutationParams = {
   providerKey: Partial<ProviderKeyWithAPIKey>;
@@ -20,39 +20,12 @@ const useProviderKeysCreateMutation = () => {
     mutationFn: async ({
       providerKey,
     }: UseProviderKeysCreateMutationParams) => {
-      const config: Record<string, unknown> = {};
-      if (providerKey?.location) {
-        config.location = providerKey.location;
-      }
-
-      if (
-        providerKey.provider === PROVIDER_TYPE.VLLM &&
-        typeof providerKey.models === 'string'
-      ) {
-        config.models = providerKey.models
-          .split(',')
-          .map((model) => model.trim())
-          .filter(Boolean)
-          .map((model) => {
-            if (model.startsWith(`${PROVIDER_TYPE.VLLM}/`)) {
-              return model;
-            }
-            return `${PROVIDER_TYPE.VLLM}/${model}`;
-          })
-          .join(',');
-      } else if (providerKey?.models) {
-        config.models = providerKey.models;
-      }
-
-      const configuration = Object.keys(config).length
-        ? { configuration: config }
-        : {};
-
       const { data } = await api.post(PROVIDER_KEYS_REST_ENDPOINT, {
         provider: providerKey.provider,
         api_key: providerKey.apiKey,
-        base_url: providerKey.url,
-        ...configuration,
+        ...(providerKey.location && { location: providerKey.location }),
+        ...(providerKey.models && { models: providerKey.models }),
+        ...(providerKey.url && { base_url: providerKey.url }),
       });
 
       return data;

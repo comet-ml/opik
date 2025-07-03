@@ -9,7 +9,7 @@ import {
   LLMOpenRouterConfigsType,
   LLMPromptConfigsType,
   LLMVertexAIConfigsType,
-  LLMVllmConfigsType,
+  LLMCustomConfigsType,
   PROVIDER_TYPE,
 } from "@/types/providers";
 
@@ -25,7 +25,7 @@ import AnthropicModelConfigs from "@/components/pages-shared/llm/PromptModelSett
 import OpenRouterModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/OpenRouterModelConfigs";
 import GeminiModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/GeminiModelConfigs";
 import VertexAIModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/VertexAIModelConfigs";
-import VllmAIModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/VllmAIModelConfig";
+import CustomModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/CustomModelConfig";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
@@ -88,10 +88,10 @@ const PromptModelConfigs = ({
       );
     }
 
-    if (provider === PROVIDER_TYPE.VLLM) {
+    if (provider === PROVIDER_TYPE.CUSTOM) {
       return (
-        <VllmAIModelConfigs
-          configs={configs as LLMVllmConfigsType}
+        <CustomModelConfigs
+          configs={configs as LLMCustomConfigsType}
           onChange={onChange}
         />
       );

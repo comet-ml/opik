@@ -54,7 +54,7 @@ export const DEFAULT_VERTEX_AI_CONFIGS = {
   TOP_P: 1,
 };
 
-export const DEFAULT_VLLM_CONFIGS = {
+export const DEFAULT_CUSTOM_CONFIGS = {
   TEMPERATURE: 0,
   MAX_COMPLETION_TOKENS: 1024,
   TOP_P: 1,
