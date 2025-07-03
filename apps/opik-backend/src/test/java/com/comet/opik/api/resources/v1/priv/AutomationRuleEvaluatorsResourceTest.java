@@ -39,6 +39,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -1012,11 +1013,11 @@ class AutomationRuleEvaluatorsResourceTest {
                     .data(List.of(
                             TraceThreadPythonEvaluatorRequest.ChatMessage.builder()
                                     .role("user")
-                                    .content("abc")
+                                    .content(TextNode.valueOf("abc"))
                                     .build(),
                             TraceThreadPythonEvaluatorRequest.ChatMessage.builder()
                                     .role("assistant")
-                                    .content("abc")
+                                    .content(TextNode.valueOf("abc"))
                                     .build()))
                     .build();
 

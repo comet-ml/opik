@@ -1,6 +1,7 @@
 package com.comet.opik.api.events;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
@@ -12,7 +13,7 @@ import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLl
 @Builder(toBuilder = true)
 @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
 public record TraceThreadToScoreLlmAsJudge(
-        @NotNull List<String> threadIds,
+        @NotNull @NotEmpty List<String> threadIds,
         @NotNull UUID ruleId,
         @NotNull UUID projectId,
         @NotNull TraceThreadLlmAsJudgeCode code,

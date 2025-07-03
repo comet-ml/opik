@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
@@ -42,8 +43,10 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull ChatCompletionService aiProxyService,
+            @NonNull TraceService traceService,
             @NonNull LlmProviderFactory llmProviderFactory) {
-        super(config, redisson, feedbackScoreService, AutomationRuleEvaluatorType.LLM_AS_JUDGE, "llm_as_judge");
+        super(config, redisson, feedbackScoreService, traceService, AutomationRuleEvaluatorType.LLM_AS_JUDGE,
+                "llm_as_judge");
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringLlmAsJudgeScorer.class);
         this.llmProviderFactory = llmProviderFactory;

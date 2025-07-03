@@ -17,7 +17,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.List;
 import java.util.Map;
 
-import static com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.*;
+import static com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.ChatMessage;
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j

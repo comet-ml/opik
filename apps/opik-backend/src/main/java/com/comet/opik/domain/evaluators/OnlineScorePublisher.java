@@ -25,8 +25,8 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge.*;
-import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.*;
+import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode;
+import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
 
 @ImplementedBy(OnlineScorePublisherImpl.class)
 public interface OnlineScorePublisher {
@@ -92,8 +92,8 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                 .subscribe(this::noop, this::logFluxCompletionError);
     }
 
-    public void enqueueThreadMessage(@NonNull List<String> threadIds, @NonNull UUID ruleId, @NonNull UUID projectId, @NonNull String workspaceId,
-                                     @NonNull String userName) {
+    public void enqueueThreadMessage(@NonNull List<String> threadIds, @NonNull UUID ruleId, @NonNull UUID projectId,
+            @NonNull String workspaceId, @NonNull String userName) {
         AutomationRuleEvaluator<?> rule = automationRuleEvaluatorService.findById(ruleId, projectId, workspaceId);
 
         switch (rule) {

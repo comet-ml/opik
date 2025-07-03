@@ -5,12 +5,8 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
-import com.comet.opik.api.filter.Operator;
-import com.comet.opik.api.filter.TraceField;
-import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
-import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.UserLog;
@@ -52,7 +48,6 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
 
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final PythonEvaluatorService pythonEvaluatorService;
-    private final TraceService traceService;
     private final TraceThreadService traceThreadService;
     private final Logger userFacingLogger;
     private final ProjectService projectService;
@@ -69,11 +64,10 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
             @NonNull TraceThreadService traceThreadService,
             @NonNull ProjectService projectService,
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService) {
-        super(config, redisson, feedbackScoreService, TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
+        super(config, redisson, feedbackScoreService, traceService, TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
                 "trace_thread_python_user_defined_metric");
         this.pythonEvaluatorService = pythonEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
-        this.traceService = traceService;
         this.traceThreadService = traceThreadService;
         this.projectService = projectService;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
@@ -115,7 +109,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
     }
 
     private Mono<Void> processThreadScores(TraceThreadToScoreUserDefinedMetricPython message, String currentThreadId) {
-        return retrieveFullThreadContext(message, currentThreadId, new AtomicReference<>(null))
+        return retrieveFullThreadContext(currentThreadId, new AtomicReference<>(null), message.projectId())
                 .collectList()
                 .flatMap(traces -> traceThreadService.getThreadModelId(message.projectId(), currentThreadId)
                         .flatMap(threadModelId -> Mono.fromCallable(() -> {
@@ -203,34 +197,4 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
         }
     }
 
-    /**
-     * Retrieves the full thread context for a given thread ID, recursively fetching traces until no more are found.
-     *
-     * @param message the message containing project ID and other details
-     * @param threadId the ID of the thread to retrieve context for
-     * @param lastReceivedIdRef a reference to store the last received trace ID
-     * @return a Flux of Trace objects representing the full thread context
-     */
-    private Flux<Trace> retrieveFullThreadContext(TraceThreadToScoreUserDefinedMetricPython message,
-            String threadId, AtomicReference<UUID> lastReceivedIdRef) {
-        return Flux.defer(() -> traceService.search(2000,
-                TraceSearchCriteria.builder()
-                        .projectId(message.projectId())
-                        .filters(List.of(TraceFilter.builder()
-                                .field(TraceField.THREAD_ID)
-                                .operator(Operator.EQUAL)
-                                .value(threadId)
-                                .build()))
-                        .lastReceivedId(lastReceivedIdRef.get())
-                        .build())
-                .collectList()
-                .flatMapMany(results -> {
-                    if (results.isEmpty()) {
-                        return Flux.empty(); // stop recursion
-                    } else {
-                        lastReceivedIdRef.set(results.getLast().id());
-                        return Flux.fromIterable(results);
-                    }
-                })).repeat();
-    }
 }

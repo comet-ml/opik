@@ -4,14 +4,9 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
-import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
-import com.comet.opik.api.filter.Operator;
-import com.comet.opik.api.filter.TraceField;
-import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
-import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.UserLog;
@@ -45,6 +40,7 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
+import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE;
 
 @EagerSingleton
 @Slf4j
@@ -53,7 +49,6 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     private final ChatCompletionService aiProxyService;
     private final Logger userFacingLogger;
     private final LlmProviderFactory llmProviderFactory;
-    private final TraceService traceService;
     private final TraceThreadService traceThreadService;
     private final ProjectService projectService;
     private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
@@ -68,11 +63,10 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             @NonNull TraceThreadService traceThreadService,
             @NonNull ProjectService projectService,
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService) {
-        super(config, redisson, feedbackScoreService, AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE,
+        super(config, redisson, feedbackScoreService, traceService, TRACE_THREAD_LLM_AS_JUDGE,
                 "trace_thread_llm_as_judge");
         this.aiProxyService = aiProxyService;
         this.llmProviderFactory = llmProviderFactory;
-        this.traceService = traceService;
         this.traceThreadService = traceThreadService;
         this.projectService = projectService;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
@@ -110,7 +104,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     }
 
     private Mono<Void> processThreadScores(TraceThreadToScoreLlmAsJudge message, String currentThreadId) {
-        return retrieveFullThreadContext(message, currentThreadId, new AtomicReference<>(null))
+        return retrieveFullThreadContext(currentThreadId, new AtomicReference<>(null), message.projectId())
                 .collectList()
                 .flatMap(traces -> traceThreadService.getThreadModelId(message.projectId(), currentThreadId)
                         .flatMap(threadModelId -> Mono.fromCallable(() -> {
@@ -127,37 +121,6 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                             }
                         }).subscribeOn(Schedulers.boundedElastic())))
                 .then();
-    }
-
-    /**
-     * Retrieves the full thread context for a given thread ID, recursively fetching traces until no more are found.
-     *
-     * @param message the message containing project ID and other details
-     * @param threadId the ID of the thread to retrieve context for
-     * @param lastReceivedIdRef a reference to store the last received trace ID
-     * @return a Flux of Trace objects representing the full thread context
-     */
-    private Flux<Trace> retrieveFullThreadContext(TraceThreadToScoreLlmAsJudge message,
-            String threadId, AtomicReference<UUID> lastReceivedIdRef) {
-        return Flux.defer(() -> traceService.search(2000,
-                TraceSearchCriteria.builder()
-                        .projectId(message.projectId())
-                        .filters(List.of(TraceFilter.builder()
-                                .field(TraceField.THREAD_ID)
-                                .operator(Operator.EQUAL)
-                                .value(threadId)
-                                .build()))
-                        .lastReceivedId(lastReceivedIdRef.get())
-                        .build())
-                .collectList()
-                .flatMapMany(results -> {
-                    if (results.isEmpty()) {
-                        return Flux.empty(); // stop recursion
-                    } else {
-                        lastReceivedIdRef.set(results.getLast().id());
-                        return Flux.fromIterable(results);
-                    }
-                })).repeat();
     }
 
     /**
