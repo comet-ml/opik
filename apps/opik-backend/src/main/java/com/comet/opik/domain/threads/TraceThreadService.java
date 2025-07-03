@@ -134,7 +134,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
                         projectId))
                 .then();
     }
-  
+
     public Mono<Void> update(@NonNull UUID threadModelId, @NonNull TraceThreadUpdate threadUpdate) {
         return traceThreadIdService.getTraceThreadIdByThreadModelId(threadModelId)
                 .switchIfEmpty(Mono.error(failWithNotFound("Thread", threadModelId)))

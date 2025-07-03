@@ -5,8 +5,6 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
-import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
-import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -74,7 +72,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.LogItem.LogLevel;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
