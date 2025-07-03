@@ -1,7 +1,7 @@
 package com.comet.opik.domain.llm.structuredoutput;
 
-import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.infrastructure.llm.StructuredOutputSupported;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;

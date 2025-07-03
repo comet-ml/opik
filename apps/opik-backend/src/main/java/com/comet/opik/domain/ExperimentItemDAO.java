@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
-import com.comet.opik.api.ExperimentItemSearchCriteria;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;

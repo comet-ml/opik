@@ -4,7 +4,6 @@ import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.Optimization;
-import com.comet.opik.api.OptimizationSearchCriteria;
 import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.api.events.OptimizationCreated;
 import com.comet.opik.api.events.OptimizationsDeleted;

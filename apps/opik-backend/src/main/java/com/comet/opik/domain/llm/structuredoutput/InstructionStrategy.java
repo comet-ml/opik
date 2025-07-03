@@ -1,6 +1,6 @@
 package com.comet.opik.domain.llm.structuredoutput;
 
-import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeOutputSchema;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;

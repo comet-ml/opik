@@ -1,6 +1,6 @@
 package com.comet.opik.domain.llm;
 
-import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import dev.langchain4j.internal.RetryUtils;
@@ -88,7 +88,7 @@ public class ChatCompletionService {
     }
 
     public ChatResponse scoreTrace(@NonNull ChatRequest chatRequest,
-            @NonNull AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters,
+            @NonNull LlmAsJudgeModelParameters modelParameters,
             @NonNull String workspaceId) {
         var languageModelClient = llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
 

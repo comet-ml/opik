@@ -1,7 +1,7 @@
 package com.comet.opik.infrastructure.llm.openrouter;
 
-import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
@@ -28,7 +28,7 @@ class OpenRouterLlmServiceProvider implements LlmServiceProvider {
 
     @Override
     public ChatModel getLanguageModel(@NonNull LlmProviderClientApiConfig config,
-            @NonNull AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters) {
+            @NonNull LlmAsJudgeModelParameters modelParameters) {
         return clientGenerator.newOpenAiChatLanguageModel(config, modelParameters);
     }
 }

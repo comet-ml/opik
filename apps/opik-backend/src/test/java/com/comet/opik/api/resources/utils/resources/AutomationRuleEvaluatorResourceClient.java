@@ -1,8 +1,8 @@
 package com.comet.opik.api.resources.utils.resources;
 
-import com.comet.opik.api.AutomationRuleEvaluator;
-import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;

@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Project.ProjectPage;
-import com.comet.opik.api.ProjectCriteria;
 import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;

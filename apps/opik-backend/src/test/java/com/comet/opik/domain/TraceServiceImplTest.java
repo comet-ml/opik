@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Trace;
-import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.error.InvalidUUIDVersionException;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;

@@ -1,7 +1,7 @@
 package com.comet.opik.api.events;
 
-import com.comet.opik.api.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;

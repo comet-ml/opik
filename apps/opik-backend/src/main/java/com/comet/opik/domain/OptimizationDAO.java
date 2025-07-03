@@ -2,7 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.Optimization;
-import com.comet.opik.api.OptimizationSearchCriteria;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.OptimizationUpdate;
 import com.google.common.base.Function;

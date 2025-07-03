@@ -9,7 +9,6 @@ import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceDetails;
-import com.comet.opik.api.TraceSearchCriteria;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceUpdate;

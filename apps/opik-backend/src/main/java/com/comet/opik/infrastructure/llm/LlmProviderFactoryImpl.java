@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
@@ -22,8 +23,6 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
-
-import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters;
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class LlmProviderFactoryImpl implements LlmProviderFactory {

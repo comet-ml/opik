@@ -4,6 +4,7 @@ import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem.FeedbackScore
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -34,9 +35,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
-import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
-import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeMessage;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 
 @UtilityClass
 @Slf4j

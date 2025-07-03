@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.vertexai;
 
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
@@ -23,8 +24,6 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.Optional;
-
-import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters;
 
 @RequiredArgsConstructor
 @Slf4j

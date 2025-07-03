@@ -1,8 +1,8 @@
 package com.comet.opik.infrastructure.log.tables;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
-import com.comet.opik.domain.AutomationRuleEvaluatorLogsDAO;
-import com.comet.opik.domain.UserLog;
+import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorLogsDAO;
+import com.comet.opik.domain.evaluators.UserLog;
 import io.r2dbc.spi.ConnectionFactory;
 import lombok.NonNull;
 import reactor.core.publisher.Mono;
