@@ -40,7 +40,7 @@ def load_conversation_thread(
 ) -> conversation_thread.ConversationThread:
     traces = client.search_traces(
         project_name=project_name,
-        filter_string=f"thread_id = {thread.id}",
+        filter_string=f'thread_id = "{thread.id}"',
         max_results=max_results,
     )
     return conversation_factory.create_conversation_from_traces(

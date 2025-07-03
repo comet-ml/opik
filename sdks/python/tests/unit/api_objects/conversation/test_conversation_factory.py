@@ -22,7 +22,34 @@ from opik.api_objects.conversation import conversation_factory
                 {"role": "user", "content": "test input 997"},
                 {"role": "assistant", "content": "test output"},
             ],
-        )
+        ),
+        (  # test that traces are sorted by time - the first trace should be first
+            [
+                TracePublic(
+                    input={"x": "test input 3"},
+                    output={"output": "test output"},
+                    start_time=datetime.datetime.now(),
+                ),
+                TracePublic(
+                    input={"x": "test input 1"},
+                    output={"output": "test output"},
+                    start_time=datetime.datetime.now() - datetime.timedelta(seconds=10),
+                ),
+                TracePublic(
+                    input={"x": "test input 2"},
+                    output={"output": "test output"},
+                    start_time=datetime.datetime.now() - datetime.timedelta(seconds=5),
+                ),
+            ],
+            [
+                {"role": "user", "content": "test input 1"},
+                {"role": "assistant", "content": "test output"},
+                {"role": "user", "content": "test input 2"},
+                {"role": "assistant", "content": "test output"},
+                {"role": "user", "content": "test input 3"},
+                {"role": "assistant", "content": "test output"},
+            ],
+        ),
     ],
 )
 def test_create_conversation_from_traces(traces, expected_discussion):
