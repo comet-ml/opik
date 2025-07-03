@@ -14,6 +14,7 @@ import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.NUMBER_OF_MESSAGES;
 import static com.comet.opik.api.sorting.SortableFields.START_TIME;
 import static com.comet.opik.api.sorting.SortableFields.STATUS;
+import static com.comet.opik.api.sorting.SortableFields.TAGS;
 import static com.comet.opik.api.sorting.SortableFields.TOTAL_ESTIMATED_COST;
 import static com.comet.opik.api.sorting.SortableFields.USAGE;
 
@@ -34,6 +35,7 @@ public class TraceThreadSortingFactory extends SortingFactory {
                 USAGE,
                 TOTAL_ESTIMATED_COST,
                 FEEDBACK_SCORES,
-                STATUS);
+                STATUS,
+                TAGS);
     }
 }
