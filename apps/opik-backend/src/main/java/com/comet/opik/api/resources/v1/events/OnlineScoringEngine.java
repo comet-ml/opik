@@ -4,8 +4,10 @@ import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem.FeedbackScore
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
+
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
+import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -15,15 +17,6 @@ import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
-import dev.langchain4j.model.chat.request.ResponseFormat;
-import dev.langchain4j.model.chat.request.ResponseFormatType;
-import dev.langchain4j.model.chat.request.json.JsonBooleanSchema;
-import dev.langchain4j.model.chat.request.json.JsonIntegerSchema;
-import dev.langchain4j.model.chat.request.json.JsonNumberSchema;
-import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
-import dev.langchain4j.model.chat.request.json.JsonSchema;
-import dev.langchain4j.model.chat.request.json.JsonSchemaElement;
-import dev.langchain4j.model.chat.request.json.JsonStringSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -39,9 +32,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
+import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeMessage;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
 
@@ -52,11 +49,10 @@ public class OnlineScoringEngine {
     static final String SCORE_FIELD_NAME = "score";
     static final String REASON_FIELD_NAME = "reason";
 
-    private static final String SCORE_FIELD_DESCRIPTION = "the score for ";
-    private static final String REASON_FIELD_DESCRIPTION = "the reason for the score for ";
-    private static final String DEFAULT_SCHEMA_NAME = "scoring_schema";
-
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    private static final Pattern JSON_BLOCK_PATTERN = Pattern.compile(
+            "```(?:json)?\\s*(\\{.*?})\\s*```", Pattern.DOTALL);
 
     /**
      * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering the template messages with
@@ -67,13 +63,11 @@ public class OnlineScoringEngine {
      * @return a request to trigger to any supported provider with a ChatLanguageModel
      */
     public static ChatRequest prepareLlmRequest(
-            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace) {
-        var responseFormat = toResponseFormat(evaluatorCode.schema());
+            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace, StructuredOutputStrategy structuredOutputStrategy) {
         var renderedMessages = renderMessages(evaluatorCode.messages(), evaluatorCode.variables(), trace);
-        return ChatRequest.builder()
-                .messages(renderedMessages)
-                .responseFormat(responseFormat)
-                .build();
+        var chatRequestBuilder = ChatRequest.builder().messages(renderedMessages);
+
+        return structuredOutputStrategy.apply(chatRequestBuilder, renderedMessages, evaluatorCode.schema()).build();
     }
 
     /**
@@ -170,46 +164,8 @@ public class OnlineScoringEngine {
         }
     }
 
-    static ResponseFormat toResponseFormat(@NotNull List<LlmAsJudgeOutputSchema> schema) {
-        // convert <name, type, description> into something like
-        // "${name}": { "score": { "type": "${type}" , "description": ${description}", "reason": { "type" : "string" }}
-        Map<String, JsonSchemaElement> structuredFields = schema.stream()
-                .map(scoreDefinition -> Map.entry(scoreDefinition.name(),
-                        JsonObjectSchema.builder()
-                                .description(scoreDefinition.description())
-                                .required(SCORE_FIELD_NAME, REASON_FIELD_NAME)
-                                .addProperties(Map.of(
-                                        SCORE_FIELD_NAME, switch (scoreDefinition.type()) {
-                                            case BOOLEAN -> JsonBooleanSchema.builder()
-                                                    .description(SCORE_FIELD_DESCRIPTION + scoreDefinition.name())
-                                                    .build();
-                                            case INTEGER -> JsonIntegerSchema.builder()
-                                                    .description(SCORE_FIELD_DESCRIPTION + scoreDefinition.name())
-                                                    .build();
-                                            case DOUBLE -> JsonNumberSchema.builder()
-                                                    .description(SCORE_FIELD_DESCRIPTION + scoreDefinition.name())
-                                                    .build();
-                                        },
-                                        REASON_FIELD_NAME,
-                                        JsonStringSchema.builder()
-                                                .description(REASON_FIELD_DESCRIPTION + scoreDefinition.name())
-                                                .build()))
-                                .build()
-
-                ))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        var allPropertyNames = structuredFields.keySet().stream().toList();
-        var schemaBuilder = JsonObjectSchema.builder().required(allPropertyNames).addProperties(structuredFields)
-                .build();
-        var jsonSchema = JsonSchema.builder().name(DEFAULT_SCHEMA_NAME).rootElement(schemaBuilder).build();
-        return ResponseFormat.builder()
-                .type(ResponseFormatType.JSON)
-                .jsonSchema(jsonSchema)
-                .build();
-    }
-
     public static List<FeedbackScoreBatchItem> toFeedbackScores(@NotNull ChatResponse chatResponse) {
-        var content = chatResponse.aiMessage().text();
+        var content = extractJson(chatResponse.aiMessage().text());
         JsonNode structuredResponse;
         try {
             structuredResponse = OBJECT_MAPPER.readTree(content);
@@ -245,6 +201,16 @@ public class OnlineScoringEngine {
                 })
                 .filter(Objects::nonNull)
                 .toList();
+    }
+
+    private static String extractJson(String response) {
+        Matcher matcher = JSON_BLOCK_PATTERN.matcher(response);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+
+        // Assume the whole response is raw JSON
+        return response.trim();
     }
 
     @AllArgsConstructor
