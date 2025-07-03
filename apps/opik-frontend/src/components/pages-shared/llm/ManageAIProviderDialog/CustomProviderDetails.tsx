@@ -75,7 +75,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
               <FormMessage />
               <Description>
                 Custom providers may not require an API key, depending on your
-                server setup, learn more in the{" "}
+                server setup. Learn more in the{" "}
                 <Button
                   variant="link"
                   size="sm"

@@ -1,5 +1,4 @@
-<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg">
-    <title>vLLM</title>
-    <path d="M0 4.973h9.324V23L0 4.973z"></path>
-    <path d="M13.986 4.351L22.378 0l-6.216 23H9.324l4.662-18.649z"></path>
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M7.02637 14.3608L2.16211 4.95557H7.02637V14.3608Z" fill="#030712"/>
+<path d="M10.5947 14.3608H7.02637L9.45898 4.63135L13.8379 2.36084L10.5947 14.3608Z" fill="#030712"/>
 </svg>
