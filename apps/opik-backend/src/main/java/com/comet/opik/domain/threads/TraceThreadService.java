@@ -21,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.util.context.ContextView;
 
 import java.time.Duration;
@@ -29,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
@@ -162,14 +164,18 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 .build();
 
         return Mono.deferContextual(context -> getReopenedThreads(traceThreads, criteria)
-                .flatMap(reopenedThreads -> traceThreadDAO.save(traceThreads)
+                .flatMap(reopenedThreads -> saveThreads(traceThreads, reopenedThreads)
                         .doOnSuccess(
                                 count -> {
+
+                                    Set<UUID> reopenedThreadModelIds = reopenedThreads.stream()
+                                            .map(TraceThreadModel::id)
+                                            .collect(Collectors.toSet());
 
                                     List<UUID> createdThreadIds = traceThreads
                                             .stream()
                                             .map(TraceThreadModel::id)
-                                            .filter(id -> !reopenedThreads.contains(id))
+                                            .filter(id -> !reopenedThreadModelIds.contains(id))
                                             .toList();
 
                                     if (!createdThreadIds.isEmpty()) {
@@ -188,23 +194,45 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                     projectId);
 
                             eventBus.post(new ThreadsReopened(
-                                    reopenedThreads,
+                                    reopenedThreads.stream().map(TraceThreadModel::id).collect(Collectors.toSet()),
                                     projectId,
                                     context.get(RequestContext.WORKSPACE_ID),
                                     context.get(RequestContext.USER_NAME)));
 
                             return null;
-                        })))
+                        }).subscribeOn(Schedulers.boundedElastic())))
                 .then());
     }
 
-    private Mono<Set<UUID>> getReopenedThreads(List<TraceThreadModel> traceThreads,
+    private Mono<Long> saveThreads(List<TraceThreadModel> traceThreads, List<TraceThreadModel> reopenedThreads) {
+        Map<UUID, TraceThreadModel> threadModelMap = reopenedThreads.stream()
+                .collect(Collectors.toMap(TraceThreadModel::id, Function.identity()));
+
+        List<TraceThreadModel> threadsToSave = traceThreads.stream()
+                .map(thread -> {
+                    TraceThreadModel existingThread = threadModelMap.get(thread.id());
+
+                    if (existingThread != null) {
+                        // Update existing thread with new values
+                        return existingThread.toBuilder()
+                                .status(thread.status())
+                                .lastUpdatedBy(thread.lastUpdatedBy())
+                                .lastUpdatedAt(thread.lastUpdatedAt())
+                                .build();
+                    }
+
+                    return thread;
+                })
+                .toList();
+
+        return traceThreadDAO.save(threadsToSave);
+    }
+
+    private Mono<List<TraceThreadModel>> getReopenedThreads(List<TraceThreadModel> traceThreads,
             TraceThreadCriteria criteria) {
         return traceThreadDAO.findThreadsByProject(1, traceThreads.size(), criteria)
-                .map(existingThreads -> existingThreads
-                        .stream()
-                        .map(TraceThreadModel::id)
-                        .collect(Collectors.toSet()));
+                .switchIfEmpty(Mono.just(List.of()));
+
     }
 
     @Override
