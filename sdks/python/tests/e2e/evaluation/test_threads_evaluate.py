@@ -3,7 +3,8 @@ import uuid
 
 import pytest
 
-from opik import synchronization, datetime_helpers
+from opik import synchronization
+from opik.api_objects.threads import threads_client
 from opik.evaluation import metrics
 from opik.evaluation.threads import evaluator
 from opik.types import FeedbackScoreDict
@@ -42,7 +43,7 @@ def active_thread(opik_client, real_model_conversation):
     # create conversation traces
     i = 0
     while i < len(real_model_conversation) - 1:
-        trace = opik_client.trace(
+        opik_client.trace(
             name=f"trace-name-{i}:{thread_id}",
             input={"input": f"{real_model_conversation[i]['content']}"},
             output={"output": f"{real_model_conversation[i + 1]['content']}"},
@@ -50,7 +51,6 @@ def active_thread(opik_client, real_model_conversation):
             thread_id=thread_id,
         )
         time.sleep(0.1)
-        trace.update(end_time=datetime_helpers.local_timestamp())
         i += 2
 
     opik_client.flush()
@@ -63,21 +63,39 @@ def active_thread(opik_client, real_model_conversation):
     )
 
 
+def _all_threads_closed(threads_client_: threads_client.ThreadsClient) -> bool:
+    threads = threads_client_.search_threads(
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME, filter_string='status = "active"'
+    )
+    return len(threads) == 0
+
+
+def _one_thread_is_active(threads_client_: threads_client.ThreadsClient) -> bool:
+    threads = threads_client_.search_threads(
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME, filter_string='status = "active"'
+    )
+    return len(threads) == 1
+
+
 def test_evaluate_threads__happy_path(opik_client, active_thread):
+    threads_client_ = opik_client.get_threads_client()
+    # wait for active threads to propagate
+    if not synchronization.until(
+        lambda: _one_thread_is_active(threads_client_), max_try_seconds=30
+    ):
+        raise AssertionError(
+            f"Failed to create threads in project '{OPIK_E2E_TESTS_PROJECT_NAME}'"
+        )
+
     # close threads before evaluating - otherwise backend will return 409 error on logging scores
     opik_client.rest_client.traces.close_trace_thread(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME, thread_id=active_thread
     )
-    threads_client = opik_client.get_threads_client()
-
-    def check_threads_closed() -> bool:
-        threads = threads_client.search_threads(
-            project_name=OPIK_E2E_TESTS_PROJECT_NAME, filter_string='status = "active"'
-        )
-        return len(threads) == 0
 
     # wait for closed threads to propagate
-    if not synchronization.until(lambda: check_threads_closed(), max_try_seconds=30):
+    if not synchronization.until(
+        lambda: _all_threads_closed(threads_client_), max_try_seconds=30
+    ):
         raise AssertionError(
             f"Failed to get closed threads from project '{OPIK_E2E_TESTS_PROJECT_NAME}'"
         )
