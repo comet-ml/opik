@@ -1281,6 +1281,7 @@ class TraceDAOImpl implements TraceDAO {
                     thread_id,
                     id as thread_model_id,
                     status,
+                    tags,
                     created_by,
                     last_updated_by,
                     created_at,
@@ -1346,6 +1347,7 @@ class TraceDAOImpl implements TraceDAO {
                 if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
                 if(tt.status = 'unknown', 'active', tt.status) as status,
                 if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
+                tt.tags as tags,
                 fsagg.feedback_scores_list as feedback_scores_list,
                 fsagg.feedback_scores as feedback_scores,
                 c.comments AS comments
@@ -1485,6 +1487,7 @@ class TraceDAOImpl implements TraceDAO {
                     thread_id,
                     id as thread_model_id,
                     status,
+                    tags,
                     created_by,
                     last_updated_by,
                     created_at,
@@ -1534,6 +1537,7 @@ class TraceDAOImpl implements TraceDAO {
                 if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
                 if(tt.status = 'unknown', 'active', tt.status) as status,
                 if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
+                tt.tags as tags,
                 fsagg.feedback_scores_list as feedback_scores_list,
                 fsagg.feedback_scores as feedback_scores,
                 c.comments AS comments
@@ -2401,8 +2405,11 @@ class TraceDAOImpl implements TraceDAO {
                         .orElse(null))
                 .numberOfMessages(row.get("number_of_messages", Long.class))
                 .usage(row.get("usage", Map.class))
-                .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class))
+                .totalEstimatedCost(Optional.ofNullable(row.get("total_estimated_cost", BigDecimal.class))
+                        .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
+                        .orElse(null))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
+                .lastUpdatedBy(row.get("last_updated_by", String.class))
                 .createdBy(row.get("created_by", String.class))
                 .createdAt(row.get("created_at", Instant.class))
                 .status(TraceThreadStatus.fromValue(row.get("status", String.class)).orElse(TraceThreadStatus.ACTIVE))
@@ -2417,6 +2424,11 @@ class TraceDAOImpl implements TraceDAO {
                 .comments(Optional
                         .ofNullable(row.get("comments", List[].class))
                         .map(CommentResultMapper::getComments)
+                        .orElse(null))
+                .tags(Optional
+                        .ofNullable(row.get("tags", String[].class))
+                        .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
+                        .filter(set -> !set.isEmpty())
                         .orElse(null))
                 .build());
     }

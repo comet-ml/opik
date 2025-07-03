@@ -90,6 +90,7 @@ Call opik api on http://localhost:5173/api
 |-----|------|---------|-------------|
 | altinity-clickhouse-operator.metrics.enabled | bool | `false` |  |
 | altinity-clickhouse-operator.serviceMonitor.enabled | bool | `false` |  |
+| altinity-clickhouse-operator.serviceMonitor.interval | string | `""` |  |
 | basicAuth | bool | `false` |  |
 | clickhouse.adminUser.password | string | `"opik"` |  |
 | clickhouse.adminUser.useSecret.enabled | bool | `false` |  |

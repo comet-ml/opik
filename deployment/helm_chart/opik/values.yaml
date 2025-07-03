@@ -335,6 +335,7 @@ altinity-clickhouse-operator:
     enabled: false
   serviceMonitor:
     enabled: false
+    interval: '' # workaround for https://github.com/Altinity/clickhouse-operator/issues/1759
 
 clickhouse:
   enabled: true

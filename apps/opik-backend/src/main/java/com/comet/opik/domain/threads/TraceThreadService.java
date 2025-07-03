@@ -3,6 +3,7 @@ package com.comet.opik.domain.threads;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
+import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.api.events.ThreadsReopened;
 import com.comet.opik.api.events.TraceThreadsCreated;
@@ -30,6 +31,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
+
 @ImplementedBy(TraceThreadServiceImpl.class)
 public interface TraceThreadService {
 
@@ -39,10 +42,12 @@ public interface TraceThreadService {
 
     Mono<List<TraceThreadModel>> getThreadsByProject(int page, int size, TraceThreadCriteria criteria);
 
-    Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(Instant lastUpdatedUntil,
+    Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(Instant now,
+            Duration timeoutToMarkThreadAsInactive,
             int limit);
 
-    Mono<Void> processProjectWithTraceThreadsPendingClosure(UUID projectId, Instant lastUpdatedUntil);
+    Mono<Void> processProjectWithTraceThreadsPendingClosure(UUID projectId, Instant now,
+            Duration timeoutToMarkThreadAsInactive);
 
     Mono<Boolean> addToPendingQueue(UUID projectId);
 
@@ -55,6 +60,8 @@ public interface TraceThreadService {
     Mono<UUID> getThreadModelId(UUID projectId, String threadId);
 
     Mono<Void> updateThreadSampledValue(UUID projectId, List<TraceThreadSampling> threadSamplingPerRule);
+
+    Mono<Void> update(UUID threadModelId, TraceThreadUpdate threadUpdate);
 }
 
 @Slf4j
@@ -126,6 +133,13 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 .doOnSuccess(count -> log.info("Updated '{}' trace threads sampled values for projectId: '{}'", count,
                         projectId))
                 .then();
+    }
+  
+    public Mono<Void> update(@NonNull UUID threadModelId, @NonNull TraceThreadUpdate threadUpdate) {
+        return traceThreadIdService.getTraceThreadIdByThreadModelId(threadModelId)
+                .switchIfEmpty(Mono.error(failWithNotFound("Thread", threadModelId)))
+                .flatMap(traceThreadIdModel -> traceThreadDAO.updateThread(threadModelId,
+                        traceThreadIdModel.projectId(), threadUpdate));
     }
 
     private TraceThreadModel mapToModel(TraceThreadIdModel traceThread, String userName, Instant lastUpdatedAt) {
@@ -201,23 +215,24 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
     @Override
     public Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(
-            @NonNull Instant lastUpdatedUntil, int limit) {
-        return traceThreadDAO.findProjectsWithPendingClosureThreads(lastUpdatedUntil, limit);
+            @NonNull Instant now, @NonNull Duration timeoutToMarkThreadAsInactive, int limit) {
+        return traceThreadDAO.findProjectsWithPendingClosureThreads(now, timeoutToMarkThreadAsInactive, limit);
     }
 
     @Override
     public Mono<Void> processProjectWithTraceThreadsPendingClosure(@NonNull UUID projectId,
-            @NonNull Instant lastUpdatedUntil) {
+            @NonNull Instant now, @NonNull Duration timeoutToMarkThreadAsInactive) {
         return lockService.executeWithLockCustomExpire(
                 new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
                 Mono.deferContextual(
-                        contextView -> closeThreadWith(projectId, lastUpdatedUntil, contextView)),
+                        contextView -> closeThreadWith(projectId, now, timeoutToMarkThreadAsInactive, contextView)),
                 LOCK_DURATION).then();
     }
 
-    private Mono<Long> closeThreadWith(UUID projectId, Instant lastUpdatedUntil, ContextView ctx) {
+    private Mono<Long> closeThreadWith(UUID projectId, Instant now, Duration timeoutToMarkThreadAsInactive,
+            ContextView ctx) {
         String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-        return traceThreadDAO.closeThreadWith(projectId, lastUpdatedUntil)
+        return traceThreadDAO.closeThreadWith(projectId, now, timeoutToMarkThreadAsInactive)
                 .flatMap(count -> {
                     var lock = new LockService.Lock(TraceThreadBufferConfig.BUFFER_SET_NAME, projectId.toString());
                     return lockService.unlockUsingToken(lock).thenReturn(count);
