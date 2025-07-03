@@ -4870,6 +4870,57 @@ class TracesResourceTest {
             }
         }
 
+        @Test
+        @DisplayName("When filtering by thread tag, should return only threads with matching tags")
+        void whenFilterByTags__thenReturnThreadsWithMatchingTags() {
+
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+
+            // Create traces
+            var traces = IntStream.range(0, 3)
+                    .mapToObj(it -> {
+                        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+                        return createTrace().toBuilder()
+                                .projectName(projectName)
+                                .usage(null)
+                                .threadId(threadId)
+                                .endTime(now.plus(it, ChronoUnit.MILLIS))
+                                .startTime(now)
+                                .build();
+                    })
+                    .collect(Collectors.toList());
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            var createdThread = traceResourceClient.getTraceThread(threadId, projectId, apiKey, workspaceName);
+
+            // Add tags to the thread
+            var update = factory.manufacturePojo(TraceThreadUpdate.class);
+            traceResourceClient.updateThread(update, createdThread.threadModelId(), apiKey, workspaceName, 204);
+
+            List<TraceThread> expectedThreads = List.of(createdThread.toBuilder().tags(update.tags()).build());
+
+            // Create filter for the specified status
+            var statusFilter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.TAGS)
+                    .operator(Operator.CONTAINS)
+                    .value(update.tags().iterator().next())
+                    .build();
+
+            assertThreadPage(null, projectId, expectedThreads, List.of(statusFilter), Map.of(), apiKey,
+                    workspaceName);
+            assertTheadStream(null, projectId, apiKey, workspaceName, expectedThreads, List.of(statusFilter));
+        }
+
         private void assertTheadStream(String projectName, UUID projectId, String apiKey, String workspaceName,
                 List<TraceThread> expectedThreads, List<TraceThreadFilter> filters) {
             var actualThreads = traceResourceClient.searchTraceThreadsStream(projectName, projectId, apiKey,
@@ -8999,6 +9050,11 @@ class TracesResourceTest {
             // Create multiple threads with different values
             List<String> threadIds = PodamFactoryUtils.manufacturePojoList(factory, String.class);
 
+            Map<String, TraceThreadUpdate> updates = threadIds.stream()
+                    .collect(Collectors.toMap(
+                            threadId -> threadId,
+                            threadId -> factory.manufacturePojo(TraceThreadUpdate.class)));
+
             // Create traces for each thread with varying number of messages
             List<Trace> allTraces = new ArrayList<>();
             Map<String, List<Trace>> tracesByThread = new HashMap<>();
@@ -9054,8 +9110,19 @@ class TracesResourceTest {
                                         .build())
                                 .toList();
 
+                        // Update thread to add tags
+                        var createdThread = traceResourceClient.getTraceThread(threadId, projectId, apiKey,
+                                workspaceName);
+                        traceResourceClient.updateThread(updates.get(threadId), createdThread.threadModelId(), apiKey,
+                                workspaceName, 204);
+
                         return getExpectedThreads(tracesByThread.get(threadId), projectId, threadId,
-                                spansWithTotalEstimatedCost, TraceThreadStatus.ACTIVE);
+                                spansWithTotalEstimatedCost, TraceThreadStatus.ACTIVE)
+                                .stream()
+                                .map(thread -> thread.toBuilder()
+                                        .tags(updates.get(threadId).tags())
+                                        .build())
+                                .toList();
                     })
                     .flatMap(List::stream)
                     .toList();
@@ -9082,6 +9149,7 @@ class TracesResourceTest {
         }
 
         private Stream<Arguments> getTraceThreads__whenSortingByValidFields__thenReturnTraceThreadsSorted() {
+            Comparator<TraceThread> tagsComparator = Comparator.comparing(thread -> thread.tags().toString());
             return Stream.of(
                     Arguments.of(
                             Comparator.comparing(TraceThread::totalEstimatedCost)
@@ -9150,7 +9218,13 @@ class TracesResourceTest {
                     Arguments.of(
                             Comparator.comparing(TraceThread::createdAt).reversed()
                                     .thenComparing(Comparator.comparing(TraceThread::lastUpdatedAt).reversed()),
-                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC).build()));
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC).build()),
+                    Arguments.of(
+                            tagsComparator,
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            tagsComparator.reversed(),
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()));
         }
 
         @ParameterizedTest
