@@ -8,6 +8,7 @@ from google.adk.models import LlmResponse
 import opik.types as opik_types
 import pydantic
 
+
 def convert_adk_base_model_to_dict(value: pydantic.BaseModel) -> Dict[str, Any]:
     """Most ADK objects are Pydantic Base Models"""
     return value.model_dump(mode="json", exclude_unset=True, fallback=str)
