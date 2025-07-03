@@ -388,14 +388,18 @@ export type PROVIDER_MODELS_TYPE = {
   }[];
 };
 
+export interface ProviderKeyConfiguration {
+  location?: string;
+  models?: string;
+}
+
 export interface ProviderKey {
   id: string;
   keyName: string;
   created_at: string;
   provider: PROVIDER_TYPE;
-  location?: string;
   base_url?: string;
-  models?: string;
+  configuration: ProviderKeyConfiguration;
 }
 
 export interface ProviderKeyWithAPIKey extends ProviderKey {

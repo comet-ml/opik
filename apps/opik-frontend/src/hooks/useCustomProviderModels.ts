@@ -23,8 +23,8 @@ const useCustomProviderModels = () => {
         (providerKey) => providerKey.provider === PROVIDER_TYPE.CUSTOM,
       );
 
-      if (customConfig && customConfig.models) {
-        retval[PROVIDER_TYPE.CUSTOM] = customConfig.models
+      if (customConfig && customConfig.configuration?.models) {
+        retval[PROVIDER_TYPE.CUSTOM] = customConfig.configuration.models
           .split(",")
           .map((model) => {
             const trimmedModel = model.trim();

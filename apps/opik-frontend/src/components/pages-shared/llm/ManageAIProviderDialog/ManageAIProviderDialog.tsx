@@ -75,7 +75,9 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       // @ts-expect-error testing
       location: providerKey?.location ?? "",
       url: providerKey?.base_url ?? "",
-      models: convertCustomProviderModels(providerKey?.models ?? ""),
+      models: convertCustomProviderModels(
+        providerKey?.configuration?.models ?? "",
+      ),
     },
   });
 
@@ -109,14 +111,21 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     const isVertex = provider === PROVIDER_TYPE.VERTEX_AI;
     const isCustom = provider === PROVIDER_TYPE.CUSTOM;
 
+    const configuration =
+      isVertex || isCustom
+        ? {
+            location: isVertex ? location : undefined,
+            models: isCustom ? models : undefined,
+          }
+        : undefined;
+
     if (providerKey || calculatedProviderKey) {
       updateMutate({
         providerKey: {
           id: providerKey?.id ?? calculatedProviderKey?.id,
           apiKey,
-          location: isVertex ? location : undefined,
           base_url: isCustom ? url : undefined,
-          models: isCustom ? models : undefined,
+          ...(configuration && { configuration }),
         },
       });
     } else if (provider) {
@@ -128,9 +137,8 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         providerKey: {
           apiKey,
           provider,
-          location: isVertex ? location : undefined,
           base_url: isCustom ? url : undefined,
-          models: isCustom ? models : undefined,
+          ...(configuration && { configuration }),
         },
       });
     }
@@ -209,12 +217,12 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                             form.setValue(
                               "models",
                               convertCustomProviderModels(
-                                providerData?.models ?? "",
+                                providerData?.configuration?.models ?? "",
                               ),
                             );
                             form.setValue(
                               "location",
-                              providerData?.location ?? "",
+                              providerData?.configuration?.location ?? "",
                             );
 
                             field.onChange(p);
