@@ -53,8 +53,9 @@ public class CustomLlmProvider implements LlmProviderService {
     }
 
     private ChatCompletionRequest cleanModelName(@NonNull ChatCompletionRequest request) {
-        String cleanedModel = request.model().startsWith(CUSTOM_LLM_MODEL_PREFIX) ?
-                request.model().replace(CUSTOM_LLM_MODEL_PREFIX, "") : request.model();
+        String cleanedModel = request.model().startsWith(CUSTOM_LLM_MODEL_PREFIX)
+                ? request.model().replace(CUSTOM_LLM_MODEL_PREFIX, "")
+                : request.model();
 
         // Is there a way to make this less verbose to somehow only modify the model name?
         return ChatCompletionRequest.builder()

@@ -43,7 +43,7 @@ public interface StructuredOutputStrategy {
                     .map(StructuredOutputSupported::isStructuredOutputSupported).orElse(false);
             case VERTEX_AI -> VertexAIModelName.byQualifiedName(modelName)
                     .map(StructuredOutputSupported::isStructuredOutputSupported).orElse(false);
-            case ANTHROPIC -> false;
+            case ANTHROPIC, CUSTOM_LLM -> false;
         };
 
         return isStructuredOutputSupported ? new ToolCallingStrategy() : new InstructionStrategy();

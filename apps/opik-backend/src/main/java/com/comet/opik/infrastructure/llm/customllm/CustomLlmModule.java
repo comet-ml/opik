@@ -14,7 +14,8 @@ public class CustomLlmModule extends AbstractModule {
     @Provides
     @Singleton
     @Named("customLlmGenerator")
-    public CustomLlmClientGenerator clientGenerator(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
+    public CustomLlmClientGenerator clientGenerator(
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
         return new CustomLlmClientGenerator(config);
     }
 

@@ -12,7 +12,8 @@ import static com.comet.opik.infrastructure.llm.customllm.CustomLlmErrorMessage.
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record CustomLlmErrorMessage(
         CustomProviderError error, String object, String message, String type, String param, Integer code)
-        implements LlmProviderError<CustomProviderError> {
+        implements
+            LlmProviderError<CustomProviderError> {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record CustomProviderError(String message, String code, String type) {

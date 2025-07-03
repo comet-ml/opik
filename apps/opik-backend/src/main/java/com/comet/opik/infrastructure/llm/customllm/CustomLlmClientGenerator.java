@@ -35,7 +35,8 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
 
         var baseUrl = Optional.ofNullable(config.baseUrl())
                 .filter(StringUtils::isNotBlank)
-                .orElseThrow(() -> new IllegalArgumentException("custom provider client not configured properly, missing url"));
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "custom provider client not configured properly, missing url"));
 
         var openAiClientBuilder = OpenAiClient.builder()
                 .baseUrl(baseUrl)
@@ -61,7 +62,8 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
             @NonNull LlmProviderClientApiConfig config, @NonNull LlmAsJudgeModelParameters modelParameters) {
         var baseUrl = Optional.ofNullable(config.baseUrl())
                 .filter(StringUtils::isNotBlank)
-                .orElseThrow(() -> new IllegalArgumentException("custom provider client not configured properly, missing url"));
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "custom provider client not configured properly, missing url"));
 
         // Force HTTP/1.1 to avoid upgrade. For example, vLLM is built on FastAPI and explicitly uses HTTP/1.1
         HttpClient.Builder httpClientBuilder = HttpClient.newBuilder()
