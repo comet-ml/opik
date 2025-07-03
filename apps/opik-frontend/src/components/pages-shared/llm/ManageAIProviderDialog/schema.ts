@@ -35,11 +35,7 @@ export const CustomProviderDetailsFormSchema = z.object({
   provider: z.enum([PROVIDER_TYPE.CUSTOM], {
     message: "Provider is required",
   }),
-  apiKey: z
-    .string({
-      required_error: "API key is required",
-    })
-    .min(1, { message: "API key is required" }),
+  apiKey: z.string(),
   url: z.string().url(),
   models: z
     .string()

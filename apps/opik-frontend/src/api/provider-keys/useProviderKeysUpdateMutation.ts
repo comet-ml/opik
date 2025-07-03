@@ -22,7 +22,7 @@ const useProviderKeysUpdateMutation = () => {
       const { data } = await api.patch(
         `${PROVIDER_KEYS_REST_ENDPOINT}${providerKey.id}`,
         {
-          api_key: providerKey.apiKey,
+          ...(providerKey.apiKey && { api_key: providerKey.apiKey }),
           ...(providerKey.base_url && { base_url: providerKey.base_url }),
           ...(providerKey?.configuration && {
             configuration: providerKey.configuration,

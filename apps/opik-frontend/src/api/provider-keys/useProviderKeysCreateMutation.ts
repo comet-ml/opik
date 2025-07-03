@@ -22,7 +22,7 @@ const useProviderKeysCreateMutation = () => {
     }: UseProviderKeysCreateMutationParams) => {
       const { data } = await api.post(PROVIDER_KEYS_REST_ENDPOINT, {
         provider: providerKey.provider,
-        api_key: providerKey.apiKey,
+        ...(providerKey.apiKey && { api_key: providerKey.apiKey }),
         ...(providerKey.base_url && { base_url: providerKey.base_url }),
         ...(providerKey?.configuration && {
           configuration: providerKey.configuration,
