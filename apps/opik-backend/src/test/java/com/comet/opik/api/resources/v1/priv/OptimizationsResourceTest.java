@@ -7,7 +7,6 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreAverage;
-import com.comet.opik.api.FeedbackScoreBatchItem;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.OptimizationUpdate;
@@ -23,6 +22,7 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
@@ -36,7 +36,6 @@ import com.comet.opik.utils.JsonUtils;
 import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -59,7 +58,6 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
-import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -67,11 +65,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
@@ -99,7 +98,7 @@ class OptimizationsResourceTest {
     private final TestDropwizardAppExtensionUtils.AppContextConfig contextConfig;
 
     @RegisterApp
-    private final TestDropwizardAppExtension app;
+    private final TestDropwizardAppExtension APP;
 
     {
         Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
@@ -108,6 +107,9 @@ class OptimizationsResourceTest {
 
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICK_HOUSE_CONTAINER, DATABASE_NAME);
+
+        MigrationUtils.runMysqlDbMigration(MYSQL_CONTAINER);
+        MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
 
         contextConfig = TestDropwizardAppExtensionUtils.AppContextConfig.builder()
                 .jdbcUrl(MYSQL_CONTAINER.getJdbcUrl())
@@ -118,7 +120,7 @@ class OptimizationsResourceTest {
                 .mockEventBus(Mockito.mock(EventBus.class))
                 .build();
 
-        app = newTestDropwizardAppExtension(contextConfig);
+        APP = newTestDropwizardAppExtension(contextConfig);
     }
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
@@ -133,15 +135,8 @@ class OptimizationsResourceTest {
     private TraceResourceClient traceResourceClient;
 
     @BeforeAll
-    void beforeAll(ClientSupport client, Jdbi jdbi) throws SQLException {
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
-        try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
-
-        baseURI = "http://localhost:%d".formatted(client.getPort());
+    void beforeAll(ClientSupport client) {
+        this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
 
         ClientSupportUtils.config(client);
@@ -333,7 +328,7 @@ class OptimizationsResourceTest {
                                     .id(trace.id())
                                     .name(score.name())
                                     .build()))
-                    .toList();
+                    .collect(Collectors.toList());
 
             traceResourceClient.feedbackScores(scoreBatchItems, API_KEY, TEST_WORKSPACE_NAME);
 
@@ -666,7 +661,7 @@ class OptimizationsResourceTest {
                                     .id(trace.id())
                                     .name(score.name())
                                     .build()))
-                    .toList();
+                    .collect(Collectors.toList());
 
             traceResourceClient.feedbackScores(scoreBatchItems, apiKey, workspaceName);
 

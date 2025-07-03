@@ -1,10 +1,5 @@
 import opik
-from typing import Literal, List, Dict, Any
-from .. import utils
-from datasets import load_dataset
-import traceback
-from importlib.resources import files
-import json
+from typing import Literal
 import warnings
 from ..datasets import (
     hotpot_300,
@@ -20,6 +15,7 @@ from ..datasets import (
     medhallu,
     rag_hallucinations,
 )
+
 
 class HaltError(Exception):
     """Exception raised when we need to halt the process due to a critical error."""
@@ -51,7 +47,7 @@ def get_or_create_dataset(
         "This function is deprecated. Please use the datasets directly from opik_optimizer.datasets module instead."
         " For example: opik_optimizer.datasets.truthful_qa() or opik_optimizer.datasets.rag_hallucination()",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
     if name == "hotpot-300":
         dataset = hotpot_300(test_mode)

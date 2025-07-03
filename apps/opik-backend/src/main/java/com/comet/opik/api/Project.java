@@ -1,14 +1,17 @@
 package com.comet.opik.api;
 
+import com.comet.opik.api.validation.DurationValidation;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Builder;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -45,7 +48,18 @@ public record Project(
         @JsonView({
                 Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long traceCount,
         @JsonView({
-                Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long guardrailsFailedCount){
+                Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long guardrailsFailedCount,
+        @JsonView({
+                Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable ErrorCountWithDeviation errorCount,
+        @JsonView({Project.View.Public.class, Project.View.Detailed.class,
+                View.Write.class}) @Nullable @Valid Configuration configuration){
+
+    @Builder(toBuilder = true)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record Configuration(
+            @DurationValidation @Schema(description = "minimum precision supported is seconds, please use a duration with seconds precision or higher. Also, the max duration allowed is 7 days.") Duration timeoutToMarkThreadAsInactive) {
+    }
 
     public static class View {
         public static class Write {

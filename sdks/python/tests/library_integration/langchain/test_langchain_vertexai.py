@@ -98,6 +98,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -144,7 +145,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
                         usage=ANY_DICT,
                         spans=[],
                         provider="google_vertexai",
-                        model=ANY_STRING(startswith="gemini-2.0-flash"),
+                        model=ANY_STRING.starting_with("gemini-2.0-flash"),
                     ),
                 ],
             )

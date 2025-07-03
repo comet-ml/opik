@@ -26,10 +26,10 @@ def run_optimization(
     dataset_name: str,
     optimizer_name: str,
     model_name: str,
-    test_mode: bool
-):
+    test_mode: bool,
+) -> TaskResult:
     timestamp_start = time.time()
-    
+
     initial_prompt = None
     optimized_prompt = None
 
@@ -37,40 +37,41 @@ def run_optimization(
         try:
             # Initialize the dataset, optimizer_class, metrics and initial_prompt
             dataset_config = benchmark_config.DATASET_CONFIG[dataset_name]
-            dataset = getattr(opik_optimizer.datasets, dataset_name)(test_mode=test_mode)
-            
-            optimizer_config = benchmark_config.OPTIMIZER_CONFIGS[optimizer_name]
-            optimizer: BaseOptimizer = getattr(opik_optimizer, optimizer_config.class_name)(
-                model=model_name,
-                **optimizer_config.params
+            dataset = getattr(opik_optimizer.datasets, dataset_name)(
+                test_mode=test_mode
             )
 
-            messages=benchmark_config.INITIAL_PROMPTS[dataset_name]
-            initial_prompt = chat_prompt.ChatPrompt(messages=messages) # type: ignore
+            optimizer_config = benchmark_config.OPTIMIZER_CONFIGS[optimizer_name]
+            optimizer: BaseOptimizer = getattr(
+                opik_optimizer, optimizer_config.class_name
+            )(model=model_name, **optimizer_config.params)
+
+            messages = benchmark_config.INITIAL_PROMPTS[dataset_name]
+            initial_prompt = chat_prompt.ChatPrompt(messages=messages)  # type: ignore
 
             # Start by running a first evaluation
             start_time_initial_eval = time.time()
             initial_evaluation = []
             for metric_ in dataset_config.metrics:
-                result=optimizer.evaluate_prompt(
-                    prompt=initial_prompt,
-                    dataset=dataset,
-                    metric=metric_
+                result = optimizer.evaluate_prompt(
+                    prompt=initial_prompt, dataset=dataset, metric=metric_, n_threads=4
                 )
-                initial_evaluation.append({
-                    "metric_name": metric_.__name__,
-                    "score": result,
-                    "timestamp": time.time()
-                })
+                initial_evaluation.append(
+                    {
+                        "metric_name": metric_.__name__,
+                        "score": result,
+                        "timestamp": time.time(),
+                    }
+                )
             initial_evaluation_duration = time.time() - start_time_initial_eval
-            
+
             # Run optimization
             optimization_results = optimizer.optimize_prompt(
-                prompt=initial_prompt,
-                dataset=dataset,
-                metric=dataset_config.metrics[0]
+                prompt=initial_prompt, dataset=dataset, metric=dataset_config.metrics[0]
             )
-            optimized_prompt = chat_prompt.ChatPrompt(messages=optimization_results.prompt)
+            optimized_prompt = chat_prompt.ChatPrompt(
+                messages=optimization_results.prompt
+            )
 
             # Run final evaluation
             start_time_final_eval = time.time()
@@ -79,13 +80,16 @@ def run_optimization(
                 result = optimizer.evaluate_prompt(
                     prompt=optimized_prompt,
                     dataset=dataset,
-                    metric=metric_
+                    metric=metric_,
+                    n_threads=4,
                 )
-                optimized_evaluation.append({
-                    "metric_name": metric_.__name__,
-                    "score": result,
-                    "timestamp": time.time()
-                })
+                optimized_evaluation.append(
+                    {
+                        "metric_name": metric_.__name__,
+                        "score": result,
+                        "timestamp": time.time(),
+                    }
+                )
             optimized_evaluation_duration = time.time() - start_time_final_eval
 
             return TaskResult(
@@ -97,13 +101,13 @@ def run_optimization(
                 timestamp_start=timestamp_start,
                 initial_prompt=initial_prompt,
                 initial_evaluation=TaskEvaluationResult(
-                    metrics=initial_evaluation, # type: ignore
-                    duration_seconds=initial_evaluation_duration
+                    metrics=initial_evaluation,  # type: ignore
+                    duration_seconds=initial_evaluation_duration,
                 ),
                 optimized_prompt=optimized_prompt,
                 optimized_evaluation=TaskEvaluationResult(
-                    metrics=optimized_evaluation, # type: ignore
-                    duration_seconds=optimized_evaluation_duration
+                    metrics=optimized_evaluation,  # type: ignore
+                    duration_seconds=optimized_evaluation_duration,
                 ),
                 error_message=None,
                 llm_calls_total_optimization=optimization_results.llm_calls,
@@ -123,16 +127,13 @@ def run_optimization(
                 timestamp_end=time.time(),
             )
 
-class BenchmarkRunner():
+
+class BenchmarkRunner:
     run_id: Optional[str] = None
 
     def __init__(
-        self,
-        max_workers: int,
-        seed: int,
-        test_mode: bool,
-        checkpoint_dir: str
-    ):
+        self, max_workers: int, seed: int, test_mode: bool, checkpoint_dir: str
+    ) -> None:
         self.max_workers = max_workers
         self.seed = seed
         self.test_mode = test_mode
@@ -145,8 +146,8 @@ class BenchmarkRunner():
         optimizers: List[str],
         models: List[str],
         retry_failed_run_id: Optional[str],
-        resume_run_id: Optional[str]
-    ):
+        resume_run_id: Optional[str],
+    ) -> None:
         # Create unique id
         if resume_run_id and retry_failed_run_id:
             raise ValueError("Cannot resume and retry at the same time")
@@ -155,19 +156,17 @@ class BenchmarkRunner():
         elif retry_failed_run_id:
             self.run_id = retry_failed_run_id
         else:
-            self.run_id = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.urandom(4).hex()}"
+            self.run_id = (
+                f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.urandom(4).hex()}"
+            )
 
         # Initialize logger
         checkpoint_folder = os.path.join(self.checkpoint_dir, self.run_id)
         self.benchmark_logger.setup_logger(
-            demo_datasets,
-            optimizers,
-            models,
-            self.test_mode,
-            self.run_id
+            demo_datasets, optimizers, models, self.test_mode, self.run_id
         )
-        self.benchmark_logger.print_benchmark_header()        
-        
+        self.benchmark_logger.print_benchmark_header()
+
         # Initialize BenchmarkCheckpointManager
         checkpoint_manager = benchmark_checkpoint.BenchmarkCheckpointManager(
             checkpoint_folder=checkpoint_folder,
@@ -175,7 +174,7 @@ class BenchmarkRunner():
             test_mode=self.test_mode,
             demo_datasets=demo_datasets,
             optimizers=optimizers,
-            models=models
+            models=models,
         )
         if resume_run_id or retry_failed_run_id:
             checkpoint_manager.load()
@@ -195,21 +194,29 @@ class BenchmarkRunner():
                     for optimizer_name in optimizers:
                         for model_name in models:
                             task_id = f"{dataset_name}_{optimizer_name}_{model_name}"
-                            
+
                             # If retrying failed runs, skip tasks that have not failed
                             if retry_failed_run_id:
-                                failed_tasks = [x.id for x in checkpoint_manager.task_results if x.status == "Failed"]
+                                failed_tasks = [
+                                    x.id
+                                    for x in checkpoint_manager.task_results
+                                    if x.status == "Failed"
+                                ]
 
                                 if task_id not in failed_tasks:
                                     continue
-                            
+
                             # If resuming a run, skip tasks that have already been completed
                             if resume_run_id:
-                                completed_tasks = [x.id for x in checkpoint_manager.task_results if x.status != "Pending"]
+                                completed_tasks = [
+                                    x.id
+                                    for x in checkpoint_manager.task_results
+                                    if x.status != "Pending"
+                                ]
 
                                 if task_id in completed_tasks:
                                     continue
-                            
+
                             # Schedule the task
                             future = executor.submit(
                                 run_optimization,
@@ -218,9 +225,17 @@ class BenchmarkRunner():
                                 optimizer_name=optimizer_name,
                                 model_name=model_name,
                                 test_mode=self.test_mode,
-                                checkpoint_folder=checkpoint_folder
+                                checkpoint_folder=checkpoint_folder,
                             )
-                            futures.append((task_id, future, dataset_name, optimizer_name, model_name))
+                            futures.append(
+                                (
+                                    task_id,
+                                    future,
+                                    dataset_name,
+                                    optimizer_name,
+                                    model_name,
+                                )
+                            )
 
                             # Update the checkpoint manager
                             checkpoint_manager.update_task_result(
@@ -230,25 +245,33 @@ class BenchmarkRunner():
                                     optimizer_name=optimizer_name,
                                     model_name=model_name,
                                     status="Pending",
-                                    timestamp_start=time.time()
+                                    timestamp_start=time.time(),
                                 )
                             )
-                            
+
                             # Update the logging
                             self.benchmark_logger.update_active_task_status(
                                 future=future,
                                 dataset_name=dataset_name,
                                 optimizer_name=optimizer_name,
                                 model_name=model_name,
-                                status="Pending"
+                                status="Pending",
                             )
-                            live.update(self.benchmark_logger._generate_live_display_message())
-                
+                            live.update(
+                                self.benchmark_logger._generate_live_display_message()
+                            )
+
                 completed_futures: List[str] = []
                 while True:
                     try:
                         for future_info in futures:
-                            task_id, future, dataset_name, optimizer_name, model_name = future_info
+                            (
+                                task_id,
+                                future,
+                                dataset_name,
+                                optimizer_name,
+                                model_name,
+                            ) = future_info
                             # If the task has not completed and is now running, mark it as Running.
                             if not future.done() and future.running():
                                 # Update the checkpoint manager
@@ -259,7 +282,7 @@ class BenchmarkRunner():
                                         optimizer_name=optimizer_name,
                                         model_name=model_name,
                                         status="Running",
-                                        timestamp_start=time.time()
+                                        timestamp_start=time.time(),
                                     )
                                 )
 
@@ -269,7 +292,7 @@ class BenchmarkRunner():
                                     dataset_name=dataset_name,
                                     optimizer_name=optimizer_name,
                                     model_name=model_name,
-                                    status="Running"
+                                    status="Running",
                                 )
                             elif future.done():
                                 if task_id in completed_futures:
@@ -278,17 +301,17 @@ class BenchmarkRunner():
                                     result = future.result()
                                     task_results.append(result)
                                     completed_futures.append(task_id)
-                                    
+
                                     # Update the checkpoint manager
                                     checkpoint_manager.update_task_result(result)
-                                    
+
                                     # Update the logging
                                     self.benchmark_logger.update_active_task_status(
                                         future=future,
                                         dataset_name=dataset_name,
                                         optimizer_name=optimizer_name,
                                         model_name=model_name,
-                                        status=result.status
+                                        status=result.status,
                                     )
                                 except Exception:
                                     result = TaskResult(
@@ -302,37 +325,39 @@ class BenchmarkRunner():
                                         error_message=traceback.format_exc(),
                                     )
                                     completed_futures.append(task_id)
-                                    
+
                                     # Update the checkpoint manager
                                     checkpoint_manager.update_task_result(result)
-                                    
+
                                     # Update the logging
                                     self.benchmark_logger.update_active_task_status(
                                         future=future,
                                         dataset_name=dataset_name,
                                         optimizer_name=optimizer_name,
                                         model_name=model_name,
-                                        status="Failed"
+                                        status="Failed",
                                     )
-                                
+
                                 self.benchmark_logger.add_result_panel(
                                     dataset_name=dataset_name,
                                     optimizer_name=optimizer_name,
-                                    task_detail_data=result
+                                    task_detail_data=result,
                                 )
-                            live.update(self.benchmark_logger._generate_live_display_message())
+                            live.update(
+                                self.benchmark_logger._generate_live_display_message()
+                            )
                     except KeyboardInterrupt:
                         executor.shutdown(wait=False, cancel_futures=True)
                         sys.exit(1)
 
-                    if all(future.done() for _, future, _, _, _ in futures) and len(completed_futures) == len(futures):
+                    if all(future.done() for _, future, _, _, _ in futures) and len(
+                        completed_futures
+                    ) == len(futures):
                         break
                     time.sleep(50)
-        
+
         total_duration = time.time() - start_time
         self.benchmark_logger.print_benchmark_footer(
             results=task_results,
             total_duration=total_duration,
         )
-
-

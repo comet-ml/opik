@@ -5,6 +5,8 @@ import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
+import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -17,8 +19,10 @@ import org.slf4j.Logger;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.List;
 import java.util.Map;
 
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
@@ -31,15 +35,18 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
     private final ChatCompletionService aiProxyService;
     private final Logger userFacingLogger;
+    private final LlmProviderFactory llmProviderFactory;
 
     @Inject
     public OnlineScoringLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
-            @NonNull ChatCompletionService aiProxyService) {
+            @NonNull ChatCompletionService aiProxyService,
+            @NonNull LlmProviderFactory llmProviderFactory) {
         super(config, redisson, feedbackScoreService, AutomationRuleEvaluatorType.LLM_AS_JUDGE, "llm_as_judge");
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringLlmAsJudgeScorer.class);
+        this.llmProviderFactory = llmProviderFactory;
     }
 
     /**
@@ -65,7 +72,10 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
             ChatRequest scoreRequest;
             try {
-                scoreRequest = OnlineScoringEngine.prepareLlmRequest(message.llmAsJudgeCode(), trace);
+                String modelName = message.llmAsJudgeCode().model().name();
+                var llmProvider = llmProviderFactory.getLlmProvider(modelName);
+                var strategy = StructuredOutputStrategy.getStrategy(llmProvider, modelName);
+                scoreRequest = OnlineScoringEngine.prepareLlmRequest(message.llmAsJudgeCode(), trace, strategy);
             } catch (Exception exception) {
                 userFacingLogger.error("Error preparing LLM request for traceId '{}': \n\n{}",
                         trace.id(), exception.getMessage());
@@ -87,8 +97,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             }
 
             try {
-                var scores = OnlineScoringEngine.toFeedbackScores(chatResponse).stream()
-                        .map(item -> item.toBuilder()
+                List<FeedbackScoreBatchItem> scores = OnlineScoringEngine.toFeedbackScores(chatResponse).stream()
+                        .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
                                 .id(trace.id())
                                 .projectId(trace.projectId())
                                 .projectName(trace.projectName())

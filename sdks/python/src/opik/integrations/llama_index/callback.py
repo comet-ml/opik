@@ -64,15 +64,22 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             metadata={"created_from": "llama_index"},
             project_name=self._project_name,
         )
+
+        if self._opik_client.config.log_start_trace_span:
+            self._opik_client.trace(**trace_data.as_start_parameters)
+
         return trace_data
 
     def start_trace(self, trace_id: Optional[str] = None) -> None:
         # When a new LLama Index trace is started, create a new trace in Opik
         existing_trace_data = opik_context.get_current_trace_data()
-        if existing_trace_data:
+        if existing_trace_data is not None:
             self._opik_trace_data = existing_trace_data
         else:
             self._opik_trace_data = self._create_trace_data(trace_name=trace_id)
+
+        if self._opik_client.config.log_start_trace_span:
+            self._opik_client.trace(**self._opik_trace_data.as_start_parameters)
 
     def _get_last_event(self, trace_map: Dict[str, List[str]]) -> str:
         def dfs(key: str) -> str:
@@ -96,12 +103,12 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         last_event_output = self._map_event_id_to_output.get(last_event, None)
 
         # And then end the trace with the optional output
-        if self._opik_trace_data and (
+        if self._opik_trace_data is not None and (
             self._skip_index_construction_trace is False
             or self._opik_trace_data.name != "index_construction"
         ):
             self._opik_trace_data.init_end_time().update(output=last_event_output)
-            self._opik_client.trace(**self._opik_trace_data.__dict__)
+            self._opik_client.trace(**self._opik_trace_data.as_parameters)
             self._opik_trace_data = None
 
         # Do not clean _map_event_id_to_span_data as streaming LLM events can
@@ -159,6 +166,8 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             project_name=project_name,
         )
         self._map_event_id_to_span_data[event_id] = span_data
+        if self._opik_client.config.log_start_trace_span:
+            self._opik_client.span(**span_data.as_start_parameters)
 
         # If the parent_id is a BASE_TRACE_EVENT, update the trace with the span input
         if parent_id == llama_index_schema.BASE_TRACE_EVENT and span_input:
@@ -194,7 +203,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
                 span_data.update(
                     output=span_output, error_info=error_info
                 ).init_end_time()
-                self._opik_client.span(**span_data.__dict__)
+                self._opik_client.span(**span_data.as_parameters)
 
                 del self._map_event_id_to_span_data[event_id]
 

@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
@@ -20,15 +21,21 @@ public record TraceThread(
         String id,
         UUID projectId,
         @JsonIgnore String workspaceId,
+        UUID threadModelId,
         Instant startTime,
         Instant endTime,
         Double duration,
         JsonNode firstMessage,
         JsonNode lastMessage,
+        List<FeedbackScore> feedbackScores,
+        TraceThreadStatus status,
         long numberOfMessages,
         BigDecimal totalEstimatedCost,
         Map<String, Long> usage,
+        List<Comment> comments,
+        Set<String> tags,
         Instant lastUpdatedAt,
+        String lastUpdatedBy,
         String createdBy,
         Instant createdAt) {
 

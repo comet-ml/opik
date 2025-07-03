@@ -2,18 +2,23 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.Response;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.UUID;
 
+import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RequiredArgsConstructor
@@ -98,5 +103,46 @@ public class ProjectResourceClient {
 
             return actualResponse.readEntity(FeedbackScoreNames.class);
         }
+    }
+
+    public ProjectStatsSummary getProjectStatsSummary(String projectName, @NonNull String apiKey,
+            @NonNull String workspaceName) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("/stats");
+
+        if (StringUtils.isEmpty(projectName)) {
+            webTarget = webTarget.queryParam("name", projectName);
+        }
+
+        Response actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        assertThat(actualResponse.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
+
+        return actualResponse.readEntity(ProjectStatsSummary.class);
+    }
+
+    public void updateConfigurations(Project.Configuration configuration, UUID projectId, String apiKey,
+            String workspaceName) {
+        try (var actualResponse = callUpdateConfigurations(configuration, projectId, apiKey, workspaceName)) {
+
+            // Then
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public Response callUpdateConfigurations(Project.Configuration configuration, UUID projectId, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(projectId.toString())
+                .path("configurations")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(configuration));
     }
 }

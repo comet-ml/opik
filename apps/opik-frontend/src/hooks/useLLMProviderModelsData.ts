@@ -27,22 +27,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GPT_4O,
       label: "GPT 4o",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
       label: "GPT 4o Mini",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GPT_4O_MINI_2024_07_18,
       label: "GPT 4o Mini 2024-07-18",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GPT_4O_2024_08_06,
       label: "GPT 4o 2024-08-06",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GPT_4O_2024_05_13,
@@ -331,42 +327,34 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.COHERE_COMMAND,
       label: "cohere/command",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.COHERE_COMMAND_R,
       label: "cohere/command-r",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.COHERE_COMMAND_R7B_12_2024,
       label: "cohere/command-r7b-12-2024",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.COHERE_COMMAND_R_03_2024,
       label: "cohere/command-r-03-2024",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.COHERE_COMMAND_R_08_2024,
       label: "cohere/command-r-08-2024",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.COHERE_COMMAND_R_PLUS,
       label: "cohere/command-r-plus",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.COHERE_COMMAND_R_PLUS_04_2024,
       label: "cohere/command-r-plus-04-2024",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.COHERE_COMMAND_R_PLUS_08_2024,
       label: "cohere/command-r-plus-08-2024",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.DATABRICKS_DBRX_INSTRUCT,
@@ -375,7 +363,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT,
       label: "deepseek/deepseek-chat",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT_FREE,
@@ -392,7 +379,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1,
       label: "deepseek/deepseek-r1",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_70B,
@@ -445,18 +431,15 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_001,
       label: "google/gemini-2.0-flash-001",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_EXP_FREE,
       label: "google/gemini-2.0-flash-exp:free",
-      structuredOutput: true,
     },
     {
       value:
         PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_LITE_PREVIEW_02_05_FREE,
       label: "google/gemini-2.0-flash-lite-preview-02-05:free",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_THINKING_EXP_1219_FREE,
@@ -469,7 +452,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_PRO_EXP_02_05_FREE,
       label: "google/gemini-2.0-pro-exp-02-05:free",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_EXP_1114,
@@ -482,22 +464,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_EXP_1206_FREE,
       label: "google/gemini-exp-1206:free",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_FLASH_1_5,
       label: "google/gemini-flash-1.5",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_FLASH_1_5_8B,
       label: "google/gemini-flash-1.5-8b",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_FLASH_1_5_8B_EXP,
       label: "google/gemini-flash-1.5-8b-exp",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_FLASH_1_5_EXP,
@@ -510,7 +488,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_PRO_1_5,
       label: "google/gemini-pro-1.5",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_PRO_1_5_EXP,
@@ -539,7 +516,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_LEARNLM_1_5_PRO_EXPERIMENTAL_FREE,
       label: "google/learnlm-1.5-pro-experimental:free",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_PALM_2_CHAT_BISON,
@@ -560,7 +536,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GRYPHE_MYTHOMAX_L2_13B,
       label: "gryphe/mythomax-l2-13b",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GRYPHE_MYTHOMAX_L2_13B_FREE,
@@ -677,22 +652,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_405B_INSTRUCT,
       label: "meta-llama/llama-3.1-405b-instruct",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_70B_INSTRUCT,
       label: "meta-llama/llama-3.1-70b-instruct",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_8B_INSTRUCT,
       label: "meta-llama/llama-3.1-8b-instruct",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_2_11B_VISION_INSTRUCT,
       label: "meta-llama/llama-3.2-11b-vision-instruct",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_2_11B_VISION_INSTRUCT_FREE,
@@ -705,17 +676,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_2_3B_INSTRUCT,
       label: "meta-llama/llama-3.2-3b-instruct",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_2_90B_VISION_INSTRUCT,
       label: "meta-llama/llama-3.2-90b-vision-instruct",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_3_70B_INSTRUCT,
       label: "meta-llama/llama-3.3-70b-instruct",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_3_70B_INSTRUCT_FREE,
@@ -728,7 +696,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_70B_INSTRUCT,
       label: "meta-llama/llama-3-70b-instruct",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_8B,
@@ -737,7 +704,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_8B_INSTRUCT,
       label: "meta-llama/llama-3-8b-instruct",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_8B_INSTRUCT_FREE,
@@ -810,7 +776,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_CODESTRAL_2501,
       label: "mistralai/codestral-2501",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_CODESTRAL_MAMBA,
@@ -819,12 +784,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MINISTRAL_3B,
       label: "mistralai/ministral-3b",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MINISTRAL_8B,
       label: "mistralai/ministral-8b",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_7B_INSTRUCT,
@@ -849,27 +812,22 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_LARGE,
       label: "mistralai/mistral-large",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_LARGE_2407,
       label: "mistralai/mistral-large-2407",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_LARGE_2411,
       label: "mistralai/mistral-large-2411",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_MEDIUM,
       label: "mistralai/mistral-medium",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_NEMO,
       label: "mistralai/mistral-nemo",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_NEMO_FREE,
@@ -878,17 +836,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_SABA,
       label: "mistralai/mistral-saba",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_SMALL,
       label: "mistralai/mistral-small",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_SMALL_24B_INSTRUCT_2501,
       label: "mistralai/mistral-small-24b-instruct-2501",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_SMALL_24B_INSTRUCT_2501_FREE,
@@ -897,7 +852,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_TINY,
       label: "mistralai/mistral-tiny",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MIXTRAL_8X22B,
@@ -906,7 +860,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MIXTRAL_8X22B_INSTRUCT,
       label: "mistralai/mixtral-8x22b-instruct",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MIXTRAL_8X7B,
@@ -915,17 +868,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MIXTRAL_8X7B_INSTRUCT,
       label: "mistralai/mixtral-8x7b-instruct",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_PIXTRAL_12B,
       label: "mistralai/pixtral-12b",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_PIXTRAL_LARGE_2411,
       label: "mistralai/pixtral-large-2411",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.NEVERSLEEP_LLAMA_3_1_LUMIMAID_70B,
@@ -1026,7 +976,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_CHATGPT_4O_LATEST,
       label: "openai/chatgpt-4o-latest",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO,
@@ -1067,42 +1016,34 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
       label: "openai/gpt-4o",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_ONLINE,
       label: "openai/gpt-4o:online",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_2024_05_13,
       label: "openai/gpt-4o-2024-05-13",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_2024_08_06,
       label: "openai/gpt-4o-2024-08-06",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_2024_11_20,
       label: "openai/gpt-4o-2024-11-20",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_EXTENDED,
       label: "openai/gpt-4o:extended",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
       label: "openai/gpt-4o-mini",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI_2024_07_18,
       label: "openai/gpt-4o-mini-2024-07-18",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_0314,
@@ -1135,7 +1076,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_O1,
       label: "openai/o1",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_O1_MINI,
@@ -1156,12 +1096,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_O3_MINI,
       label: "openai/o3-mini",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH,
       label: "openai/o3-mini-high",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_SHAP_E,
@@ -1262,7 +1200,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_5_72B_INSTRUCT,
       label: "qwen/qwen-2.5-72b-instruct",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_5_7B_INSTRUCT,
@@ -1271,7 +1208,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_5_CODER_32B_INSTRUCT,
       label: "qwen/qwen-2.5-coder-32b-instruct",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_72B_INSTRUCT,
@@ -1328,7 +1264,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B_PREVIEW,
       label: "qwen/qwq-32b-preview",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.RAIFLE_SORCERERLM_8X22B,
@@ -1473,7 +1408,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ZERO_ONE_AI_YI_LARGE,
       label: "01-ai/yi-large",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.ZERO_ONE_AI_YI_LARGE_FC,
@@ -1493,22 +1427,30 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
       label: "Gemini 2.0 Flash",
-      structuredOutput: true,
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
+      label: "Gemini 2.5 Pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      label: "Gemini 2.5 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
+      label: "Gemini 2.5 Flash Lite Preview 06-17",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_1_5_FLASH,
       label: "Gemini 1.5 Flash",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_1_5_FLASH_8B,
       label: "Gemini 1.5 Flash-8B",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_1_5_PRO,
       label: "Gemini 1.5 Pro",
-      structuredOutput: true,
     },
   ],
 
@@ -1516,32 +1458,38 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17,
       label: "Gemini 2.5 Pro Preview 04.17",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_05_06,
       label: "Gemini 2.5 Pro Preview 05.06",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO_PREVIEW_03_25,
       label: "Gemini 2.5 Pro Preview 03.25",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO_EXP_03_25,
       label: "Gemini 2.5 Pro Exp 03.25",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH,
       label: "Gemini 2.0 Flash",
-      structuredOutput: true,
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH_LITE,
       label: "Gemini 2.0 Flash Lite",
-      structuredOutput: true,
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO,
+      label: "Gemini 2.5 Pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      label: "Gemini 2.5 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
+      label: "Gemini 2.5 Flash Lite Preview 06-17",
     },
   ],
 
@@ -1594,9 +1542,7 @@ const useLLMProviderModelsData = () => {
       lastPickedModel: PROVIDER_MODEL_TYPE | "",
       setupProviders: PROVIDER_TYPE[],
       preferredProvider?: PROVIDER_TYPE | "",
-      config: { structuredOutput?: boolean } = {},
     ) => {
-      const { structuredOutput = false } = config;
       const lastPickedModelProvider = calculateModelProvider(lastPickedModel);
 
       const isLastPickedModelValid =
@@ -1611,10 +1557,7 @@ const useLLMProviderModelsData = () => {
         preferredProvider ?? getDefaultProviderKey(setupProviders);
 
       if (provider) {
-        if (
-          PROVIDERS[provider].locationType === PROVIDER_LOCATION_TYPE.local &&
-          !structuredOutput
-        ) {
+        if (PROVIDERS[provider].locationType === PROVIDER_LOCATION_TYPE.local) {
           return (
             (first(
               (getLocalAIProviderData(provider)?.models || "").split(","),
@@ -1623,21 +1566,13 @@ const useLLMProviderModelsData = () => {
         } else if (
           PROVIDERS[provider].locationType === PROVIDER_LOCATION_TYPE.cloud
         ) {
-          if (structuredOutput) {
-            return (
-              first(
-                getProviderModels()[provider].filter((m) => m.structuredOutput),
-              )?.value ?? ""
-            );
-          } else {
-            return PROVIDERS[provider].defaultModel;
-          }
+          return PROVIDERS[provider].defaultModel;
         }
       }
 
       return "";
     },
-    [calculateModelProvider, getLocalAIProviderData, getProviderModels],
+    [calculateModelProvider, getLocalAIProviderData],
   );
 
   return {

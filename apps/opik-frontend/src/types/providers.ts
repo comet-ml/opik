@@ -366,6 +366,9 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_1_5_FLASH = "gemini-1.5-flash",
   GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b",
   GEMINI_1_5_PRO = "gemini-1.5-pro",
+  GEMINI_2_5_PRO = "gemini-2.5-pro",
+  GEMINI_2_5_FLASH = "gemini-2.5-flash",
+  GEMINI_2_5_FLASH_LITE_PREVIEW_06_17 = "gemini-2.5-flash-lite-preview-06-17",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17 = "vertex_ai/gemini-2.5-flash-preview-04-17",
@@ -374,13 +377,15 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_2_5_PRO_EXP_03_25 = "vertex_ai/gemini-2.5-pro-exp-03-25",
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
   VERTEX_AI_GEMINI_2_0_FLASH_LITE = "vertex_ai/gemini-2.0-flash-lite-001",
+  VERTEX_AI_GEMINI_2_5_PRO = "vertex_ai/gemini-2.5-pro",
+  VERTEX_AI_GEMINI_2_5_FLASH = "vertex_ai/gemini-2.5-flash",
+  VERTEX_AI_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17 = "vertex_ai/gemini-2.5-flash-lite-preview-06-17",
 }
 
 export type PROVIDER_MODELS_TYPE = {
   [key in PROVIDER_TYPE]: {
     value: PROVIDER_MODEL_TYPE;
     label: string;
-    structuredOutput?: boolean;
   }[];
 };
 

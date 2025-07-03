@@ -27,7 +27,7 @@ import {
 } from "@/constants/experiments";
 import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import { formatDate } from "@/lib/date";
-import { toString } from "@/lib/utils";
+import { calculatePercentageChange, toString } from "@/lib/utils";
 import { getFeedbackScoreValue } from "@/lib/feedback-scores";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import useAppStore from "@/store/AppStore";
@@ -59,15 +59,6 @@ const REFETCH_INTERVAL = 30000;
 const MAX_EXPERIMENTS_LOADED = 1000;
 
 export const getRowId = (e: Experiment) => e.id;
-
-const calculatePercentageChange = (
-  baseValue: number,
-  newValue: number,
-): number | undefined => {
-  if (baseValue === 0 && newValue === 0) return 0;
-  if (baseValue === 0) return undefined;
-  return ((newValue - baseValue) / Math.abs(baseValue)) * 100;
-};
 
 const SELECTED_COLUMNS_KEY = "optimization-experiments-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimization-experiments-columns-width";

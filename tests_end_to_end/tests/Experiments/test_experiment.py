@@ -1,7 +1,7 @@
 import pytest
 from playwright.sync_api import Page
 from page_objects.ExperimentsPage import ExperimentsPage
-from sdk_helpers import get_experiment_by_id, delete_experiment_by_id
+from tests.sdk_helpers import get_experiment_by_id, delete_experiment_by_id
 import logging
 import allure
 
@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 
 class TestExperimentsCrud:
     @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.experiments
     @allure.title("Basic experiment creation")
     def test_experiment_visibility(self, page: Page, mock_experiment):
         """Test experiment visibility in both UI and SDK interfaces.
@@ -49,6 +51,8 @@ class TestExperimentsCrud:
         logger.info("Successfully verified experiment via SDK")
 
     @pytest.mark.parametrize("deletion_method", ["ui", "sdk"])
+    @pytest.mark.regression
+    @pytest.mark.experiments
     @allure.title("Experiment deletion - delete via {deletion_method}")
     def test_experiment_deletion(self, page: Page, mock_experiment, deletion_method):
         """Test experiment deletion via both UI and SDK interfaces.

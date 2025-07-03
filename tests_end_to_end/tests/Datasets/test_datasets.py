@@ -3,7 +3,7 @@ from playwright.sync_api import Page
 from page_objects.DatasetsPage import DatasetsPage
 from page_objects.ProjectsPage import ProjectsPage
 from page_objects.TracesPage import TracesPage
-from sdk_helpers import (
+from tests.sdk_helpers import (
     delete_dataset_by_name_if_exists,
     update_dataset_name,
     get_dataset_by_name,
@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 class TestDatasetsCrud:
+    @pytest.mark.regression
+    @pytest.mark.datasets
     @allure.title("Dataset creation via traces page (add traces to new dataset)")
     def test_create_dataset_ui_add_traces_to_new_dataset(
         self, page: Page, create_project_api, create_10_test_traces
@@ -75,6 +77,8 @@ class TestDatasetsCrud:
         "dataset_fixture", ["create_dataset_ui", "create_dataset_sdk"]
     )
     @pytest.mark.sanity
+    @pytest.mark.datasets
+    @pytest.mark.regression
     @allure.title("Dataset visibility - {dataset_fixture}")
     def test_dataset_visibility(
         self, request, page: Page, client: opik.Opik, dataset_fixture
@@ -128,6 +132,8 @@ class TestDatasetsCrud:
         ["create_dataset_sdk", "create_dataset_ui"],
     )
     @allure.title("Dataset name update - {dataset_fixture}")
+    @pytest.mark.datasets
+    @pytest.mark.regression
     def test_dataset_name_update(
         self, request, page: Page, client: opik.Opik, dataset_fixture
     ):
@@ -226,6 +232,8 @@ class TestDatasetsCrud:
     @allure.title(
         "Dataset deletion - {dataset_fixture} and delete via {deletion_method}"
     )
+    @pytest.mark.datasets
+    @pytest.mark.regression
     def test_dataset_deletion(
         self, request, page: Page, client: opik.Opik, dataset_fixture, deletion_method
     ):

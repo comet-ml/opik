@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.clickhouse.client.ClickHouseException;
+import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
@@ -60,16 +61,15 @@ public class SpanService {
     @WithSpan
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
         log.info("Finding span by '{}'", searchCriteria);
-        searchCriteria = findProjectAndVerifyVisibility(searchCriteria);
 
-        return spanDAO.find(page, size, searchCriteria);
+        return findProjectAndVerifyVisibility(searchCriteria)
+                .flatMap(it -> spanDAO.find(page, size, it));
     }
 
-    private SpanSearchCriteria findProjectAndVerifyVisibility(SpanSearchCriteria searchCriteria) {
-        return searchCriteria.toBuilder()
-                .projectId(projectService.resolveProjectIdAndVerifyVisibility(searchCriteria.projectId(),
-                        searchCriteria.projectName()))
-                .build();
+    private Mono<SpanSearchCriteria> findProjectAndVerifyVisibility(SpanSearchCriteria searchCriteria) {
+        return projectService
+                .resolveProjectIdAndVerifyVisibility(searchCriteria.projectId(), searchCriteria.projectName())
+                .map(projectId -> searchCriteria.toBuilder().projectId(projectId).build());
     }
 
     @WithSpan
@@ -260,16 +260,15 @@ public class SpanService {
     }
 
     public Mono<ProjectStats> getStats(@NonNull SpanSearchCriteria criteria) {
-        criteria = findProjectAndVerifyVisibility(criteria);
-        return spanDAO.getStats(criteria)
+        return findProjectAndVerifyVisibility(criteria)
+                .flatMap(spanDAO::getStats)
                 .switchIfEmpty(Mono.just(ProjectStats.empty()));
     }
 
     @WithSpan
     public Flux<Span> search(int limit, @NonNull SpanSearchCriteria criteria) {
-        criteria = findProjectAndVerifyVisibility(criteria);
-
-        return spanDAO.search(limit, criteria);
+        return findProjectAndVerifyVisibility(criteria)
+                .flatMapMany(it -> spanDAO.search(limit, it));
     }
 
     public Mono<Void> deleteByTraceIds(Set<UUID> traceIds) {
@@ -294,5 +293,17 @@ public class SpanService {
                                 .workspacesSpansCount(items)
                                 .build()))
                 .switchIfEmpty(Mono.just(SpansCountResponse.empty()));
+    }
+
+    @WithSpan
+    public Mono<BiInformationResponse> getSpanBIInformation() {
+        log.info("Getting span BI events daily data");
+        return spanDAO.getSpanBIInformation()
+                .collectList()
+                .flatMap(items -> Mono.just(
+                        BiInformationResponse.builder()
+                                .biInformation(items)
+                                .build()))
+                .switchIfEmpty(Mono.just(BiInformationResponse.empty()));
     }
 }

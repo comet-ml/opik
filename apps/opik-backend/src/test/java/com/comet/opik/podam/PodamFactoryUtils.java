@@ -2,18 +2,20 @@ package com.comet.opik.podam;
 
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.Guardrail;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
-import com.comet.opik.api.validate.InRange;
+import com.comet.opik.api.validation.InRange;
 import com.comet.opik.podam.manufacturer.BigDecimalTypeManufacturer;
 import com.comet.opik.podam.manufacturer.CategoricalFeedbackDetailTypeManufacturer;
 import com.comet.opik.podam.manufacturer.DatasetItemTypeManufacturer;
 import com.comet.opik.podam.manufacturer.GuardrailCheckTypeManufacturer;
 import com.comet.opik.podam.manufacturer.JsonNodeTypeManufacturer;
 import com.comet.opik.podam.manufacturer.NumericalFeedbackDetailTypeManufacturer;
+import com.comet.opik.podam.manufacturer.ProjectConfigurationTypeManufacturer;
 import com.comet.opik.podam.manufacturer.PromptVersionManufacturer;
 import com.comet.opik.podam.manufacturer.ProviderApiKeyManufacturer;
 import com.comet.opik.podam.manufacturer.ProviderApiKeyUpdateManufacturer;
@@ -80,6 +82,8 @@ public class PodamFactoryUtils {
                 StartMultipartUploadRequestManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(Guardrail.class, GuardrailCheckTypeManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(VisibilityMode.class, getVisibilityModeManufacturer());
+        strategy.addOrReplaceTypeManufacturer(Project.Configuration.class,
+                ProjectConfigurationTypeManufacturer.INSTANCE);
 
         return podamFactory;
     }

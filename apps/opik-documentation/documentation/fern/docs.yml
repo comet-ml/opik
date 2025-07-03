@@ -334,6 +334,15 @@ navigation:
           - page: Guardrails
             path: docs/production/guardrails.mdx
             slug: guardrails
+      - section: Configuration
+        slug: /configuration
+        contents:
+          - page: Feedback definitions
+            path: docs/configuration/feedback_definitions.mdx
+            slug: /configuration/feedback_definitions
+          - page: AI Providers
+            path: docs/configuration/ai_providers.mdx
+            slug: ai_providers
   - tab: agent-optimization
     layout:
       - page: Opik Agent Optimizer
@@ -447,6 +456,9 @@ navigation:
           - page: OpenAI
             path: docs/cookbook/openai.mdx
             slug: openai
+          - page: OpenAI Agents
+            path: docs/cookbook/openai-agents.mdx
+            slug: openai-agents
           - page: LiteLLM
             path: docs/cookbook/litellm.mdx
             slug: litellm
@@ -526,6 +538,9 @@ navigation:
         contents:
           - link: Reference
             href: https://www.comet.com/docs/opik/python-sdk-reference/
+          - page: REST API Client
+            path: docs/reference/python-sdk/rest-api.mdx
+            slug: rest-api
       - section: Typescript SDK
         slug: typescript-sdk
         contents:
@@ -547,6 +562,9 @@ navigation:
               - page: OpenAI
                 path: docs/reference/typescript-sdk/integrations/openai.mdx
                 slug: openai
+              - page: Cloudflare Workers AI
+                path: docs/reference/typescript-sdk/integrations/workers-ai.mdx
+                slug: workers-ai
           - section: Evaluation
             slug: evaluation
             contents:

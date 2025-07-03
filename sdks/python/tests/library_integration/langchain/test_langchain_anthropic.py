@@ -32,13 +32,17 @@ def _assert_usage_validity(usage: Dict[str, Any]):
     assert_dict_has_keys(usage, REQUIRED_USAGE_KEYS)
 
 
+MODEL_FOR_TESTS_FULL = "claude-sonnet-4-0"
+MODEL_FOR_TESTS_SHORT = "claude-sonnet-4"
+
+
 def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__happyflow(
     fake_backend,
 ):
     # lanchain_anthropic.Anthropic/AnthropicLLM is not tested because it is considered a legacy API which does not support the newest models
     llm = langchain_anthropic.ChatAnthropic(
         max_tokens=100,
-        model_name="claude-3-5-sonnet-latest",
+        model_name=MODEL_FOR_TESTS_FULL,
         name="custom-anthropic-llm-name",
     )
 
@@ -68,6 +72,7 @@ def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -129,7 +134,7 @@ def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__
                         usage=ANY_DICT,
                         spans=[],
                         provider="anthropic",
-                        model=ANY_STRING(startswith="claude-3-5-sonnet"),
+                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                     ),
                 ],
             )
@@ -150,7 +155,7 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
     # lanchain_anthropic.Anthropic/AnthropicLLM is not tested because it is considered a legacy API which does not support the newest models
     llm = langchain_anthropic.ChatAnthropic(
         max_tokens=100,
-        model_name="claude-3-5-sonnet-latest",
+        model_name=MODEL_FOR_TESTS_FULL,
         name="custom-anthropic-llm-name",
     )
 
@@ -184,6 +189,7 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -245,7 +251,7 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
                         usage=ANY_DICT,
                         spans=[],
                         provider="anthropic",
-                        model=ANY_STRING(startswith="claude-3-5-sonnet"),
+                        model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
                     ),
                 ],
             )

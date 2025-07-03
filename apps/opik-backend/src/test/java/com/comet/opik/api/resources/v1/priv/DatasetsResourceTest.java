@@ -17,8 +17,8 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentType;
-import com.comet.opik.api.FeedbackScoreBatch;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchContainer;
+import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Project;
@@ -45,6 +45,7 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
@@ -84,7 +85,6 @@ import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.glassfish.jersey.client.ChunkedInput;
-import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -139,12 +139,13 @@ import java.util.stream.StreamSupport;
 
 import static com.comet.opik.api.Column.ColumnType;
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.Visibility.PRIVATE;
 import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.CommentAssertionUtils.IGNORED_FIELDS_COMMENTS;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoresIgnoredFieldsAndSetThemToNull;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
@@ -216,6 +217,9 @@ class DatasetsResourceTest {
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICKHOUSE, DATABASE_NAME);
 
+        MigrationUtils.runMysqlDbMigration(MYSQL);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
+
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MYSQL.getJdbcUrl(),
                 databaseAnalyticsFactory,
@@ -236,16 +240,9 @@ class DatasetsResourceTest {
     private OptimizationResourceClient optimizationResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplate mySqlTemplate) throws Exception {
+    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate) {
 
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
-        try (var connection = CLICKHOUSE.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
-
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
         this.mySqlTemplate = mySqlTemplate;
 
@@ -1588,7 +1585,7 @@ class DatasetsResourceTest {
                     .toList();
 
             var traceIdToScoresMap = Stream.concat(scores1.stream(), scores2.stream())
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatch.class);
@@ -1633,7 +1630,8 @@ class DatasetsResourceTest {
 
     }
 
-    private void createScoreAndAssert(FeedbackScoreBatch feedbackScoreBatch, String apiKey, String workspaceName) {
+    private void createScoreAndAssert(FeedbackScoreBatchContainer feedbackScoreBatch, String apiKey,
+            String workspaceName) {
         try (var actualResponse = client.target(getTracesPath())
                 .path("feedback-scores")
                 .request()
@@ -2086,7 +2084,7 @@ class DatasetsResourceTest {
                     .toList();
 
             var traceIdToScoresMap = scores.stream()
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatch.class);
@@ -3883,7 +3881,7 @@ class DatasetsResourceTest {
                     .toList();
 
             var traceIdToScoresMap = Stream.concat(scores1.stream(), scores2.stream())
-                    .collect(groupingBy(FeedbackScoreBatchItem::id));
+                    .collect(groupingBy(FeedbackScoreItem::id));
 
             // When storing the scores in batch, adding some more unrelated random ones
             var feedbackScoreBatch = factory.manufacturePojo(FeedbackScoreBatch.class);
@@ -4446,7 +4444,7 @@ class DatasetsResourceTest {
 
             List<FeedbackScoreBatchItem> scores = new ArrayList<>();
             createScores(traces, projectName, scores);
-            createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
 
             List<ExperimentItem> experimentItems = new ArrayList<>();
             createExperimentItems(items, traces, scores, experimentId, experimentItems);
@@ -4529,7 +4527,7 @@ class DatasetsResourceTest {
 
             List<FeedbackScoreBatchItem> scores = new ArrayList<>();
             createScores(traces, projectName, scores);
-            createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
 
             List<ExperimentItem> experimentItems = new ArrayList<>();
             createExperimentItems(datasetItems, traces, scores, experimentId, experimentItems);
@@ -4703,7 +4701,8 @@ class DatasetsResourceTest {
             }
         }
 
-        private void createScoreAndAssert(FeedbackScoreBatch feedbackScoreBatch, String apiKey, String workspaceName) {
+        private void createScoreAndAssert(FeedbackScoreBatchContainer feedbackScoreBatch, String apiKey,
+                String workspaceName) {
             try (var actualResponse = client.target(getTracesPath())
                     .path("feedback-scores")
                     .request()
@@ -4747,12 +4746,12 @@ class DatasetsResourceTest {
                     .map(score -> score.toBuilder()
                             .name(factory.manufacturePojo(String.class))
                             .build())
-                    .toList();
-            createScoreAndAssert(new FeedbackScoreBatch(scores), apiKey, workspaceName);
+                    .collect(toList());
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
 
             List<ExperimentItem> experimentItems = new ArrayList<>();
             createExperimentItems(datasetItems, traces, Stream.concat(scores.stream(),
-                    Stream.of((FeedbackScoreBatchItem) null)).collect(toList()),
+                    Stream.of((FeedbackScoreBatchItem) null)).toList(),
                     experimentId, experimentItems);
 
             createAndAssert(

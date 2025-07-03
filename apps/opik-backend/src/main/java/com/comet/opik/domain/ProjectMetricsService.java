@@ -27,13 +27,13 @@ public interface ProjectMetricsService {
 @Slf4j
 @Singleton
 class ProjectMetricsServiceImpl implements ProjectMetricsService {
-    private final @NonNull Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> metricHandler;
+    private final @NonNull Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> projectMetricHandler;
     private final @NonNull ProjectService projectService;
 
     @Inject
     public ProjectMetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO,
             @NonNull ProjectService projectService) {
-        metricHandler = Map.of(
+        projectMetricHandler = Map.of(
                 MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
                 MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores,
                 MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage,
@@ -82,6 +82,6 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
 
     private BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>> getMetricHandler(
             MetricType metricType) {
-        return metricHandler.get(metricType);
+        return projectMetricHandler.get(metricType);
     }
 }

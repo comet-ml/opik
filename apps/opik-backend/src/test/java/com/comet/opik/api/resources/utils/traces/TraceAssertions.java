@@ -22,9 +22,10 @@ public class TraceAssertions {
             "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "spanCount",
             "llmSpanCount", "duration", "comments", "threadId", "guardrailsValidations"};
 
-    public static final String[] IGNORED_FIELDS_THREADS = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
-
     private static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
+
+    private static final String[] IGNORED_FIELDS_THREADS = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
+            "threadModelId", "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt"};
 
     public static void assertErrorResponse(Response actualResponse, String message, int expectedStatus) {
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
@@ -157,6 +158,8 @@ public class TraceAssertions {
                 .ignoringFields(IGNORED_FIELDS_THREADS)
                 .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
                 .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                .ignoringCollectionOrderInFields("feedbackScores")
                 .isEqualTo(expectedThreads);
     }
+
 }

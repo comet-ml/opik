@@ -24,6 +24,7 @@ export * as guardrails from "./guardrails";
 export * as openTelemetryIngestion from "./openTelemetryIngestion";
 export * as serviceToggles from "./serviceToggles";
 export * as traces from "./traces";
+export * as workspaces from "./workspaces";
 export * as redirect from "./redirect";
 export * from "./attachments/client/requests";
 export * from "./automationRuleEvaluators/client/requests";
