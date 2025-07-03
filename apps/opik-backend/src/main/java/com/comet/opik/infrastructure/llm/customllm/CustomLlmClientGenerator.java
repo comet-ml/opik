@@ -18,6 +18,7 @@ import java.net.http.HttpClient;
 import java.util.Optional;
 
 import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters;
+import static com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker.CUSTOM_LLM_MODEL_PREFIX;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -75,7 +76,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         var builder = OpenAiChatModel.builder()
                 .baseUrl(baseUrl)
                 .httpClientBuilder(jdkHttpClientBuilder)
-                .modelName(modelParameters.name())
+                .modelName(modelParameters.name().replace(CUSTOM_LLM_MODEL_PREFIX, ""))
                 .apiKey(config.apiKey())
                 .logRequests(true)
                 .logResponses(true);

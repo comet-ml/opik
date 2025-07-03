@@ -52,14 +52,13 @@ public class CustomLlmProvider implements LlmProviderService {
         return LlmProviderLangChainMapper.INSTANCE.getCustomLlmErrorObject(throwable, log);
     }
 
-    private ChatCompletionRequest cleanModelName(@NonNull ChatCompletionRequest request) {
-        String cleanedModel = request.model().startsWith(CUSTOM_LLM_MODEL_PREFIX)
-                ? request.model().replace(CUSTOM_LLM_MODEL_PREFIX, "")
-                : request.model();
+    private static ChatCompletionRequest cleanModelName(@NonNull ChatCompletionRequest request) {
+        if (!request.model().startsWith(CUSTOM_LLM_MODEL_PREFIX)) {
+            return request;
+        }
 
-        // Is there a way to make this less verbose to somehow only modify the model name?
         return ChatCompletionRequest.builder()
-                .model(cleanedModel)
+                .model(request.model().replace(CUSTOM_LLM_MODEL_PREFIX, ""))
                 .messages(request.messages())
                 .temperature(request.temperature())
                 .topP(request.topP())
