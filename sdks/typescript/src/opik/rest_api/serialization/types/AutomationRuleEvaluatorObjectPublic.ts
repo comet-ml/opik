@@ -7,10 +7,12 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import { AutomationRuleEvaluatorLlmAsJudgePublic } from "./AutomationRuleEvaluatorLlmAsJudgePublic";
 import { AutomationRuleEvaluatorUserDefinedMetricPythonPublic } from "./AutomationRuleEvaluatorUserDefinedMetricPythonPublic";
+import { AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic } from "./AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic";
+import { AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonPublic } from "./AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonPublic";
 
 const _Base = core.serialization.object({
     id: core.serialization.string().optional(),
-    projectId: core.serialization.property("project_id", core.serialization.string().optional()),
+    projectId: core.serialization.property("project_id", core.serialization.string()),
     projectName: core.serialization.property("project_name", core.serialization.string().optional()),
     name: core.serialization.string(),
     samplingRate: core.serialization.property("sampling_rate", core.serialization.number().optional()),
@@ -18,7 +20,7 @@ const _Base = core.serialization.object({
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
-    action: core.serialization.stringLiteral("evaluator").optional(),
+    action: core.serialization.stringLiteral("evaluator"),
 });
 export const AutomationRuleEvaluatorObjectPublic: core.serialization.Schema<
     serializers.AutomationRuleEvaluatorObjectPublic.Raw,
@@ -27,6 +29,9 @@ export const AutomationRuleEvaluatorObjectPublic: core.serialization.Schema<
     .union("type", {
         llm_as_judge: AutomationRuleEvaluatorLlmAsJudgePublic.extend(_Base),
         user_defined_metric_python: AutomationRuleEvaluatorUserDefinedMetricPythonPublic.extend(_Base),
+        trace_thread_llm_as_judge: AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic.extend(_Base),
+        trace_thread_user_defined_metric_python:
+            AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonPublic.extend(_Base),
     })
     .transform<OpikApi.AutomationRuleEvaluatorObjectPublic>({
         transform: (value) => value,
@@ -36,7 +41,9 @@ export const AutomationRuleEvaluatorObjectPublic: core.serialization.Schema<
 export declare namespace AutomationRuleEvaluatorObjectPublic {
     export type Raw =
         | AutomationRuleEvaluatorObjectPublic.LlmAsJudge
-        | AutomationRuleEvaluatorObjectPublic.UserDefinedMetricPython;
+        | AutomationRuleEvaluatorObjectPublic.UserDefinedMetricPython
+        | AutomationRuleEvaluatorObjectPublic.TraceThreadLlmAsJudge
+        | AutomationRuleEvaluatorObjectPublic.TraceThreadUserDefinedMetricPython;
 
     export interface LlmAsJudge extends _Base, AutomationRuleEvaluatorLlmAsJudgePublic.Raw {
         type: "llm_as_judge";
@@ -46,9 +53,19 @@ export declare namespace AutomationRuleEvaluatorObjectPublic {
         type: "user_defined_metric_python";
     }
 
+    export interface TraceThreadLlmAsJudge extends _Base, AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic.Raw {
+        type: "trace_thread_llm_as_judge";
+    }
+
+    export interface TraceThreadUserDefinedMetricPython
+        extends _Base,
+            AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonPublic.Raw {
+        type: "trace_thread_user_defined_metric_python";
+    }
+
     export interface _Base {
         id?: string | null;
-        project_id?: string | null;
+        project_id: string;
         project_name?: string | null;
         name: string;
         sampling_rate?: number | null;
@@ -56,6 +73,6 @@ export declare namespace AutomationRuleEvaluatorObjectPublic {
         created_by?: string | null;
         last_updated_at?: string | null;
         last_updated_by?: string | null;
-        action?: "evaluator" | null;
+        action: "evaluator";
     }
 }
