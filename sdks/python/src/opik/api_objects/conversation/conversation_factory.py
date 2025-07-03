@@ -33,9 +33,11 @@ def create_conversation_from_traces(
     discussion = conversation_thread.ConversationThread()
     for trace in traces:
         trace_input = input_transform(trace.input)
-        discussion.add_user_message(trace_input)
+        if trace_input is not None:
+            discussion.add_user_message(trace_input)
 
         trace_output = output_transform(trace.output)
-        discussion.add_assistant_message(trace_output)
+        if trace_output is not None:
+            discussion.add_assistant_message(trace_output)
 
     return discussion
