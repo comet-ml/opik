@@ -64,7 +64,7 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     defaultModel: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17,
   },
   [PROVIDER_TYPE.CUSTOM]: {
-    label: "vLLM / custom provider",
+    label: "vLLM / Custom provider",
     value: PROVIDER_TYPE.CUSTOM,
     icon: CustomIcon,
     apiKeyName: "CUSTOM_PROVIDER_API_KEY",

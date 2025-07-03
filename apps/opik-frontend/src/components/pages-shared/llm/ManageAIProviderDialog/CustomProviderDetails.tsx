@@ -23,34 +23,32 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
   form,
 }) => {
   return (
-    <div className="flex flex-col gap-2 pb-4">
-      <div className="flex flex-col gap-2">
-        <FormField
-          control={form.control}
-          name="url"
-          render={({ field, formState }) => {
-            const validationErrors = get(formState.errors, ["url"]);
+    <div className="flex flex-col gap-4 pb-4">
+      <FormField
+        control={form.control}
+        name="url"
+        render={({ field, formState }) => {
+          const validationErrors = get(formState.errors, ["url"]);
 
-            return (
-              <FormItem>
-                <Label htmlFor="url">URL</Label>
-                <FormControl>
-                  <Input
-                    id="url"
-                    placeholder={"https://vllm.example.com/v1"}
-                    value={field.value}
-                    onChange={(e) => field.onChange(e.target.value)}
-                    className={cn({
-                      "border-destructive": Boolean(validationErrors?.message),
-                    })}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            );
-          }}
-        />
-      </div>
+          return (
+            <FormItem>
+              <Label htmlFor="url">URL</Label>
+              <FormControl>
+                <Input
+                  id="url"
+                  placeholder={"https://vllm.example.com/v1"}
+                  value={field.value}
+                  onChange={(e) => field.onChange(e.target.value)}
+                  className={cn({
+                    "border-destructive": Boolean(validationErrors?.message),
+                  })}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          );
+        }}
+      />
 
       <FormField
         control={form.control}
@@ -108,7 +106,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
               <FormControl>
                 <Input
                   id="models"
-                  placeholder="Comma separated models list"
+                  placeholder="Models list"
                   value={field.value}
                   onChange={(e) => field.onChange(e.target.value)}
                   className={cn({
@@ -118,7 +116,8 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
               </FormControl>
               <FormMessage />
               <Description>
-                Comma separated list of available models
+                Comma separated list of available models. Example:
+                {`"meta-llama/Meta-Llama-3.1-70B,mistralai/Mistral-7B"`}
               </Description>
             </FormItem>
           );
