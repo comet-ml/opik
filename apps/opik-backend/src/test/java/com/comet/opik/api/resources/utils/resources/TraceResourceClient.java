@@ -13,6 +13,7 @@ import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceThreadSearchStreamRequest;
+import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
@@ -584,4 +585,19 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
     }
 
+    public void updateThread(TraceThreadUpdate threadUpdate, UUID threadModelId, String apiKey, String workspaceName,
+            int expectedStatus) {
+
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path(threadModelId.toString())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(threadUpdate))) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        }
+    }
 }
