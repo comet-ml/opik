@@ -394,7 +394,7 @@ export interface ProviderKey {
   created_at: string;
   provider: PROVIDER_TYPE;
   location?: string;
-  url?: string;
+  base_url?: string;
   models?: string;
 }
 

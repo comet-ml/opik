@@ -74,7 +74,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       apiKey: "",
       // @ts-expect-error testing
       location: providerKey?.location ?? "",
-      url: providerKey?.url ?? "",
+      url: providerKey?.base_url ?? "",
       models: convertCustomProviderModels(providerKey?.models ?? ""),
     },
   });
@@ -115,7 +115,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           id: providerKey?.id ?? calculatedProviderKey?.id,
           apiKey,
           location: isVertex ? location : undefined,
-          url: isCustom ? url : undefined,
+          base_url: isCustom ? url : undefined,
           models: isCustom ? models : undefined,
         },
       });
@@ -129,7 +129,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           apiKey,
           provider,
           location: isVertex ? location : undefined,
-          url: isCustom ? url : undefined,
+          base_url: isCustom ? url : undefined,
           models: isCustom ? models : undefined,
         },
       });
@@ -205,7 +205,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                               (c) => p === c.provider,
                             );
 
-                            form.setValue("url", providerData?.url ?? "");
+                            form.setValue("url", providerData?.base_url ?? "");
                             form.setValue(
                               "models",
                               convertCustomProviderModels(

@@ -25,7 +25,7 @@ const useProviderKeysUpdateMutation = () => {
           api_key: providerKey.apiKey,
           ...(providerKey.location && { location: providerKey.location }),
           ...(providerKey.models && { models: providerKey.models }),
-          ...(providerKey.url && { base_url: providerKey.url }),
+          ...(providerKey.base_url && { base_url: providerKey.base_url }),
         },
       );
       return data;
