@@ -31,6 +31,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.FeedbackScoreItem.*;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 
 /**
@@ -222,6 +223,19 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
         log.info("Received '{}' scores for traceId '{}' in workspace '{}'. Storing them",
                 scores.size(), trace.id(), workspaceId);
         feedbackScoreService.scoreBatchOfTraces(scores)
+                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+        return scores.stream()
+                .collect(Collectors.groupingBy(FeedbackScoreItem::name,
+                        Collectors.mapping(FeedbackScoreItem::value, Collectors.toList())));
+    }
+
+    protected Map<String, List<BigDecimal>> storeThreadScores(
+            List<FeedbackScoreBatchItemThread> scores, String threadId, String userName, String workspaceId) {
+        log.info("Received '{}' scores for threadId '{}' in workspace '{}'. Storing them",
+                scores.size(), threadId, workspaceId);
+        feedbackScoreService.scoreBatchOfThreads(scores)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                 .block();

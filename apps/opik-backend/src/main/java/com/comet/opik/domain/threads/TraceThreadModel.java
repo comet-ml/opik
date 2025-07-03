@@ -4,6 +4,8 @@ import com.comet.opik.api.TraceThreadStatus;
 import lombok.Builder;
 
 import java.time.Instant;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -23,6 +25,8 @@ public record TraceThreadModel(
         String lastUpdatedBy,
         Instant createdAt,
         Instant lastUpdatedAt,
-        boolean sampled) {
+        Set<String> tags,
+        Map<UUID, Boolean> sampling,
+        Instant scoredAt) {
 
 }

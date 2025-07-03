@@ -10,11 +10,14 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Map;
+
+import static com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.*;
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
@@ -30,6 +33,20 @@ public class PythonEvaluatorService {
         var request = PythonEvaluatorRequest.builder()
                 .code(code)
                 .data(data)
+                .build();
+        try (var response = client.target(URL_TEMPLATE.formatted(config.getPythonEvaluator().url()))
+                .request()
+                .post(Entity.json(request))) {
+            var result = getAndValidateResult(response);
+            return result.scores();
+        }
+    }
+
+    public List<PythonScoreResult> evaluateThread(@NonNull String code, List<ChatMessage> context) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(context), "Argument 'data' must not be empty");
+        var request = TraceThreadPythonEvaluatorRequest.builder()
+                .code(code)
+                .data(context)
                 .build();
         try (var response = client.target(URL_TEMPLATE.formatted(config.getPythonEvaluator().url()))
                 .request()
