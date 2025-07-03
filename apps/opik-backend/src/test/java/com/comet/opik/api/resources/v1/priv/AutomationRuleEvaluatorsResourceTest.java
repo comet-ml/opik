@@ -1,14 +1,18 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.AutomationRuleEvaluator;
-import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
-import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
-import com.comet.opik.api.AutomationRuleEvaluatorUpdateLlmAsJudge;
-import com.comet.opik.api.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
-import com.comet.opik.api.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -22,9 +26,9 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.evaluators.python.PythonEvaluatorRequest;
+import com.comet.opik.domain.evaluators.python.PythonEvaluatorResponse;
 import com.comet.opik.domain.llm.LlmProviderFactory;
-import com.comet.opik.domain.pythonevaluator.PythonEvaluatorRequest;
-import com.comet.opik.domain.pythonevaluator.PythonEvaluatorResponse;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.llm.LlmModule;
@@ -644,7 +648,10 @@ class AutomationRuleEvaluatorsResourceTest {
         Stream<Arguments> createAndGet() {
             return Stream.of(
                     arguments(factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class), true),
-                    arguments(factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class), false));
+                    arguments(factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class), false),
+                    arguments(factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class), true),
+                    arguments(factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class),
+                            false));
         }
 
         @ParameterizedTest
@@ -681,7 +688,9 @@ class AutomationRuleEvaluatorsResourceTest {
         Stream<Class<? extends AutomationRuleEvaluator<?>>> find() {
             return Stream.of(
                     AutomationRuleEvaluatorLlmAsJudge.class,
-                    AutomationRuleEvaluatorUserDefinedMetricPython.class);
+                    AutomationRuleEvaluatorUserDefinedMetricPython.class,
+                    AutomationRuleEvaluatorTraceThreadLlmAsJudge.class,
+                    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class);
         }
 
         @ParameterizedTest
@@ -745,7 +754,9 @@ class AutomationRuleEvaluatorsResourceTest {
         Stream<Arguments> findByName() {
             return Stream.of(
                     arguments(AutomationRuleEvaluatorLlmAsJudge.class, true),
-                    arguments(AutomationRuleEvaluatorUserDefinedMetricPython.class, false));
+                    arguments(AutomationRuleEvaluatorUserDefinedMetricPython.class, false),
+                    arguments(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class, true),
+                    arguments(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class, false));
         }
 
         @ParameterizedTest
@@ -795,7 +806,14 @@ class AutomationRuleEvaluatorsResourceTest {
                             factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class)),
                     arguments(
                             factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class),
-                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateUserDefinedMetricPython.class)));
+                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateUserDefinedMetricPython.class)),
+                    arguments(
+                            factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class),
+                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge.class)),
+                    arguments(
+                            factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class),
+                            factory.manufacturePojo(
+                                    AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython.class)));
         }
 
         @ParameterizedTest
@@ -844,8 +862,10 @@ class AutomationRuleEvaluatorsResourceTest {
                     WORKSPACE_NAME);
             var id1 = createGetAndAssertId(AutomationRuleEvaluatorLlmAsJudge.class, projectId);
             var id2 = createGetAndAssertId(AutomationRuleEvaluatorUserDefinedMetricPython.class, projectId);
-            var id3 = createGetAndAssertId(AutomationRuleEvaluatorLlmAsJudge.class, projectId);
-            var id4 = createGetAndAssertId(AutomationRuleEvaluatorUserDefinedMetricPython.class, projectId);
+            var id3 = createGetAndAssertId(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class, projectId);
+            var id4 = createGetAndAssertId(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class, projectId);
+            var id5 = createGetAndAssertId(AutomationRuleEvaluatorLlmAsJudge.class, projectId);
+            var id6 = createGetAndAssertId(AutomationRuleEvaluatorUserDefinedMetricPython.class, projectId);
 
             var batchDelete = BatchDelete.builder().ids(Set.of(id1, id2)).build();
             try (var actualResponse = evaluatorsResourceClient.delete(
@@ -868,15 +888,15 @@ class AutomationRuleEvaluatorsResourceTest {
 
                 var actualEntity = actualResponse.readEntity(AutomationRuleEvaluator.AutomationRuleEvaluatorPage.class);
                 assertThat(actualEntity.page()).isEqualTo(1);
-                assertThat(actualEntity.size()).isEqualTo(2);
-                assertThat(actualEntity.total()).isEqualTo(2);
+                assertThat(actualEntity.size()).isEqualTo(4);
+                assertThat(actualEntity.total()).isEqualTo(4);
 
                 var actualAutomationRuleEvaluators = actualEntity.content();
-                assertThat(actualAutomationRuleEvaluators).hasSize(2);
+                assertThat(actualAutomationRuleEvaluators).hasSize(4);
                 var actualIds = actualAutomationRuleEvaluators.stream()
                         .map(AutomationRuleEvaluator::getId)
                         .collect(Collectors.toSet());
-                assertThat(actualIds).containsExactlyInAnyOrder(id3, id4);
+                assertThat(actualIds).containsExactlyInAnyOrder(id3, id4, id5, id6);
             }
         }
     }
