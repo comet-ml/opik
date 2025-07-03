@@ -1264,7 +1264,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
     assert_dict_has_keys(trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
-def test_adk__agent_with_response_schema__every_subagent_has_its_own_span(
+def test_adk__agent_with_response_schema__happyflow(
     fake_backend,
 ):
     opik_tracer = OpikTracer()
