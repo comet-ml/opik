@@ -1,12 +1,24 @@
-from typing import List, Optional, Literal, Any
+from typing import List, Optional, Any
+from enum import Enum, auto
 
 import google.adk.agents
 import google.adk.tools.agent_tool
 import inspect
 
-AgentNodeType = Literal["sequential", "loop", "parallel", "llm"]
 
-SUBGRAPH_NODE_TYPES: List[AgentNodeType] = ["sequential", "loop", "parallel"]
+class GraphNodeType(str, Enum):
+    SEQUENTIAL_AGENT = "sequential_agent"
+    LOOG_AGENT = "loop_agent"
+    PARALLEL_AGENT = "parallel_agent"
+    LLM_AGENT = "llm_agent"
+    TOOL = "tool"
+
+
+NODE_TYPES_TO_BUILD_SUBGRAPHS = [
+    GraphNodeType.SEQUENTIAL_AGENT,
+    GraphNodeType.LOOG_AGENT,
+    GraphNodeType.PARALLEL_AGENT,
+]
 
 
 class AgentNode:
@@ -14,7 +26,7 @@ class AgentNode:
         self.agent = agent
         self.name = agent.name
         self.subagent_nodes: List[AgentNode] = []
-        self.agent_type = _determine_agent_type(agent)
+        self.type = _determine_agent_type(agent)
         self.tools: List[ToolNode] = []
 
     def add_child(self, child: "AgentNode") -> None:
@@ -37,21 +49,22 @@ class ToolNode:
         self.tool = tool
         self.name = name
         self.agent: Optional[AgentNode] = None
+        self.type = GraphNodeType.TOOL
 
     def associate_agent_node(self, agent: AgentNode) -> None:
         """Used to link a tool node with agent node if a tool is an agent"""
         self.agent = agent
 
 
-def _determine_agent_type(agent: google.adk.agents.BaseAgent) -> AgentNodeType:
+def _determine_agent_type(agent: google.adk.agents.BaseAgent) -> GraphNodeType:
     if isinstance(agent, google.adk.agents.SequentialAgent):
-        return "sequential"
+        return GraphNodeType.SEQUENTIAL_AGENT
     elif isinstance(agent, google.adk.agents.LoopAgent):
-        return "loop"
+        return GraphNodeType.LOOG_AGENT
     elif isinstance(agent, google.adk.agents.ParallelAgent):
-        return "parallel"
+        return GraphNodeType.PARALLEL_AGENT
     else:
-        return "llm"
+        return GraphNodeType.LLM_AGENT
 
 
 def build_nodes_tree(agent: google.adk.agents.BaseAgent) -> AgentNode:
