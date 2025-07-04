@@ -101,18 +101,12 @@ model = BedrockModel(
 )
  
 # Configure the agent
-# Pass optional tracing attributes such as session id, user id or tags to Langfuse.
 agent = Agent(
     model=model,
     system_prompt=system_prompt,
     trace_attributes={
         "session.id": "abc-1234", # Example session ID
         "user.id": "user-email-example@domain.com", # Example user ID
-        "langfuse.tags": [
-            "Agent-SDK-Example",
-            "Strands-Project-Demo",
-            "Observability-Tutorial"
-        ]
     }
 )
 
