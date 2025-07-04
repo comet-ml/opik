@@ -39,20 +39,20 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
         return None
 
 
-def is_google_run(run: "Run") -> bool:
+def is_vertexai_run(run: "Run") -> bool:
     try:
         if run.serialized is None:
             return False
 
         invocation_params = run.extra.get("invocation_params", {})
         provider = invocation_params.get("_type", "").lower()
-        is_google = "vertexai" in provider.lower()
+        is_vertexai = "vertexai" in provider
 
-        return is_google
+        return is_vertexai
 
     except Exception:
         LOGGER.debug(
-            "Failed to check if Run instance is from Google LLM, returning False.",
+            "Failed to check if Run instance is from VertexAI, returning False.",
             exc_info=True,
         )
         return False
