@@ -10,6 +10,8 @@ from .auth_details_holder import AuthDetailsHolder
 from .automation_rule_evaluator import (
     AutomationRuleEvaluator,
     AutomationRuleEvaluator_LlmAsJudge,
+    AutomationRuleEvaluator_TraceThreadLlmAsJudge,
+    AutomationRuleEvaluator_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluator_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_llm_as_judge import AutomationRuleEvaluatorLlmAsJudge
@@ -18,20 +20,46 @@ from .automation_rule_evaluator_llm_as_judge_write import AutomationRuleEvaluato
 from .automation_rule_evaluator_object_public import (
     AutomationRuleEvaluatorObjectPublic,
     AutomationRuleEvaluatorObjectPublic_LlmAsJudge,
+    AutomationRuleEvaluatorObjectPublic_TraceThreadLlmAsJudge,
+    AutomationRuleEvaluatorObjectPublic_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorObjectPublic_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_page_public import AutomationRuleEvaluatorPagePublic
 from .automation_rule_evaluator_public import (
     AutomationRuleEvaluatorPublic,
     AutomationRuleEvaluatorPublic_LlmAsJudge,
+    AutomationRuleEvaluatorPublic_TraceThreadLlmAsJudge,
+    AutomationRuleEvaluatorPublic_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorPublic_UserDefinedMetricPython,
+)
+from .automation_rule_evaluator_trace_thread_llm_as_judge import AutomationRuleEvaluatorTraceThreadLlmAsJudge
+from .automation_rule_evaluator_trace_thread_llm_as_judge_public import (
+    AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic,
+)
+from .automation_rule_evaluator_trace_thread_llm_as_judge_write import AutomationRuleEvaluatorTraceThreadLlmAsJudgeWrite
+from .automation_rule_evaluator_trace_thread_user_defined_metric_python import (
+    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython,
+)
+from .automation_rule_evaluator_trace_thread_user_defined_metric_python_public import (
+    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonPublic,
+)
+from .automation_rule_evaluator_trace_thread_user_defined_metric_python_write import (
+    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite,
 )
 from .automation_rule_evaluator_update import (
     AutomationRuleEvaluatorUpdate,
     AutomationRuleEvaluatorUpdate_LlmAsJudge,
+    AutomationRuleEvaluatorUpdate_TraceThreadLlmAsJudge,
+    AutomationRuleEvaluatorUpdate_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorUpdate_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_update_llm_as_judge import AutomationRuleEvaluatorUpdateLlmAsJudge
+from .automation_rule_evaluator_update_trace_thread_llm_as_judge import (
+    AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge,
+)
+from .automation_rule_evaluator_update_trace_thread_user_defined_metric_python import (
+    AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython,
+)
 from .automation_rule_evaluator_update_user_defined_metric_python import (
     AutomationRuleEvaluatorUpdateUserDefinedMetricPython,
 )
@@ -45,6 +73,8 @@ from .automation_rule_evaluator_user_defined_metric_python_write import (
 from .automation_rule_evaluator_write import (
     AutomationRuleEvaluatorWrite,
     AutomationRuleEvaluatorWrite_LlmAsJudge,
+    AutomationRuleEvaluatorWrite_TraceThreadLlmAsJudge,
+    AutomationRuleEvaluatorWrite_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
 )
 from .avg_value_stat_public import AvgValueStatPublic
@@ -336,9 +366,15 @@ from .trace_thread import TraceThread
 from .trace_thread_filter import TraceThreadFilter
 from .trace_thread_filter_operator import TraceThreadFilterOperator
 from .trace_thread_identifier import TraceThreadIdentifier
+from .trace_thread_llm_as_judge_code import TraceThreadLlmAsJudgeCode
+from .trace_thread_llm_as_judge_code_public import TraceThreadLlmAsJudgeCodePublic
+from .trace_thread_llm_as_judge_code_write import TraceThreadLlmAsJudgeCodeWrite
 from .trace_thread_page import TraceThreadPage
 from .trace_thread_status import TraceThreadStatus
 from .trace_thread_update import TraceThreadUpdate
+from .trace_thread_user_defined_metric_python_code import TraceThreadUserDefinedMetricPythonCode
+from .trace_thread_user_defined_metric_python_code_public import TraceThreadUserDefinedMetricPythonCodePublic
+from .trace_thread_user_defined_metric_python_code_write import TraceThreadUserDefinedMetricPythonCodeWrite
 from .trace_visibility_mode import TraceVisibilityMode
 from .trace_write import TraceWrite
 from .usage import Usage
@@ -365,23 +401,41 @@ __all__ = [
     "AutomationRuleEvaluatorLlmAsJudgeWrite",
     "AutomationRuleEvaluatorObjectPublic",
     "AutomationRuleEvaluatorObjectPublic_LlmAsJudge",
+    "AutomationRuleEvaluatorObjectPublic_TraceThreadLlmAsJudge",
+    "AutomationRuleEvaluatorObjectPublic_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorObjectPublic_UserDefinedMetricPython",
     "AutomationRuleEvaluatorPagePublic",
     "AutomationRuleEvaluatorPublic",
     "AutomationRuleEvaluatorPublic_LlmAsJudge",
+    "AutomationRuleEvaluatorPublic_TraceThreadLlmAsJudge",
+    "AutomationRuleEvaluatorPublic_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorPublic_UserDefinedMetricPython",
+    "AutomationRuleEvaluatorTraceThreadLlmAsJudge",
+    "AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic",
+    "AutomationRuleEvaluatorTraceThreadLlmAsJudgeWrite",
+    "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython",
+    "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonPublic",
+    "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite",
     "AutomationRuleEvaluatorUpdate",
     "AutomationRuleEvaluatorUpdateLlmAsJudge",
+    "AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge",
+    "AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdateUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdate_LlmAsJudge",
+    "AutomationRuleEvaluatorUpdate_TraceThreadLlmAsJudge",
+    "AutomationRuleEvaluatorUpdate_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdate_UserDefinedMetricPython",
     "AutomationRuleEvaluatorUserDefinedMetricPython",
     "AutomationRuleEvaluatorUserDefinedMetricPythonPublic",
     "AutomationRuleEvaluatorUserDefinedMetricPythonWrite",
     "AutomationRuleEvaluatorWrite",
     "AutomationRuleEvaluatorWrite_LlmAsJudge",
+    "AutomationRuleEvaluatorWrite_TraceThreadLlmAsJudge",
+    "AutomationRuleEvaluatorWrite_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorWrite_UserDefinedMetricPython",
     "AutomationRuleEvaluator_LlmAsJudge",
+    "AutomationRuleEvaluator_TraceThreadLlmAsJudge",
+    "AutomationRuleEvaluator_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluator_UserDefinedMetricPython",
     "AvgValueStatPublic",
     "BatchDelete",
@@ -656,9 +710,15 @@ __all__ = [
     "TraceThreadFilter",
     "TraceThreadFilterOperator",
     "TraceThreadIdentifier",
+    "TraceThreadLlmAsJudgeCode",
+    "TraceThreadLlmAsJudgeCodePublic",
+    "TraceThreadLlmAsJudgeCodeWrite",
     "TraceThreadPage",
     "TraceThreadStatus",
     "TraceThreadUpdate",
+    "TraceThreadUserDefinedMetricPythonCode",
+    "TraceThreadUserDefinedMetricPythonCodePublic",
+    "TraceThreadUserDefinedMetricPythonCodeWrite",
     "TraceVisibilityMode",
     "TraceWrite",
     "Usage",
