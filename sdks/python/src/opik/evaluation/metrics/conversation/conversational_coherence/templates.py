@@ -55,7 +55,7 @@ def evaluate_conversation(sliding_window: conversation_types.Conversation) -> st
 
 def generate_reason(score: float, irrelevancies: List[Dict[str, str]]) -> str:
     return f"""Below is a list of irrelevancies drawn from some messages in a conversation, which you have minimal knowledge of. It is a list of strings explaining why the 'assistant' messages are irrelevant to the 'user' messages.
-Given the relevancy score, which is a 0-1 score indicating how irrelevant the OVERALL AI 'assistant' messages are in a conversation (higher the better).
+Given the relevancy score, which is a 0-1 score indicating how relevant the OVERALL AI 'assistant' messages are in a conversation (higher values is the better relevancy).
 
 ** Guidelines: **
 - Make sure to only return in JSON format, with the 'reason' key providing the reason.
