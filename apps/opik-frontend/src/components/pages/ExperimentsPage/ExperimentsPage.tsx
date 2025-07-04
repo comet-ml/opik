@@ -41,6 +41,7 @@ import {
   COLUMN_TYPE,
   ColumnData,
   DynamicColumn,
+  OnChangeFn,
 } from "@/types/shared";
 import { Filter } from "@/types/filters";
 import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
@@ -297,8 +298,6 @@ const ExperimentsPage: React.FunctionComponent = () => {
       },
     );
 
-  const experiments = useMemo(() => data?.content ?? [], [data?.content]);
-
   const sortableBy: string[] = useMemo(
     () => data?.sortable_by ?? [],
     [data?.sortable_by],
@@ -363,6 +362,9 @@ const ExperimentsPage: React.FunctionComponent = () => {
       ),
     ];
   }, [dynamicScoresColumns]);
+
+  // Use the flat experiments array for the table
+  const experiments = useMemo(() => data?.experiments ?? [], [data?.experiments]);
 
   const selectedRows: Array<GroupedExperiment> = useMemo(() => {
     return experiments.filter(
@@ -462,13 +464,6 @@ const ExperimentsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  const renderCustomRowCallback = useCallback(
-    (row: Row<GroupedExperiment>, applyStickyWorkaround?: boolean) => {
-      return renderCustomRow(row, setGroupLimit, applyStickyWorkaround);
-    },
-    [setGroupLimit],
-  );
-
   const columnSections = useMemo(() => {
     return [
       {
@@ -479,6 +474,9 @@ const ExperimentsPage: React.FunctionComponent = () => {
       },
     ];
   }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+
+  // Helper: no-op for setGroupLimit
+  const noopSetGroupLimit: OnChangeFn<Record<string, number>> = () => {};
 
   if (isPending || isFeedbackScoresPending) {
     return <Loader />;
@@ -540,35 +538,45 @@ const ExperimentsPage: React.FunctionComponent = () => {
           </Button>
         </div>
       </div>
-      {Boolean(experiments.length) && (
-        <FeedbackScoresChartsWrapper entities={experiments} isAverageScores />
+      {isPending || isFeedbackScoresPending ? (
+        <Loader />
+      ) : (
+        <div>
+          {experiments.length === 0 ? (
+            <DataTableNoData title={noDataText}>
+              {noData && (
+                <Button variant="link" onClick={handleNewExperimentClick}>
+                  Create new experiment
+                </Button>
+              )}
+            </DataTableNoData>
+          ) : (
+            <>
+              <FeedbackScoresChartsWrapper entities={experiments} isAverageScores />
+              <DataTable
+                columns={columns}
+                data={experiments}
+                onRowClick={handleRowClick}
+                renderCustomRow={(row: Row<GroupedExperiment>, stickyWorkaround?: boolean) =>
+                  renderCustomRow(row, noopSetGroupLimit, stickyWorkaround)
+                }
+                getIsCustomRow={getIsCustomRow}
+                sortConfig={sortConfig}
+                resizeConfig={resizeConfig}
+                selectionConfig={{
+                  rowSelection,
+                  setRowSelection,
+                }}
+                expandingConfig={expandingConfig}
+                groupingConfig={GROUPING_CONFIG}
+                getRowId={getRowId}
+                columnPinning={DEFAULT_COLUMN_PINNING}
+                noData={<></>}
+              />
+            </>
+          )}
+        </div>
       )}
-      <DataTable
-        columns={columns}
-        data={experiments}
-        onRowClick={handleRowClick}
-        renderCustomRow={renderCustomRowCallback}
-        getIsCustomRow={getIsCustomRow}
-        sortConfig={sortConfig}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        expandingConfig={expandingConfig}
-        groupingConfig={GROUPING_CONFIG}
-        getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={
-          <DataTableNoData title={noDataText}>
-            {noData && (
-              <Button variant="link" onClick={handleNewExperimentClick}>
-                Create new experiment
-              </Button>
-            )}
-          </DataTableNoData>
-        }
-      />
       <div className="py-4">
         <DataTablePagination
           page={page!}
