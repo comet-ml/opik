@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
@@ -11,8 +12,6 @@ import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Optional;
-
-import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters;
 
 @RequiredArgsConstructor
 public class AnthropicClientGenerator implements LlmProviderClientGenerator<AnthropicClient> {

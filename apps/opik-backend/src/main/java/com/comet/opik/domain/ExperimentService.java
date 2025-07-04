@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
-import com.comet.opik.api.DatasetCriteria;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
