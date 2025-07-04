@@ -1,12 +1,12 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
-import com.comet.opik.api.AutomationRuleEvaluator;
-import com.comet.opik.api.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.Page;
-import com.comet.opik.domain.AutomationRuleEvaluatorService;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
+import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -42,9 +42,9 @@ import lombok.extern.slf4j.Slf4j;
 import java.net.URI;
 import java.util.UUID;
 
-import static com.comet.opik.api.AutomationRuleEvaluator.AutomationRuleEvaluatorPage;
-import static com.comet.opik.api.AutomationRuleEvaluator.View;
 import static com.comet.opik.api.LogItem.LogPage;
+import static com.comet.opik.api.evaluators.AutomationRuleEvaluator.AutomationRuleEvaluatorPage;
+import static com.comet.opik.api.evaluators.AutomationRuleEvaluator.View;
 
 @Path("/v1/private/automations/evaluators/")
 @Produces(MediaType.APPLICATION_JSON)

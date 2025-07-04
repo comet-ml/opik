@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
@@ -22,8 +23,6 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
-
-import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters;
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class LlmProviderFactoryImpl implements LlmProviderFactory {
@@ -72,7 +71,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     /**
      * The agreed requirement is to resolve the LLM provider and its API key based on the model.
      */
-    private LlmProvider getLlmProvider(String model) {
+    public LlmProvider getLlmProvider(@NonNull String model) {
         if (isModelBelongToProvider(model, OpenaiModelName.class, OpenaiModelName::toString)) {
             return LlmProvider.OPEN_AI;
         }

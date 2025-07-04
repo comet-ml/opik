@@ -1,8 +1,8 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.AutomationRuleEvaluatorType;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -30,6 +30,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 
 /**
  * This is the base online scorer, for all particular implementations to extend. It listens to a Redis stream for
@@ -224,8 +226,8 @@ public abstract class OnlineScoringBaseScorer<M> implements Managed {
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                 .block();
         return scores.stream()
-                .collect(Collectors.groupingBy(FeedbackScoreBatchItem::name,
-                        Collectors.mapping(FeedbackScoreBatchItem::value, Collectors.toList())));
+                .collect(Collectors.groupingBy(FeedbackScoreItem::name,
+                        Collectors.mapping(FeedbackScoreItem::value, Collectors.toList())));
     }
 
     /**
