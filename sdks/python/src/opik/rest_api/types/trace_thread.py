@@ -7,7 +7,7 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .comment import Comment
 from .feedback_score import FeedbackScore
-from .json_node import JsonNode
+from .json_list_string import JsonListString
 from .trace_thread_status import TraceThreadStatus
 
 
@@ -18,8 +18,8 @@ class TraceThread(UniversalBaseModel):
     start_time: typing.Optional[dt.datetime] = None
     end_time: typing.Optional[dt.datetime] = None
     duration: typing.Optional[float] = None
-    first_message: typing.Optional[JsonNode] = None
-    last_message: typing.Optional[JsonNode] = None
+    first_message: typing.Optional[JsonListString] = None
+    last_message: typing.Optional[JsonListString] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScore]] = None
     status: typing.Optional[TraceThreadStatus] = None
     number_of_messages: typing.Optional[int] = None
