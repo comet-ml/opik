@@ -79,6 +79,8 @@ const PromptModelSelect = ({
       configuredProvidersList.map((p) => p.provider),
     );
 
+    console.log(123, filteredByConfiguredProviders);
+
     Object.entries(filteredByConfiguredProviders).forEach(
       ([pn, providerModels]) => {
         providerModels.forEach(({ value }) => {
@@ -262,6 +264,35 @@ const PromptModelSelect = ({
     return <Icon className="min-w-3.5" />;
   };
 
+  const renderSelectTrigger = () => {
+    const modelName =
+      groupOptions
+        .find((o) => o.provider === provider)
+        ?.options?.find((m) => m.value === value)?.label ?? value;
+
+    const title = `${
+      provider ? PROVIDERS[provider].label + " " : ""
+    }${modelName}`;
+
+    return (
+      <SelectTrigger
+        className={cn("size-full data-[placeholder]:text-light-slate", {
+          "border-destructive": hasError,
+        })}
+      >
+        <SelectValue
+          placeholder="Select an LLM model"
+          data-testid="select-a-llm-model"
+        >
+          <div className="flex items-center gap-2">
+            {renderProviderValueIcon()}
+            <span className="truncate">{title}</span>
+          </div>
+        </SelectValue>
+      </SelectTrigger>
+    );
+  };
+
   return (
     <>
       <Select
@@ -269,23 +300,7 @@ const PromptModelSelect = ({
         onValueChange={handleOnChange}
         onOpenChange={handleSelectOpenChange}
       >
-        <SelectTrigger
-          className={cn("size-full data-[placeholder]:text-light-slate", {
-            "border-destructive": hasError,
-          })}
-        >
-          <SelectValue
-            placeholder="Select an LLM model"
-            data-testid="select-a-llm-model"
-          >
-            <div className="flex items-center gap-2">
-              {renderProviderValueIcon()}
-              <span className="truncate">
-                {provider && PROVIDERS[provider].label} {value}
-              </span>
-            </div>
-          </SelectValue>
-        </SelectTrigger>
+        {renderSelectTrigger()}
         <SelectContent onKeyDown={handleKeyDown} className="p-0">
           <div className="relative flex h-10 items-center justify-center gap-1 pl-6">
             <Search className="absolute left-2 size-4 text-light-slate" />
