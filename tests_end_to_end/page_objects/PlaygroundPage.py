@@ -34,6 +34,58 @@ class PlaygroundPage(BasePage):
             "text=Please select an LLM model for your prompt"
         )
 
+    def select_model(self, provider_name: str, model_name: str):
+        """
+        Select a specific model from a provider.
+
+        Args:
+            provider_name: The name of the provider (e.g., "OpenAI", "Anthropic")
+            model_name: The name of the model to select
+        """
+        logger.info(f"Selecting model: {provider_name} -> {model_name}")
+        
+        # Click the model selector to open the dropdown
+        self.model_selector.click()
+        
+        # First hover over the provider to expand it
+        provider_element = self.page.get_by_text(provider_name, exact=True)
+        provider_element.hover()
+        
+        # Then click on the specific model option
+        model_element = self.page.get_by_role("option").filter(has_text=model_name)
+        model_element.click()
+        
+        logger.info(f"Successfully selected {provider_name} -> {model_name}")
+
+    def verify_model_available(self, provider_name: str, model_name: str):
+        """
+        Verify that a specific model is available in the selector.
+
+        Args:
+            provider_name: The name of the provider
+            model_name: The name of the model to check
+        """
+        logger.info(f"Verifying model availability: {provider_name} -> {model_name}")
+        
+        # Click the model selector to open the dropdown
+        self.model_selector.click()
+        
+        # Check if provider is visible
+        provider_element = self.page.get_by_text(provider_name, exact=True)
+        expect(provider_element).to_be_visible()
+        
+        # Hover over provider to see models
+        provider_element.hover()
+        
+        # Check if model is visible
+        model_element = self.page.get_by_role("option").filter(has_text=model_name)
+        expect(model_element).to_be_visible()
+        
+        # Close the dropdown by clicking elsewhere
+        self.page.keyboard.press("Escape")
+        
+        logger.info(f"Model {provider_name} -> {model_name} is available")
+
     def verify_model_selected(self, expected_model_contains=None):
         """
         Verify that a model is selected. Optionally check if it contains expected text.
@@ -109,3 +161,28 @@ class PlaygroundPage(BasePage):
             error_text = self.error_message.inner_text()
             logger.warning(f"Error message detected: {error_text}")
         return has_error
+
+    def setup_ai_provider(self, provider_name: str, provider_config):
+        """
+        Set up AI provider configuration for testing.
+        
+        Args:
+            provider_name: The provider name (e.g., "openai", "anthropic")
+            provider_config: The provider configuration object
+        """
+        from page_objects.helpers.AIProviderSetupHelper import AIProviderSetupHelper
+        
+        helper = AIProviderSetupHelper(self.page)
+        helper.setup_provider_if_needed(provider_name, provider_config)
+
+    def cleanup_ai_provider(self, provider_config):
+        """
+        Clean up AI provider configuration after testing.
+        
+        Args:
+            provider_config: The provider configuration object
+        """
+        from page_objects.helpers.AIProviderSetupHelper import AIProviderSetupHelper
+        
+        helper = AIProviderSetupHelper(self.page)
+        helper.cleanup_provider(provider_config)

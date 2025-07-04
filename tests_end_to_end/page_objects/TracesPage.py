@@ -1,6 +1,9 @@
 from playwright.sync_api import Page, expect, Locator
 import re
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class TracesPage:
@@ -135,3 +138,25 @@ class TracesPage:
         self.page.get_by_role("button", name="Create new dataset").click()
         self.page.get_by_placeholder("Dataset name").fill(dataset_name)
         self.page.get_by_role("button", name="Create dataset").click()
+
+    def navigate_to_project(self, project_name: str):
+        """
+        Navigate to a specific project's traces page.
+        
+        Args:
+            project_name: The project name to navigate to
+        """
+        from page_objects.ProjectsPage import ProjectsPage
+        
+        logger.info(f"Navigating to traces page for project {project_name}")
+        projects_page = ProjectsPage(self.page)
+        try:
+            projects_page.go_to_page()
+            projects_page.click_project(project_name)
+            logger.info("Successfully navigated to project traces")
+        except Exception as e:
+            raise AssertionError(
+                f"Failed to navigate to project traces.\n"
+                f"Project name: {project_name}\n"
+                f"Error: {str(e)}"
+            ) from e
