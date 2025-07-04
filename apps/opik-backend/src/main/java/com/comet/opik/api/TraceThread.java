@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
 import java.math.BigDecimal;
@@ -25,8 +26,8 @@ public record TraceThread(
         Instant startTime,
         Instant endTime,
         Double duration,
-        JsonNode firstMessage,
-        JsonNode lastMessage,
+        @Schema(implementation = JsonListString.class) JsonNode firstMessage,
+        @Schema(implementation = JsonListString.class) JsonNode lastMessage,
         List<FeedbackScore> feedbackScores,
         TraceThreadStatus status,
         long numberOfMessages,

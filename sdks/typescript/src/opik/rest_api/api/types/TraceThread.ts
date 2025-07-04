@@ -11,8 +11,8 @@ export interface TraceThread {
     startTime?: Date;
     endTime?: Date;
     duration?: number;
-    firstMessage?: OpikApi.JsonNode;
-    lastMessage?: OpikApi.JsonNode;
+    firstMessage?: OpikApi.JsonListString;
+    lastMessage?: OpikApi.JsonListString;
     feedbackScores?: OpikApi.FeedbackScore[];
     status?: OpikApi.TraceThreadStatus;
     numberOfMessages?: number;

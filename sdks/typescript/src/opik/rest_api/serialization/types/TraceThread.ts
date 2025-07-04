@@ -5,7 +5,7 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
-import { JsonNode } from "./JsonNode";
+import { JsonListString } from "./JsonListString";
 import { FeedbackScore } from "./FeedbackScore";
 import { TraceThreadStatus } from "./TraceThreadStatus";
 import { Comment } from "./Comment";
@@ -18,8 +18,8 @@ export const TraceThread: core.serialization.ObjectSchema<serializers.TraceThrea
         startTime: core.serialization.property("start_time", core.serialization.date().optional()),
         endTime: core.serialization.property("end_time", core.serialization.date().optional()),
         duration: core.serialization.number().optional(),
-        firstMessage: core.serialization.property("first_message", JsonNode.optional()),
-        lastMessage: core.serialization.property("last_message", JsonNode.optional()),
+        firstMessage: core.serialization.property("first_message", JsonListString.optional()),
+        lastMessage: core.serialization.property("last_message", JsonListString.optional()),
         feedbackScores: core.serialization.property(
             "feedback_scores",
             core.serialization.list(FeedbackScore).optional(),
@@ -44,8 +44,8 @@ export declare namespace TraceThread {
         start_time?: string | null;
         end_time?: string | null;
         duration?: number | null;
-        first_message?: JsonNode.Raw | null;
-        last_message?: JsonNode.Raw | null;
+        first_message?: JsonListString.Raw | null;
+        last_message?: JsonListString.Raw | null;
         feedback_scores?: FeedbackScore.Raw[] | null;
         status?: TraceThreadStatus.Raw | null;
         number_of_messages?: number | null;
