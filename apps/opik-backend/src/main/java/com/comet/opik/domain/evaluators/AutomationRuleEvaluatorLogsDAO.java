@@ -25,7 +25,8 @@ import java.util.stream.Collectors;
 import static com.comet.opik.api.LogItem.LogLevel;
 import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.infrastructure.log.tables.UserLogTableFactory.UserLogTableDAO;
-import static com.comet.opik.utils.TemplateUtils.*;
+import static com.comet.opik.utils.TemplateUtils.QueryItem;
+import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
 @ImplementedBy(AutomationRuleEvaluatorLogsDAOImpl.class)
 public interface AutomationRuleEvaluatorLogsDAO extends UserLogTableDAO {

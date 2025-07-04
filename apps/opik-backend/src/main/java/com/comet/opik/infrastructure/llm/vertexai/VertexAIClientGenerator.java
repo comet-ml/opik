@@ -111,7 +111,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             return builder
                     .setProjectId(credentials.getProjectId())
                     .setCredentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
-                    .setTransport(Transport.REST)
+                    .setTransport(Transport.GRPC)
                     .build();
 
         } catch (Exception e) {

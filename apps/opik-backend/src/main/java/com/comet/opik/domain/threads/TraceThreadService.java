@@ -64,6 +64,8 @@ public interface TraceThreadService {
     Mono<Void> updateThreadSampledValue(UUID projectId, List<TraceThreadSampling> threadSamplingPerRule);
 
     Mono<Void> update(UUID threadModelId, TraceThreadUpdate threadUpdate);
+
+    Mono<Void> setScoredAt(UUID projectId, List<String> threadIds, Instant scoredAt);
 }
 
 @Slf4j
@@ -78,6 +80,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
     private final @NonNull TraceService traceService;
     private final @NonNull LockService lockService;
     private final @NonNull EventBus eventBus;
+    private final @NonNull TraceThreadOnlineScorerPublisher onlineScorePublisher;
 
     public Mono<Void> processTraceThreads(@NonNull Map<String, Instant> threadIdAndLastUpdateAts,
             @NonNull UUID projectId) {
@@ -126,11 +129,12 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
         return lockService.executeWithLockCustomExpire(
                 new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
-                Mono.defer(() -> updateThreadSampledValueAsync(projectId, threadSamplingPerRules)),
+                Mono.defer(() -> processUpdateThreadSampledValue(projectId, threadSamplingPerRules)),
                 LOCK_DURATION);
     }
 
-    private Mono<Void> updateThreadSampledValueAsync(UUID projectId, List<TraceThreadSampling> threadSamplingPerRules) {
+    private Mono<Void> processUpdateThreadSampledValue(UUID projectId,
+            List<TraceThreadSampling> threadSamplingPerRules) {
         return traceThreadDAO.updateThreadSampledValues(projectId, threadSamplingPerRules)
                 .doOnSuccess(count -> log.info("Updated '{}' trace threads sampled values for projectId: '{}'", count,
                         projectId))
@@ -142,6 +146,25 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 .switchIfEmpty(Mono.error(failWithNotFound("Thread", threadModelId)))
                 .flatMap(traceThreadIdModel -> traceThreadDAO.updateThread(threadModelId,
                         traceThreadIdModel.projectId(), threadUpdate));
+    }
+
+    @Override
+    public Mono<Void> setScoredAt(@NonNull UUID projectId, @NonNull List<String> threadIds, @NonNull Instant scoredAt) {
+        if (threadIds.isEmpty()) {
+            log.info("No threadIds provided for setting scored at. For projectId: '{}', skipping update.", projectId);
+            return Mono.empty();
+        }
+
+        return lockService.executeWithLockCustomExpire(
+                new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
+                Mono.defer(() -> traceThreadDAO.setScoredAt(projectId, threadIds, scoredAt))
+                        .doOnSuccess(count -> log.info("Set scoredAt '{}' for threadIds'[{}]' in projectId: '{}'",
+                                scoredAt, threadIds, projectId))
+                        .doOnError(ex -> log.error(
+                                "Error setting scoredAt for threadIds: '[{}]' in projectId: '{}' with error: {}",
+                                scoredAt, threadIds, projectId, ex))
+                        .then(),
+                LOCK_DURATION);
     }
 
     private TraceThreadModel mapToModel(TraceThreadIdModel traceThread, String userName, Instant lastUpdatedAt) {
@@ -218,9 +241,9 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                 .status(thread.status())
                                 .lastUpdatedBy(thread.lastUpdatedBy())
                                 .lastUpdatedAt(thread.lastUpdatedAt())
+                                .scoredAt(null) // Reset scoredAt to null for reopened threads
                                 .build();
                     }
-
                     return thread;
                 })
                 .toList();
@@ -232,7 +255,6 @@ class TraceThreadServiceImpl implements TraceThreadService {
             TraceThreadCriteria criteria) {
         return traceThreadDAO.findThreadsByProject(1, traceThreads.size(), criteria)
                 .switchIfEmpty(Mono.just(List.of()));
-
     }
 
     @Override
@@ -268,9 +290,38 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 .doOnSuccess(count -> log.info("Closed '{}' trace threads for projectId: '{}' on workspaceId '{}'",
                         count, projectId, workspaceId))
                 .doOnError(ex -> log.error(
-                        "Error when processing closure of pending trace threads  for project: '%s' workspaceId '{}'"
+                        "Error when processing closure of pending trace threads  for project: '%s' workspaceId '%s'"
                                 .formatted(projectId, workspaceId),
-                        ex));
+                        ex))
+                .flatMap(count -> checkAndTriggerOnlineScoring(projectId, count));
+
+    }
+
+    private Mono<Long> checkAndTriggerOnlineScoring(UUID projectId, Long count) {
+        if (count <= 0) {
+            log.info("No closed trace threads to process for projectId: '{}'. Skipping online scoring.", projectId);
+            return Mono.just(count);
+        }
+
+        return getClosedThreadsByProject(projectId, count)
+                .flatMap(closedThreads -> {
+                    if (!closedThreads.isEmpty()) {
+                        // Publish closed threads for online scoring
+                        return onlineScorePublisher.publish(projectId, closedThreads)
+                                .thenReturn(count);
+                    }
+
+                    return Mono.just(count);
+                });
+    }
+
+    private Mono<List<TraceThreadModel>> getClosedThreadsByProject(UUID projectId, Long count) {
+        return traceThreadDAO.findThreadsByProject(1, count.intValue(),
+                TraceThreadCriteria.builder()
+                        .projectId(projectId)
+                        .status(TraceThreadStatus.INACTIVE)
+                        .scoredAtEmpty(true)
+                        .build());
     }
 
     @Override
@@ -297,6 +348,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                 .doOnSuccess(
                                         count -> log.info("Closed count '{}' for threadId '{}' and  projectId: '{}'",
                                                 count, threadId, projectId))
+                                .flatMap(count -> checkAndTriggerOnlineScoring(projectId, count))
                                 .then(),
                         LOCK_DURATION)));
     }
