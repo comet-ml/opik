@@ -7,6 +7,7 @@ import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -17,6 +18,9 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -31,6 +35,7 @@ import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.function.TriFunction;
 import org.apache.hc.core5.http.HttpStatus;
@@ -57,7 +62,10 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -1018,7 +1026,9 @@ class PromptResourceTest {
                             .build()),
                     arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder()
                             .description(UUID.randomUUID().toString()).build()),
-                    arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder().description(null).build()));
+                    arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder().description(null).build()),
+                    arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder()
+                            .tags(PodamFactoryUtils.manufacturePojoSet(factory, String.class)).build()));
         }
 
         @ParameterizedTest
@@ -1210,7 +1220,7 @@ class PromptResourceTest {
 
             List<Prompt> expectedPrompts = List.of(prompt);
 
-            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, null);
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, null, null);
         }
 
         @Test
@@ -1233,7 +1243,7 @@ class PromptResourceTest {
 
             List<Prompt> expectedPrompts = List.of(prompt);
 
-            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, prompt.name());
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, prompt.name(), null);
         }
 
         @Test
@@ -1261,7 +1271,7 @@ class PromptResourceTest {
 
             List<Prompt> expectedPrompts = List.of();
 
-            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, partialSearch);
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, partialSearch, null);
         }
 
         @ParameterizedTest
@@ -1301,7 +1311,7 @@ class PromptResourceTest {
             createPrompt(prompt, apiKey, workspaceName);
 
             List<Prompt> expectedPrompts = List.of(prompt);
-            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, partialSearch);
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, partialSearch, null);
         }
 
         Stream<Arguments> when__searchByPartialName__thenReturnPromptMatchingName() {
@@ -1334,7 +1344,7 @@ class PromptResourceTest {
 
             List<Prompt> expectedPrompts = prompts.reversed();
 
-            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, null);
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, null, null);
         }
 
         @Test
@@ -1360,10 +1370,47 @@ class PromptResourceTest {
             List<Prompt> promptPage1 = prompts.reversed().subList(0, 10);
             List<Prompt> promptPage2 = prompts.reversed().subList(10, 20);
 
-            findPromptsAndAssertPage(promptPage1, apiKey, workspaceName, prompts.size(), 1, null);
-            findPromptsAndAssertPage(promptPage2, apiKey, workspaceName, prompts.size(), 2, null);
+            findPromptsAndAssertPage(promptPage1, apiKey, workspaceName, prompts.size(), 1, null, null);
+            findPromptsAndAssertPage(promptPage2, apiKey, workspaceName, prompts.size(), 2, null, null);
         }
 
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when sorting prompts by valid fields, then return sorted prompts")
+        void getPrompts__whenSortingByValidFields__thenReturnTracePromptsSorted(Comparator<Prompt> comparator, SortingField sorting) {
+
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var prompts = PodamFactoryUtils.manufacturePojoList(factory, Prompt.class).stream()
+                    .map(prompt -> prompt.toBuilder()
+                            .lastUpdatedBy(USER)
+                            .createdBy(USER)
+                            .versionCount(0L)
+                            .template(null)
+                            .build())
+                    .toList();
+
+            prompts.forEach(prompt -> createPrompt(prompt, apiKey, workspaceName));
+
+            List<Prompt> expectedPrompts = prompts.stream().sorted(comparator).toList();
+
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, null, List.of(sorting));
+        }
+
+        private Stream<Arguments> getPrompts__whenSortingByValidFields__thenReturnTracePromptsSorted() {
+            Comparator<Prompt> tagsComparator = Comparator.comparing(prompt -> prompt.tags().toString().toLowerCase());
+            return Stream.of(
+                    Arguments.of(
+                            tagsComparator,
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            tagsComparator.reversed(),
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()));
+        }
     }
 
     @Nested
@@ -2217,7 +2264,7 @@ class PromptResourceTest {
     }
 
     private void findPromptsAndAssertPage(List<Prompt> expectedPrompts, String apiKey, String workspaceName,
-            int expectedTotal, int page, String nameSearch) {
+            int expectedTotal, int page, String nameSearch, List<SortingField> sortingFields) {
 
         WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
 
@@ -2227,6 +2274,11 @@ class PromptResourceTest {
 
         if (page > 1) {
             target = target.queryParam("page", page);
+        }
+
+        if (CollectionUtils.isNotEmpty(sortingFields)) {
+            target = target.queryParam("sorting",
+                    URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8));
         }
 
         try (var response = target
