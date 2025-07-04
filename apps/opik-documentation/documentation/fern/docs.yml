@@ -504,6 +504,9 @@ navigation:
           - page: Ollama
             path: docs/cookbook/ollama.mdx
             slug: ollama
+          - page: OpenAI Agents
+            path: docs/cookbook/openai-agents.mdx
+            slug: openai-agents
           - page: Predibase
             path: docs/cookbook/predibase.mdx
             slug: predibase
@@ -676,6 +679,6 @@ redirects:
   - source: "docs/agent_optimization/best-practices/prompt_engineering"
     destination: "/docs/agent_optimization/best_practices/prompt_engineering"
     permanent: true
-  - source: "docs/agent_optimization/opik_optimizer/litellm_support.mdx"
+  - source: "docs/agent_optimization/opik_optimizer/litellm_support"
     destination: "/docs/agent_optimization/opik_optimizer/models"
     permanent: true
