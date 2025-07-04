@@ -1,5 +1,5 @@
 ---
-title: "Agent Optimizer LiteLLM Support"
+title: "Customizing models used in the Optimizer"
 subtitle: "LiteLLM Model Support for Optimizers (OpenAI, Azure, Local Models)"
 description: "Learn how to use any model with Opik Agent Optimizer, LiteLLMs supports various LLM providers including OpenAI, Azure, Anthropic, Google, and local models."
 pytest_codeblocks_skip: true
@@ -10,7 +10,115 @@ comprehensive support for a wide array of Large Language Models (LLMs). This int
 can use virtually any model provider or even locally hosted models with any of the Opik optimization
 algorithms.
 
-## How it Works
+The Agent Optimizer uses LLM's to optimize prompts, as a result there are two different ways to
+configure the LLM calling behavior in the Optimizer:
+
+1. `ChatPrompt model`: This is the LLM model used in your application to generate the response
+2. `Optimization model`: This is the LLM model used by the Opik Optimizer to improve the ChatPrompt
+
+## Configuring ChatPrompt model
+
+### How it works
+
+The ChatPrompt has two different parameters that you can use to configure the LLM response:
+
+1. `model`: Specify a model to use
+2. `invoke`: Specify a function to generate the response, this is more customizable than the
+   `model` field
+
+We recommend starting by using the `model` parameter that allows you to specify a provider or model
+to use to generate the LLM out. We recommend that you set the model string to the model that you
+use within your LLM application.
+
+If you need to customize the LLM generation behavior further to match what you do in your
+LLM application, you can use the `invoke` parameter in the `ChatPrompt`. This parameter supports a
+function that takes the model string, the messages list and the tool list and returns the LLM
+response string.
+
+### Specifying a ChatPrompt model
+
+You can configure the ChatPrompt model using the `model` parameter:
+
+```python
+from opik_optimizer import ChatPrompt
+
+prompt = ChatPrompt(
+  name="demo_prompt",
+  model="openai/gpt-4o-mini"
+  messages=[
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "{question}"}
+  ]
+)
+```
+
+<Info>
+  The Opik Optimizer supports all LLM providers thanks to LiteLLM, you can learn more about the models and providers
+  supported in the [LiteLLM documentation](https://docs.litellm.ai/docs/providers).
+</Info>
+
+### Customizing the LLM response
+
+The `invoke` parameter of the ChatPrompt allows you to customize the LLM response. This allows you
+to fully customize the ChatPrompt behavior, the invoke function should follow the following parameters:
+
+```python
+import litellm
+from opik_optimizer import ChatPrompt
+
+def invoke_llm(model, messages, tools):
+    res = litellm.completion(
+        model=model,
+        messages=messages,
+        tools=tools
+    )
+    return res.choices[0].delta.content
+
+prompt = ChatPrompt(
+  name="demo_prompt",
+  messages=[
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "{question}"}
+  ],
+  invoke=invoke_llm
+)
+```
+
+The `invoke` method can also be used to optimize prompts that utilize structured outputs:
+
+```python
+from pydantic import BaseModel
+from openai import OpenAI
+
+client = OpenAI()
+
+class CalendarEvent(BaseModel):
+    name: str
+    date: str
+    participants: list[str]
+
+def invoke_llm(model, messages, tools):
+    completion = client.chat.completions.parse(
+        model=model,
+        messages=messages,
+        response_format=CalendarEvent,
+    )
+
+    return completion.choices[0].message.parsed
+
+prompt = ChatPrompt(
+  name="demo_prompt",
+  messages=[
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "{question}"}
+  ],
+  invoke=invoke_llm
+)
+```
+
+## Configuring Optimization model
+
+### How it Works
 
 When you initialize an optimizer (e.g., `MetaPromptOptimizer`, `FewShotBayesianOptimizer`,
 `MiproOptimizer`, `EvolutionaryOptimizer`), the `model` parameter (and `reasoning_model` for
@@ -28,12 +136,12 @@ in LiteLLM.
   Opik Agent Optimizer codebase.
 </Info>
 
-## Specifying Models
+### Specifying Models
 
 You pass the LiteLLM model identifier string directly to the `model` parameter in the optimizer's
 constructor. Here are some common examples:
 
-### OpenAI
+#### OpenAI
 
 ```python
 from opik_optimizer import MetaPromptOptimizer
@@ -44,7 +152,7 @@ optimizer = MetaPromptOptimizer(
 )
 ```
 
-### Azure OpenAI
+#### Azure OpenAI
 
 ```python
 from opik_optimizer import FewShotBayesianOptimizer
@@ -56,7 +164,7 @@ optimizer = FewShotBayesianOptimizer(
 )
 ```
 
-### Anthropic
+#### Anthropic
 
 ```python
 from opik_optimizer import FewShotBayesianOptimizer
@@ -68,7 +176,7 @@ optimizer = FewShotBayesianOptimizer(
 )
 ```
 
-### Google Gemini
+#### Google Gemini
 
 ```python
 from opik_optimizer import EvolutionaryOptimizer
@@ -80,7 +188,7 @@ optimizer = EvolutionaryOptimizer(
 )
 ```
 
-### Local Models (e.g., via Ollama)
+#### Local Models (e.g., via Ollama)
 
 LiteLLM allows you to connect to models served locally through tools like Ollama.
 
@@ -110,7 +218,7 @@ optimizer = MetaPromptOptimizer(
 </Step>
 </Steps>
 
-### Other Providers
+#### Other Providers
 
 LiteLLM supports numerous other providers like Cohere, Mistral AI, Bedrock, Vertex AI, Hugging Face
 Inference Endpoints, etc. Refer to the
