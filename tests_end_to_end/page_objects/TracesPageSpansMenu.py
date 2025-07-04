@@ -17,10 +17,10 @@ class TracesPageSpansMenu:
         return self.page.get_by_role("button", name=name).first
 
     def get_first_span_by_name(self, name):
-        return self.page.get_by_role("button", name=name).first
+        return self.page.get_by_text(name).first
 
     def check_span_exists_by_name(self, name):
-        expect(self.page.get_by_role("button", name=name)).to_be_visible()
+        expect(self.page.get_by_text(name).first).to_be_visible()
 
     def check_tag_exists_by_name(self, tag_name):
         expect(self.page.get_by_text(tag_name)).to_be_visible()
@@ -35,7 +35,7 @@ class TracesPageSpansMenu:
         return self.page.get_by_role("tab", name="Metadata")
 
     def open_span_content(self, span_name):
-        self.page.get_by_role("button", name=span_name).click()
+        self.page.get_by_text(span_name).first.click()
         expect(self.span_title.filter(has_text=span_name)).to_be_visible()
 
     def check_span_attachment(self, attachment_name):
