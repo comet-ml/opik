@@ -13,23 +13,23 @@ class AgentNode:
     def __init__(self, agent: google.adk.agents.BaseAgent) -> None:
         self.agent = agent
         self.name = agent.name
-        self.children_nodes: List[AgentNode] = []
+        self.subagent_nodes: List[AgentNode] = []
         self.agent_type = _determine_agent_type(agent)
         self.tools: List[ToolNode] = []
 
     def add_child(self, child: "AgentNode") -> None:
-        self.children_nodes.append(child)
+        self.subagent_nodes.append(child)
 
     def add_tool(self, tool: "ToolNode") -> None:
         self.tools.append(tool)
 
     @property
     def first_child_name(self) -> Optional[str]:
-        return self.children_nodes[0].name if self.children_nodes else None
+        return self.subagent_nodes[0].name if self.subagent_nodes else None
 
     @property
     def last_child_name(self) -> Optional[str]:
-        return self.children_nodes[-1].name if self.children_nodes else None
+        return self.subagent_nodes[-1].name if self.subagent_nodes else None
 
 
 class ToolNode:

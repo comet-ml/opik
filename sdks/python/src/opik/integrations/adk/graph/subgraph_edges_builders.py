@@ -3,13 +3,13 @@ from . import nodes
 import itertools
 
 
-def build_edge_definitions_for_parallel_children(
+def build_edge_definitions_for_parallel_subagents(
     children: List[nodes.AgentNode],
 ) -> List[str]:
     return [f'{child.name}["{child.name}"]' for child in children]
 
 
-def build_edge_definitions_for_sequential_children(
+def build_edge_definitions_for_sequential_subagents(
     children: List[nodes.AgentNode],
 ) -> List[str]:
     if len(children) == 1:
@@ -23,10 +23,10 @@ def build_edge_definitions_for_sequential_children(
     return result
 
 
-def build_edge_definitions_for_loop_children(
+def build_edge_definitions_for_loop_subagents(
     children: List[nodes.AgentNode],
 ) -> List[str]:
-    result = build_edge_definitions_for_sequential_children(children)
+    result = build_edge_definitions_for_sequential_subagents(children)
 
     loop_back_edge_definition: Optional[str] = None
     if len(children) == 1:

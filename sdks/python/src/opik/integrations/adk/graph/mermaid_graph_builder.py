@@ -15,11 +15,11 @@ class MermaidGraphBuilder:
         # connections for non-composite nodes with children
         if node.agent_type in nodes.SUBGRAPH_NODE_TYPES:
             self._build_subgraph_for_composite_node(node)
-        elif len(node.children_nodes) > 0 or len(node.tools) > 0:
+        elif len(node.subagent_nodes) > 0 or len(node.tools) > 0:
             self._build_edges_for_non_composite_llm_node(node)
 
         # 2. Recursively process all children agents
-        for child in node.children_nodes:
+        for child in node.subagent_nodes:
             self.build_node_graph(child)
 
         # 3. Recursively process all agent tools
@@ -28,7 +28,7 @@ class MermaidGraphBuilder:
                 self.build_node_graph(tool.agent)
 
     def _build_edges_for_non_composite_llm_node(self, node: nodes.AgentNode) -> None:
-        for child in node.children_nodes:
+        for child in node.subagent_nodes:
             self.edges_definitions.append(f"{node.name} --> {child.name}")
 
         for tool in node.tools:
@@ -41,24 +41,24 @@ class MermaidGraphBuilder:
 
         if composite_node.agent_type == "sequential":
             edge_definitions = (
-                subgraph_edges_builders.build_edge_definitions_for_sequential_children(
-                    composite_node.children_nodes
+                subgraph_edges_builders.build_edge_definitions_for_sequential_subagents(
+                    composite_node.subagent_nodes
                 )
             )
             block.extend([f"  {edge}" for edge in edge_definitions])
 
         elif composite_node.agent_type == "loop":
             edge_definitions = (
-                subgraph_edges_builders.build_edge_definitions_for_loop_children(
-                    composite_node.children_nodes
+                subgraph_edges_builders.build_edge_definitions_for_loop_subagents(
+                    composite_node.subagent_nodes
                 )
             )
             block.extend([f"  {edge}" for edge in edge_definitions])
 
         elif composite_node.agent_type == "parallel":
             edge_definitions = (
-                subgraph_edges_builders.build_edge_definitions_for_parallel_children(
-                    composite_node.children_nodes
+                subgraph_edges_builders.build_edge_definitions_for_parallel_subagents(
+                    composite_node.subagent_nodes
                 )
             )
             block.extend([f"  {edge}" for edge in edge_definitions])
