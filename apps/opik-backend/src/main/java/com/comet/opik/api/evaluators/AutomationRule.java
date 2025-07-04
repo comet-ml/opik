@@ -27,7 +27,7 @@ public sealed interface AutomationRule permits AutomationRuleEvaluator {
     String getName();
 
     AutomationRuleAction getAction();
-    Float getSamplingRate();
+    float getSamplingRate();
 
     Instant getCreatedAt();
     String getCreatedBy();
