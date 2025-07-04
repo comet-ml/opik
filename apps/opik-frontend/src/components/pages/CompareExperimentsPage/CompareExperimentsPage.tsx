@@ -14,6 +14,7 @@ import { Experiment } from "@/types/datasets";
 import CompareExperimentsDetails from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/CompareExperimentsDetails";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExperimentDashboardTab from "./ExperimentDashboardTab";
 
 const CompareExperimentsPage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam, {
@@ -40,6 +41,8 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
   const memorizedExperiments: Experiment[] = useDeepMemo(() => {
     return experiments ?? [];
   }, [experiments]);
+
+  const singleExperiment = experimentsIds.length === 1 ? experiments[0] : undefined;
 
   return (
     <PageBodyScrollContainer>
@@ -71,6 +74,11 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
                 {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
               />
             </TabsTrigger>
+            {experimentsIds.length === 1 && (
+              <TabsTrigger variant="underline" value="dashboard">
+                Dashboard
+              </TabsTrigger>
+            )}
           </TabsList>
         </PageBodyStickyContainer>
         <TabsContent value="items">
@@ -93,9 +101,17 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
             isPending={isPending}
           />
         </TabsContent>
+        {experimentsIds.length === 1 && singleExperiment && (
+          <TabsContent value="dashboard">
+            <ExperimentDashboardTab 
+              experimentId={singleExperiment.id}
+            />
+          </TabsContent>
+        )}
       </Tabs>
     </PageBodyScrollContainer>
   );
 };
 
 export default CompareExperimentsPage;
+
