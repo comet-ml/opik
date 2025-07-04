@@ -3,10 +3,12 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge;
@@ -28,6 +30,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorRequest;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorResponse;
+import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -45,10 +48,8 @@ import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
-import jakarta.ws.rs.HttpMethod;
-import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import org.apache.http.HttpHeaders;
 import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -77,6 +78,7 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -91,7 +93,6 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KE
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
-import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
@@ -109,8 +110,6 @@ import static org.mockito.Mockito.when;
 @DisplayName("Automation Rule Evaluators Resource Test")
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class AutomationRuleEvaluatorsResourceTest {
-
-    private static final String URL_TEMPLATE = "%s/v1/private/automations/evaluators/";
 
     private static final String[] AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS = {
             "createdAt", "lastUpdatedAt", "projectName"};
@@ -159,6 +158,34 @@ class AutomationRuleEvaluatorsResourceTest {
                     self, output: str, reference: str, **ignored_kwargs: Any
                 ) -> score_result.ScoreResult:
                     value = 1.0 if output == reference else 0.0
+                    return score_result.ScoreResult(value=value, name=self.name)
+            """;
+
+    private static final String TRACE_THREAD_USER_DEFINED_METRIC = """
+            from typing import Union, List, Any
+
+            from opik.evaluation.metrics import base_metric, score_result
+            from opik.evaluation.metrics.types import Conversation
+
+            class CustomConversationThreadMetric(base_metric.BaseMetric):
+                ""Abstract base class for all conversation thread metrics.""
+
+                def __init__(
+                    self,
+                    name: str = "custom_conversation_thread_metric",
+                ):
+                    super().__init__(
+                        name=name,
+                        track=False,
+                    )
+
+                # user -> input
+                # assistant -> output
+                def score(
+                    self, conversation: Conversation, **ignored_kwargs: Any
+                ) -> score_result.ScoreResult:
+                    has_assistant = any(m["role"] == "assistant" for m in conversation)
+                    value = 1.0 if has_assistant else 0.0
                     return score_result.ScoreResult(value=value, name=self.name)
             """;
 
@@ -381,12 +408,8 @@ class AutomationRuleEvaluatorsResourceTest {
             var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
                     .projectId(projectId)
                     .build();
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .request()
-                    .cookie(SESSION_COOKIE, sessionToken)
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(ruleEvaluator))) {
+            try (var actualResponse = evaluatorsResourceClient.createEvaluatorWithSessionToken(
+                    ruleEvaluator, sessionToken, workspaceName)) {
 
                 if (isAuthorized) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
@@ -421,14 +444,8 @@ class AutomationRuleEvaluatorsResourceTest {
                 evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
             });
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("size", samplesToCreate)
-                    .queryParam("project_id", projectId)
-                    .request()
-                    .cookie(SESSION_COOKIE, sessionToken)
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
+            try (var actualResponse = evaluatorsResourceClient.findEvaluatorWithSessionToken(
+                    projectId, samplesToCreate, sessionToken, workspaceName)) {
                 if (isAuthorized) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
@@ -451,14 +468,8 @@ class AutomationRuleEvaluatorsResourceTest {
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class);
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(id.toString())
-                    .queryParam("project_id", evaluator.getProjectId())
-                    .request()
-                    .cookie(SESSION_COOKIE, sessionToken)
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
+            try (var actualResponse = evaluatorsResourceClient.getEvaluatorWithSessionToken(
+                    id, evaluator.getProjectId(), sessionToken, workspaceName)) {
                 if (isAuthorized) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
@@ -482,13 +493,8 @@ class AutomationRuleEvaluatorsResourceTest {
             var updatedEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
                     .projectId(evaluator.getProjectId())
                     .build();
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path(id.toString())
-                    .request()
-                    .cookie(SESSION_COOKIE, sessionToken)
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .method(HttpMethod.PATCH, Entity.json(updatedEvaluator))) {
+            try (var actualResponse = evaluatorsResourceClient.updateEvaluatorWithSessionToken(
+                    id, updatedEvaluator, sessionToken, workspaceName)) {
 
                 if (isAuthorized) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
@@ -509,14 +515,8 @@ class AutomationRuleEvaluatorsResourceTest {
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
             var deleteMethod = BatchDelete.builder().ids(Collections.singleton(id)).build();
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("delete")
-                    .queryParam("project_id", evaluator.getProjectId())
-                    .request()
-                    .cookie(SESSION_COOKIE, sessionToken)
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(deleteMethod))) {
+            try (var actualResponse = evaluatorsResourceClient.deleteWithSessionToken(
+                    evaluator.getProjectId(), deleteMethod, sessionToken, workspaceName)) {
 
                 if (isAuthorized) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
@@ -550,14 +550,8 @@ class AutomationRuleEvaluatorsResourceTest {
 
             var evalIds1and2 = Set.of(evalId1, evalId2);
             var deleteMethod = BatchDelete.builder().ids(evalIds1and2).build();
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("delete")
-                    .queryParam("project_id", projectId)
-                    .request()
-                    .cookie(SESSION_COOKIE, sessionToken)
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(deleteMethod))) {
+            try (var actualResponse = evaluatorsResourceClient.deleteWithSessionToken(
+                    projectId, deleteMethod, sessionToken, workspaceName)) {
 
                 if (isAuthorized) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
@@ -568,13 +562,8 @@ class AutomationRuleEvaluatorsResourceTest {
                 }
             }
             // we shall see a single evaluators for the project now
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .queryParam("project_id", projectId)
-                    .request()
-                    .cookie(SESSION_COOKIE, sessionToken)
-                    .accept(MediaType.APPLICATION_JSON_TYPE)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
+            try (var actualResponse = evaluatorsResourceClient.findEvaluatorWithSessionToken(
+                    projectId, null, sessionToken, workspaceName)) {
                 if (isAuthorized) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
@@ -618,19 +607,13 @@ class AutomationRuleEvaluatorsResourceTest {
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
             Awaitility.await().untilAsserted(() -> {
-                try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                        .path(id.toString())
-                        .path("logs")
-                        .request()
-                        .cookie(SESSION_COOKIE, sessionToken)
-                        .accept(MediaType.APPLICATION_JSON_TYPE)
-                        .header(WORKSPACE_HEADER, workspaceName)
-                        .get()) {
+                try (var actualResponse = evaluatorsResourceClient.getLogsWithSessionToken(
+                        id, sessionToken, workspaceName)) {
                     if (isAuthorized) {
                         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                         assertThat(actualResponse.hasEntity()).isTrue();
                         var actualEntity = actualResponse.readEntity(LogPage.class);
-                        assertLogResponse(actualEntity, id, trace);
+                        assertTraceLogResponse(actualEntity, id, trace);
                     } else {
                         assertThat(actualResponse.getStatusInfo().getStatusCode())
                                 .isEqualTo(HttpStatus.SC_UNAUTHORIZED);
@@ -930,7 +913,51 @@ class AutomationRuleEvaluatorsResourceTest {
 
             Awaitility.await().untilAsserted(() -> {
                 var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
-                assertLogResponse(logPage, id, trace);
+                assertTraceLogResponse(logPage, id, trace);
+            });
+        }
+
+        @Test
+        void getLogsTraceThreadLlmAsJudgeScorer(LlmProviderFactory llmProviderFactory) throws JsonProcessingException {
+            var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
+            when(llmProviderFactory.getLanguageModel(anyString(), any())
+                    .chat(any(ChatRequest.class)))
+                    .thenAnswer(invocationOnMock -> chatResponse);
+
+            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
+                    .code(OBJECT_MAPPER.readValue(LLM_AS_A_JUDGE_EVALUATOR,
+                            AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode.class))
+                    .samplingRate(1f)
+                    .projectId(projectId)
+                    .build();
+
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .threadId("thread-" + RandomStringUtils.randomAlphanumeric(36))
+                    .input(OBJECT_MAPPER.readTree(INPUT))
+                    .output(OBJECT_MAPPER.readTree(OUTPUT))
+                    .build();
+
+            Instant createdAt = trace.createdAt();
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            Awaitility.await().untilAsserted(() -> {
+
+                TraceThread traceThread = traceResourceClient.getTraceThread(trace.threadId(), projectId, API_KEY,
+                        WORKSPACE_NAME);
+                String threadModelId = Optional.ofNullable(traceThread.threadModelId())
+                        .map(Object::toString)
+                        .orElseThrow();
+
+                Map<String, String> markers = Map.of("thread_model_id", threadModelId);
+                String message = "The threadModelId '.*' will be sampled for rule: '.*' with sampling rate '.*'";
+
+                var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
+                assertTraceThreadLogResponse(logPage, id, markers, createdAt, message);
             });
         }
 
@@ -973,7 +1000,72 @@ class AutomationRuleEvaluatorsResourceTest {
 
             Awaitility.await().untilAsserted(() -> {
                 var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
-                assertLogResponse(logPage, id, trace);
+                assertTraceLogResponse(logPage, id, trace);
+            });
+        }
+
+        @Test
+        void getLogsTraceThreadUserDefinedMetricPythonScorer() throws JsonProcessingException {
+            //Given
+            var pythonEvaluatorRequest = TraceThreadPythonEvaluatorRequest.builder()
+                    .code(TRACE_THREAD_USER_DEFINED_METRIC)
+                    .data(List.of(
+                            TraceThreadPythonEvaluatorRequest.ChatMessage.builder()
+                                    .role("user")
+                                    .content("abc")
+                                    .build(),
+                            TraceThreadPythonEvaluatorRequest.ChatMessage.builder()
+                                    .role("assistant")
+                                    .content("abc")
+                                    .build()))
+                    .build();
+
+            var pythonEvaluatorResponse = factory.manufacturePojo(PythonEvaluatorResponse.class);
+
+            // When
+            wireMock.server().stubFor(
+                    post(urlPathEqualTo("/pythonBackendMock/v1/private/evaluators/python"))
+                            .withRequestBody(equalToJson(OBJECT_MAPPER.writeValueAsString(pythonEvaluatorRequest)))
+                            .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(pythonEvaluatorResponse))));
+
+            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class)
+                    .toBuilder()
+                    .code(TraceThreadUserDefinedMetricPythonCode.builder()
+                            .metric(TRACE_THREAD_USER_DEFINED_METRIC)
+                            .build())
+                    .samplingRate(1f)
+                    .projectId(projectId)
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .output(OBJECT_MAPPER.readTree("""
+                            {
+                                "response": "abc"
+                            }
+                            """))
+                    .build();
+
+            Instant createdAt = trace.createdAt();
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            // Then
+            Awaitility.await().untilAsserted(() -> {
+                TraceThread traceThread = traceResourceClient.getTraceThread(trace.threadId(), projectId, API_KEY,
+                        WORKSPACE_NAME);
+
+                String threadModelId = Optional.ofNullable(traceThread.threadModelId())
+                        .map(Object::toString)
+                        .orElseThrow();
+
+                Map<String, String> markers = Map.of("thread_model_id", threadModelId);
+                String message = "The threadModelId '.*' will be sampled for rule: '.*' with sampling rate '.*'";
+
+                var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
+                assertTraceThreadLogResponse(logPage, id, markers, createdAt, message);
             });
         }
 
@@ -1003,6 +1095,7 @@ class AutomationRuleEvaluatorsResourceTest {
             // Sending a trace, that shouldn't be sampled as the rate is 0 for both rules
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
+                    .threadId(null)
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
@@ -1013,6 +1106,99 @@ class AutomationRuleEvaluatorsResourceTest {
                 assertLogResponse(logPageLlm, idLlm, evaluatorLlm, trace);
             });
         }
+
+        @Test
+        void getLogsTraceThreadSkipped() {
+            // Adding 2 rules to a project, as there was a bug in the sampler causing the logs to fail when having
+            // multiple rules. This test should have at least 2 rules to ensure that the bug is fixed.
+            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            // Added a Python rule with sampling rate 0
+            var evaluatorPython = Optional.ofNullable(factory
+                    .manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class)
+                    .toBuilder()
+                    .samplingRate(0f)
+                    .projectId(projectId)
+                    .build())
+                    .map(evaluator -> evaluator.toBuilder()
+                            .id(evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY))
+                            .build())
+                    .get();
+
+            // Added a LLM rule with sampling rate 0
+            var evaluatorLlm = Optional.ofNullable(
+                    factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class)
+                            .toBuilder()
+                            .samplingRate(0f)
+                            .projectId(projectId)
+                            .build())
+                    .map(evaluator -> evaluator.toBuilder()
+                            .id(evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY))
+                            .build())
+                    .get();
+
+            // Sending a trace, that shouldn't be sampled as the rate is 0 for both rules
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+
+            Instant createdAt = trace.createdAt();
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            Awaitility.await().untilAsserted(() -> {
+                TraceThread traceThread = traceResourceClient.getTraceThread(trace.threadId(), projectId, API_KEY,
+                        WORKSPACE_NAME);
+
+                var logPagePython = evaluatorsResourceClient.getLogs(evaluatorPython.getId(), WORKSPACE_NAME, API_KEY);
+                var logPageLlm = evaluatorsResourceClient.getLogs(evaluatorLlm.getId(), WORKSPACE_NAME, API_KEY);
+
+                String threadModelId = Optional.ofNullable(traceThread.threadModelId())
+                        .map(Object::toString)
+                        .orElseThrow();
+
+                Map<String, String> markers = Map.of("thread_model_id", threadModelId);
+                String message = "The threadModelId '%s' was skipped for rule: '%s' and per the sampling rate '%s'";
+
+                assertTraceThreadLogResponse(logPagePython, threadModelId, evaluatorPython, markers, createdAt,
+                        message);
+                assertTraceThreadLogResponse(logPageLlm, threadModelId, evaluatorLlm, markers, createdAt, message);
+            });
+        }
+
+    }
+
+    private void assertTraceThreadLogResponse(LogPage logPage, String threadModelId, AutomationRuleEvaluator<?> rule,
+            Map<String, String> markers,
+            Instant createdAt, String message) {
+        assertLogPage(logPage, 1);
+
+        assertThat(logPage.content())
+                .allSatisfy(log -> {
+                    assertThat(log.timestamp()).isBetween(createdAt, Instant.now());
+                    assertThat(log.ruleId()).isEqualTo(rule.getId());
+                    assertThat(log.level()).isEqualTo(LogLevel.INFO);
+                    assertThat(log.markers()).isEqualTo(markers);
+                });
+
+        assertThat(logPage.content().getFirst().message())
+                .isEqualTo(message.formatted(threadModelId, rule.getName(), rule.getSamplingRate()));
+    }
+
+    private void assertTraceThreadLogResponse(LogPage logPage, UUID id, Map<String, String> markers,
+            Instant createdAt, String message) {
+        assertLogPage(logPage, 1);
+
+        assertThat(logPage.content())
+                .allSatisfy(log -> {
+                    assertThat(log.timestamp()).isBetween(createdAt, Instant.now());
+                    assertThat(log.ruleId()).isEqualTo(id);
+                    assertThat(log.level()).isEqualTo(LogLevel.INFO);
+                    assertThat(log.markers()).isEqualTo(markers);
+                });
+
+        assertThat(logPage.content())
+                .anyMatch(log -> log.message().matches(message));
     }
 
     private UUID createGetAndAssertId(Class<? extends AutomationRuleEvaluator<?>> evaluatorClass, UUID projectId) {
@@ -1070,7 +1256,7 @@ class AutomationRuleEvaluatorsResourceTest {
         assertThat(actualRuleEvaluator.getLastUpdatedAt()).isAfter(expectedRuleEvaluator.getLastUpdatedAt());
     }
 
-    private void assertLogResponse(LogPage logPage, UUID id, Trace trace) {
+    private void assertTraceLogResponse(LogPage logPage, UUID id, Trace trace) {
         assertLogPage(logPage, 4);
 
         assertThat(logPage.content())
