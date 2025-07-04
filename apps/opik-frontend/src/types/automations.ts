@@ -42,7 +42,7 @@ export interface LLMJudgeObject {
 }
 
 export interface LLMJudgeDetails {
-  type: EVALUATORS_RULE_TYPE.llm_judge;
+  type: EVALUATORS_RULE_TYPE.llm_judge | EVALUATORS_RULE_TYPE.thread_llm_judge;
   code: LLMJudgeObject;
 }
 
@@ -51,7 +51,9 @@ export type PythonCodeObject =
   | PythonCodeDetailsThreadFormType;
 
 export interface PythonCodeDetails {
-  type: EVALUATORS_RULE_TYPE.python_code;
+  type:
+    | EVALUATORS_RULE_TYPE.python_code
+    | EVALUATORS_RULE_TYPE.thread_python_code;
   code: PythonCodeObject;
 }
 

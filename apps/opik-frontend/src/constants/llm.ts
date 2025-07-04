@@ -493,13 +493,5 @@ export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadFormType =
       "    def score(self, conversation: types.Conversation, **kwargs: Any) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:\n" +
       "        raise NotImplementedError(\n" +
       '            "Please use concrete metric classes instead of this one."\n' +
-      "        )\n" +
-      "\n" +
-      "    async def ascore(self, conversation: types.Conversation, **kwargs: Any) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:\n" +
-      '        """\n' +
-      "        Async public method that can be called independently.\n" +
-      '        """\n' +
-      "        raise NotImplementedError(\n" +
-      '            "Please use concrete metric classes instead of this one."\n' +
       "        )",
   };
