@@ -1,10 +1,10 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useRef } from "react";
 import cloneDeep from "lodash/cloneDeep";
 import get from "lodash/get";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, UseFormReturn } from "react-hook-form";
-import { MessageCircleWarning } from "lucide-react";
+import { Info, MessageCircleWarning } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -28,10 +28,19 @@ import {
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  EVALUATORS_RULE_SCOPE,
   EVALUATORS_RULE_TYPE,
   EvaluatorsRule,
   LLMJudgeObject,
   PythonCodeObject,
+  UI_EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
 import useAppStore from "@/store/AppStore";
 import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
@@ -47,11 +56,14 @@ import {
   convertLLMJudgeObjectToLLMJudgeData,
   EvaluationRuleFormSchema,
   EvaluationRuleFormType,
-  LLMJudgeDetailsFormType,
-  PythonCodeDetailsFormType,
 } from "@/components/pages-shared/automations/AddEditRuleDialog/schema";
 import { LLM_JUDGE } from "@/types/llm";
-import { LLM_PROMPT_CUSTOM_TEMPLATE } from "@/constants/llm";
+import {
+  DEFAULT_PYTHON_CODE_THREAD_DATA,
+  DEFAULT_PYTHON_CODE_TRACE_DATA,
+  LLM_PROMPT_CUSTOM_THREAD_TEMPLATE,
+  LLM_PROMPT_CUSTOM_TRACE_TEMPLATE,
+} from "@/constants/llm";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -59,41 +71,39 @@ import { Description } from "@/components/ui/description";
 import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
 import { useNavigate } from "@tanstack/react-router";
+import { getBackendRuleType, getUIRuleScope, getUIRuleType } from "./helpers";
 
 export const DEFAULT_SAMPLING_RATE = 1;
 
-export const DEFAULT_LLM_AS_JUDGE_DATA: LLMJudgeDetailsFormType = {
-  model: "",
-  config: {
-    temperature: 0.0,
+export const DEFAULT_LLM_AS_JUDGE_DATA = {
+  [EVALUATORS_RULE_SCOPE.trace]: {
+    model: "",
+    config: {
+      temperature: 0.0,
+    },
+    template: LLM_JUDGE.custom,
+    messages: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.messages,
+    variables: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.variables,
+    schema: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.schema,
   },
-  template: LLM_JUDGE.custom,
-  messages: LLM_PROMPT_CUSTOM_TEMPLATE.messages,
-  variables: LLM_PROMPT_CUSTOM_TEMPLATE.variables,
-  schema: LLM_PROMPT_CUSTOM_TEMPLATE.schema,
+  [EVALUATORS_RULE_SCOPE.thread]: {
+    model: "",
+    config: {
+      temperature: 0.0,
+    },
+    template: LLM_JUDGE.custom,
+    messages: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.messages,
+    variables: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.variables,
+    schema: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.schema,
+  },
 };
 
-export const DEFAULT_PYTHON_CODE_DATA: PythonCodeDetailsFormType = {
-  metric:
-    "from typing import Any\n" +
-    "from opik.evaluation.metrics import base_metric, score_result\n" +
-    "\n" +
-    "class MyCustomMetric(base_metric.BaseMetric):\n" +
-    '    def __init__(self, name: str = "my_custom_metric"):\n' +
-    "        self.name = name\n" +
-    "\n" +
-    "    def score(self, input: str, output: str, **ignored_kwargs: Any):\n" +
-    "        # Add you logic here\n" +
-    "\n" +
-    "        return score_result.ScoreResult(\n" +
-    "            value=0,\n" +
-    "            name=self.name,\n" +
-    '            reason="Optional reason for the score"\n' +
-    "        )",
-  arguments: {
-    input: "",
-    output: "",
-  },
+const DEFAULT_PYTHON_CODE_DATA: Record<
+  EVALUATORS_RULE_SCOPE,
+  PythonCodeObject
+> = {
+  [EVALUATORS_RULE_SCOPE.trace]: DEFAULT_PYTHON_CODE_TRACE_DATA,
+  [EVALUATORS_RULE_SCOPE.thread]: DEFAULT_PYTHON_CODE_THREAD_DATA,
 };
 
 type AddEditRuleDialogProps = {
@@ -116,6 +126,17 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const formUIRuleType = defaultRule?.type
+    ? getUIRuleType(defaultRule.type)
+    : UI_EVALUATORS_RULE_TYPE.llm_judge;
+  const formScope = defaultRule?.type
+    ? getUIRuleScope(defaultRule.type)
+    : EVALUATORS_RULE_SCOPE.trace;
+
+  const pythonCodeCache = useRef<
+    Record<EVALUATORS_RULE_SCOPE, PythonCodeObject>
+  >(DEFAULT_PYTHON_CODE_DATA);
+
   const form: UseFormReturn<EvaluationRuleFormType> = useForm<
     z.infer<typeof EvaluationRuleFormSchema>
   >({
@@ -124,20 +145,22 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       ruleName: defaultRule?.name || "",
       projectId: defaultRule?.project_id || projectId || "",
       samplingRate: defaultRule?.sampling_rate ?? DEFAULT_SAMPLING_RATE,
-      type: defaultRule?.type || EVALUATORS_RULE_TYPE.llm_judge,
+      uiType: formUIRuleType,
+      scope: formScope,
       pythonCodeDetails:
         defaultRule && defaultRule.type === EVALUATORS_RULE_TYPE.python_code
           ? (defaultRule.code as PythonCodeObject)
-          : cloneDeep(DEFAULT_PYTHON_CODE_DATA),
+          : cloneDeep(DEFAULT_PYTHON_CODE_DATA[formScope]),
       llmJudgeDetails:
         defaultRule && defaultRule.type === EVALUATORS_RULE_TYPE.llm_judge
           ? convertLLMJudgeObjectToLLMJudgeData(
               defaultRule.code as LLMJudgeObject,
             )
-          : cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA),
+          : cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[formScope]),
     },
   });
-  const isLLMJudge = form.getValues("type") === EVALUATORS_RULE_TYPE.llm_judge;
+  const isLLMJudge =
+    form.getValues("uiType") === UI_EVALUATORS_RULE_TYPE.llm_judge;
 
   const { mutate: createMutate } = useRuleCreateMutation();
   const { mutate: updateMutate } = useRuleUpdateMutation();
@@ -145,6 +168,8 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const isEdit = Boolean(defaultRule);
   const title = isEdit ? "Edit rule" : "Create a new rule";
   const submitText = isEdit ? "Update rule" : "Create rule";
+
+  console.log(form.formState.errors);
 
   const isCodeMetricEditBlock = !isCodeMetricEnabled && !isLLMJudge && isEdit;
 
@@ -182,15 +207,35 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
 
   const getRule = useCallback(() => {
     const formData = form.getValues();
-    return {
+    const ruleType = formData.type;
+
+    const ruleData = {
       name: formData.ruleName,
       project_id: formData.projectId,
       sampling_rate: formData.samplingRate,
-      type: formData.type,
-      code:
-        formData.type === EVALUATORS_RULE_TYPE.llm_judge
-          ? convertLLMJudgeDataToLLMJudgeObject(formData.llmJudgeDetails)
-          : formData.pythonCodeDetails,
+      type: ruleType,
+    };
+
+    if (ruleType === EVALUATORS_RULE_TYPE.llm_judge) {
+      return {
+        ...ruleData,
+        code: convertLLMJudgeDataToLLMJudgeObject(formData.llmJudgeDetails),
+      } as EvaluatorsRule;
+    }
+
+    if (ruleType === EVALUATORS_RULE_TYPE.thread_llm_judge) {
+      return {
+        ...ruleData,
+        code: {
+          ...convertLLMJudgeDataToLLMJudgeObject(formData.llmJudgeDetails),
+          variables: undefined,
+        },
+      } as EvaluatorsRule;
+    }
+
+    return {
+      ...ruleData,
+      code: formData.pythonCodeDetails,
     } as EvaluatorsRule;
   }, [form]);
 
@@ -219,6 +264,15 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     () => (isEdit ? editPrompt() : createPrompt()),
     [isEdit, editPrompt, createPrompt],
   );
+
+  // const syncPythonCodeCache = useCallback(
+  //   (scope: EVALUATORS_RULE_SCOPE, uiType: UI_EVALUATORS_RULE_TYPE) => {
+  //     if (uiType === UI_EVALUATORS_RULE_TYPE.python_code) {
+  //       pythonCodeCache.current[scope] = form.getValues("pythonCodeDetails");
+  //     }
+  //   },
+  //   [form],
+  // );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -263,7 +317,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                   );
                 }}
               />
-              {!projectId && (
+              <div className="flex gap-4">
                 <FormField
                   control={form.control}
                   name="projectId"
@@ -273,7 +327,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                     ]);
 
                     return (
-                      <FormItem>
+                      <FormItem className="flex-1">
                         <Label>Project</Label>
                         <FormControl>
                           <ProjectsSelectBox
@@ -284,6 +338,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                                 validationErrors?.message,
                               ),
                             })}
+                            disabled={Boolean(projectId)}
                           />
                         </FormControl>
                         <FormMessage />
@@ -291,7 +346,68 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                     );
                   }}
                 />
-              )}
+                <FormField
+                  control={form.control}
+                  name="scope"
+                  render={({ field }) => (
+                    <FormItem className="flex-1">
+                      <Label className="flex items-center">
+                        Scope{" "}
+                        <TooltipWrapper
+                          content="Choose whether the evaluation rule scores the entire
+                      thread or each individual trace. Thread-level rules assess
+                      the full conversation, while trace-level rules evaluate
+                      one model response at a time."
+                        >
+                          <Info className="ml-1 size-4 text-light-slate" />
+                        </TooltipWrapper>
+                      </Label>
+                      <FormControl>
+                        <Select
+                          value={field.value}
+                          onValueChange={(value: EVALUATORS_RULE_SCOPE) => {
+                            const { uiType } = form.getValues();
+                            const type = getBackendRuleType(value, uiType);
+
+                            field.onChange(value);
+                            form.setValue("type", type);
+
+                            if (
+                              uiType === UI_EVALUATORS_RULE_TYPE.python_code
+                            ) {
+                              form.setValue(
+                                "pythonCodeDetails",
+                                pythonCodeCache.current[value],
+                              );
+                            }
+
+                            if (uiType === UI_EVALUATORS_RULE_TYPE.llm_judge) {
+                              form.setValue(
+                                "llmJudgeDetails",
+                                cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[value]),
+                              );
+                            }
+                          }}
+                          disabled={isEdit}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select scope" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={EVALUATORS_RULE_SCOPE.trace}>
+                              Trace
+                            </SelectItem>
+                            <SelectItem value={EVALUATORS_RULE_SCOPE.thread}>
+                              Thread
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+
               <FormField
                 control={form.control}
                 name="samplingRate"
@@ -309,10 +425,11 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                   />
                 )}
               />
+
               {!isEdit && (
                 <FormField
                   control={form.control}
-                  name="type"
+                  name="uiType"
                   render={({ field }) => (
                     <FormItem>
                       <Label>Type</Label>
@@ -321,19 +438,34 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                           <ToggleGroup
                             type="single"
                             value={field.value}
-                            onValueChange={(value) =>
-                              value && field.onChange(value)
-                            }
+                            onValueChange={(value: UI_EVALUATORS_RULE_TYPE) => {
+                              if (!value) return;
+
+                              const { scope, uiType } = form.getValues();
+                              const type = getBackendRuleType(scope, uiType);
+
+                              field.onChange(value);
+                              form.setValue("type", type);
+
+                              if (
+                                value === UI_EVALUATORS_RULE_TYPE.python_code
+                              ) {
+                                form.setValue(
+                                  "pythonCodeDetails",
+                                  pythonCodeCache.current[scope],
+                                );
+                              }
+                            }}
                           >
                             <ToggleGroupItem
-                              value={EVALUATORS_RULE_TYPE.llm_judge}
+                              value={UI_EVALUATORS_RULE_TYPE.llm_judge}
                               aria-label="LLM-as-judge"
                             >
                               LLM-as-judge
                             </ToggleGroupItem>
                             {isCodeMetricEnabled ? (
                               <ToggleGroupItem
-                                value={EVALUATORS_RULE_TYPE.python_code}
+                                value={UI_EVALUATORS_RULE_TYPE.python_code}
                                 aria-label="Code metric"
                               >
                                 Code metric
@@ -342,7 +474,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                               <TooltipWrapper content="This feature is not available for this environment">
                                 <span>
                                   <ToggleGroupItem
-                                    value={EVALUATORS_RULE_TYPE.python_code}
+                                    value={UI_EVALUATORS_RULE_TYPE.python_code}
                                     aria-label="Code metric"
                                     disabled
                                   >
